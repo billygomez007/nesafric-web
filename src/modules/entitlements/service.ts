@@ -80,7 +80,6 @@ async function upgradeWouldHelp(currentPlanId: string, featureKey: string, effec
 }
 
 async function notifyUsageThreshold(organisationId: string, subscriptionId: string, featureKey: string, current: number, limit: number, periodStart: Date) {
-  const label = getEntitlementDefinition(featureKey)?.label ?? featureKey;
   const ratio = limit > 0 ? current / limit : 1;
   const eventType = current >= limit ? "ENTITLEMENT_LIMIT_REACHED" : ratio >= APPROACHING_RATIO ? "ENTITLEMENT_LIMIT_APPROACHING" : null;
   if (!eventType) return;

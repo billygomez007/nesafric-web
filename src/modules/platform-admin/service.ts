@@ -166,7 +166,7 @@ export async function updatePlan(principal: PlatformPrincipal, planId: string, i
   const existing = await db.subscriptionPlan.findUnique({ where: { id: planId } });
   if (!existing) throw notFound();
   const plan = await db.$transaction(async (tx) => {
-    const updated = await tx.subscriptionPlan.update({
+    await tx.subscriptionPlan.update({
       where: { id: planId },
       data: {
         name: data.name, description: data.description, isActive: data.isActive, isPublic: data.isPublic, sortOrder: data.sortOrder,

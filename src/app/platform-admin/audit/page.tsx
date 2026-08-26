@@ -18,7 +18,7 @@ function AuditContent() {
 
   return <section className="rounded-xl border bg-white p-5 shadow-sm">
     <h2 className="font-semibold">Platform audit log</h2>
-    <p className="mt-1 text-sm text-slate-600">Every platform-principal action — organisation views, plan/entitlement/flag changes, support sessions — fully separate from any organisation's own audit history.</p>
+    <p className="mt-1 text-sm text-slate-600">Every platform-principal action — organisation views, plan/entitlement/flag changes, support sessions — fully separate from any organisation&apos;s own audit history.</p>
     {entries.length ? <ul className="mt-3 divide-y text-sm">{entries.map((entry) => <li className="py-2" key={entry.id}>{new Date(entry.createdAt).toLocaleString()} — <span className="font-semibold">{entry.action}</span> ({entry.entityType}:{entry.entityId}){entry.organisationId ? ` — org ${entry.organisationId}` : ""}</li>)}</ul> : <p className="mt-2 text-sm text-slate-600">No platform audit events yet.</p>}
   </section>;
 }

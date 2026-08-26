@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
+import { changeOrganisationPlan } from "@/modules/subscriptions/service";
 import { createPortfolio, createProperty } from "@/modules/assets/service";
 import { createTenant } from "@/modules/tenants/service";
 import { createListing, transitionListing, updateListingVerification } from "@/modules/listings/service";
@@ -95,6 +96,9 @@ describe("PostgreSQL Phase 17 omnichannel communications", () => {
     const staffMember = await registerUser({ displayName: "Support Staff", email: "support-staff@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Comms Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
     const otherOrganisation = await createOrganisation(outsider.id, { name: "Other Comms Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
+    // This fixture and a downstream test create more AI employees than the default STARTER
+    // plan's entitlement limit (1) allows; upgrade to a plan with enough headroom.
+    await changeOrganisationPlan(owner.id, organisation.id, { planKey: "growth" });
     const supportRole = await db.role.findUniqueOrThrow({ where: { key: "property_manager" } });
     const supportMember = await db.organisationMember.create({ data: { organisationId: organisation.id, userId: staffMember.id } });
     await db.membershipRole.create({ data: { memberId: supportMember.id, roleId: supportRole.id } });

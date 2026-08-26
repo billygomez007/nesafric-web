@@ -18,7 +18,13 @@ function FlagsContent() {
     setFlags(body as Flag[]);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    fetch("/api/platform-admin/feature-flags").then(async (response) => {
+      const body = await response.json();
+      if (response.ok) setFlags(body as Flag[]);
+      else setError(body.error?.message ?? "Unable to load feature flags.");
+    });
+  }, []);
 
   async function createFlag(event: FormEvent) {
     event.preventDefault();

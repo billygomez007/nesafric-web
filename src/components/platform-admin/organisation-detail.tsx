@@ -27,7 +27,15 @@ export function PlatformAdminOrganisationDetail({ organisationId }: { organisati
     setDetail(body as Detail);
   }, [organisationId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    fetch(`/api/platform-admin/organisations/${organisationId}`).then(async (response) => {
+      const body = await response.json();
+      if (response.status === 403 && body.error?.code === "SUPPORT_SESSION_REQUIRED") { setNeedsSupportSession(true); return; }
+      if (!response.ok) { setError(body.error?.message ?? "Unable to load organisation."); return; }
+      setNeedsSupportSession(false);
+      setDetail(body as Detail);
+    });
+  }, [organisationId]);
 
   async function startSupportSession() {
     setError("");

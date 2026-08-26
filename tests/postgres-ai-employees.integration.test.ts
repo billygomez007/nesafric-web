@@ -15,6 +15,7 @@ import { updateAutonomyConfiguration, upsertAutonomyPolicy } from "@/modules/ai-
 import { decideAIProposal } from "@/modules/ai/service";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
+import { changeOrganisationPlan } from "@/modules/subscriptions/service";
 import { db } from "@/platform/database/client";
 
 async function cleanDatabase() {
@@ -48,6 +49,10 @@ describe("PostgreSQL Phase 16 AI employees", () => {
     const outsider = await registerUser({ displayName: "Other Employer", email: "other-employer@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "AI Employee Operations", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
     const otherOrganisation = await createOrganisation(outsider.id, { name: "Other AI Employees", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
+    // These fixtures create more AI employees than the default STARTER plan's entitlement limit
+    // (1) allows; upgrade to a plan with enough headroom so this file continues to exercise
+    // multi-employee scenarios rather than the (separately tested) entitlement limit itself.
+    await changeOrganisationPlan(owner.id, organisation.id, { planKey: "growth" });
     const managerMember = await addMember(organisation.id, manager.id, "property_manager");
     await addMember(organisation.id, administrator.id, "administrator");
     await addMember(organisation.id, viewer.id, "viewer");

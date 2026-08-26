@@ -39,7 +39,17 @@ function OrganisationsContent() {
     setRows(body as OrgRow[]);
   }
 
-  useEffect(() => { void load(); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const query = new URLSearchParams();
+    if (status) query.set("status", status);
+    if (search) query.set("search", search);
+    fetch("/api/platform-admin/organisations?" + query.toString()).then(async (response) => {
+      const body = await response.json();
+      if (response.ok) setRows(body as OrgRow[]);
+      else setError(body.error?.message ?? "Unable to load organisations.");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
 

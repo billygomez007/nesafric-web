@@ -42,5 +42,14 @@
     "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.2": true,
+    "@prisma/engines@6.19.2": true,
+    "argon2@0.45.1": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "prisma@6.19.2": true,
+    "unrs-resolver@1.12.2": true
   }
 }

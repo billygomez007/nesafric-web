@@ -13,14 +13,13 @@ function PlansContent() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [error, setError] = useState("");
 
-  async function load() {
-    const response = await fetch("/api/platform-admin/plans");
-    const body = await response.json();
-    if (!response.ok) return setError(body.error?.message ?? "Unable to load plans.");
-    setPlans(body as Plan[]);
-  }
-
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    fetch("/api/platform-admin/plans").then(async (response) => {
+      const body = await response.json();
+      if (response.ok) setPlans(body as Plan[]);
+      else setError(body.error?.message ?? "Unable to load plans.");
+    });
+  }, []);
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
   if (!plans) return <p className="text-slate-600">Loading…</p>;

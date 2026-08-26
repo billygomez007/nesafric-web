@@ -20,7 +20,9 @@ async function cleanDatabase() {
   await db.backgroundJob.deleteMany();
   await db.domainEvent.deleteMany(); await db.auditEvent.deleteMany(); await db.notification.deleteMany(); await db.reminderPolicy.deleteMany(); await db.financialLedgerEntry.deleteMany(); await db.rentObligation.deleteMany(); await db.leaseAmendment.deleteMany(); await db.leaseDocument.deleteMany(); await db.leaseHistory.deleteMany(); await db.leaseParty.deleteMany(); await db.lease.deleteMany();
   await db.tenantOrganisation.deleteMany(); await db.tenant.deleteMany(); await db.membershipRole.deleteMany(); await db.organisationMember.deleteMany();
-  await db.unit.deleteMany(); await db.building.deleteMany(); await db.property.deleteMany(); await db.organisation.deleteMany(); await db.session.deleteMany(); await db.user.deleteMany();
+  await db.unit.deleteMany(); await db.building.deleteMany(); await db.property.deleteMany();
+  await db.subscriptionInvoice.deleteMany(); await db.subscriptionStatusHistory.deleteMany(); await db.organisationEntitlementOverride.deleteMany(); await db.organisationFeatureFlagOverride.deleteMany(); await db.platformSupportSession.deleteMany(); await db.organisationSubscription.deleteMany();
+  await db.organisation.deleteMany(); await db.session.deleteMany(); await db.user.deleteMany();
 }
 
 describe("PostgreSQL Phase 2 tenant and lease core", () => {
