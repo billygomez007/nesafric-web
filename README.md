@@ -16,6 +16,38 @@ The application is a TypeScript modular monolith built with Next.js and PostgreS
 4. Run `npm run dev`.
 5. (Optional) Grant platform-administration access with `npm run platform-admin:bootstrap -- <email> SUPER_ADMIN`, or set `PLATFORM_ADMIN_BOOTSTRAP_EMAILS` before starting the app. This is independent of organisation membership — see `docs/architecture.md`.
 
+## Demo environment (development only)
+
+`npm run db:seed` only seeds foundational reference data (country/currency/permissions/roles/plans) —
+it creates no organisations, properties, or users. To populate a local database with a realistic,
+fully-connected demo organisation for manual/visual inspection of the product:
+
+1. Make sure PostgreSQL is running locally, e.g. `brew services start postgresql@16` (adjust for
+   your installed version/OS).
+2. Apply migrations: `npm run db:generate && npm run db:deploy`.
+3. Seed foundational reference data: `npm run db:seed`.
+4. Seed the demo organisation: `npm run seed:demo`.
+5. Promote the demo platform-admin account (a separate, explicit, operator-run step — the same one
+   a real platform administrator would use, never exposed through any HTTP endpoint):
+   `npm run platform-admin:bootstrap -- platform-admin@propertyos.demo SUPER_ADMIN`.
+6. Run `npm run dev` and sign in at `http://localhost:3000/login`.
+
+Demo logins (all share the password `DemoPassword123!`):
+
+| Role | Email |
+| --- | --- |
+| Landlord / organisation owner | `landlord@propertyos.demo` |
+| Property manager (staff) | `manager@propertyos.demo` |
+| NesAfric platform administrator (after step 5) | `platform-admin@propertyos.demo` |
+
+**These are development/demo credentials only and must never be used against, or exist in, a
+production environment.** `npm run seed:demo` refuses to run when `NODE_ENV=production`; every
+demo user's email uses the non-production `@propertyos.demo` domain, and every demo display
+name/organisation name is suffixed "(Demo)" so seeded records are unmistakable in any list view or
+audit log. The script only ever creates records — it never deletes or modifies pre-existing data —
+and is safe to rerun: if the demo organisation already exists, it exits as a no-op instead of
+creating duplicates.
+
 ## Database and security
 
 Migrations are committed under `prisma/migrations`; production uses `npm run db:deploy`, never `db push`. Monetary values must use integer minor units plus an ISO-4217 currency code when financial domains are added. Timestamps are stored in UTC.
