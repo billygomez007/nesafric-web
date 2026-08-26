@@ -1,0 +1,34 @@
+/**
+ * Platform-administration permissions (item 8). A small, closed set evaluated entirely in code —
+ * deliberately not the DB-driven `Role`/`Permission`/`RolePermission` tables organisation RBAC
+ * uses (`src/platform/authorization/`). The two systems share no plumbing, no tables, and no
+ * concepts: an `OrganisationMember`'s roles say nothing whatsoever about platform access, and a
+ * `PlatformPrincipal`'s role says nothing about any organisation's RBAC.
+ */
+export const PLATFORM_PERMISSIONS = {
+  orgsRead: "orgs.read",
+  orgsManage: "orgs.manage",
+  plansManage: "plans.manage",
+  entitlementsOverride: "entitlements.override",
+  flagsManage: "flags.manage",
+  supportSessionCreate: "support_session.create",
+  analyticsRead: "analytics.read",
+  auditRead: "platform_audit.read",
+  jobsManage: "jobs.manage",
+} as const;
+
+export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
+export type PlatformRoleValue = "SUPER_ADMIN" | "BILLING_ADMIN" | "SUPPORT_AGENT" | "READ_ONLY";
+
+const ALL_PERMISSIONS = Object.values(PLATFORM_PERMISSIONS);
+
+const ROLE_PERMISSIONS: Record<PlatformRoleValue, readonly PlatformPermission[]> = {
+  SUPER_ADMIN: ALL_PERMISSIONS,
+  BILLING_ADMIN: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.orgsManage, PLATFORM_PERMISSIONS.plansManage, PLATFORM_PERMISSIONS.entitlementsOverride, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead],
+  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead],
+  READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead],
+};
+
+export function platformRoleHasPermission(role: PlatformRoleValue, permission: PlatformPermission) {
+  return ROLE_PERMISSIONS[role].includes(permission);
+}

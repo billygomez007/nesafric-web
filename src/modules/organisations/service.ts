@@ -4,6 +4,9 @@ import { AppError, notFound } from "@/platform/errors";
 import { requirePermission, PERMISSIONS } from "@/platform/authorization/permissions";
 import { recordAudit } from "@/modules/audit/service";
 import { publishDomainEvent } from "@/modules/events/service";
+import { createTrialSubscription } from "@/modules/subscriptions/lifecycle";
+import { assertOperational } from "@/modules/entitlements/service";
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { createOrganisationSchema, inviteMemberSchema } from "./schemas";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -23,12 +26,26 @@ export async function createOrganisation(userId: string, input: unknown) {
     await tx.membershipRole.create({ data: { memberId: member.id, roleId: ownerRole.id } });
     await tx.auditEvent.create({ data: { organisationId: organisation.id, actorUserId: userId, action: "organisation.created", entityType: "organisation", entityId: organisation.id } });
     await tx.domainEvent.create({ data: { organisationId: organisation.id, name: "organisation.created", aggregateType: "organisation", aggregateId: organisation.id, payload: { countryCode: organisation.countryCode } } });
+    // Every organisation gains a subscription the moment it exists (item 1 + item 6's onboarding
+    // checklist "org setup -> plan/trial"): no duplicate identity, never a second signup step.
+    await createTrialSubscription(tx, organisation.id, currencyCode);
     return organisation;
   });
+}
+export async function listUserOrganisations(userId: string) {
+  const memberships = await db.organisationMember.findMany({
+    where: { userId, status: "ACTIVE", archivedAt: null },
+    select: { organisation: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return memberships.map(({ organisation }) => organisation);
 }
 
 export async function inviteMember(actorUserId: string, organisationId: string, input: unknown) {
   await requirePermission(actorUserId, organisationId, PERMISSIONS.organisationManageMembers);
+  // Representative entitlement check (item 2): team seats are capped per plan and the
+  // organisation must be in a writable subscription state to grow its team.
+  await assertOperational(organisationId, ENTITLEMENTS.teamMembersMax.key);
   const data = inviteMemberSchema.parse(input);
   const role = await db.role.findUnique({ where: { key: data.roleKey } });
   if (!role) throw notFound();

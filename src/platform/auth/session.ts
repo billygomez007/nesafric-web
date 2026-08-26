@@ -18,13 +18,18 @@ export async function createSession(userId: string) {
   store.set(COOKIE_NAME, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: sessionDurationMs / 1000 });
 }
 
-export async function requireUser() {
+export async function getOptionalUser() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!token) throw unauthenticated();
+  if (!token) return null;
   const session = await db.session.findFirst({
     where: { tokenHash: hashSessionToken(token), expiresAt: { gt: new Date() } },
     include: { user: true },
   });
-  if (!session) throw unauthenticated();
-  return session.user;
+  return session?.user ?? null;
+}
+
+export async function requireUser() {
+  const user = await getOptionalUser();
+  if (!user) throw unauthenticated();
+  return user;
 }

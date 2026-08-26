@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/platform/database/generated
+
+# local/dev object storage adapter (never used when an S3-compatible provider is configured)
+/var/object-storage

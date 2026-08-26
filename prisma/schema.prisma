@@ -3,6 +3,233 @@ generator client {
   output   = "../src/platform/database/generated"
 }
 
+enum AIAutonomyLevel {
+  DISABLED
+  RECOMMEND_ONLY
+  APPROVAL_REQUIRED
+  AUTO_EXECUTE
+}
+
+enum AIActivityType {
+  DETECTION
+  RECOMMENDATION
+  PROPOSAL
+  AUTO_EXECUTION
+  ESCALATION
+  POLICY_BLOCKED
+  FAILURE
+}
+
+enum AIActivityStatus {
+  RECORDED
+  PENDING
+  COMPLETED
+  FAILED
+  BLOCKED
+}
+
+enum AISeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AIEscalationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum AIEmployeeRole {
+  RECEPTIONIST
+  PROPERTY_MANAGER
+}
+
+enum AIEmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum AIEmployeeScope {
+  ORGANISATION
+  SELECTED
+}
+
+enum AIHandoffStatus {
+  OPEN
+  ASSIGNED
+  RESOLVED
+  CLOSED
+}
+
+// Phase 17 - Omnichannel Communications + AI Receptionist Integration.
+// VOICE is intentionally not modelled yet; the channel/adapter architecture is designed so a
+// future VOICE channel can be added without redesigning conversations, messages, or delivery.
+enum ConversationChannel {
+  WEB_CHAT
+  EMAIL
+  WHATSAPP
+  SMS
+  IN_APP
+}
+
+enum ConversationStatus {
+  OPEN
+  AI_ACTIVE
+  HUMAN_REQUIRED
+  HUMAN_ACTIVE
+  WAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum ConversationIdentityLevel {
+  NONE
+  CLAIMED
+  VERIFIED
+}
+
+enum ConversationParticipantType {
+  TENANT
+  PROSPECT
+  APPLICANT
+  PROVIDER
+  ORG_MEMBER
+  AI_EMPLOYEE
+  SYSTEM
+  ANONYMOUS
+}
+
+enum ConversationAssigneeType {
+  UNASSIGNED
+  AI_EMPLOYEE
+  ORG_MEMBER
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageSenderType {
+  TENANT
+  PROSPECT
+  APPLICANT
+  PROVIDER
+  AI_EMPLOYEE
+  ORG_MEMBER
+  SYSTEM
+}
+
+enum MessageDeliveryStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
+enum NoticeToVacateStatus {
+  SUBMITTED
+  ACKNOWLEDGED
+  WITHDRAWN
+  COMPLETED
+}
+
+enum NoticeToVacateSource {
+  TENANT
+  LANDLORD
+  PROPERTY_MANAGER
+}
+
+enum MoveOutStatus {
+  NOT_STARTED
+  NOTICE_RECEIVED
+  SCHEDULED
+  INSPECTION_PENDING
+  SETTLEMENT_PENDING
+  READY_TO_CLOSE
+  COMPLETED
+  CANCELLED
+}
+
+enum DepositSettlementStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FORFEITED
+  CLOSED
+}
+
+enum DepositDeductionCategory {
+  PROPERTY_DAMAGE
+  MISSING_INVENTORY
+  CLEANING
+  UNPAID_RENT
+  UNPAID_APPROVED_CHARGES
+  KEY_REPLACEMENT
+  OTHER
+}
+
+enum DepositDeductionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVERSED
+}
+
+enum VacancyTurnoverStatus {
+  INSPECTION_REQUIRED
+  REPAIRS_REQUIRED
+  CLEANING_REQUIRED
+  READY_FOR_MARKETING
+  READY_FOR_OCCUPANCY
+  COMPLETED
+}
+
+enum TurnoverTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AISessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum AIMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum AIActionLevel {
+  READ
+  RECOMMEND
+  APPROVAL_REQUIRED
+  PROHIBITED_AUTONOMOUS
+}
+
+enum AIProposalStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  EXECUTING
+  COMPLETED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -87,6 +314,47 @@ enum MoveStatus {
   MOVED_OUT
 }
 
+enum LeaseExecutionStatus {
+  DRAFT
+  READY_FOR_SIGNATURE
+  PARTIALLY_SIGNED
+  FULLY_SIGNED
+  ACTIVE
+}
+
+enum LeaseExecutionDocumentStatus {
+  DRAFT
+  READY
+  SIGNING
+  EXECUTED
+  SUPERSEDED
+}
+
+enum LeaseSignatureRole {
+  ORG_REPRESENTATIVE
+  TENANT
+  CO_TENANT
+  OTHER
+}
+
+enum LeaseSignatureStatus {
+  PENDING
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum MoveInStatus {
+  NOT_STARTED
+  SCHEDULED
+  INSPECTION_PENDING
+  READY
+  COMPLETED
+}
+
 enum RenewalWorkflowStatus {
   NONE
   REQUESTED
@@ -104,6 +372,85 @@ enum RentObligationStatus {
   SATISFIED
 }
 
+enum RentCollectionState {
+  UNPAID
+  PARTIALLY_PAID
+  FULLY_PAID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  MOBILE_MONEY
+  CARD
+}
+
+enum PaymentSource {
+  MANUAL
+  PROVIDER
+}
+
+enum PaymentIntentPurpose {
+  RENT
+  DEPOSIT
+}
+
+enum SecurityDepositSource {
+  MANUAL
+  PROVIDER
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REVERSED
+}
+
+enum ReconciliationStatus {
+  UNMATCHED
+  PENDING
+  MATCHED
+  MISMATCHED
+  DUPLICATE
+}
+
+enum ReceiptStatus {
+  ISSUED
+  VOIDED
+}
+
+enum SecurityDepositStatus {
+  HELD
+  PARTIALLY_REFUNDED
+  REFUNDED
+  PARTIALLY_DEDUCTED
+  APPLIED
+}
+
+enum LedgerEntryType {
+  RENT_CHARGE
+  RENT_PAYMENT
+  DEPOSIT_RECEIVED
+  /// Provider-verified deposit intake, written only after `reconcileProviderEvent` confirms a
+  /// deposit checkout succeeded. Kept distinct from the manual DEPOSIT_RECEIVED entry so the
+  /// ledger always shows whether a deposit came from a verified provider webhook or a
+  /// staff-recorded manual entry.
+  DEPOSIT_RECEIPT
+  PAYMENT_REVERSAL
+  MANUAL_ADJUSTMENT
+  DEPOSIT_DEDUCTION
+  DEPOSIT_REFUND
+  DEPOSIT_ADJUSTMENT
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
 enum ReminderEventType {
   LEASE_EXPIRY
   RENT_DUE
@@ -111,6 +458,19 @@ enum ReminderEventType {
   DOCUMENT_EXPIRY
   INSPECTION_DUE
   MAINTENANCE_FOLLOWUP
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  // Phase 20: commercial/SaaS-billing notifications. Distinct values from the tenant rent-reminder
+  // events above so they are never mixed up, even though both flow through the same Notification
+  // model/delivery pipeline (item 12).
+  SUBSCRIPTION_TRIAL_ENDING
+  SUBSCRIPTION_BILLING_ISSUE
+  SUBSCRIPTION_ACTIVATED
+  SUBSCRIPTION_CHANGED
+  SUBSCRIPTION_GRACE_PERIOD
+  SUBSCRIPTION_SUSPENDED
+  ENTITLEMENT_LIMIT_APPROACHING
+  ENTITLEMENT_LIMIT_REACHED
 }
 
 enum NotificationChannel {
@@ -121,9 +481,13 @@ enum NotificationChannel {
 }
 
 enum NotificationStatus {
+  PENDING
+  PROCESSING
   SCHEDULED
   SENT
+  DELIVERED
   FAILED
+  SKIPPED
   CANCELLED
 }
 
@@ -134,18 +498,282 @@ enum BackgroundJobStatus {
   FAILED
 }
 
+enum MaintenancePriority {
+  EMERGENCY
+  URGENT
+  NORMAL
+  LOW
+}
+
+enum MaintenanceStatus {
+  REPORTED
+  TRIAGED
+  AWAITING_APPROVAL
+  APPROVED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CLOSED
+  REJECTED
+  CANCELLED
+}
+
+enum MaintenanceHistoryType {
+  STATUS
+  NOTE
+  APPROVAL
+  ASSIGNMENT
+  ESTIMATE
+  ACTUAL_COST
+}
+
+enum MaintenanceApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WorkOrderStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ServiceProviderType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum ProviderVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum ProviderAvailabilityStatus {
+  AVAILABLE
+  LIMITED
+  UNAVAILABLE
+}
+
+enum ProviderDirectoryStatus {
+  ACTIVE
+  BLOCKED
+  ARCHIVED
+}
+
+enum ProviderEvidenceType {
+  IDENTITY
+  BUSINESS_REGISTRATION
+  PROFESSIONAL_LICENSE
+  INSURANCE
+  ADDRESS
+  OTHER
+}
+
+enum QuotationRequestStatus {
+  OPEN
+  SUBMITTED
+  CLOSED
+  CANCELLED
+  EXPIRED
+}
+
+enum ProviderQuotationStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum QuotationSource {
+  PROVIDER
+  ADMIN_RECORDED
+}
+
+enum ProviderAssignmentStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  COMPLETED
+}
+
+enum MarketplaceEnquiryStatus {
+  NEW
+  VIEWED
+  RESPONDED
+  CLOSED
+  CANCELLED
+}
+
+enum ListingType {
+  RENT
+  SALE
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  PAUSED
+  RESERVED
+  RENTED
+  ARCHIVED
+  REJECTED
+}
+
+enum ListingVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum ListingMediaType {
+  PHOTO
+  VIDEO
+  FLOOR_PLAN
+}
+
+enum ListingLocationPrecision {
+  APPROXIMATE
+  DISTRICT
+  CITY
+  REGION
+}
+
+enum MarketplaceLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  VIEWING_SCHEDULED
+  VIEWING_COMPLETED
+  APPLICATION_STARTED
+  APPLICATION_SUBMITTED
+  CLOSED
+  LOST
+}
+
+enum ViewingRequestStatus {
+  REQUESTED
+  CONFIRMED
+  RESCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum RentalApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  MORE_INFORMATION_REQUIRED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum ApplicationDocumentType {
+  ID
+  INCOME
+  EMPLOYMENT
+  REFERENCE
+  OTHER
+}
+
 model User {
-  id              String                   @id @default(uuid()) @db.Uuid
-  email           String                   @unique @db.Citext
-  passwordHash    String
-  displayName     String
-  emailVerifiedAt DateTime?
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  sessions        Session[]
-  memberships     OrganisationMember[]
-  invitations     OrganisationInvitation[] @relation("InvitationSender")
-  audits          AuditEvent[]             @relation("AuditActor")
+  id                            String                              @id @default(uuid()) @db.Uuid
+  email                         String                              @unique @db.Citext
+  passwordHash                  String
+  displayName                   String
+  emailVerifiedAt               DateTime?
+  createdAt                     DateTime                            @default(now())
+  updatedAt                     DateTime                            @updatedAt
+  sessions                      Session[]
+  memberships                   OrganisationMember[]
+  invitations                   OrganisationInvitation[]            @relation("InvitationSender")
+  audits                        AuditEvent[]                        @relation("AuditActor")
+  tenantRelationships           TenantOrganisation[]
+  reportedMaintenanceRequests   MaintenanceRequest[]                @relation("MaintenanceReporter")
+  maintenanceHistory            MaintenanceHistory[]                @relation("MaintenanceHistoryActor")
+  requestedMaintenanceApprovals MaintenanceApproval[]               @relation("MaintenanceApprovalRequester")
+  decidedMaintenanceApprovals   MaintenanceApproval[]               @relation("MaintenanceApprovalDecision")
+  assignedWorkOrders            WorkOrder[]                         @relation("WorkOrderAssignee")
+  createdWorkOrders             WorkOrder[]                         @relation("WorkOrderCreator")
+  workOrderHistory              WorkOrderHistory[]                  @relation("WorkOrderHistoryActor")
+  individualProvider            ServiceProvider?                    @relation("IndividualProviderUser")
+  administeredProviders         ServiceProvider[]                   @relation("ProviderAdministrator")
+  providerEvidence              ProviderEvidence[]                  @relation("ProviderEvidenceSubmitter")
+  providerVerificationHistory   ProviderVerificationHistory[]       @relation("ProviderVerificationActor")
+  providerDirectoriesCreated    ProviderOrganisation[]              @relation("ProviderDirectoryCreator")
+  quotationRequestsCreated      ProviderQuotationRequest[]          @relation("QuotationRequester")
+  quotationsSubmitted           ProviderQuotation[]                 @relation("QuotationSubmitter")
+  quotationsRecorded            ProviderQuotation[]                 @relation("QuotationRecorder")
+  quotationReviews              ProviderQuotationReview[]           @relation("QuotationReviewer")
+  providerAssignmentsCreated    ProviderAssignment[]                @relation("ProviderAssignmentCreator")
+  providerAssignmentResponses   ProviderAssignment[]                @relation("ProviderAssignmentResponder")
+  providerRatings               ProviderRating[]                    @relation("ProviderRatingCreator")
+  marketplaceProfileChanges     ProviderMarketplaceProfileHistory[] @relation("MarketplaceProfileHistoryActor")
+  marketplaceEnquiriesCreated   MarketplaceEnquiry[]                @relation("MarketplaceEnquiryRequester")
+  marketplaceEnquiryHistory     MarketplaceEnquiryStatusHistory[]   @relation("MarketplaceEnquiryStatusActor")
+  listingsCreated               Listing[]                           @relation("ListingCreator")
+  listingStatusHistory          ListingStatusHistory[]              @relation("ListingStatusActor")
+  listingVerificationHistory    ListingVerificationHistory[]        @relation("ListingVerificationActor")
+  listingVerificationEvidence   ListingVerificationEvidence[]       @relation("ListingEvidenceSubmitter")
+  marketplaceLeads              MarketplaceLead[]                   @relation("MarketplaceLeadUser")
+  marketplaceLeadHistory        MarketplaceLeadStatusHistory[]      @relation("MarketplaceLeadStatusActor")
+  marketplaceLeadActivities     MarketplaceLeadActivity[]           @relation("MarketplaceLeadActivityActor")
+  viewingRequestsCreated        ViewingRequest[]                    @relation("ViewingRequestCreator")
+  viewingRequestHistory         ViewingRequestStatusHistory[]       @relation("ViewingRequestStatusActor")
+  applicantsCreated             Applicant[]                         @relation("ApplicantCreator")
+  applicationsCreated           RentalApplication[]                 @relation("ApplicationCreator")
+  applicationStatusHistory      RentalApplicationStatusHistory[]    @relation("ApplicationStatusActor")
+  applicationActivities         RentalApplicationActivity[]         @relation("ApplicationActivityActor")
+  applicationDocuments          RentalApplicationDocument[]         @relation("ApplicationDocumentUploader")
+  applicationConsents           ApplicationConsent[]                @relation("ApplicationConsentRecorder")
+  leaseExecutionDocuments       LeaseExecutionDocument[]            @relation("LeaseExecutionDocumentCreator")
+  leaseSignatureActions         LeaseSignatureRequest[]             @relation("LeaseSignatureActor")
+  moveInHistory                 MoveInHistory[]                     @relation("MoveInHistoryActor")
+  moveOutHistory                MoveOutHistory[]                    @relation("MoveOutHistoryActor")
+  noticesToVacateCreated        NoticeToVacate[]                    @relation("NoticeCreator")
+  noticeHistory                 NoticeToVacateHistory[]             @relation("NoticeHistoryActor")
+  depositDeductionsCreated      DepositDeduction[]                  @relation("DepositDeductionCreator")
+  depositDeductionsDecided      DepositDeduction[]                  @relation("DepositDeductionDecision")
+  depositSettlementsApproved    DepositSettlement[]                 @relation("DepositSettlementApprover")
+  depositRefundsRecorded        DepositSettlement[]                 @relation("DepositRefundRecorder")
+  depositRefundTransactions     DepositRefund[]                     @relation("DepositRefundTransactionRecorder")
+  turnoverHistory               VacancyTurnoverHistory[]            @relation("VacancyTurnoverHistoryActor")
+  aiSessions                    AISession[]
+  aiMessages                    AIMessage[]
+  aiToolExecutions              AIToolExecution[]
+  aiProposalsRequested          AIActionProposal[]                  @relation("AIProposalRequester")
+  aiProposalsDecided            AIActionProposal[]                  @relation("AIProposalDecision")
+  aiAutonomyConfigured          AIAutonomyConfiguration[]           @relation("AIAutonomyActor")
+  aiAutonomyUpdated             AIAutonomyConfiguration[]           @relation("AIAutonomyUpdater")
+  aiPoliciesCreated             AIAutonomyPolicy[]                  @relation("AIPolicyCreator")
+  aiPoliciesUpdated             AIAutonomyPolicy[]                  @relation("AIPolicyUpdater")
+  aiActivities                  AIActivity[]                        @relation("AIActivityActor")
+  aiEmployeesCreated            AIEmployee[]                        @relation("AIEmployeeCreator")
+  aiEmployeesUpdated            AIEmployee[]                        @relation("AIEmployeeUpdater")
+  aiHandoffsCreated             AIEmployeeHandoff[]                 @relation("AIHandoffCreator")
+  authoredMessages              Message[]                           @relation("MessageAuthor")
+  conversationAssignmentActions ConversationAssignment[]            @relation("ConversationAssignmentActor")
+  storageObjectsUploaded        StorageObject[]                     @relation("StorageObjectUploader")
+  storageObjectsArchived        StorageObject[]                     @relation("StorageObjectArchiver")
+  storageObjectHistory          StorageObjectHistory[]              @relation("StorageObjectHistoryActor")
+  generatedDocuments            GeneratedDocument[]                 @relation("GeneratedDocumentCreator")
+  documentTemplatesCreated      DocumentTemplate[]                  @relation("DocumentTemplateCreator")
+  calendarEventsCreated         CalendarEvent[]                     @relation("CalendarEventCreator")
+  integrationConfigsUpdated     IntegrationConfig[]                 @relation("IntegrationConfigUpdater")
+  platformPrincipal             PlatformPrincipal?
+  subscriptionStatusActions     SubscriptionStatusHistory[]         @relation("SubscriptionStatusActor")
 }
 
 model Session {
@@ -178,45 +806,116 @@ model Currency {
 }
 
 model Organisation {
-  id                  String                   @id @default(uuid()) @db.Uuid
-  name                String
-  type                OrganisationType
-  countryCode         String                   @db.Char(2)
-  defaultCurrencyCode String                   @db.Char(3)
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  archivedAt          DateTime?
-  country             Country                  @relation(fields: [countryCode], references: [code])
-  members             OrganisationMember[]
-  invitations         OrganisationInvitation[]
-  portfolios          Portfolio[]
-  properties          Property[]               @relation("ManagingOrganisation")
-  auditEvents         AuditEvent[]
-  domainEvents        DomainEvent[]
-  tenants             TenantOrganisation[]
-  leases              Lease[]
-  reminderPolicies    ReminderPolicy[]
-  notifications       Notification[]
-  backgroundJobs      BackgroundJob[]
-  notifyEmail         Boolean                  @default(true)
-  notifySms           Boolean                  @default(false)
-  notifyWhatsapp      Boolean                  @default(false)
-  rentObligations     RentObligation[]
+  id                        String                            @id @default(uuid()) @db.Uuid
+  name                      String
+  type                      OrganisationType
+  countryCode               String                            @db.Char(2)
+  defaultCurrencyCode       String                            @db.Char(3)
+  createdAt                 DateTime                          @default(now())
+  updatedAt                 DateTime                          @updatedAt
+  archivedAt                DateTime?
+  country                   Country                           @relation(fields: [countryCode], references: [code])
+  members                   OrganisationMember[]
+  invitations               OrganisationInvitation[]
+  portfolios                Portfolio[]
+  properties                Property[]                        @relation("ManagingOrganisation")
+  auditEvents               AuditEvent[]
+  domainEvents              DomainEvent[]
+  tenants                   TenantOrganisation[]
+  leases                    Lease[]
+  reminderPolicies          ReminderPolicy[]
+  notifications             Notification[]
+  backgroundJobs            BackgroundJob[]
+  notifyEmail               Boolean                           @default(true)
+  notifySms                 Boolean                           @default(false)
+  notifyWhatsapp            Boolean                           @default(false)
+  rentObligations           RentObligation[]
+  paymentIntents            PaymentIntent[]
+  payments                  Payment[]
+  receipts                  Receipt[]
+  securityDeposits          SecurityDeposit[]
+  ledgerEntries             FinancialLedgerEntry[]
+  reconciliationEvents      PaymentReconciliationEvent[]
+  maintenanceRequests       MaintenanceRequest[]
+  workOrders                WorkOrder[]
+  maintenanceApprovals      MaintenanceApproval[]
+  providerProfile           ServiceProvider?                  @relation("CompanyProviderOrganisation")
+  providerDirectories       ProviderOrganisation[]            @relation("LandlordProviderDirectory")
+  quotationRequests         ProviderQuotationRequest[]        @relation("LandlordQuotationRequests")
+  providerQuotations        ProviderQuotation[]               @relation("LandlordProviderQuotations")
+  providerAssignments       ProviderAssignment[]              @relation("LandlordProviderAssignments")
+  providerRatings           ProviderRating[]                  @relation("LandlordProviderRatings")
+  marketplaceEnquiries      MarketplaceEnquiry[]              @relation("MarketplaceRequestingOrganisation")
+  listings                  Listing[]
+  moveOuts                  MoveOut[]
+  vacancyTurnovers          VacancyTurnover[]
+  depositSettlements        DepositSettlement[]
+  depositDeductions         DepositDeduction[]
+  depositRefunds            DepositRefund[]
+  aiSessions                AISession[]
+  aiToolExecutions          AIToolExecution[]
+  aiActionProposals         AIActionProposal[]
+  aiAutonomyConfig          AIAutonomyConfiguration?
+  aiAutonomyPolicies        AIAutonomyPolicy[]
+  aiActivities              AIActivity[]
+  aiEmployees               AIEmployee[]
+  aiEmployeeHandoffs        AIEmployeeHandoff[]
+  aiEmployeeActivities      AIEmployeeActivity[]
+  marketplaceLeads          MarketplaceLead[]
+  viewingRequests           ViewingRequest[]
+  moveIns                   MoveIn[]
+  noticesToVacate           NoticeToVacate[]
+  applicants                Applicant[]
+  rentalApplications        RentalApplication[]
+  conversations             Conversation[]
+  communicationChannels     CommunicationChannelConfig[]
+  conversationParticipants  ConversationParticipant[]
+  messages                  Message[]
+  messageDeliveries         MessageDelivery[]
+  conversationAssignments   ConversationAssignment[]
+  storageObjects            StorageObject[]
+  generatedDocuments        GeneratedDocument[]
+  documentTemplates         DocumentTemplate[]
+  signatureProviderEvents   SignatureProviderEvent[]
+  geocodeLookups            GeocodeLookup[]
+  calendarEvents            CalendarEvent[]
+  integrationConfigs        IntegrationConfig[]
+  subscription              OrganisationSubscription?
+  subscriptionInvoices      SubscriptionInvoice[]
+  subscriptionStatusHistory SubscriptionStatusHistory[]
+  entitlementOverrides      OrganisationEntitlementOverride[]
+  billingWebhookEvents      BillingWebhookEvent[]
+  platformSupportSessions   PlatformSupportSession[]
+  platformAuditEvents       PlatformAuditEvent[]
+  featureFlagOverrides      OrganisationFeatureFlagOverride[]
 
   @@index([countryCode])
   @@index([archivedAt])
 }
 
 model OrganisationMember {
-  id             String           @id @default(uuid()) @db.Uuid
-  organisationId String           @db.Uuid
-  userId         String           @db.Uuid
-  status         MemberStatus     @default(ACTIVE)
-  createdAt      DateTime         @default(now())
-  archivedAt     DateTime?
-  organisation   Organisation     @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-  roles          MembershipRole[]
+  id                      String                   @id @default(uuid()) @db.Uuid
+  organisationId          String                   @db.Uuid
+  userId                  String                   @db.Uuid
+  status                  MemberStatus             @default(ACTIVE)
+  createdAt               DateTime                 @default(now())
+  archivedAt              DateTime?
+  organisation            Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roles                   MembershipRole[]
+  assignedWorkOrders      WorkOrder[]              @relation("WorkOrderAssigneeMember")
+  assignedViewings        ViewingRequest[]         @relation("ViewingAssigneeMember")
+  leaseSignatureRequests  LeaseSignatureRequest[]  @relation("OrganisationSignatureMember")
+  responsibleMoveIns      MoveIn[]                 @relation("MoveInResponsibleMember")
+  inspections             MoveInInspection[]       @relation("MoveInInspectorMember")
+  responsibleMoveOuts     MoveOut[]                @relation("MoveOutResponsibleMember")
+  moveOutInspections      MoveOutInspection[]      @relation("MoveOutInspectorMember")
+  keyReturnsVerified      MoveInKeyHandover[]      @relation("MoveOutKeyVerifier")
+  assignedLeads           MarketplaceLead[]        @relation("MarketplaceLeadAssignee")
+  assignedApplications    RentalApplication[]      @relation("RentalApplicationAssignee")
+  aiEmployeeHandoffs      AIEmployeeHandoff[]
+  assignedConversations   Conversation[]           @relation("ConversationAssigneeMember")
+  conversationAssignments ConversationAssignment[] @relation("ConversationAssignmentMember")
 
   @@unique([organisationId, userId])
   @@index([userId, status])
@@ -278,15 +977,16 @@ model OrganisationInvitation {
 }
 
 model Portfolio {
-  id             String       @id @default(uuid()) @db.Uuid
-  organisationId String       @db.Uuid
+  id             String                @id @default(uuid()) @db.Uuid
+  organisationId String                @db.Uuid
   name           String
   description    String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
   archivedAt     DateTime?
-  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  organisation   Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
   properties     Property[]
+  aiEmployees    AIEmployeePortfolio[]
 
   @@unique([organisationId, name])
   @@index([organisationId, archivedAt])
@@ -301,34 +1001,51 @@ model PropertyOwner {
 }
 
 model Property {
-  id                   String           @id @default(uuid()) @db.Uuid
-  organisationId       String           @db.Uuid
-  portfolioId          String?          @db.Uuid
-  ownerId              String?          @db.Uuid
+  id                   String                 @id @default(uuid()) @db.Uuid
+  organisationId       String                 @db.Uuid
+  portfolioId          String?                @db.Uuid
+  ownerId              String?                @db.Uuid
   referenceNumber      String
   name                 String
   description          String?
   category             String
-  countryCode          String           @db.Char(2)
+  countryCode          String                 @db.Char(2)
   region               String?
   city                 String?
   district             String?
   addressLine1         String?
   digitalAddress       String?
-  latitude             Decimal?         @db.Decimal(10, 7)
-  longitude            Decimal?         @db.Decimal(10, 7)
-  currencyCode         String           @db.Char(3)
-  status               PropertyStatus   @default(ACTIVE)
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  latitude             Decimal?               @db.Decimal(10, 7)
+  longitude            Decimal?               @db.Decimal(10, 7)
+  geocodeStatus        GeocodeStatus          @default(NOT_ATTEMPTED)
+  geocodedAt           DateTime?
+  currencyCode         String                 @db.Char(3)
+  status               PropertyStatus         @default(ACTIVE)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
   archivedAt           DateTime?
-  managingOrganisation Organisation     @relation("ManagingOrganisation", fields: [organisationId], references: [id], onDelete: Restrict)
-  portfolio            Portfolio?       @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
-  owner                PropertyOwner?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  managingOrganisation Organisation           @relation("ManagingOrganisation", fields: [organisationId], references: [id], onDelete: Restrict)
+  portfolio            Portfolio?             @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  owner                PropertyOwner?         @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   buildings            Building[]
   units                Unit[]
   leases               Lease[]
   rentObligations      RentObligation[]
+  paymentIntents       PaymentIntent[]
+  payments             Payment[]
+  receipts             Receipt[]
+  securityDeposits     SecurityDeposit[]
+  ledgerEntries        FinancialLedgerEntry[]
+  maintenanceRequests  MaintenanceRequest[]
+  workOrders           WorkOrder[]
+  marketplaceEnquiries MarketplaceEnquiry[]
+  listings             Listing[]
+  vacancyTurnovers     VacancyTurnover[]
+  aiAutonomyPolicies   AIAutonomyPolicy[]
+  aiEmployees          AIEmployeeProperty[]
+  conversations        Conversation[]
+  geocodeLookups       GeocodeLookup[]
+  generatedDocuments   GeneratedDocument[]
 
   @@unique([organisationId, referenceNumber])
   @@index([organisationId, archivedAt, status])
@@ -351,23 +1068,33 @@ model Building {
 }
 
 model Unit {
-  id              String           @id @default(uuid()) @db.Uuid
-  propertyId      String           @db.Uuid
-  buildingId      String?          @db.Uuid
-  name            String
-  unitType        String?
-  floor           String?
-  bedrooms        Int?
-  bathrooms       Int?
-  sizeSqm         Decimal?         @db.Decimal(12, 2)
-  status          UnitStatus       @default(AVAILABLE)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  archivedAt      DateTime?
-  property        Property         @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  building        Building?        @relation(fields: [buildingId], references: [id], onDelete: Restrict)
-  leases          Lease[]
-  rentObligations RentObligation[]
+  id                  String                 @id @default(uuid()) @db.Uuid
+  propertyId          String                 @db.Uuid
+  buildingId          String?                @db.Uuid
+  name                String
+  unitType            String?
+  floor               String?
+  bedrooms            Int?
+  bathrooms           Int?
+  sizeSqm             Decimal?               @db.Decimal(12, 2)
+  status              UnitStatus             @default(AVAILABLE)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  archivedAt          DateTime?
+  property            Property               @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  building            Building?              @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  leases              Lease[]
+  rentObligations     RentObligation[]
+  paymentIntents      PaymentIntent[]
+  payments            Payment[]
+  receipts            Receipt[]
+  securityDeposits    SecurityDeposit[]
+  ledgerEntries       FinancialLedgerEntry[]
+  maintenanceRequests MaintenanceRequest[]
+  workOrders          WorkOrder[]
+  listings            Listing[]
+  vacancyTurnovers    VacancyTurnover[]
+  conversations       Conversation[]
 
   @@unique([propertyId, buildingId, name])
   @@index([propertyId, archivedAt, status])
@@ -384,67 +1111,99 @@ model Tenant {
 }
 
 model TenantOrganisation {
-  id                           String         @id @default(uuid()) @db.Uuid
-  tenantId                     String         @db.Uuid
-  organisationId               String         @db.Uuid
-  email                        String?        @db.Citext
+  id                           String                  @id @default(uuid()) @db.Uuid
+  tenantId                     String                  @db.Uuid
+  organisationId               String                  @db.Uuid
+  userId                       String?                 @db.Uuid
+  email                        String?                 @db.Citext
   phone                        String?
   addressLine1                 String?
   city                         String?
-  countryCode                  String?        @db.Char(2)
+  countryCode                  String?                 @db.Char(2)
   notes                        String?
-  communicationEmailAllowed    Boolean        @default(true)
-  communicationSmsAllowed      Boolean        @default(false)
-  communicationWhatsappAllowed Boolean        @default(false)
-  communicationInAppAllowed    Boolean        @default(true)
-  createdAt                    DateTime       @default(now())
-  updatedAt                    DateTime       @updatedAt
+  communicationEmailAllowed    Boolean                 @default(true)
+  communicationSmsAllowed      Boolean                 @default(false)
+  communicationWhatsappAllowed Boolean                 @default(false)
+  communicationInAppAllowed    Boolean                 @default(true)
+  createdAt                    DateTime                @default(now())
+  updatedAt                    DateTime                @updatedAt
   archivedAt                   DateTime?
-  tenant                       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  organisation                 Organisation   @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  tenant                       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  organisation                 Organisation            @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  user                         User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
   leaseParties                 LeaseParty[]
   notifications                Notification[]
+  paymentIntents               PaymentIntent[]
+  payments                     Payment[]
+  receipts                     Receipt[]
+  securityDeposits             SecurityDeposit[]
+  maintenanceRequests          MaintenanceRequest[]
+  leaseSignatureRequests       LeaseSignatureRequest[] @relation("TenantSignatureRelationship")
+  keyHandovers                 MoveInKeyHandover[]     @relation("MoveInKeyRecipient")
+  rentalApplications           RentalApplication[]
+  noticesToVacate              NoticeToVacate[]
+  depositSettlements           DepositSettlement[]
+  conversations                Conversation[]
+  generatedDocuments           GeneratedDocument[]
 
   @@unique([tenantId, organisationId])
+  @@unique([organisationId, userId])
   @@index([organisationId, archivedAt])
   @@index([email])
 }
 
 model Lease {
-  id                    String                @id @default(uuid()) @db.Uuid
-  organisationId        String                @db.Uuid
-  propertyId            String                @db.Uuid
-  unitId                String?               @db.Uuid
-  renewedFromLeaseId    String?               @db.Uuid
-  referenceNumber       String
-  startDate             DateTime              @db.Date
-  endDate               DateTime?             @db.Date
-  rentAmountMinor       Decimal               @db.Decimal(19, 0)
-  currencyCode          String                @db.Char(3)
-  rentFrequency         RentFrequency
-  customFrequency       String?
-  depositAmountMinor    Decimal?              @db.Decimal(19, 0)
-  status                LeaseStatus           @default(DRAFT)
-  renewalStatus         RenewalStatus         @default(NOT_RENEWED)
-  moveStatus            MoveStatus            @default(NOT_MOVED_IN)
-  notes                 String?
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  archivedAt            DateTime?
-  organisation          Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  property              Property              @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit                  Unit?                 @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  renewedFromLease      Lease?                @relation("LeaseRenewals", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
-  renewals              Lease[]               @relation("LeaseRenewals")
-  parties               LeaseParty[]
-  documents             LeaseDocument[]
-  history               LeaseHistory[]
-  amendments            LeaseAmendment[]
-  obligations           RentObligation[]
-  notifications         Notification[]
-  renewalWorkflowStatus RenewalWorkflowStatus @default(NONE)
-  building              Building?             @relation(fields: [buildingId], references: [id])
-  buildingId            String?               @db.Uuid
+  id                     String                   @id @default(uuid()) @db.Uuid
+  organisationId         String                   @db.Uuid
+  propertyId             String                   @db.Uuid
+  unitId                 String?                  @db.Uuid
+  renewedFromLeaseId     String?                  @db.Uuid
+  referenceNumber        String
+  startDate              DateTime                 @db.Date
+  endDate                DateTime?                @db.Date
+  rentAmountMinor        Decimal                  @db.Decimal(19, 0)
+  currencyCode           String                   @db.Char(3)
+  rentFrequency          RentFrequency
+  customFrequency        String?
+  depositAmountMinor     Decimal?                 @db.Decimal(19, 0)
+  status                 LeaseStatus              @default(DRAFT)
+  renewalStatus          RenewalStatus            @default(NOT_RENEWED)
+  moveStatus             MoveStatus               @default(NOT_MOVED_IN)
+  notes                  String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  archivedAt             DateTime?
+  organisation           Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property               Property                 @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                   Unit?                    @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  renewedFromLease       Lease?                   @relation("LeaseRenewals", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
+  renewals               Lease[]                  @relation("LeaseRenewals")
+  parties                LeaseParty[]
+  documents              LeaseDocument[]
+  history                LeaseHistory[]
+  amendments             LeaseAmendment[]
+  obligations            RentObligation[]
+  notifications          Notification[]
+  paymentIntents         PaymentIntent[]
+  payments               Payment[]
+  receipts               Receipt[]
+  securityDeposits       SecurityDeposit[]
+  ledgerEntries          FinancialLedgerEntry[]
+  maintenanceRequests    MaintenanceRequest[]
+  rentalApplications     RentalApplication[]
+  renewalWorkflowStatus  RenewalWorkflowStatus    @default(NONE)
+  building               Building?                @relation(fields: [buildingId], references: [id])
+  buildingId             String?                  @db.Uuid
+  executionStatus        LeaseExecutionStatus     @default(DRAFT)
+  activationRequirements Json?
+  executionDocuments     LeaseExecutionDocument[]
+  signatureRequests      LeaseSignatureRequest[]
+  moveIn                 MoveIn?
+  noticeToVacate         NoticeToVacate?
+  moveOut                MoveOut?
+  depositSettlement      DepositSettlement?
+  conversations          Conversation[]
+  generatedDocuments     GeneratedDocument[]
 
   @@unique([organisationId, referenceNumber])
   @@index([organisationId, status, endDate])
@@ -466,26 +1225,267 @@ model LeaseAmendment {
 }
 
 model RentObligation {
-  id             String               @id @default(uuid()) @db.Uuid
-  organisationId String               @db.Uuid
-  leaseId        String               @db.Uuid
-  propertyId     String               @db.Uuid
-  unitId         String?              @db.Uuid
-  dueDate        DateTime             @db.Date
-  periodStart    DateTime             @db.Date
-  periodEnd      DateTime             @db.Date
-  amountMinor    Decimal              @db.Decimal(19, 0)
-  currencyCode   String               @db.Char(3)
-  status         RentObligationStatus @default(UPCOMING)
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  lease          Lease                @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  property       Property             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit           Unit?                @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  organisation   Organisation         @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  id                   String                 @id @default(uuid()) @db.Uuid
+  organisationId       String                 @db.Uuid
+  leaseId              String                 @db.Uuid
+  propertyId           String                 @db.Uuid
+  unitId               String?                @db.Uuid
+  dueDate              DateTime               @db.Date
+  periodStart          DateTime               @db.Date
+  periodEnd            DateTime               @db.Date
+  amountMinor          Decimal                @db.Decimal(19, 0)
+  currencyCode         String                 @db.Char(3)
+  status               RentObligationStatus   @default(UPCOMING)
+  collectionState      RentCollectionState    @default(UNPAID)
+  collectedAmountMinor Decimal                @default(0) @db.Decimal(19, 0)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  lease                Lease                  @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property             Property               @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                 Unit?                  @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  organisation         Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  allocations          PaymentAllocation[]
+  ledgerEntries        FinancialLedgerEntry[]
 
   @@unique([leaseId, periodStart, periodEnd])
   @@index([organisationId, status, dueDate])
+}
+
+model PaymentIntent {
+  id                   String               @id @default(uuid()) @db.Uuid
+  organisationId       String               @db.Uuid
+  tenantOrganisationId String               @db.Uuid
+  leaseId              String               @db.Uuid
+  propertyId           String               @db.Uuid
+  unitId               String?              @db.Uuid
+  internalReference    String
+  amountMinor          Decimal              @db.Decimal(19, 0)
+  currencyCode         String               @db.Char(3)
+  method               PaymentMethod
+  /// Which ledger this checkout ultimately feeds: RENT flows into rent allocation/receipts as
+  /// before; DEPOSIT keeps the money financially separate and, once the provider webhook
+  /// verifies success, produces a `SecurityDeposit` instead of a `Payment`. Set once at intent
+  /// creation by the calling service function (never a user-supplied field), so a checkout can
+  /// never be relabelled after the fact.
+  purpose              PaymentIntentPurpose @default(RENT)
+  status               PaymentStatus        @default(PENDING)
+  providerKey          String
+  providerIntentRef    String?
+  idempotencyKey       String
+  providerPayload      Json?
+  expiresAt            DateTime?
+  createdByUserId      String               @db.Uuid
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  organisation         Organisation         @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation   @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  lease                Lease                @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property             Property             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                 Unit?                @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  payments             Payment[]
+  securityDeposit      SecurityDeposit?
+
+  @@unique([organisationId, internalReference])
+  @@unique([organisationId, idempotencyKey])
+  @@unique([providerKey, providerIntentRef])
+  @@index([organisationId, status, createdAt])
+}
+
+model Payment {
+  id                     String                       @id @default(uuid()) @db.Uuid
+  organisationId         String                       @db.Uuid
+  paymentIntentId        String?                      @db.Uuid
+  tenantOrganisationId   String                       @db.Uuid
+  leaseId                String                       @db.Uuid
+  propertyId             String                       @db.Uuid
+  unitId                 String?                      @db.Uuid
+  internalReference      String
+  amountMinor            Decimal                      @db.Decimal(19, 0)
+  currencyCode           String                       @db.Char(3)
+  method                 PaymentMethod
+  source                 PaymentSource
+  status                 PaymentStatus                @default(PENDING)
+  paidAt                 DateTime
+  externalReference      String
+  evidenceReference      String?
+  providerKey            String?
+  providerTransactionRef String?
+  idempotencyKey         String?
+  reconciliationStatus   ReconciliationStatus         @default(UNMATCHED)
+  failureReason          String?
+  createdByUserId        String?                      @db.Uuid
+  confirmedAt            DateTime?
+  reversedAt             DateTime?
+  reversedByUserId       String?                      @db.Uuid
+  reversalReason         String?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  organisation           Organisation                 @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  intent                 PaymentIntent?               @relation(fields: [paymentIntentId], references: [id], onDelete: Restrict)
+  tenantOrganisation     TenantOrganisation           @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  lease                  Lease                        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property               Property                     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                   Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  allocations            PaymentAllocation[]
+  receipt                Receipt?
+  ledgerEntries          FinancialLedgerEntry[]
+  reconciliationEvents   PaymentReconciliationEvent[]
+
+  @@unique([organisationId, internalReference])
+  @@unique([organisationId, idempotencyKey])
+  @@unique([providerKey, providerTransactionRef])
+  @@index([organisationId, status, paidAt])
+  @@index([organisationId, leaseId, paidAt])
+  @@index([organisationId, tenantOrganisationId, paidAt])
+}
+
+model PaymentAllocation {
+  id               String         @id @default(uuid()) @db.Uuid
+  paymentId        String         @db.Uuid
+  rentObligationId String         @db.Uuid
+  amountMinor      Decimal        @db.Decimal(19, 0)
+  allocatedAt      DateTime       @default(now())
+  reversedAt       DateTime?
+  payment          Payment        @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  rentObligation   RentObligation @relation(fields: [rentObligationId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, rentObligationId])
+  @@index([rentObligationId, reversedAt])
+}
+
+model Receipt {
+  id                   String             @id @default(uuid()) @db.Uuid
+  organisationId       String             @db.Uuid
+  paymentId            String             @unique @db.Uuid
+  tenantOrganisationId String             @db.Uuid
+  leaseId              String             @db.Uuid
+  propertyId           String             @db.Uuid
+  unitId               String?            @db.Uuid
+  receiptNumber        String             @unique
+  amountMinor          Decimal            @db.Decimal(19, 0)
+  currencyCode         String             @db.Char(3)
+  method               PaymentMethod
+  paidAt               DateTime
+  status               ReceiptStatus      @default(ISSUED)
+  issuedAt             DateTime           @default(now())
+  voidedAt             DateTime?
+  organisation         Organisation       @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  payment              Payment            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  lease                Lease              @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property             Property           @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                 Unit?              @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, issuedAt])
+}
+
+model SecurityDeposit {
+  id                     String                       @id @default(uuid()) @db.Uuid
+  organisationId         String                       @db.Uuid
+  tenantOrganisationId   String                       @db.Uuid
+  leaseId                String                       @db.Uuid
+  propertyId             String                       @db.Uuid
+  unitId                 String?                      @db.Uuid
+  paymentIntentId        String?                      @unique @db.Uuid
+  internalReference      String
+  amountMinor            Decimal                      @db.Decimal(19, 0)
+  currencyCode           String                       @db.Char(3)
+  receivedAt             DateTime
+  method                 PaymentMethod
+  /// MANUAL deposits are staff-recorded (e.g. cash/bank evidence); PROVIDER deposits are created
+  /// only by `reconcileProviderEvent` after a verified successful provider webhook, and are never
+  /// created from an unverified checkout redirect.
+  source                 SecurityDepositSource        @default(MANUAL)
+  externalReference      String
+  providerKey            String?
+  providerTransactionRef String?
+  idempotencyKey         String
+  evidenceReference      String?
+  status                 SecurityDepositStatus        @default(HELD)
+  refundedAmountMinor    Decimal                      @default(0) @db.Decimal(19, 0)
+  deductedAmountMinor    Decimal                      @default(0) @db.Decimal(19, 0)
+  notes                  String?
+  recordedByUserId       String                       @db.Uuid
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  organisation           Organisation                 @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  tenantOrganisation     TenantOrganisation           @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  lease                  Lease                        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property               Property                     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                   Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  paymentIntent          PaymentIntent?               @relation(fields: [paymentIntentId], references: [id], onDelete: Restrict)
+  ledgerEntries          FinancialLedgerEntry[]
+  reconciliationEvents   PaymentReconciliationEvent[]
+
+  @@unique([organisationId, internalReference])
+  @@unique([organisationId, idempotencyKey])
+  @@unique([providerKey, providerTransactionRef])
+  @@index([organisationId, leaseId, receivedAt])
+}
+
+model FinancialLedgerEntry {
+  id                  String             @id @default(uuid()) @db.Uuid
+  organisationId      String             @db.Uuid
+  propertyId          String             @db.Uuid
+  unitId              String?            @db.Uuid
+  leaseId             String?            @db.Uuid
+  rentObligationId    String?            @db.Uuid
+  paymentId           String?            @db.Uuid
+  securityDepositId   String?            @db.Uuid
+  depositSettlementId String?            @db.Uuid
+  depositDeductionId  String?            @db.Uuid
+  depositRefundId     String?            @db.Uuid
+  type                LedgerEntryType
+  direction           LedgerDirection
+  amountMinor         Decimal            @db.Decimal(19, 0)
+  currencyCode        String             @db.Char(3)
+  effectiveAt         DateTime
+  reference           String
+  description         String?
+  createdByUserId     String?            @db.Uuid
+  createdAt           DateTime           @default(now())
+  organisation        Organisation       @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property            Property           @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                Unit?              @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  lease               Lease?             @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  rentObligation      RentObligation?    @relation(fields: [rentObligationId], references: [id], onDelete: Restrict)
+  payment             Payment?           @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  securityDeposit     SecurityDeposit?   @relation(fields: [securityDepositId], references: [id], onDelete: Restrict)
+  depositSettlement   DepositSettlement? @relation(fields: [depositSettlementId], references: [id], onDelete: Restrict)
+  depositDeduction    DepositDeduction?  @relation(fields: [depositDeductionId], references: [id], onDelete: Restrict)
+  depositRefund       DepositRefund?     @relation(fields: [depositRefundId], references: [id], onDelete: Restrict)
+
+  @@unique([rentObligationId, type])
+  @@index([organisationId, propertyId, effectiveAt])
+  @@index([paymentId])
+  @@index([securityDepositId])
+  @@index([depositSettlementId])
+  @@index([depositDeductionId])
+  @@index([depositRefundId])
+}
+
+model PaymentReconciliationEvent {
+  id                String               @id @default(uuid()) @db.Uuid
+  organisationId    String               @db.Uuid
+  paymentId         String?              @db.Uuid
+  /// Set instead of `paymentId` when the matched intent's purpose is DEPOSIT: a deposit checkout
+  /// never creates a `Payment`, so its reconciliation trail points at the `SecurityDeposit` it
+  /// produced (or stays null when the event did not result in one, e.g. FAILED/MISMATCHED).
+  securityDepositId String?              @db.Uuid
+  providerKey       String
+  eventKey          String
+  payloadHash       String
+  transactionRef    String?
+  status            ReconciliationStatus @default(UNMATCHED)
+  receivedAt        DateTime             @default(now())
+  processedAt       DateTime?
+  organisation      Organisation         @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  payment           Payment?             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  securityDeposit   SecurityDeposit?     @relation(fields: [securityDepositId], references: [id], onDelete: Restrict)
+
+  @@unique([providerKey, eventKey])
+  @@index([organisationId, receivedAt])
+  @@index([securityDepositId])
 }
 
 model ReminderPolicy {
@@ -510,19 +1510,33 @@ model Notification {
   tenantOrganisationId String?             @db.Uuid
   eventType            ReminderEventType
   thresholdDays        Int?
+  /// Disambiguates repeatable per-transaction notifications (e.g. one per payment) from
+  /// the lease-threshold reminders this table originally modeled. Reminders always use the
+  /// default "" value, which preserves their original de-duplication behaviour exactly;
+  /// transaction-driven notifications (e.g. payment received/failed) set it to the source
+  /// record id so repeat events for the same lease/tenant/channel are not treated as duplicates.
+  dedupeReference      String              @default("")
   channel              NotificationChannel
-  status               NotificationStatus  @default(SCHEDULED)
+  status               NotificationStatus  @default(PENDING)
   scheduledAt          DateTime
+  processingAt         DateTime?
+  lastAttemptAt        DateTime?
   sentAt               DateTime?
+  deliveredAt          DateTime?
+  failedAt             DateTime?
+  failureReason        String?
   providerReference    String?
-  retryCount           Int                 @default(0)
+  deliveryAttempts     Int                 @default(0)
+  readAt               DateTime?
   createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
   organisation         Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
   lease                Lease?              @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   tenantOrganisation   TenantOrganisation? @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
 
-  @@unique([leaseId, tenantOrganisationId, eventType, thresholdDays, channel])
+  @@unique([leaseId, tenantOrganisationId, eventType, thresholdDays, dedupeReference, channel])
   @@index([organisationId, status, scheduledAt])
+  @@index([organisationId, readAt, createdAt])
 }
 
 model BackgroundJob {
@@ -547,14 +1561,15 @@ model BackgroundJob {
 }
 
 model LeaseParty {
-  id                   String             @id @default(uuid()) @db.Uuid
-  leaseId              String             @db.Uuid
-  tenantOrganisationId String             @db.Uuid
-  role                 LeasePartyRole     @default(TENANT)
-  isPrimary            Boolean            @default(false)
-  createdAt            DateTime           @default(now())
-  lease                Lease              @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  tenantOrganisation   TenantOrganisation @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  id                   String                  @id @default(uuid()) @db.Uuid
+  leaseId              String                  @db.Uuid
+  tenantOrganisationId String                  @db.Uuid
+  role                 LeasePartyRole          @default(TENANT)
+  isPrimary            Boolean                 @default(false)
+  createdAt            DateTime                @default(now())
+  lease                Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation      @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  signatureRequests    LeaseSignatureRequest[]
 
   @@unique([leaseId, tenantOrganisationId, role])
   @@index([tenantOrganisationId])
@@ -571,6 +1586,492 @@ model LeaseDocument {
   lease       Lease    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
 
   @@unique([leaseId, fileKey])
+}
+
+model LeaseExecutionDocument {
+  id                String                       @id @default(uuid()) @db.Uuid
+  leaseId           String                       @db.Uuid
+  version           Int
+  status            LeaseExecutionDocumentStatus @default(DRAFT)
+  source            String
+  fileKey           String
+  fileName          String
+  contentType       String?
+  sizeBytes         Int?
+  providerReference String?
+  supersedesId      String?                      @db.Uuid
+  createdByUserId   String                       @db.Uuid
+  createdAt         DateTime                     @default(now())
+  readyAt           DateTime?
+  executedAt        DateTime?
+  lease             Lease                        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  createdBy         User                         @relation("LeaseExecutionDocumentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  supersedes        LeaseExecutionDocument?      @relation("LeaseDocumentVersions", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy      LeaseExecutionDocument[]     @relation("LeaseDocumentVersions")
+  signatureRequests LeaseSignatureRequest[]
+
+  @@unique([leaseId, version])
+  @@unique([leaseId, fileKey])
+  @@index([leaseId, status, createdAt])
+}
+
+model LeaseSignatureRequest {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  leaseId              String                   @db.Uuid
+  documentId           String                   @db.Uuid
+  leasePartyId         String?                  @db.Uuid
+  tenantOrganisationId String?                  @db.Uuid
+  organisationMemberId String?                  @db.Uuid
+  signerName           String
+  signerEmail          String?
+  role                 LeaseSignatureRole
+  required             Boolean                  @default(true)
+  status               LeaseSignatureStatus     @default(PENDING)
+  providerKey          String                   @default("INTERNAL")
+  providerReference    String?
+  signingUrl           String?
+  requestedAt          DateTime?
+  sentAt               DateTime?
+  viewedAt             DateTime?
+  signedAt             DateTime?
+  declinedAt           DateTime?
+  expiredAt            DateTime?
+  cancelledAt          DateTime?
+  actedByUserId        String?                  @db.Uuid
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  lease                Lease                    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  document             LeaseExecutionDocument   @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  leaseParty           LeaseParty?              @relation(fields: [leasePartyId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation?      @relation("TenantSignatureRelationship", fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  organisationMember   OrganisationMember?      @relation("OrganisationSignatureMember", fields: [organisationMemberId], references: [id], onDelete: Restrict)
+  actedBy              User?                    @relation("LeaseSignatureActor", fields: [actedByUserId], references: [id], onDelete: SetNull)
+  providerEvents       SignatureProviderEvent[]
+
+  @@index([leaseId, status])
+  @@index([documentId, status])
+  @@index([tenantOrganisationId])
+  @@index([organisationMemberId])
+}
+
+model MoveIn {
+  id                  String                @id @default(uuid()) @db.Uuid
+  organisationId      String                @db.Uuid
+  leaseId             String                @unique @db.Uuid
+  status              MoveInStatus          @default(NOT_STARTED)
+  scheduledDate       DateTime?             @db.Date
+  actualDate          DateTime?             @db.Date
+  responsibleMemberId String?               @db.Uuid
+  notes               String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  organisation        Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  lease               Lease                 @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  responsibleMember   OrganisationMember?   @relation("MoveInResponsibleMember", fields: [responsibleMemberId], references: [id], onDelete: SetNull)
+  checklist           MoveInChecklistItem[]
+  inspections         MoveInInspection[]
+  keyHandovers        MoveInKeyHandover[]
+  history             MoveInHistory[]
+
+  @@index([organisationId, status, scheduledDate])
+}
+
+model MoveInChecklistItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  moveInId    String    @db.Uuid
+  key         String
+  label       String
+  required    Boolean   @default(true)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  notes       String?
+  moveIn      MoveIn    @relation(fields: [moveInId], references: [id], onDelete: Restrict)
+
+  @@unique([moveInId, key])
+}
+
+model MoveInHistory {
+  id          String        @id @default(uuid()) @db.Uuid
+  moveInId    String        @db.Uuid
+  actorUserId String        @db.Uuid
+  fromStatus  MoveInStatus?
+  toStatus    MoveInStatus
+  note        String?
+  createdAt   DateTime      @default(now())
+  moveIn      MoveIn        @relation(fields: [moveInId], references: [id], onDelete: Restrict)
+  actor       User          @relation("MoveInHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([moveInId, createdAt])
+}
+
+model MoveInInspection {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  moveInId             String                 @db.Uuid
+  inspectorMemberId    String                 @db.Uuid
+  inspectedAt          DateTime
+  overallCondition     String?
+  notes                String?
+  tenantAcknowledged   Boolean                @default(false)
+  tenantAcknowledgedAt DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime               @default(now())
+  moveIn               MoveIn                 @relation(fields: [moveInId], references: [id], onDelete: Restrict)
+  inspectorMember      OrganisationMember     @relation("MoveInInspectorMember", fields: [inspectorMemberId], references: [id], onDelete: Restrict)
+  areas                MoveInInspectionArea[]
+  meterReadings        MoveInMeterReading[]
+  inventory            MoveInInventoryItem[]
+
+  @@index([moveInId, inspectedAt])
+}
+
+model MoveInInspectionArea {
+  id           String           @id @default(uuid()) @db.Uuid
+  inspectionId String           @db.Uuid
+  name         String
+  condition    String
+  notes        String?
+  defects      Json?
+  media        Json?
+  inspection   MoveInInspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+
+  @@index([inspectionId])
+}
+
+model MoveInMeterReading {
+  id           String           @id @default(uuid()) @db.Uuid
+  inspectionId String           @db.Uuid
+  type         String
+  identifier   String?
+  value        Decimal          @db.Decimal(19, 4)
+  unit         String
+  readAt       DateTime
+  notes        String?
+  inspection   MoveInInspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+
+  @@index([inspectionId, type])
+}
+
+model MoveInInventoryItem {
+  id           String           @id @default(uuid()) @db.Uuid
+  inspectionId String           @db.Uuid
+  category     String
+  item         String
+  quantity     Int              @default(1)
+  condition    String
+  notes        String?
+  metadata     Json?
+  inspection   MoveInInspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+
+  @@index([inspectionId, category])
+}
+
+model MoveInKeyHandover {
+  id                   String              @id @default(uuid()) @db.Uuid
+  moveInId             String              @db.Uuid
+  tenantOrganisationId String              @db.Uuid
+  type                 String
+  quantity             Int                 @default(1)
+  identifier           String?
+  issuedAt             DateTime
+  returnedAt           DateTime?
+  returnedQuantity     Int                 @default(0)
+  missingQuantity      Int                 @default(0)
+  returnVerifiedById   String?             @db.Uuid
+  returnNotes          String?
+  notes                String?
+  moveIn               MoveIn              @relation(fields: [moveInId], references: [id], onDelete: Restrict)
+  recipient            TenantOrganisation  @relation("MoveInKeyRecipient", fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  returnVerifiedBy     OrganisationMember? @relation("MoveOutKeyVerifier", fields: [returnVerifiedById], references: [id], onDelete: Restrict)
+
+  @@index([moveInId, issuedAt])
+  @@index([tenantOrganisationId])
+}
+
+model NoticeToVacate {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  organisationId       String                  @db.Uuid
+  leaseId              String                  @unique @db.Uuid
+  tenantOrganisationId String?                 @db.Uuid
+  createdByUserId      String                  @db.Uuid
+  noticeDate           DateTime                @db.Date
+  intendedMoveOutDate  DateTime                @db.Date
+  source               NoticeToVacateSource
+  reason               String?
+  notes                String?
+  status               NoticeToVacateStatus    @default(SUBMITTED)
+  acknowledgedAt       DateTime?
+  withdrawnAt          DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  organisation         Organisation            @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  lease                Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation?     @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  createdBy            User                    @relation("NoticeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  history              NoticeToVacateHistory[]
+  moveOut              MoveOut?
+
+  @@index([organisationId, status, intendedMoveOutDate])
+}
+
+model NoticeToVacateHistory {
+  id          String                @id @default(uuid()) @db.Uuid
+  noticeId    String                @db.Uuid
+  actorUserId String                @db.Uuid
+  fromStatus  NoticeToVacateStatus?
+  toStatus    NoticeToVacateStatus
+  note        String?
+  createdAt   DateTime              @default(now())
+  notice      NoticeToVacate        @relation(fields: [noticeId], references: [id], onDelete: Restrict)
+  actor       User                  @relation("NoticeHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([noticeId, createdAt])
+}
+
+model MoveOut {
+  id                  String              @id @default(uuid()) @db.Uuid
+  organisationId      String              @db.Uuid
+  leaseId             String              @unique @db.Uuid
+  noticeId            String?             @unique @db.Uuid
+  status              MoveOutStatus       @default(NOT_STARTED)
+  scheduledDate       DateTime?           @db.Date
+  actualDate          DateTime?           @db.Date
+  responsibleMemberId String?             @db.Uuid
+  notes               String?
+  closureRequirements Json?
+  closedAt            DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  organisation        Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  lease               Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  notice              NoticeToVacate?     @relation(fields: [noticeId], references: [id], onDelete: Restrict)
+  responsibleMember   OrganisationMember? @relation("MoveOutResponsibleMember", fields: [responsibleMemberId], references: [id], onDelete: SetNull)
+  history             MoveOutHistory[]
+  inspections         MoveOutInspection[]
+  depositSettlement   DepositSettlement?
+  turnover            VacancyTurnover?
+
+  @@index([organisationId, status, scheduledDate])
+}
+
+model MoveOutHistory {
+  id          String         @id @default(uuid()) @db.Uuid
+  moveOutId   String         @db.Uuid
+  actorUserId String         @db.Uuid
+  fromStatus  MoveOutStatus?
+  toStatus    MoveOutStatus
+  note        String?
+  createdAt   DateTime       @default(now())
+  moveOut     MoveOut        @relation(fields: [moveOutId], references: [id], onDelete: Restrict)
+  actor       User           @relation("MoveOutHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([moveOutId, createdAt])
+}
+
+model MoveOutInspection {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  moveOutId            String                  @db.Uuid
+  inspectorMemberId    String                  @db.Uuid
+  inspectedAt          DateTime
+  overallCondition     String?
+  cleaningCondition    String?
+  notes                String?
+  tenantAcknowledged   Boolean                 @default(false)
+  tenantAcknowledgedAt DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                @default(now())
+  moveOut              MoveOut                 @relation(fields: [moveOutId], references: [id], onDelete: Restrict)
+  inspectorMember      OrganisationMember      @relation("MoveOutInspectorMember", fields: [inspectorMemberId], references: [id], onDelete: Restrict)
+  areas                MoveOutInspectionArea[]
+  meterReadings        MoveOutMeterReading[]
+  inventory            MoveOutInventoryItem[]
+
+  @@index([moveOutId, inspectedAt])
+}
+
+model MoveOutInspectionArea {
+  id           String            @id @default(uuid()) @db.Uuid
+  inspectionId String            @db.Uuid
+  name         String
+  condition    String
+  notes        String?
+  damage       Json?
+  media        Json?
+  inspection   MoveOutInspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+
+  @@index([inspectionId])
+}
+
+model MoveOutMeterReading {
+  id           String            @id @default(uuid()) @db.Uuid
+  inspectionId String            @db.Uuid
+  type         String
+  identifier   String?
+  value        Decimal           @db.Decimal(19, 4)
+  unit         String
+  readAt       DateTime
+  notes        String?
+  inspection   MoveOutInspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+
+  @@index([inspectionId, type])
+}
+
+model MoveOutInventoryItem {
+  id           String            @id @default(uuid()) @db.Uuid
+  inspectionId String            @db.Uuid
+  category     String
+  item         String
+  quantity     Int               @default(1)
+  condition    String
+  missing      Boolean           @default(false)
+  notes        String?
+  metadata     Json?
+  inspection   MoveOutInspection @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+
+  @@index([inspectionId, category])
+}
+
+model DepositSettlement {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  organisationId          String                  @db.Uuid
+  leaseId                 String                  @unique @db.Uuid
+  moveOutId               String                  @unique @db.Uuid
+  tenantOrganisationId    String                  @db.Uuid
+  status                  DepositSettlementStatus @default(PENDING)
+  currencyCode            String                  @db.Char(3)
+  depositReceivedMinor    Decimal                 @default(0) @db.Decimal(19, 0)
+  priorAdjustmentMinor    Decimal                 @default(0) @db.Decimal(19, 0)
+  outstandingBalanceMinor Decimal                 @default(0) @db.Decimal(19, 0)
+  approvedDeductionMinor  Decimal                 @default(0) @db.Decimal(19, 0)
+  refundAmountMinor       Decimal                 @default(0) @db.Decimal(19, 0)
+  refundedAmountMinor     Decimal                 @default(0) @db.Decimal(19, 0)
+  approvalReason          String?
+  approvedByUserId        String?                 @db.Uuid
+  approvedAt              DateTime?
+  refundReference         String?
+  refundEvidenceReference String?
+  refundRecordedByUserId  String?                 @db.Uuid
+  refundRecordedAt        DateTime?
+  closedAt                DateTime?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  organisation            Organisation            @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  lease                   Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  moveOut                 MoveOut                 @relation(fields: [moveOutId], references: [id], onDelete: Restrict)
+  tenantOrganisation      TenantOrganisation      @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  approvedBy              User?                   @relation("DepositSettlementApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  refundRecordedBy        User?                   @relation("DepositRefundRecorder", fields: [refundRecordedByUserId], references: [id], onDelete: Restrict)
+  deductions              DepositDeduction[]
+  ledgerEntries           FinancialLedgerEntry[]
+  refunds                 DepositRefund[]
+
+  @@index([organisationId, status, createdAt])
+}
+
+model DepositRefund {
+  id                String                 @id @default(uuid()) @db.Uuid
+  organisationId    String                 @db.Uuid
+  settlementId      String                 @db.Uuid
+  amountMinor       Decimal                @db.Decimal(19, 0)
+  currencyCode      String                 @db.Char(3)
+  reference         String
+  evidenceReference String?
+  idempotencyKey    String
+  recordedByUserId  String                 @db.Uuid
+  effectiveAt       DateTime
+  createdAt         DateTime               @default(now())
+  organisation      Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  settlement        DepositSettlement      @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  recordedBy        User                   @relation("DepositRefundTransactionRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  ledgerEntries     FinancialLedgerEntry[]
+
+  @@unique([organisationId, idempotencyKey])
+  @@index([settlementId, createdAt])
+}
+
+model DepositDeduction {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  organisationId       String                   @db.Uuid
+  settlementId         String                   @db.Uuid
+  category             DepositDeductionCategory
+  amountMinor          Decimal                  @db.Decimal(19, 0)
+  currencyCode         String                   @db.Char(3)
+  explanation          String
+  evidenceReference    String?
+  maintenanceRequestId String?                  @db.Uuid
+  status               DepositDeductionStatus   @default(PENDING)
+  createdByUserId      String                   @db.Uuid
+  decidedByUserId      String?                  @db.Uuid
+  decisionReason       String?
+  decidedAt            DateTime?
+  reversedAt           DateTime?
+  reversalReason       String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  organisation         Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  settlement           DepositSettlement        @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  maintenanceRequest   MaintenanceRequest?      @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  createdBy            User                     @relation("DepositDeductionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  decidedBy            User?                    @relation("DepositDeductionDecision", fields: [decidedByUserId], references: [id], onDelete: Restrict)
+  ledgerEntries        FinancialLedgerEntry[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([settlementId, status])
+}
+
+model VacancyTurnover {
+  id               String                   @id @default(uuid()) @db.Uuid
+  organisationId   String                   @db.Uuid
+  moveOutId        String                   @unique @db.Uuid
+  propertyId       String                   @db.Uuid
+  unitId           String?                  @db.Uuid
+  status           VacancyTurnoverStatus    @default(INSPECTION_REQUIRED)
+  marketingReadyAt DateTime?
+  occupancyReadyAt DateTime?
+  completedAt      DateTime?
+  relistingReady   Boolean                  @default(false)
+  notes            String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  organisation     Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  moveOut          MoveOut                  @relation(fields: [moveOutId], references: [id], onDelete: Restrict)
+  property         Property                 @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit             Unit?                    @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  tasks            VacancyTurnoverTask[]
+  history          VacancyTurnoverHistory[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([propertyId, unitId])
+}
+
+model VacancyTurnoverTask {
+  id                   String              @id @default(uuid()) @db.Uuid
+  turnoverId           String              @db.Uuid
+  key                  String
+  label                String
+  status               TurnoverTaskStatus  @default(PENDING)
+  required             Boolean             @default(true)
+  maintenanceRequestId String?             @db.Uuid
+  completedAt          DateTime?
+  notes                String?
+  turnover             VacancyTurnover     @relation(fields: [turnoverId], references: [id], onDelete: Restrict)
+  maintenanceRequest   MaintenanceRequest? @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+
+  @@unique([turnoverId, key])
+}
+
+model VacancyTurnoverHistory {
+  id          String                 @id @default(uuid()) @db.Uuid
+  turnoverId  String                 @db.Uuid
+  actorUserId String                 @db.Uuid
+  fromStatus  VacancyTurnoverStatus?
+  toStatus    VacancyTurnoverStatus
+  note        String?
+  createdAt   DateTime               @default(now())
+  turnover    VacancyTurnover        @relation(fields: [turnoverId], references: [id], onDelete: Restrict)
+  actor       User                   @relation("VacancyTurnoverHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([turnoverId, createdAt])
 }
 
 model LeaseHistory {
@@ -591,6 +2092,928 @@ model LeaseHistory {
 
   @@unique([leaseId, version])
   @@index([leaseId, createdAt])
+}
+
+model MaintenanceRequest {
+  id                   String                     @id @default(uuid()) @db.Uuid
+  organisationId       String                     @db.Uuid
+  propertyId           String                     @db.Uuid
+  unitId               String?                    @db.Uuid
+  tenantOrganisationId String?                    @db.Uuid
+  reportedByUserId     String                     @db.Uuid
+  title                String
+  description          String
+  category             String
+  priority             MaintenancePriority        @default(NORMAL)
+  status               MaintenanceStatus          @default(REPORTED)
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  completedAt          DateTime?
+  closedAt             DateTime?
+  organisation         Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property             Property                   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                 Unit?                      @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation?        @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  reportedBy           User                       @relation("MaintenanceReporter", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+  attachments          MaintenanceAttachment[]
+  history              MaintenanceHistory[]
+  approvals            MaintenanceApproval[]
+  workOrders           WorkOrder[]
+  quotationRequests    ProviderQuotationRequest[]
+  marketplaceEnquiries MarketplaceEnquiry[]
+  lease                Lease?                     @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  leaseId              String?                    @db.Uuid
+  depositDeductions    DepositDeduction[]
+  turnoverTasks        VacancyTurnoverTask[]
+  conversations        Conversation[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([propertyId, createdAt])
+  @@index([tenantOrganisationId, createdAt])
+  @@index([unitId, createdAt])
+  @@index([leaseId])
+}
+
+model MaintenanceAttachment {
+  id                   String             @id @default(uuid()) @db.Uuid
+  maintenanceRequestId String             @db.Uuid
+  fileKey              String
+  fileName             String
+  contentType          String?
+  sizeBytes            Int?
+  createdAt            DateTime           @default(now())
+  maintenanceRequest   MaintenanceRequest @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+
+  @@unique([maintenanceRequestId, fileKey])
+}
+
+model MaintenanceHistory {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  maintenanceRequestId String                 @db.Uuid
+  actorUserId          String                 @db.Uuid
+  type                 MaintenanceHistoryType
+  fromStatus           MaintenanceStatus?
+  toStatus             MaintenanceStatus?
+  note                 String?
+  metadata             Json?
+  createdAt            DateTime               @default(now())
+  maintenanceRequest   MaintenanceRequest     @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  actor                User                   @relation("MaintenanceHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([maintenanceRequestId, createdAt])
+}
+
+model MaintenanceApproval {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  organisationId       String                    @db.Uuid
+  maintenanceRequestId String                    @db.Uuid
+  requestedByUserId    String                    @db.Uuid
+  decidedByUserId      String?                   @db.Uuid
+  status               MaintenanceApprovalStatus @default(PENDING)
+  requestedAmountMinor Decimal                   @db.Decimal(19, 0)
+  approvedAmountMinor  Decimal?                  @db.Decimal(19, 0)
+  currencyCode         String                    @db.Char(3)
+  requestReason        String?
+  decisionReason       String?
+  thresholdReference   String?
+  requestedAt          DateTime                  @default(now())
+  decidedAt            DateTime?
+  organisation         Organisation              @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  maintenanceRequest   MaintenanceRequest        @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  requestedBy          User                      @relation("MaintenanceApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  decidedBy            User?                     @relation("MaintenanceApprovalDecision", fields: [decidedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, status, requestedAt])
+  @@index([maintenanceRequestId, requestedAt])
+}
+
+model WorkOrder {
+  id                       String               @id @default(uuid()) @db.Uuid
+  organisationId           String               @db.Uuid
+  maintenanceRequestId     String               @db.Uuid
+  propertyId               String               @db.Uuid
+  unitId                   String?              @db.Uuid
+  createdByUserId          String               @db.Uuid
+  assigneeMemberId         String?              @db.Uuid
+  assigneeUserId           String?              @db.Uuid
+  title                    String
+  description              String?
+  status                   WorkOrderStatus      @default(OPEN)
+  dueAt                    DateTime?
+  estimateAmountMinor      Decimal?             @db.Decimal(19, 0)
+  actualCostAmountMinor    Decimal?             @db.Decimal(19, 0)
+  currencyCode             String               @db.Char(3)
+  paymentReference         String?
+  financialLedgerReference String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  assignedAt               DateTime?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  organisation             Organisation         @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  maintenanceRequest       MaintenanceRequest   @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  property                 Property             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                     Unit?                @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  createdBy                User                 @relation("WorkOrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assigneeMember           OrganisationMember?  @relation("WorkOrderAssigneeMember", fields: [assigneeMemberId], references: [id], onDelete: Restrict)
+  assigneeUser             User?                @relation("WorkOrderAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  history                  WorkOrderHistory[]
+  providerAssignments      ProviderAssignment[]
+  providerRating           ProviderRating?
+  conversations            Conversation[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([maintenanceRequestId, createdAt])
+  @@index([assigneeMemberId, status])
+}
+
+model WorkOrderHistory {
+  id                    String          @id @default(uuid()) @db.Uuid
+  workOrderId           String          @db.Uuid
+  actorUserId           String          @db.Uuid
+  status                WorkOrderStatus
+  estimateAmountMinor   Decimal?        @db.Decimal(19, 0)
+  actualCostAmountMinor Decimal?        @db.Decimal(19, 0)
+  currencyCode          String          @db.Char(3)
+  assigneeMemberId      String?         @db.Uuid
+  assigneeUserId        String?         @db.Uuid
+  note                  String?
+  metadata              Json?
+  createdAt             DateTime        @default(now())
+  workOrder             WorkOrder       @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  actor                 User            @relation("WorkOrderHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workOrderId, createdAt])
+}
+
+model ServiceProvider {
+  id                    String                        @id @default(uuid()) @db.Uuid
+  type                  ServiceProviderType
+  individualUserId      String?                       @unique @db.Uuid
+  companyOrganisationId String?                       @unique @db.Uuid
+  administratorUserId   String                        @db.Uuid
+  displayName           String
+  legalName             String?
+  contactEmail          String?                       @db.Citext
+  contactPhone          String?
+  verificationStatus    ProviderVerificationStatus    @default(UNVERIFIED)
+  availabilityStatus    ProviderAvailabilityStatus    @default(UNAVAILABLE)
+  contactReady          Boolean                       @default(false)
+  evidenceReady         Boolean                       @default(false)
+  acceptingWork         Boolean                       @default(false)
+  biography             String?
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+  archivedAt            DateTime?
+  individualUser        User?                         @relation("IndividualProviderUser", fields: [individualUserId], references: [id], onDelete: Restrict)
+  companyOrganisation   Organisation?                 @relation("CompanyProviderOrganisation", fields: [companyOrganisationId], references: [id], onDelete: Restrict)
+  administrator         User                          @relation("ProviderAdministrator", fields: [administratorUserId], references: [id], onDelete: Restrict)
+  categories            ServiceProviderCategory[]
+  serviceAreas          ProviderServiceArea[]
+  evidence              ProviderEvidence[]
+  verificationHistory   ProviderVerificationHistory[]
+  directories           ProviderOrganisation[]
+  quotationRequests     ProviderQuotationRequest[]
+  quotations            ProviderQuotation[]
+  assignments           ProviderAssignment[]
+  ratings               ProviderRating[]
+  marketplaceProfile    ProviderMarketplaceProfile?
+  marketplaceEnquiries  MarketplaceEnquiry[]
+  conversations         Conversation[]
+
+  @@index([verificationStatus, availabilityStatus, archivedAt])
+}
+
+model ServiceCategory {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  key                  String                        @unique
+  name                 String
+  description          String?
+  active               Boolean                       @default(true)
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  providers            ServiceProviderCategory[]
+  marketplaceProfiles  ProviderMarketplaceCategory[]
+  marketplaceEnquiries MarketplaceEnquiry[]
+
+  @@index([active, name])
+}
+
+model ServiceProviderCategory {
+  providerId String          @db.Uuid
+  categoryId String          @db.Uuid
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category   ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([providerId, categoryId])
+  @@index([categoryId])
+}
+
+model ProviderServiceArea {
+  id         String          @id @default(uuid()) @db.Uuid
+  providerId String          @db.Uuid
+  areaType   String
+  name       String
+  reference  String?
+  metadata   Json?
+  createdAt  DateTime        @default(now())
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, areaType, name])
+  @@index([areaType, reference])
+}
+
+model ProviderEvidence {
+  id                String               @id @default(uuid()) @db.Uuid
+  providerId        String               @db.Uuid
+  type              ProviderEvidenceType
+  reference         String
+  expiresAt         DateTime?
+  submittedByUserId String               @db.Uuid
+  createdAt         DateTime             @default(now())
+  provider          ServiceProvider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  submittedBy       User                 @relation("ProviderEvidenceSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([providerId, type, reference])
+  @@index([providerId, expiresAt])
+}
+
+model ProviderVerificationHistory {
+  id          String                     @id @default(uuid()) @db.Uuid
+  providerId  String                     @db.Uuid
+  actorUserId String                     @db.Uuid
+  fromStatus  ProviderVerificationStatus
+  toStatus    ProviderVerificationStatus
+  reason      String?
+  createdAt   DateTime                   @default(now())
+  provider    ServiceProvider            @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  actor       User                       @relation("ProviderVerificationActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([providerId, createdAt])
+}
+
+model ProviderOrganisation {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                  @db.Uuid
+  providerId             String                  @db.Uuid
+  status                 ProviderDirectoryStatus @default(ACTIVE)
+  internalNotes          String?
+  createdByUserId        String                  @db.Uuid
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  landlordOrganisation   Organisation            @relation("LandlordProviderDirectory", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  provider               ServiceProvider         @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  createdBy              User                    @relation("ProviderDirectoryCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([landlordOrganisationId, providerId])
+  @@index([landlordOrganisationId, status])
+  @@index([providerId, status])
+}
+
+model ProviderQuotationRequest {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                 @db.Uuid
+  providerId             String                 @db.Uuid
+  maintenanceRequestId   String                 @db.Uuid
+  requestedByUserId      String                 @db.Uuid
+  status                 QuotationRequestStatus @default(OPEN)
+  scope                  String
+  responseDueAt          DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  landlordOrganisation   Organisation           @relation("LandlordQuotationRequests", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  provider               ServiceProvider        @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  maintenanceRequest     MaintenanceRequest     @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  requestedBy            User                   @relation("QuotationRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  quotations             ProviderQuotation[]
+  marketplaceEnquiry     MarketplaceEnquiry?
+
+  @@unique([landlordOrganisationId, providerId, maintenanceRequestId])
+  @@index([landlordOrganisationId, status, createdAt])
+  @@index([providerId, status, createdAt])
+}
+
+model ProviderQuotation {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                    @db.Uuid
+  requestId              String                    @db.Uuid
+  providerId             String                    @db.Uuid
+  source                 QuotationSource
+  status                 ProviderQuotationStatus   @default(SUBMITTED)
+  labourAmountMinor      Decimal                   @db.Decimal(19, 0)
+  materialsAmountMinor   Decimal                   @db.Decimal(19, 0)
+  totalAmountMinor       Decimal                   @db.Decimal(19, 0)
+  currencyCode           String                    @db.Char(3)
+  validUntil             DateTime
+  etaDays                Int
+  notes                  String?
+  submittedByUserId      String?                   @db.Uuid
+  recordedByUserId       String?                   @db.Uuid
+  submittedAt            DateTime                  @default(now())
+  landlordOrganisation   Organisation              @relation("LandlordProviderQuotations", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  request                ProviderQuotationRequest  @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  provider               ServiceProvider           @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  submittedBy            User?                     @relation("QuotationSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  recordedBy             User?                     @relation("QuotationRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  reviews                ProviderQuotationReview[]
+  assignments            ProviderAssignment[]
+
+  @@index([landlordOrganisationId, status, submittedAt])
+  @@index([requestId, submittedAt])
+  @@index([providerId, submittedAt])
+}
+
+model ProviderQuotationReview {
+  id             String                  @id @default(uuid()) @db.Uuid
+  quotationId    String                  @db.Uuid
+  reviewerUserId String                  @db.Uuid
+  decision       ProviderQuotationStatus
+  reason         String?
+  createdAt      DateTime                @default(now())
+  quotation      ProviderQuotation       @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  reviewer       User                    @relation("QuotationReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([quotationId, createdAt])
+}
+
+model ProviderAssignment {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                   @db.Uuid
+  workOrderId            String                   @db.Uuid
+  providerId             String                   @db.Uuid
+  quotationId            String?                  @db.Uuid
+  status                 ProviderAssignmentStatus @default(PENDING)
+  assignedByUserId       String                   @db.Uuid
+  respondedByUserId      String?                  @db.Uuid
+  assignedAt             DateTime                 @default(now())
+  respondedAt            DateTime?
+  expectedStartAt        DateTime?
+  expectedCompletionAt   DateTime?
+  acceptedAt             DateTime?
+  declinedAt             DateTime?
+  declineReason          String?
+  completedAt            DateTime?
+  landlordOrganisation   Organisation             @relation("LandlordProviderAssignments", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  workOrder              WorkOrder                @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  provider               ServiceProvider          @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  quotation              ProviderQuotation?       @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  assignedBy             User                     @relation("ProviderAssignmentCreator", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+  respondedBy            User?                    @relation("ProviderAssignmentResponder", fields: [respondedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([landlordOrganisationId, status, assignedAt])
+  @@index([providerId, status, assignedAt])
+  @@index([workOrderId, assignedAt])
+}
+
+model ProviderRating {
+  id                     String          @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String          @db.Uuid
+  workOrderId            String          @unique @db.Uuid
+  providerId             String          @db.Uuid
+  createdByUserId        String          @db.Uuid
+  score                  Int
+  qualityScore           Int?
+  timelinessScore        Int?
+  communicationScore     Int?
+  comment                String?
+  createdAt              DateTime        @default(now())
+  landlordOrganisation   Organisation    @relation("LandlordProviderRatings", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  workOrder              WorkOrder       @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  provider               ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  createdBy              User            @relation("ProviderRatingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([providerId, createdAt])
+  @@index([landlordOrganisationId, createdAt])
+}
+
+model ProviderMarketplaceProfile {
+  providerId        String                              @id @db.Uuid
+  listed            Boolean                             @default(false)
+  publicDescription String?
+  showContactEmail  Boolean                             @default(false)
+  showContactPhone  Boolean                             @default(false)
+  startingRateMinor Decimal?                            @db.Decimal(19, 0)
+  currencyCode      String?                             @db.Char(3)
+  responseTimeHours Int?
+  listedAt          DateTime?
+  unlistedAt        DateTime?
+  createdAt         DateTime                            @default(now())
+  updatedAt         DateTime                            @updatedAt
+  provider          ServiceProvider                     @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  categories        ProviderMarketplaceCategory[]
+  serviceAreas      ProviderMarketplaceServiceArea[]
+  history           ProviderMarketplaceProfileHistory[]
+
+  @@index([listed, updatedAt])
+}
+
+model ProviderMarketplaceCategory {
+  providerId String                     @db.Uuid
+  categoryId String                     @db.Uuid
+  profile    ProviderMarketplaceProfile @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  category   ServiceCategory            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([providerId, categoryId])
+  @@index([categoryId, providerId])
+}
+
+model ProviderMarketplaceServiceArea {
+  id          String                     @id @default(uuid()) @db.Uuid
+  providerId  String                     @db.Uuid
+  countryCode String                     @db.Char(2)
+  region      String?
+  city        String?
+  district    String?
+  label       String?
+  latitude    Decimal?                   @db.Decimal(10, 7)
+  longitude   Decimal?                   @db.Decimal(10, 7)
+  radiusKm    Decimal?                   @db.Decimal(10, 2)
+  createdAt   DateTime                   @default(now())
+  profile     ProviderMarketplaceProfile @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+
+  @@unique([providerId, countryCode, region, city, district])
+  @@index([countryCode, region, city, district])
+  @@index([providerId])
+}
+
+model ProviderMarketplaceProfileHistory {
+  id            String                     @id @default(uuid()) @db.Uuid
+  providerId    String                     @db.Uuid
+  actorUserId   String                     @db.Uuid
+  action        String
+  changedFields String[]
+  snapshot      Json
+  createdAt     DateTime                   @default(now())
+  profile       ProviderMarketplaceProfile @relation(fields: [providerId], references: [providerId], onDelete: Restrict)
+  actor         User                       @relation("MarketplaceProfileHistoryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([providerId, createdAt])
+}
+
+model MarketplaceEnquiry {
+  id                       String                            @id @default(uuid()) @db.Uuid
+  requestingOrganisationId String                            @db.Uuid
+  providerId               String                            @db.Uuid
+  categoryId               String                            @db.Uuid
+  propertyId               String?                           @db.Uuid
+  maintenanceRequestId     String?                           @db.Uuid
+  requestedByUserId        String                            @db.Uuid
+  quotationRequestId       String?                           @unique @db.Uuid
+  message                  String
+  status                   MarketplaceEnquiryStatus          @default(NEW)
+  createdAt                DateTime                          @default(now())
+  updatedAt                DateTime                          @updatedAt
+  viewedAt                 DateTime?
+  respondedAt              DateTime?
+  closedAt                 DateTime?
+  cancelledAt              DateTime?
+  requestingOrganisation   Organisation                      @relation("MarketplaceRequestingOrganisation", fields: [requestingOrganisationId], references: [id], onDelete: Restrict)
+  provider                 ServiceProvider                   @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  category                 ServiceCategory                   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  property                 Property?                         @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  maintenanceRequest       MaintenanceRequest?               @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  requestedBy              User                              @relation("MarketplaceEnquiryRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  quotationRequest         ProviderQuotationRequest?         @relation(fields: [quotationRequestId], references: [id], onDelete: Restrict)
+  history                  MarketplaceEnquiryStatusHistory[]
+
+  @@index([requestingOrganisationId, status, createdAt])
+  @@index([providerId, status, createdAt])
+}
+
+model MarketplaceEnquiryStatusHistory {
+  id          String                    @id @default(uuid()) @db.Uuid
+  enquiryId   String                    @db.Uuid
+  actorUserId String                    @db.Uuid
+  fromStatus  MarketplaceEnquiryStatus?
+  toStatus    MarketplaceEnquiryStatus
+  note        String?
+  createdAt   DateTime                  @default(now())
+  enquiry     MarketplaceEnquiry        @relation(fields: [enquiryId], references: [id], onDelete: Restrict)
+  actor       User                      @relation("MarketplaceEnquiryStatusActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([enquiryId, createdAt])
+}
+
+model Listing {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  organisationId       String                        @db.Uuid
+  propertyId           String                        @db.Uuid
+  unitId               String?                       @db.Uuid
+  createdByUserId      String                        @db.Uuid
+  listingType          ListingType
+  category             String
+  title                String
+  publicDescription    String
+  askingAmountMinor    Decimal?                      @db.Decimal(19, 0)
+  rentAmountMinor      Decimal?                      @db.Decimal(19, 0)
+  currencyCode         String                        @db.Char(3)
+  frequency            RentFrequency?
+  availableFrom        DateTime
+  bedrooms             Int?
+  bathrooms            Decimal?                      @db.Decimal(4, 1)
+  sizeSqm              Decimal?                      @db.Decimal(12, 2)
+  countryCode          String                        @db.Char(2)
+  region               String?
+  city                 String?
+  district             String?
+  locality             String?
+  publicLocationLabel  String?
+  mapLatitude          Decimal?                      @db.Decimal(10, 7)
+  mapLongitude         Decimal?                      @db.Decimal(10, 7)
+  mapPrecision         ListingLocationPrecision?
+  contactName          String?
+  contactEmail         String?
+  contactPhone         String?
+  showContactEmail     Boolean                       @default(false)
+  showContactPhone     Boolean                       @default(false)
+  enquiryEnabled       Boolean                       @default(true)
+  privateNotes         String?
+  status               ListingStatus                 @default(DRAFT)
+  verificationStatus   ListingVerificationStatus     @default(UNVERIFIED)
+  evidenceReady        Boolean                       @default(false)
+  submittedAt          DateTime?
+  publishedAt          DateTime?
+  pausedAt             DateTime?
+  reservedAt           DateTime?
+  rentedAt             DateTime?
+  archivedAt           DateTime?
+  rejectedAt           DateTime?
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  organisation         Organisation                  @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property             Property                      @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                 Unit?                         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  createdBy            User                          @relation("ListingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  amenities            ListingAmenity[]
+  media                ListingMedia[]
+  verificationEvidence ListingVerificationEvidence[]
+  statusHistory        ListingStatusHistory[]
+  verificationHistory  ListingVerificationHistory[]
+  leads                MarketplaceLead[]
+  viewingRequests      ViewingRequest[]
+  rentalApplications   RentalApplication[]
+  conversations        Conversation[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([propertyId, createdAt])
+  @@index([unitId, createdAt])
+  @@index([status, listingType, countryCode, availableFrom])
+  @@index([currencyCode, rentAmountMinor])
+  @@index([currencyCode, askingAmountMinor])
+}
+
+model ListingAmenity {
+  id        String  @id @default(uuid()) @db.Uuid
+  listingId String  @db.Uuid
+  key       String
+  label     String
+  category  String?
+  metadata  Json?
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, key])
+  @@index([key, listingId])
+}
+
+model ListingMedia {
+  id              String                @id @default(uuid()) @db.Uuid
+  listingId       String                @db.Uuid
+  type            ListingMediaType
+  publicUrl       String
+  storageKey      String?
+  /// Legacy directly-pasted media (storageKey null) and the pre-existing bulk media-array write
+  /// path both default to PUBLIC, preserving their original always-public behaviour exactly. Only
+  /// the new controlled per-file upload endpoint can set PRIVATE, and defaults to it — "private
+  /// by default; explicit public marketplace media" (item 1) governs *that* new surface.
+  classification  StorageClassification @default(PUBLIC)
+  mimeType        String?
+  title           String?
+  altText         String?
+  sortOrder       Int                   @default(0)
+  isCover         Boolean               @default(false)
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+  fileSizeBytes   Decimal?              @db.Decimal(19, 0)
+  checksum        String?
+  metadata        Json?
+  createdAt       DateTime              @default(now())
+  listing         Listing               @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, sortOrder, createdAt])
+  @@index([type, listingId])
+}
+
+model ListingVerificationEvidence {
+  id                String    @id @default(uuid()) @db.Uuid
+  listingId         String    @db.Uuid
+  submittedByUserId String    @db.Uuid
+  type              String
+  privateReference  String
+  metadata          Json?
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  listing           Listing   @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  submittedBy       User      @relation("ListingEvidenceSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([listingId, createdAt])
+}
+
+model ListingStatusHistory {
+  id          String         @id @default(uuid()) @db.Uuid
+  listingId   String         @db.Uuid
+  actorUserId String         @db.Uuid
+  fromStatus  ListingStatus?
+  toStatus    ListingStatus
+  note        String?
+  createdAt   DateTime       @default(now())
+  listing     Listing        @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  actor       User           @relation("ListingStatusActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([listingId, createdAt])
+}
+
+model ListingVerificationHistory {
+  id          String                     @id @default(uuid()) @db.Uuid
+  listingId   String                     @db.Uuid
+  actorUserId String                     @db.Uuid
+  fromStatus  ListingVerificationStatus?
+  toStatus    ListingVerificationStatus
+  note        String?
+  createdAt   DateTime                   @default(now())
+  listing     Listing                    @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  actor       User                       @relation("ListingVerificationActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([listingId, createdAt])
+}
+
+model MarketplaceLead {
+  id                     String                         @id @default(uuid()) @db.Uuid
+  organisationId         String                         @db.Uuid
+  listingId              String                         @db.Uuid
+  userId                 String?                        @db.Uuid
+  name                   String
+  email                  String?
+  phone                  String?
+  message                String?
+  marketingConsent       Boolean                        @default(false)
+  source                 String?
+  status                 MarketplaceLeadStatus          @default(NEW)
+  privateNotes           String?
+  assigneeMemberId       String?                        @db.Uuid
+  contactedAt            DateTime?
+  qualifiedAt            DateTime?
+  viewingScheduledAt     DateTime?
+  viewingCompletedAt     DateTime?
+  applicationStartedAt   DateTime?
+  applicationSubmittedAt DateTime?
+  closedAt               DateTime?
+  lostAt                 DateTime?
+  lastActivityAt         DateTime                       @default(now())
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+  organisation           Organisation                   @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  listing                Listing                        @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  user                   User?                          @relation("MarketplaceLeadUser", fields: [userId], references: [id], onDelete: SetNull)
+  assignee               OrganisationMember?            @relation("MarketplaceLeadAssignee", fields: [assigneeMemberId], references: [id], onDelete: SetNull)
+  history                MarketplaceLeadStatusHistory[]
+  activities             MarketplaceLeadActivity[]
+  viewingRequests        ViewingRequest[]
+  rentalApplications     RentalApplication[]
+  conversations          Conversation[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([listingId, createdAt])
+  @@index([userId, createdAt])
+  @@index([assigneeMemberId, status])
+}
+
+model MarketplaceLeadStatusHistory {
+  id          String                 @id @default(uuid()) @db.Uuid
+  leadId      String                 @db.Uuid
+  actorUserId String?                @db.Uuid
+  fromStatus  MarketplaceLeadStatus?
+  toStatus    MarketplaceLeadStatus
+  note        String?
+  createdAt   DateTime               @default(now())
+  lead        MarketplaceLead        @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  actor       User?                  @relation("MarketplaceLeadStatusActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+}
+
+model ViewingRequest {
+  id                String                        @id @default(uuid()) @db.Uuid
+  organisationId    String                        @db.Uuid
+  listingId         String                        @db.Uuid
+  leadId            String                        @db.Uuid
+  createdByUserId   String?                       @db.Uuid
+  assigneeMemberId  String?                       @db.Uuid
+  status            ViewingRequestStatus          @default(REQUESTED)
+  requesterNote     String?
+  privateNotes      String?
+  outcome           String?
+  confirmedStartsAt DateTime?
+  confirmedEndsAt   DateTime?
+  confirmedAt       DateTime?
+  rescheduledAt     DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  noShowAt          DateTime?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  organisation      Organisation                  @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  listing           Listing                       @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  lead              MarketplaceLead               @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  createdBy         User?                         @relation("ViewingRequestCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignee          OrganisationMember?           @relation("ViewingAssigneeMember", fields: [assigneeMemberId], references: [id], onDelete: SetNull)
+  preferredTimes    ViewingPreferredTime[]
+  history           ViewingRequestStatusHistory[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([listingId, createdAt])
+  @@index([leadId, createdAt])
+  @@index([assigneeMemberId, status])
+}
+
+model ViewingPreferredTime {
+  id               String         @id @default(uuid()) @db.Uuid
+  viewingRequestId String         @db.Uuid
+  startsAt         DateTime
+  endsAt           DateTime
+  timezone         String
+  createdAt        DateTime       @default(now())
+  viewingRequest   ViewingRequest @relation(fields: [viewingRequestId], references: [id], onDelete: Cascade)
+
+  @@index([viewingRequestId, startsAt])
+}
+
+model ViewingRequestStatusHistory {
+  id               String                @id @default(uuid()) @db.Uuid
+  viewingRequestId String                @db.Uuid
+  actorUserId      String?               @db.Uuid
+  fromStatus       ViewingRequestStatus?
+  toStatus         ViewingRequestStatus
+  note             String?
+  createdAt        DateTime              @default(now())
+  viewingRequest   ViewingRequest        @relation(fields: [viewingRequestId], references: [id], onDelete: Restrict)
+  actor            User?                 @relation("ViewingRequestStatusActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([viewingRequestId, createdAt])
+}
+
+model MarketplaceLeadActivity {
+  id          String          @id @default(uuid()) @db.Uuid
+  leadId      String          @db.Uuid
+  actorUserId String?         @db.Uuid
+  type        String
+  note        String?
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+  lead        MarketplaceLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  actor       User?           @relation("MarketplaceLeadActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+}
+
+model Applicant {
+  id              String              @id @default(uuid()) @db.Uuid
+  organisationId  String              @db.Uuid
+  createdByUserId String              @db.Uuid
+  legalName       String
+  preferredName   String?
+  email           String?             @db.Citext
+  phone           String?
+  addressLine1    String?
+  city            String?
+  countryCode     String?             @db.Char(2)
+  applicantNotes  String?
+  internalNotes   String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  archivedAt      DateTime?
+  organisation    Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  createdBy       User                @relation("ApplicantCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  applications    RentalApplication[]
+  conversations   Conversation[]
+
+  @@index([organisationId, archivedAt, createdAt])
+  @@index([organisationId, email])
+}
+
+model RentalApplication {
+  id                   String                           @id @default(uuid()) @db.Uuid
+  organisationId       String                           @db.Uuid
+  listingId            String                           @db.Uuid
+  leadId               String                           @db.Uuid
+  applicantId          String                           @db.Uuid
+  createdByUserId      String                           @db.Uuid
+  assigneeMemberId     String?                          @db.Uuid
+  tenantOrganisationId String?                          @db.Uuid
+  leaseId              String?                          @unique @db.Uuid
+  status               RentalApplicationStatus          @default(DRAFT)
+  employmentDetails    Json?
+  incomeAmountMinor    Decimal?                         @db.Decimal(19, 0)
+  incomeCurrencyCode   String?                          @db.Char(3)
+  incomeFrequency      String?
+  previousTenancy      Json?
+  references           Json?
+  emergencyContact     Json?
+  household            Json?
+  coApplicants         Json?
+  applicantNotes       String?
+  staffReviewNotes     String?
+  decisionCategory     String?
+  decisionReason       String?
+  submittedAt          DateTime?
+  reviewedAt           DateTime?
+  decisionAt           DateTime?
+  lastActivityAt       DateTime                         @default(now())
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+  organisation         Organisation                     @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  listing              Listing                          @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  lead                 MarketplaceLead                  @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  applicant            Applicant                        @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  createdBy            User                             @relation("ApplicationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignee             OrganisationMember?              @relation("RentalApplicationAssignee", fields: [assigneeMemberId], references: [id], onDelete: SetNull)
+  tenantOrganisation   TenantOrganisation?              @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  lease                Lease?                           @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  statusHistory        RentalApplicationStatusHistory[]
+  activities           RentalApplicationActivity[]
+  documents            RentalApplicationDocument[]
+  consents             ApplicationConsent[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([listingId, createdAt])
+  @@index([leadId, createdAt])
+  @@index([applicantId, createdAt])
+  @@index([assigneeMemberId, status])
+  @@index([tenantOrganisationId])
+}
+
+model RentalApplicationStatusHistory {
+  id            String                   @id @default(uuid()) @db.Uuid
+  applicationId String                   @db.Uuid
+  actorUserId   String                   @db.Uuid
+  fromStatus    RentalApplicationStatus?
+  toStatus      RentalApplicationStatus
+  note          String?
+  createdAt     DateTime                 @default(now())
+  application   RentalApplication        @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  actor         User                     @relation("ApplicationStatusActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt])
+}
+
+model RentalApplicationActivity {
+  id            String            @id @default(uuid()) @db.Uuid
+  applicationId String            @db.Uuid
+  actorUserId   String?           @db.Uuid
+  type          String
+  note          String?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+  application   RentalApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  actor         User?             @relation("ApplicationActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, createdAt])
+}
+
+model RentalApplicationDocument {
+  id               String                  @id @default(uuid()) @db.Uuid
+  applicationId    String                  @db.Uuid
+  uploadedByUserId String                  @db.Uuid
+  type             ApplicationDocumentType
+  storageKey       String
+  fileName         String
+  contentType      String?
+  sizeBytes        Int?
+  checksum         String?
+  metadata         Json?
+  createdAt        DateTime                @default(now())
+  application      RentalApplication       @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  uploadedBy       User                    @relation("ApplicationDocumentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([applicationId, storageKey])
+  @@index([applicationId, type, createdAt])
+}
+
+model ApplicationConsent {
+  id               String            @id @default(uuid()) @db.Uuid
+  applicationId    String            @db.Uuid
+  recordedByUserId String            @db.Uuid
+  type             String
+  textVersion      String
+  granted          Boolean
+  grantedAt        DateTime?
+  revokedAt        DateTime?
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  application      RentalApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  recordedBy       User              @relation("ApplicationConsentRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, type, createdAt])
 }
 
 model AuditEvent {
@@ -623,4 +3046,1176 @@ model DomainEvent {
 
   @@index([organisationId, occurredAt])
   @@index([processedAt, occurredAt])
+}
+
+model AISession {
+  id                String             @id @default(uuid()) @db.Uuid
+  organisationId    String             @db.Uuid
+  userId            String             @db.Uuid
+  title             String?
+  status            AISessionStatus    @default(ACTIVE)
+  providerKey       String
+  modelKey          String
+  inputTokens       Int                @default(0)
+  outputTokens      Int                @default(0)
+  estimatedCostNano Decimal?           @db.Decimal(19, 0)
+  lastActivityAt    DateTime           @default(now())
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  organisation      Organisation       @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  messages          AIMessage[]
+  toolExecutions    AIToolExecution[]
+  actionProposals   AIActionProposal[]
+
+  @@index([organisationId, userId, lastActivityAt])
+}
+
+model AIMessage {
+  id                String        @id @default(uuid()) @db.Uuid
+  sessionId         String        @db.Uuid
+  userId            String?       @db.Uuid
+  role              AIMessageRole
+  content           String
+  structuredContent Json?
+  providerMessageId String?
+  providerKey       String?
+  modelKey          String?
+  inputTokens       Int?
+  outputTokens      Int?
+  estimatedCostNano Decimal?      @db.Decimal(19, 0)
+  latencyMs         Int?
+  providerAttempts  Int?
+  createdAt         DateTime      @default(now())
+  session           AISession     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  user              User?         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId, createdAt])
+}
+
+model AIAutonomyConfiguration {
+  id                    String          @id @default(uuid()) @db.Uuid
+  organisationId        String          @unique @db.Uuid
+  enabled               Boolean         @default(true)
+  automationPaused      Boolean         @default(false)
+  defaultLevel          AIAutonomyLevel @default(RECOMMEND_ONLY)
+  communicationAllowed  Boolean         @default(true)
+  automationActorUserId String          @db.Uuid
+  updatedByUserId       String          @db.Uuid
+  pausedAt              DateTime?
+  reactivatedAt         DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  organisation          Organisation    @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  automationActor       User            @relation("AIAutonomyActor", fields: [automationActorUserId], references: [id], onDelete: Restrict)
+  updatedBy             User            @relation("AIAutonomyUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([enabled, automationPaused])
+}
+
+model AIAutonomyPolicy {
+  id                         String                     @id @default(uuid()) @db.Uuid
+  organisationId             String                     @db.Uuid
+  actionKey                  String
+  scopeKey                   String
+  enabled                    Boolean                    @default(true)
+  level                      AIAutonomyLevel
+  propertyId                 String?                    @db.Uuid
+  eventType                  String?
+  channel                    NotificationChannel?
+  recipientType              String?
+  executionWindowStartMinute Int?
+  executionWindowEndMinute   Int?
+  timezone                   String                     @default("UTC")
+  maxExecutions              Int?
+  frequencyWindowMinutes     Int?
+  escalationAfterMinutes     Int?
+  minSeverity                AISeverity?
+  maxSeverity                AISeverity?
+  monetaryThresholdMinor     Decimal?                   @db.Decimal(19, 0)
+  createdByUserId            String                     @db.Uuid
+  updatedByUserId            String                     @db.Uuid
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  organisation               Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property                   Property?                  @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  createdBy                  User                       @relation("AIPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy                  User                       @relation("AIPolicyUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  activities                 AIActivity[]
+  aiEmployees                AIEmployeeAutonomyPolicy[]
+
+  @@unique([organisationId, actionKey, scopeKey])
+  @@index([organisationId, enabled, actionKey])
+  @@index([propertyId])
+}
+
+model AIActivity {
+  id                  String            @id @default(uuid()) @db.Uuid
+  organisationId      String            @db.Uuid
+  policyId            String?           @db.Uuid
+  proposalId          String?           @db.Uuid
+  parentActivityId    String?           @db.Uuid
+  actorUserId         String?           @db.Uuid
+  type                AIActivityType
+  status              AIActivityStatus
+  severity            AISeverity
+  conditionKey        String
+  actionKey           String?
+  autonomyLevel       AIAutonomyLevel?
+  policyDecision      String
+  reason              String
+  triggeringCondition Json
+  affectedEntities    Json
+  result              Json?
+  failureCode         String?
+  failureMessage      String?
+  idempotencyKey      String
+  aiProviderKey       String?
+  executedAt          DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  organisation        Organisation      @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  policy              AIAutonomyPolicy? @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  proposal            AIActionProposal? @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  parentActivity      AIActivity?       @relation("AIActivityTree", fields: [parentActivityId], references: [id], onDelete: Restrict)
+  childActivities     AIActivity[]      @relation("AIActivityTree")
+  actor               User?             @relation("AIActivityActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  escalation          AIEscalation?
+
+  @@unique([organisationId, idempotencyKey])
+  @@index([organisationId, createdAt])
+  @@index([organisationId, status, type])
+  @@index([conditionKey, createdAt])
+}
+
+model AIEscalation {
+  id         String             @id @default(uuid()) @db.Uuid
+  activityId String             @unique @db.Uuid
+  status     AIEscalationStatus @default(OPEN)
+  level      Int                @default(1)
+  reason     String
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  resolvedAt DateTime?
+  activity   AIActivity         @relation(fields: [activityId], references: [id], onDelete: Restrict)
+}
+
+model AIEmployee {
+  id                      String                     @id @default(uuid()) @db.Uuid
+  organisationId          String                     @db.Uuid
+  name                    String
+  role                    AIEmployeeRole
+  description             String?
+  status                  AIEmployeeStatus           @default(ACTIVE)
+  scope                   AIEmployeeScope            @default(ORGANISATION)
+  responsibilities        Json
+  instructions            Json
+  escalationConfiguration Json
+  workingHours            Json?
+  timezone                String                     @default("UTC")
+  providerKey             String?
+  modelKey                String?
+  createdByUserId         String                     @db.Uuid
+  updatedByUserId         String                     @db.Uuid
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  archivedAt              DateTime?
+  organisation            Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  createdBy               User                       @relation("AIEmployeeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy               User                       @relation("AIEmployeeUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  portfolios              AIEmployeePortfolio[]
+  properties              AIEmployeeProperty[]
+  toolPermissions         AIEmployeeToolPermission[]
+  autonomyPolicies        AIEmployeeAutonomyPolicy[]
+  activities              AIEmployeeActivity[]
+  handoffs                AIEmployeeHandoff[]
+  conversations           Conversation[]
+
+  @@unique([organisationId, name])
+  @@index([organisationId, status, role])
+}
+
+model AIEmployeePortfolio {
+  aiEmployeeId String     @db.Uuid
+  portfolioId  String     @db.Uuid
+  createdAt    DateTime   @default(now())
+  aiEmployee   AIEmployee @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+  portfolio    Portfolio  @relation(fields: [portfolioId], references: [id], onDelete: Restrict)
+
+  @@id([aiEmployeeId, portfolioId])
+  @@index([portfolioId])
+}
+
+model AIEmployeeProperty {
+  aiEmployeeId String     @db.Uuid
+  propertyId   String     @db.Uuid
+  createdAt    DateTime   @default(now())
+  aiEmployee   AIEmployee @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+  property     Property   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+
+  @@id([aiEmployeeId, propertyId])
+  @@index([propertyId])
+}
+
+model AIEmployeeToolPermission {
+  aiEmployeeId String     @db.Uuid
+  toolKey      String
+  createdAt    DateTime   @default(now())
+  aiEmployee   AIEmployee @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+
+  @@id([aiEmployeeId, toolKey])
+  @@index([toolKey])
+}
+
+model AIEmployeeAutonomyPolicy {
+  aiEmployeeId String           @db.Uuid
+  policyId     String           @db.Uuid
+  createdAt    DateTime         @default(now())
+  aiEmployee   AIEmployee       @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+  policy       AIAutonomyPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  @@id([aiEmployeeId, policyId])
+  @@index([policyId])
+}
+
+model AIEmployeeActivity {
+  id               String       @id @default(uuid()) @db.Uuid
+  organisationId   String       @db.Uuid
+  aiEmployeeId     String       @db.Uuid
+  type             String
+  status           String
+  actionKey        String?
+  policyDecision   String?
+  reason           String
+  affectedEntities Json
+  result           Json?
+  failureCode      String?
+  failureMessage   String?
+  idempotencyKey   String
+  triggeringUserId String?      @db.Uuid
+  humanApproverId  String?      @db.Uuid
+  createdAt        DateTime     @default(now())
+  completedAt      DateTime?
+  organisation     Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  aiEmployee       AIEmployee   @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, idempotencyKey])
+  @@index([aiEmployeeId, status, createdAt])
+  @@index([organisationId, createdAt])
+}
+
+model AIEmployeeHandoff {
+  id                    String              @id @default(uuid()) @db.Uuid
+  organisationId        String              @db.Uuid
+  aiEmployeeId          String              @db.Uuid
+  conversationId        String?
+  operationalItemType   String?
+  operationalItemId     String?
+  reason                String
+  urgency               AISeverity
+  assignedMemberId      String?             @db.Uuid
+  assignedTeamReference String?
+  status                AIHandoffStatus     @default(OPEN)
+  contextSummary        String
+  createdByUserId       String?             @db.Uuid
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  resolvedAt            DateTime?
+  organisation          Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  aiEmployee            AIEmployee          @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+  assignedMember        OrganisationMember? @relation(fields: [assignedMemberId], references: [id], onDelete: SetNull)
+  createdBy             User?               @relation("AIHandoffCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organisationId, status, urgency])
+  @@index([aiEmployeeId, createdAt])
+}
+
+model AIToolExecution {
+  id                 String        @id @default(uuid()) @db.Uuid
+  organisationId     String        @db.Uuid
+  sessionId          String        @db.Uuid
+  userId             String        @db.Uuid
+  toolKey            String
+  actionLevel        AIActionLevel
+  requiredPermission String
+  arguments          Json
+  result             Json?
+  status             String
+  errorCode          String?
+  errorMessage       String?
+  recordsAccessed    Json?
+  startedAt          DateTime      @default(now())
+  completedAt        DateTime?
+  organisation       Organisation  @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  session            AISession     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  user               User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, sessionId, startedAt])
+  @@index([toolKey, status])
+}
+
+model AIActionProposal {
+  id                   String           @id @default(uuid()) @db.Uuid
+  organisationId       String           @db.Uuid
+  sessionId            String           @db.Uuid
+  requestedByUserId    String           @db.Uuid
+  toolKey              String
+  arguments            Json
+  explanation          String
+  reason               String
+  expectedResult       String
+  affectedEntities     Json
+  actionLevel          AIActionLevel
+  status               AIProposalStatus @default(PROPOSED)
+  requiredPermission   String
+  decidedByUserId      String?          @db.Uuid
+  decisionReason       String?
+  decidedAt            DateTime?
+  expiresAt            DateTime?
+  executionResult      Json?
+  failureCode          String?
+  failureMessage       String?
+  executionStartedAt   DateTime?
+  executionCompletedAt DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  organisation         Organisation     @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  session              AISession        @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  requestedBy          User             @relation("AIProposalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  decidedBy            User?            @relation("AIProposalDecision", fields: [decidedByUserId], references: [id], onDelete: Restrict)
+  activities           AIActivity[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([sessionId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 17 - Omnichannel Communications + AI Receptionist Integration
+// ---------------------------------------------------------------------------
+
+model Conversation {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  organisationId       String                    @db.Uuid
+  channel              ConversationChannel
+  status               ConversationStatus        @default(OPEN)
+  subject              String?
+  channelAddress       String?
+  externalThreadKey    String?
+  identityLevel        ConversationIdentityLevel @default(NONE)
+  propertyId           String?                   @db.Uuid
+  unitId               String?                   @db.Uuid
+  leaseId              String?                   @db.Uuid
+  tenantOrganisationId String?                   @db.Uuid
+  applicantId          String?                   @db.Uuid
+  serviceProviderId    String?                   @db.Uuid
+  listingId            String?                   @db.Uuid
+  marketplaceLeadId    String?                   @db.Uuid
+  maintenanceRequestId String?                   @db.Uuid
+  workOrderId          String?                   @db.Uuid
+  assignedAIEmployeeId String?                   @db.Uuid
+  assignedMemberId     String?                   @db.Uuid
+  aiSummary            String?
+  webChatTokenHash     String?                   @unique
+  lastMessageAt        DateTime?
+  lastInboundAt        DateTime?
+  lastOutboundAt       DateTime?
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  organisation         Organisation              @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property             Property?                 @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                 Unit?                     @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  lease                Lease?                    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation?       @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  applicant            Applicant?                @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  serviceProvider      ServiceProvider?          @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
+  listing              Listing?                  @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  marketplaceLead      MarketplaceLead?          @relation(fields: [marketplaceLeadId], references: [id], onDelete: Restrict)
+  maintenanceRequest   MaintenanceRequest?       @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  workOrder            WorkOrder?                @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  assignedAIEmployee   AIEmployee?               @relation(fields: [assignedAIEmployeeId], references: [id], onDelete: Restrict)
+  assignedMember       OrganisationMember?       @relation("ConversationAssigneeMember", fields: [assignedMemberId], references: [id], onDelete: Restrict)
+  participants         ConversationParticipant[]
+  messages             Message[]
+  assignments          ConversationAssignment[]
+
+  @@index([organisationId, status, updatedAt])
+  @@index([organisationId, channel, channelAddress])
+  @@index([organisationId, tenantOrganisationId])
+  @@index([organisationId, marketplaceLeadId])
+  @@index([organisationId, assignedAIEmployeeId, status])
+  @@index([organisationId, assignedMemberId, status])
+  @@index([externalThreadKey])
+}
+
+model ConversationParticipant {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  conversationId       String                      @db.Uuid
+  organisationId       String                      @db.Uuid
+  type                 ConversationParticipantType
+  userId               String?                     @db.Uuid
+  tenantOrganisationId String?                     @db.Uuid
+  applicantId          String?                     @db.Uuid
+  serviceProviderId    String?                     @db.Uuid
+  organisationMemberId String?                     @db.Uuid
+  aiEmployeeId         String?                     @db.Uuid
+  displayName          String?
+  email                String?
+  phone                String?
+  verifiedAt           DateTime?
+  createdAt            DateTime                    @default(now())
+  conversation         Conversation                @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  organisation         Organisation                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId])
+  @@index([organisationId, type])
+}
+
+model Message {
+  id                    String              @id @default(uuid()) @db.Uuid
+  conversationId        String              @db.Uuid
+  organisationId        String              @db.Uuid
+  channel               ConversationChannel
+  direction             MessageDirection
+  senderType            MessageSenderType
+  senderParticipantId   String?             @db.Uuid
+  aiEmployeeId          String?             @db.Uuid
+  authoredByUserId      String?             @db.Uuid
+  body                  String
+  bodyFormat            String              @default("TEXT")
+  externalMessageId     String?
+  externalReferenceId   String?
+  metadata              Json?
+  containsSensitiveData Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  conversation          Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  organisation          Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  authoredBy            User?               @relation("MessageAuthor", fields: [authoredByUserId], references: [id], onDelete: SetNull)
+  deliveries            MessageDelivery[]
+
+  @@unique([organisationId, channel, externalMessageId])
+  @@index([conversationId, createdAt])
+  @@index([organisationId, createdAt])
+}
+
+model MessageDelivery {
+  id                String                @id @default(uuid()) @db.Uuid
+  messageId         String                @db.Uuid
+  organisationId    String                @db.Uuid
+  channel           ConversationChannel
+  status            MessageDeliveryStatus @default(QUEUED)
+  recipientAddress  String?
+  providerReference String?
+  attempts          Int                   @default(0)
+  lastAttemptAt     DateTime?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  failureReason     String?
+  idempotencyKey    String                @unique
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  message           Message               @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  organisation      Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, status])
+  @@index([messageId])
+}
+
+model ConversationAssignment {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  conversationId       String                   @db.Uuid
+  organisationId       String                   @db.Uuid
+  assigneeType         ConversationAssigneeType
+  aiEmployeeId         String?                  @db.Uuid
+  organisationMemberId String?                  @db.Uuid
+  reason               String?
+  actorUserId          String?                  @db.Uuid
+  createdAt            DateTime                 @default(now())
+  conversation         Conversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  organisation         Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  member               OrganisationMember?      @relation("ConversationAssignmentMember", fields: [organisationMemberId], references: [id], onDelete: SetNull)
+  actor                User?                    @relation("ConversationAssignmentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([organisationId, createdAt])
+}
+
+model CommunicationChannelConfig {
+  id                 String              @id @default(uuid()) @db.Uuid
+  organisationId     String              @db.Uuid
+  channel            ConversationChannel
+  enabled            Boolean             @default(false)
+  providerKey        String?
+  fromAddress        String?
+  webhookVerifyToken String?
+  config             Json                @default("{}")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  organisation       Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, channel])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 19 - Provider-neutral object storage, generated documents, e-signature,
+// geocoding, calendar, and organisation integration health.
+// ---------------------------------------------------------------------------
+
+enum StorageClassification {
+  PRIVATE
+  PUBLIC
+}
+
+enum StorageOrigin {
+  UPLOADED
+  GENERATED
+}
+
+enum MalwareScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  SKIPPED
+  ERROR
+}
+
+enum StorageArchiveAction {
+  ARCHIVED
+  RESTORED
+}
+
+enum GeneratedDocumentType {
+  RECEIPT
+  TENANT_STATEMENT
+  MOVE_OUT_STATEMENT
+  LEASE_AGREEMENT
+}
+
+enum SignatureEventStatus {
+  MATCHED
+  UNMATCHED
+  MISMATCHED
+  DUPLICATE
+}
+
+enum GeocodeStatus {
+  NOT_ATTEMPTED
+  OK
+  NOT_FOUND
+  ERROR
+  NOT_CONFIGURED
+}
+
+enum CalendarEventType {
+  VIEWING
+  MOVE_IN
+  MOVE_OUT
+  INSPECTION
+  MAINTENANCE_APPOINTMENT
+}
+
+enum CalendarEventStatus {
+  SCHEDULED
+  UPDATED
+  CANCELLED
+}
+
+enum CalendarSyncStatus {
+  NOT_APPLICABLE
+  SYNCED
+  PENDING
+  FAILED
+}
+
+enum IntegrationType {
+  STORAGE
+  ESIGNATURE
+  GEOCODING
+  CALENDAR
+  MALWARE_SCAN
+}
+
+enum IntegrationStatus {
+  NOT_CONFIGURED
+  CONNECTED
+  DEGRADED
+  ERROR
+}
+
+/// Canonical, provider-neutral metadata for every stored file byte-blob (uploaded or generated).
+/// The actual bytes never live in the database: `storageKey` is the only pointer into whichever
+/// `ObjectStorageAdapter` is configured (S3-compatible in production, filesystem/in-memory when
+/// no credentials are configured). `organisationId` is nullable because an individually-owned
+/// (non company-backed) service provider's verification evidence has no owning organisation —
+/// every other target type always sets it, and every organisation-scoped query filters on it.
+model StorageObject {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  organisationId      String?                @db.Uuid
+  storageKey          String                 @unique
+  origin              StorageOrigin
+  classification      StorageClassification  @default(PRIVATE)
+  targetType          String
+  targetId            String?                @db.Uuid
+  originalFileName    String
+  safeFileName        String
+  declaredContentType String?
+  contentType         String
+  sizeBytes           Int
+  sha256              String
+  uploadedByUserId    String?                @db.Uuid
+  malwareScanStatus   MalwareScanStatus      @default(SKIPPED)
+  malwareScanDetail   String?
+  malwareScannedAt    DateTime?
+  archivedAt          DateTime?
+  archivedByUserId    String?                @db.Uuid
+  archiveReason       String?
+  metadata            Json?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  organisation        Organisation?          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  uploadedBy          User?                  @relation("StorageObjectUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  archivedBy          User?                  @relation("StorageObjectArchiver", fields: [archivedByUserId], references: [id], onDelete: SetNull)
+  history             StorageObjectHistory[]
+  generatedDocument   GeneratedDocument?
+
+  @@index([organisationId, targetType, targetId])
+  @@index([organisationId, classification, archivedAt])
+  @@index([organisationId, createdAt])
+}
+
+/// Append-only archive/restore audit trail for a `StorageObject` (item 1's "archive policy/history").
+model StorageObjectHistory {
+  id              String               @id @default(uuid()) @db.Uuid
+  storageObjectId String               @db.Uuid
+  actorUserId     String?              @db.Uuid
+  action          StorageArchiveAction
+  reason          String?
+  createdAt       DateTime             @default(now())
+  storageObject   StorageObject        @relation(fields: [storageObjectId], references: [id], onDelete: Restrict)
+  actor           User?                @relation("StorageObjectHistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([storageObjectId, createdAt])
+}
+
+/// An immutable, versioned generated PDF (receipt/statement/lease document) backed 1:1 by a
+/// `StorageObject`. `dataHash` is a checksum of the exact source-record snapshot rendered into the
+/// PDF: requesting generation again with unchanged source data returns the existing row instead of
+/// ever re-rendering or overwriting it; a genuinely changed snapshot creates a new `version` while
+/// every previous version's bytes remain retrievable forever.
+model GeneratedDocument {
+  id                   String                @id @default(uuid()) @db.Uuid
+  organisationId       String                @db.Uuid
+  storageObjectId      String                @unique @db.Uuid
+  documentType         GeneratedDocumentType
+  referenceNumber      String                @unique
+  version              Int                   @default(1)
+  sourceType           String
+  sourceId             String                @db.Uuid
+  dataHash             String
+  leaseId              String?               @db.Uuid
+  tenantOrganisationId String?               @db.Uuid
+  propertyId           String?               @db.Uuid
+  generatedByUserId    String?               @db.Uuid
+  generatedAt          DateTime              @default(now())
+  supersededAt         DateTime?
+  organisation         Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  storageObject        StorageObject         @relation(fields: [storageObjectId], references: [id], onDelete: Restrict)
+  lease                Lease?                @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation?   @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  property             Property?             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  generatedBy          User?                 @relation("GeneratedDocumentCreator", fields: [generatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([organisationId, documentType, sourceType, sourceId, dataHash])
+  @@index([organisationId, documentType, sourceType, sourceId, version])
+  @@index([leaseId])
+  @@index([tenantOrganisationId])
+  @@index([propertyId])
+}
+
+/// An organisation's own configurable legal template for a generated document type (currently
+/// meaningful for LEASE_AGREEMENT). PropertyOS never invents or ships jurisdiction-specific legal
+/// clauses: when no active template exists, lease document generation falls back to a neutral,
+/// factual-only summary of the real lease record and reports `templateConfigured: false`.
+model DocumentTemplate {
+  id              String                @id @default(uuid()) @db.Uuid
+  organisationId  String                @db.Uuid
+  documentType    GeneratedDocumentType
+  name            String
+  bodyTemplate    String
+  isActive        Boolean               @default(true)
+  createdByUserId String                @db.Uuid
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  organisation    Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  createdBy       User                  @relation("DocumentTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, documentType])
+}
+
+/// Idempotency/replay-prevention ledger for inbound e-signature provider webhooks, mirroring
+/// `PaymentReconciliationEvent`'s (providerKey, eventKey) uniqueness so a redelivered webhook is
+/// recognised and never re-applied.
+model SignatureProviderEvent {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  organisationId     String                 @db.Uuid
+  providerKey        String
+  eventKey           String
+  payloadHash        String
+  signatureRequestId String?                @db.Uuid
+  status             SignatureEventStatus
+  receivedAt         DateTime               @default(now())
+  processedAt        DateTime?
+  organisation       Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  signatureRequest   LeaseSignatureRequest? @relation(fields: [signatureRequestId], references: [id], onDelete: Restrict)
+
+  @@unique([providerKey, eventKey])
+  @@index([organisationId, receivedAt])
+  @@index([signatureRequestId])
+}
+
+/// Log/cache of address geocoding attempts. `Property.latitude`/`longitude` hold the current
+/// precise (private) result; this table keeps the attempt history (status/provider/failure
+/// reason) so a property without coordinates can explain why, and repeated identical queries can
+/// be recognised without re-billing a paid provider.
+model GeocodeLookup {
+  id                String        @id @default(uuid()) @db.Uuid
+  organisationId    String        @db.Uuid
+  propertyId        String?       @db.Uuid
+  provider          String
+  queryText         String
+  queryHash         String
+  status            GeocodeStatus
+  latitude          Decimal?      @db.Decimal(10, 7)
+  longitude         Decimal?      @db.Decimal(10, 7)
+  precision         String?
+  providerReference String?
+  failureReason     String?
+  createdAt         DateTime      @default(now())
+  organisation      Organisation  @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property          Property?     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, queryHash])
+  @@index([propertyId, createdAt])
+}
+
+/// A provider-neutral scheduled event (viewing/move-in/move-out/inspection/maintenance
+/// appointment). The row itself is the source of truth for scheduling — `syncStatus`/
+/// `lastSyncError` track a best-effort external calendar mirror and never gate core scheduling.
+model CalendarEvent {
+  id                String              @id @default(uuid()) @db.Uuid
+  organisationId    String              @db.Uuid
+  type              CalendarEventType
+  sourceType        String
+  sourceId          String              @db.Uuid
+  title             String
+  description       String?
+  startAt           DateTime
+  endAt             DateTime
+  timezone          String
+  location          String?
+  attendees         Json                @default("[]")
+  status            CalendarEventStatus @default(SCHEDULED)
+  providerKey       String              @default("INTERNAL")
+  providerEventId   String?
+  syncStatus        CalendarSyncStatus  @default(SYNCED)
+  lastSyncError     String?
+  lastSyncAttemptAt DateTime?
+  createdByUserId   String?             @db.Uuid
+  cancelledAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  organisation      Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  createdBy         User?               @relation("CalendarEventCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([organisationId, sourceType, sourceId, type])
+  @@index([organisationId, startAt])
+  @@index([organisationId, type, status])
+}
+
+/// Organisation-scoped configuration/health for a Phase 19 integration category. Never stores raw
+/// secrets (those stay env-only); `metadata` is restricted to non-secret operational fields such
+/// as a bucket name or base URL. `status`/`lastSuccessAt`/`lastFailureAt` are maintained by the
+/// adapters themselves as they are used, giving a real health signal instead of a static flag.
+model IntegrationConfig {
+  id                String            @id @default(uuid()) @db.Uuid
+  organisationId    String            @db.Uuid
+  integrationType   IntegrationType
+  provider          String
+  enabled           Boolean           @default(true)
+  metadata          Json              @default("{}")
+  status            IntegrationStatus @default(NOT_CONFIGURED)
+  lastSuccessAt     DateTime?
+  lastFailureAt     DateTime?
+  lastFailureReason String?
+  updatedByUserId   String?           @db.Uuid
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  organisation      Organisation      @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  updatedBy         User?             @relation("IntegrationConfigUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([organisationId, integrationType])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 20: commercial SaaS subscriptions, a single entitlement service, and
+// an explicit NesAfric platform-administration boundary. Every model below is
+// additive to the existing schema (no Phase 1-19 model changes beyond the
+// `ReminderEventType` values and back-relations above) and preserves existing
+// domain identity: `OrganisationSubscription` is a 1:1 attribute of the
+// existing `Organisation`, never a duplicate tenant/account concept.
+// ---------------------------------------------------------------------------
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  SUSPENDED
+  CANCELLED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum EntitlementKind {
+  BOOLEAN
+  LIMIT
+}
+
+enum SubscriptionInvoiceStatus {
+  OPEN
+  PAID
+  FAILED
+  VOID
+}
+
+/// Mirrors `ReconciliationStatus`/`SignatureEventStatus`'s idempotent-webhook-ledger vocabulary
+/// for the provider-neutral SaaS billing webhook (item 5).
+enum BillingWebhookStatus {
+  PROCESSED
+  UNMATCHED
+  MISMATCHED
+  DUPLICATE
+  FAILED
+}
+
+/// Platform-administration roles (item 8). Deliberately a small closed set evaluated in code
+/// (`src/platform/platform-admin/permissions.ts`), not the DB-driven `Role`/`Permission` tables
+/// used for organisation RBAC — the two authorization systems must never share plumbing.
+enum PlatformRole {
+  SUPER_ADMIN
+  BILLING_ADMIN
+  SUPPORT_AGENT
+  READ_ONLY
+}
+
+enum PlatformPrincipalStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// How a `PlatformPrincipal` came to exist: only ever env-variable bootstrap or a manual,
+/// operator-run script. No API endpoint in this application creates or promotes one.
+enum PlatformPrincipalOrigin {
+  ENV_BOOTSTRAP
+  MANUAL
+}
+
+/// A configurable, sellable plan tier (item 1). Prices and entitlements are separate child
+/// tables so the same plan can be priced in several currencies/cycles and carry many
+/// boolean/limit entitlements without a wide, sparse column set.
+model SubscriptionPlan {
+  id            String                     @id @default(uuid()) @db.Uuid
+  key           String                     @unique
+  name          String
+  description   String?
+  isActive      Boolean                    @default(true)
+  isPublic      Boolean                    @default(true)
+  sortOrder     Int                        @default(0)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  prices        PlanPrice[]
+  entitlements  PlanEntitlement[]
+  subscriptions OrganisationSubscription[]
+  invoices      SubscriptionInvoice[]
+
+  @@index([isActive, isPublic, sortOrder])
+}
+
+/// One price point for a plan in a given currency/billing cycle (item 1's "configurable...
+/// prices/currencies"). `currencyCode` is a plain code (not a Prisma relation), matching every
+/// other currency-code field in this schema (e.g. `Organisation.defaultCurrencyCode`).
+model PlanPrice {
+  id           String           @id @default(uuid()) @db.Uuid
+  planId       String           @db.Uuid
+  currencyCode String           @db.Char(3)
+  billingCycle BillingCycle
+  amountMinor  Decimal          @db.Decimal(19, 0)
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  plan         SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, currencyCode, billingCycle])
+}
+
+/// One boolean or numeric-limit entitlement for a plan (item 2). `isUnlimited` is an explicit
+/// flag rather than overloading a null `limitValue`, so "unlimited" and "not configured" can
+/// never be confused.
+model PlanEntitlement {
+  id           String           @id @default(uuid()) @db.Uuid
+  planId       String           @db.Uuid
+  featureKey   String
+  kind         EntitlementKind
+  booleanValue Boolean?
+  limitValue   BigInt?
+  isUnlimited  Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  plan         SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, featureKey])
+}
+
+/// The single subscription attribute of an existing `Organisation` (item 1) — a 1:1 relation,
+/// never a second tenant identity. Carries plan/cycle/currency, provider-neutral billing
+/// customer/subscription refs, every lifecycle timestamp (item 4), and the current billing
+/// period entitlement usage windows are computed against.
+model OrganisationSubscription {
+  id                     String                      @id @default(uuid()) @db.Uuid
+  organisationId         String                      @unique @db.Uuid
+  planId                 String                      @db.Uuid
+  status                 SubscriptionStatus          @default(TRIALING)
+  billingCycle           BillingCycle                @default(MONTHLY)
+  currencyCode           String                      @db.Char(3)
+  billingProviderKey     String                      @default("test")
+  billingCustomerRef     String?
+  billingSubscriptionRef String?
+  trialEndsAt            DateTime?
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  cancelAtPeriodEnd      Boolean                     @default(false)
+  cancelledAt            DateTime?
+  suspendedAt            DateTime?
+  gracePeriodEndsAt      DateTime?
+  pastDueSince           DateTime?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  organisation           Organisation                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  plan                   SubscriptionPlan            @relation(fields: [planId], references: [id], onDelete: Restrict)
+  invoices               SubscriptionInvoice[]
+  statusHistory          SubscriptionStatusHistory[]
+
+  @@index([status])
+  @@index([planId])
+  @@index([currentPeriodEnd])
+  @@index([billingProviderKey, billingSubscriptionRef])
+}
+
+/// A billing period rendered as an invoice (item 1's "periods/history/invoices" combined into
+/// one queryable row per period, mirroring how e.g. `ListingStatusHistory` doubles as both
+/// history and the queryable current state elsewhere in this schema).
+model SubscriptionInvoice {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  organisationId     String                    @db.Uuid
+  subscriptionId     String                    @db.Uuid
+  planId             String                    @db.Uuid
+  periodStart        DateTime
+  periodEnd          DateTime
+  amountMinor        Decimal                   @db.Decimal(19, 0)
+  currencyCode       String                    @db.Char(3)
+  status             SubscriptionInvoiceStatus @default(OPEN)
+  billingProviderKey String
+  providerInvoiceRef String?
+  issuedAt           DateTime                  @default(now())
+  dueAt              DateTime?
+  paidAt             DateTime?
+  failureReason      String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  organisation       Organisation              @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  subscription       OrganisationSubscription  @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  plan               SubscriptionPlan          @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([subscriptionId, periodStart])
+  @@unique([billingProviderKey, providerInvoiceRef])
+  @@index([organisationId, status])
+}
+
+/// Append-only subscription lifecycle audit trail (item 4's "events/audit actor attribution"),
+/// distinct from the generic `AuditEvent`/`DomainEvent` tables (which every lifecycle transition
+/// also writes to, exactly like every other domain in this schema) because it is structured
+/// enough to query a subscription's full status timeline directly, and records which side (an
+/// organisation user, a platform principal, or an automated job) actually caused the change.
+model SubscriptionStatusHistory {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  subscriptionId           String                   @db.Uuid
+  organisationId           String                   @db.Uuid
+  fromStatus               SubscriptionStatus?
+  toStatus                 SubscriptionStatus
+  reason                   String
+  actorUserId              String?                  @db.Uuid
+  actorPlatformPrincipalId String?                  @db.Uuid
+  createdAt                DateTime                 @default(now())
+  subscription             OrganisationSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  organisation             Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  actorUser                User?                    @relation("SubscriptionStatusActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorPlatformPrincipal   PlatformPrincipal?       @relation(fields: [actorPlatformPrincipalId], references: [id], onDelete: SetNull)
+
+  @@index([organisationId, createdAt])
+  @@index([subscriptionId, createdAt])
+}
+
+/// A platform-granted, time-bound, per-organisation entitlement override (item 2's "org/
+/// promotional overrides"), e.g. a temporary limit raise or a comped boolean feature. Always
+/// takes precedence over the organisation's plan entitlement for the same `featureKey` while
+/// active (not expired, not revoked). Never deletes the plan entitlement it overrides.
+model OrganisationEntitlementOverride {
+  id                           String             @id @default(uuid()) @db.Uuid
+  organisationId               String             @db.Uuid
+  featureKey                   String
+  kind                         EntitlementKind
+  booleanValue                 Boolean?
+  limitValue                   BigInt?
+  isUnlimited                  Boolean            @default(false)
+  reason                       String
+  expiresAt                    DateTime?
+  createdByPlatformPrincipalId String             @db.Uuid
+  revokedAt                    DateTime?
+  revokedByPlatformPrincipalId String?            @db.Uuid
+  createdAt                    DateTime           @default(now())
+  organisation                 Organisation       @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  createdByPlatformPrincipal   PlatformPrincipal  @relation("OverrideCreator", fields: [createdByPlatformPrincipalId], references: [id], onDelete: Restrict)
+  revokedByPlatformPrincipal   PlatformPrincipal? @relation("OverrideRevoker", fields: [revokedByPlatformPrincipalId], references: [id], onDelete: SetNull)
+
+  @@index([organisationId, featureKey, revokedAt])
+}
+
+/// Idempotency/replay-prevention ledger for inbound SaaS-billing provider webhooks (item 5),
+/// mirroring `PaymentReconciliationEvent`/`SignatureProviderEvent` exactly: a redelivered webhook
+/// is recognised by `(providerKey, eventKey)` and never re-applied. `organisationId` is nullable
+/// because a webhook can arrive referencing a billing customer/subscription ref this instance
+/// does not (yet) recognise (`UNMATCHED`), which must still be durably recorded.
+model BillingWebhookEvent {
+  id             String               @id @default(uuid()) @db.Uuid
+  organisationId String?              @db.Uuid
+  providerKey    String
+  eventKey       String
+  eventType      String
+  payloadHash    String
+  status         BillingWebhookStatus
+  failureReason  String?
+  receivedAt     DateTime             @default(now())
+  processedAt    DateTime?
+  organisation   Organisation?        @relation(fields: [organisationId], references: [id], onDelete: SetNull)
+
+  @@unique([providerKey, eventKey])
+  @@index([organisationId, receivedAt])
+}
+
+/// The explicit NesAfric platform-administration principal (item 8) — completely independent of
+/// `OrganisationMember`/`Role`/`Permission`. Linked 1:1 to a `User` purely to reuse the existing
+/// login/session mechanism; having an `OrganisationMember` row never implies this, and vice
+/// versa. Only ever created by `ensurePlatformBootstrap()` (env-variable driven) or a manual,
+/// operator-run script — no HTTP endpoint in this application can create or promote one.
+model PlatformPrincipal {
+  id                        String                            @id @default(uuid()) @db.Uuid
+  userId                    String                            @unique @db.Uuid
+  role                      PlatformRole
+  status                    PlatformPrincipalStatus           @default(ACTIVE)
+  createdVia                PlatformPrincipalOrigin
+  notes                     String?
+  createdAt                 DateTime                          @default(now())
+  updatedAt                 DateTime                          @updatedAt
+  disabledAt                DateTime?
+  user                      User                              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  supportSessions           PlatformSupportSession[]
+  auditEvents               PlatformAuditEvent[]
+  overridesCreated          OrganisationEntitlementOverride[] @relation("OverrideCreator")
+  overridesRevoked          OrganisationEntitlementOverride[] @relation("OverrideRevoker")
+  flagOverridesCreated      OrganisationFeatureFlagOverride[]
+  flagsUpdated              FeatureFlag[]
+  subscriptionStatusActions SubscriptionStatusHistory[]
+
+  @@index([role, status])
+}
+
+/// An audited, time-bound, read-only support access grant (item 9): reason/admin/target/expiry.
+/// Deliberately has no relation to `OrganisationMember` and grants no mutation capability of its
+/// own — it is the durable, organisation-visible record that justifies a platform principal
+/// viewing a specific organisation's detail through the (already read-only) platform-admin APIs.
+model PlatformSupportSession {
+  id                  String            @id @default(uuid()) @db.Uuid
+  platformPrincipalId String            @db.Uuid
+  organisationId      String            @db.Uuid
+  reason              String
+  startedAt           DateTime          @default(now())
+  expiresAt           DateTime
+  endedAt             DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime          @default(now())
+  platformPrincipal   PlatformPrincipal @relation(fields: [platformPrincipalId], references: [id], onDelete: Restrict)
+  organisation        Organisation      @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, expiresAt])
+  @@index([platformPrincipalId, expiresAt])
+}
+
+/// Platform-side append-only audit trail (item 8), the counterpart of the organisation-scoped
+/// `AuditEvent` for actions a platform principal takes (viewing an org, changing a plan,
+/// suspending a subscription, editing a feature flag) — kept fully separate so organisation
+/// members never see platform-principal identities mixed into their own audit history.
+model PlatformAuditEvent {
+  id                  String             @id @default(uuid()) @db.Uuid
+  platformPrincipalId String?            @db.Uuid
+  action              String
+  entityType          String
+  entityId            String
+  organisationId      String?            @db.Uuid
+  metadata            Json?
+  createdAt           DateTime           @default(now())
+  platformPrincipal   PlatformPrincipal? @relation(fields: [platformPrincipalId], references: [id], onDelete: SetNull)
+  organisation        Organisation?      @relation(fields: [organisationId], references: [id], onDelete: SetNull)
+
+  @@index([organisationId, createdAt])
+  @@index([action, createdAt])
+}
+
+/// A platform-wide feature flag (item 10), fully separate from organisation RBAC. Evaluation
+/// order (see `src/modules/feature-flags/service.ts`): `emergencyDisabled` always wins (forces
+/// off); otherwise an active `OrganisationFeatureFlagOverride` wins; otherwise a deterministic
+/// percentage-cohort hash of `(organisationId, key)` against `rolloutPercentage`; otherwise
+/// `isEnabled`.
+model FeatureFlag {
+  id                           String                            @id @default(uuid()) @db.Uuid
+  key                          String                            @unique
+  description                  String
+  isEnabled                    Boolean                           @default(false)
+  rolloutPercentage            Int                               @default(100)
+  emergencyDisabled            Boolean                           @default(false)
+  createdAt                    DateTime                          @default(now())
+  updatedAt                    DateTime                          @updatedAt
+  updatedByPlatformPrincipalId String?                           @db.Uuid
+  updatedByPlatformPrincipal   PlatformPrincipal?                @relation(fields: [updatedByPlatformPrincipalId], references: [id], onDelete: SetNull)
+  organisationOverrides        OrganisationFeatureFlagOverride[]
+}
+
+/// A per-organisation override of a `FeatureFlag`'s evaluated result (item 10).
+model OrganisationFeatureFlagOverride {
+  id                           String             @id @default(uuid()) @db.Uuid
+  organisationId               String             @db.Uuid
+  flagKey                      String
+  enabled                      Boolean
+  createdAt                    DateTime           @default(now())
+  createdByPlatformPrincipalId String?            @db.Uuid
+  organisation                 Organisation       @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  flag                         FeatureFlag        @relation(fields: [flagKey], references: [key], onDelete: Restrict)
+  createdByPlatformPrincipal   PlatformPrincipal? @relation(fields: [createdByPlatformPrincipalId], references: [id], onDelete: SetNull)
+
+  @@unique([organisationId, flagKey])
 }

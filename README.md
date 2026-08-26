@@ -14,6 +14,7 @@ The application is a TypeScript modular monolith built with Next.js and PostgreS
 2. Run `npm install`.
 3. Run `npm run db:generate && npm run db:deploy && npm run db:seed`.
 4. Run `npm run dev`.
+5. (Optional) Grant platform-administration access with `npm run platform-admin:bootstrap -- <email> SUPER_ADMIN`, or set `PLATFORM_ADMIN_BOOTSTRAP_EMAILS` before starting the app. This is independent of organisation membership — see `docs/architecture.md`.
 
 ## Database and security
 

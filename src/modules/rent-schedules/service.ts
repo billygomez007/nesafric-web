@@ -18,7 +18,29 @@ export async function generateRentSchedule(userId: string, organisationId: strin
     rows.push({ organisationId, leaseId: lease.id, propertyId: lease.propertyId, unitId: lease.unitId, dueDate: periodStart, periodStart, periodEnd: lease.endDate && periodEnd > lease.endDate ? lease.endDate : periodEnd, amountMinor: lease.rentAmountMinor, currencyCode: lease.currencyCode });
   }
   const result = await db.$transaction(async (tx) => {
-    for (const row of rows) await tx.rentObligation.upsert({ where: { leaseId_periodStart_periodEnd: { leaseId: row.leaseId, periodStart: row.periodStart, periodEnd: row.periodEnd } }, update: {}, create: row });
+    for (const row of rows) {
+      const obligation = await tx.rentObligation.upsert({ where: { leaseId_periodStart_periodEnd: { leaseId: row.leaseId, periodStart: row.periodStart, periodEnd: row.periodEnd } }, update: {}, create: row });
+      const existingCharge = await tx.financialLedgerEntry.findUnique({ where: { rentObligationId_type: { rentObligationId: obligation.id, type: "RENT_CHARGE" } } });
+      if (!existingCharge) {
+        const entry = await tx.financialLedgerEntry.create({
+          data: {
+            organisationId,
+            propertyId: obligation.propertyId,
+            unitId: obligation.unitId,
+            leaseId: obligation.leaseId,
+            rentObligationId: obligation.id,
+            type: "RENT_CHARGE",
+            direction: "DEBIT",
+            amountMinor: obligation.amountMinor,
+            currencyCode: obligation.currencyCode,
+            effectiveAt: obligation.dueDate,
+            reference: `RENT-${obligation.id}`,
+            createdByUserId: userId,
+          },
+        });
+        await tx.domainEvent.create({ data: { organisationId, name: "ledger.entry_created", aggregateType: "financial_ledger_entry", aggregateId: entry.id, payload: { type: entry.type, obligationId: obligation.id } } });
+      }
+    }
     await tx.domainEvent.create({ data: { organisationId, name: "rent_schedule.generated", aggregateType: "lease", aggregateId: lease.id, payload: { periods: rows.length } } });
     return rows.length;
   });

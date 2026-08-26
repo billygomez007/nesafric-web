@@ -2,6 +2,8 @@ import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 import { requirePermission, PERMISSIONS } from "@/platform/authorization/permissions";
 import { recordAudit } from "@/modules/audit/service";
+import { assertOperational, assertWithinLimit } from "@/modules/entitlements/service";
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { createPortfolioSchema, createPropertySchema, updatePropertySchema } from "./schemas";
 import { activePropertyScope } from "./repository";
 
@@ -23,6 +25,12 @@ export async function createProperty(userId: string, organisationId: string, inp
   const country = await db.country.findUnique({ where: { code: data.countryCode } });
   const currency = await db.currency.findUnique({ where: { code: data.currencyCode } });
   if (!country?.isActive || !currency?.isActive) throw new AppError("INVALID_CONFIGURATION", 422, "Country or currency is not supported.");
+  // Representative entitlement checks (item 2): a subscription in a read-only state (suspended/
+  // cancelled) or already at its property/unit ceiling blocks creating more, without touching any
+  // existing property/unit.
+  const newUnitCount = (data.building?.units.length ?? 0) + data.units.length;
+  await assertOperational(organisationId, ENTITLEMENTS.propertiesMax.key);
+  if (newUnitCount > 0) await assertWithinLimit(organisationId, ENTITLEMENTS.unitsMax.key, newUnitCount);
   return db.$transaction(async (tx) => {
     const { building, units, ...propertyData } = data;
     const property = await tx.property.create({ data: { ...propertyData, organisationId } });

@@ -14,3 +14,10 @@ export const createTenantSchema = z.object({
 export const updateTenantSchema = createTenantSchema.omit({ legalName: true }).extend({
   legalName: z.string().trim().min(2).max(200).optional(),
 }).refine((input) => Object.keys(input).length > 0, "At least one tenant field must be provided.");
+
+export const communicationPreferencesSchema = z.object({
+  communicationInAppAllowed: z.boolean(),
+  communicationEmailAllowed: z.boolean(),
+  communicationSmsAllowed: z.boolean(),
+  communicationWhatsappAllowed: z.boolean(),
+});

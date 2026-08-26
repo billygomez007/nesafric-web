@@ -1,7 +1,7 @@
 import { db } from "@/platform/database/client";
-import { notFound } from "@/platform/errors";
+import { AppError, notFound } from "@/platform/errors";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
-import { createTenantSchema, updateTenantSchema } from "./schemas";
+import { communicationPreferencesSchema, createTenantSchema, updateTenantSchema } from "./schemas";
 
 export async function createTenant(userId: string, organisationId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.tenantCreate);
@@ -52,6 +52,20 @@ export async function updateTenant(userId: string, organisationId: string, tenan
     const updated = await tx.tenantOrganisation.update({ where: { id: relationship.id }, data: profile });
     await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "tenant.updated", entityType: "tenant", entityId: updated.id } });
     await tx.domainEvent.create({ data: { organisationId, name: "tenant.updated", aggregateType: "tenant", aggregateId: updated.id, payload: { changedFields: Object.keys(data) } } });
+    return updated;
+  });
+}
+
+export async function updateTenantCommunicationPreferences(userId: string, organisationId: string, tenantOrganisationId: string, input: unknown) {
+  await requirePermission(userId, organisationId, PERMISSIONS.tenantUpdate);
+  const parsed = communicationPreferencesSchema.safeParse(input);
+  if (!parsed.success) throw new AppError("INVALID_COMMUNICATION_PREFERENCES", 422, parsed.error.issues[0]?.message ?? "Invalid communication preferences.");
+  return db.$transaction(async (tx) => {
+    const current = await tx.tenantOrganisation.findFirst({ where: { id: tenantOrganisationId, organisationId, archivedAt: null } });
+    if (!current) throw notFound();
+    const updated = await tx.tenantOrganisation.update({ where: { id: current.id }, data: parsed.data });
+    await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "tenant.communication_preferences_updated", entityType: "tenant", entityId: updated.id, metadata: parsed.data } });
+    await tx.domainEvent.create({ data: { organisationId, name: "tenant.communication_preferences_updated", aggregateType: "tenant", aggregateId: updated.id, payload: parsed.data } });
     return updated;
   });
 }

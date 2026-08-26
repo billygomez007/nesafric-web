@@ -4,13 +4,21 @@ import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
 import { createProperty } from "@/modules/assets/service";
 import { createTenant, getTenant, updateTenant } from "@/modules/tenants/service";
-import { createLease, getLease, updateLease } from "@/modules/leases/service";
+import { getLease, updateLease } from "@/modules/leases/service";
+import { createLease } from "./helpers/lease";
 import { transitionLease } from "@/modules/lifecycle/service";
 import { generateRentSchedule } from "@/modules/rent-schedules/service";
 import { createExpiryPolicy, scheduleExpiryReminders } from "@/modules/reminders/service";
 
 async function cleanDatabase() {
-  await db.domainEvent.deleteMany(); await db.auditEvent.deleteMany(); await db.notification.deleteMany(); await db.reminderPolicy.deleteMany(); await db.rentObligation.deleteMany(); await db.leaseAmendment.deleteMany(); await db.leaseDocument.deleteMany(); await db.leaseHistory.deleteMany(); await db.leaseParty.deleteMany(); await db.lease.deleteMany();
+  await db.workOrderHistory.deleteMany();
+  await db.workOrder.deleteMany();
+  await db.maintenanceApproval.deleteMany();
+  await db.maintenanceAttachment.deleteMany();
+  await db.maintenanceHistory.deleteMany();
+  await db.maintenanceRequest.deleteMany();
+  await db.backgroundJob.deleteMany();
+  await db.domainEvent.deleteMany(); await db.auditEvent.deleteMany(); await db.notification.deleteMany(); await db.reminderPolicy.deleteMany(); await db.financialLedgerEntry.deleteMany(); await db.rentObligation.deleteMany(); await db.leaseAmendment.deleteMany(); await db.leaseDocument.deleteMany(); await db.leaseHistory.deleteMany(); await db.leaseParty.deleteMany(); await db.lease.deleteMany();
   await db.tenantOrganisation.deleteMany(); await db.tenant.deleteMany(); await db.membershipRole.deleteMany(); await db.organisationMember.deleteMany();
   await db.unit.deleteMany(); await db.building.deleteMany(); await db.property.deleteMany(); await db.organisation.deleteMany(); await db.session.deleteMany(); await db.user.deleteMany();
 }
@@ -44,7 +52,7 @@ describe("PostgreSQL Phase 2 tenant and lease core", () => {
     expect(await db.rentObligation.count({ where: { leaseId: lease.id } })).toBe(3);
     await createExpiryPolicy(ownerA.id, organisationA.id, 365, ["EMAIL"]);
     expect(await scheduleExpiryReminders(ownerA.id, organisationA.id, new Date("2026-01-02"))).toBe(1);
-    expect(await scheduleExpiryReminders(ownerA.id, organisationA.id, new Date("2026-01-02"))).toBe(1);
+    expect(await scheduleExpiryReminders(ownerA.id, organisationA.id, new Date("2026-01-02"))).toBe(0);
     expect(await db.notification.count({ where: { leaseId: lease.id } })).toBe(1);
     await expect(getLease(ownerB.id, organisationB.id, lease.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(getTenant(ownerB.id, organisationB.id, tenantA.relationship.id)).rejects.toMatchObject({ code: "NOT_FOUND" });

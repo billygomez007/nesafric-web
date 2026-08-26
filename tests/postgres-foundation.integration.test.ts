@@ -9,10 +9,17 @@ import { createPortfolio, createProperty, getProperty, updateProperty } from "@/
 import { getAuditEvents } from "@/modules/audit/queries";
 
 async function cleanDatabase() {
+  await db.workOrderHistory.deleteMany();
+  await db.workOrder.deleteMany();
+  await db.maintenanceApproval.deleteMany();
+  await db.maintenanceAttachment.deleteMany();
+  await db.maintenanceHistory.deleteMany();
+  await db.maintenanceRequest.deleteMany();
   await db.domainEvent.deleteMany();
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.reminderPolicy.deleteMany();
+  await db.financialLedgerEntry.deleteMany();
   await db.rentObligation.deleteMany();
   await db.leaseAmendment.deleteMany();
   await db.leaseDocument.deleteMany();

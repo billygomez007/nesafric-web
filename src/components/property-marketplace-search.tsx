@@ -1,0 +1,38 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useEffect, useState } from "react";
+
+export type PublicListing = { id: string; listingType: string; scope: string; category: string; title: string; description: string; pricing: { askingAmountMinor: string | null; rentAmountMinor: string | null; currencyCode: string; frequency: string | null }; availability: { availableFrom: string; actual: boolean }; attributes: { bedrooms: number | null; bathrooms: string | null; sizeSqm: string | null }; location: { countryCode: string; region: string | null; city: string | null; district: string | null; locality: string | null; label: string | null; map: { latitude: string | null; longitude: string | null; precision: string | null; geocodingRequired: boolean } }; amenities: { key: string; label: string; category: string | null }[]; media: { id: string; type: string; url: string; altText: string | null; title: string | null }[]; contact: { name: string | null; email: string | null; phone: string | null; enquiryEnabled: boolean }; verification: { status: string; evidenceReady: boolean }; publishedAt: string };
+type Result = { items: PublicListing[]; pagination: { page: number; pageSize: number; total: number; totalPages: number }; meta: { availability: string; map: { countryNeutral: boolean } } };
+
+export function PropertyMarketplaceSearch() {
+  const [result, setResult] = useState<Result | null>(null);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  async function search(search = "") {
+    const response = await fetch(`/api/public/listings${search ? `?${search}` : ""}`);
+    if (!response.ok) throw new Error((await response.json()).error?.message ?? "Unable to search listings.");
+    setResult(await response.json());
+  }
+  useEffect(() => { void search().catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load listings.")); }, []);
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const params = new URLSearchParams();
+    for (const key of ["q", "listingType", "category", "scope", "country", "region", "city", "district", "bedroomsMin", "bathroomsMin", "minPriceMinor", "maxPriceMinor", "currencyCode", "availableOn", "amenities"]) {
+      const value = String(data.get(key) ?? "").trim();
+      if (value) params.set(key, value);
+    }
+    setQuery(params.toString());
+    void search(params.toString()).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to search listings."));
+  }
+  return <div className="grid gap-6"><form className="grid gap-3 rounded-2xl border bg-white p-5 shadow-sm md:grid-cols-4" onSubmit={submit}><input className="rounded-lg border p-3 text-sm md:col-span-2" name="q" placeholder="Search homes, apartments, neighbourhoods..." /><select className="rounded-lg border p-3 text-sm" name="listingType"><option value="">Rent or sale</option><option value="RENT">For rent</option><option value="SALE">For sale</option></select><select className="rounded-lg border p-3 text-sm" name="scope"><option value="">Property or unit</option><option value="PROPERTY">Whole property</option><option value="UNIT">Unit</option></select><input className="rounded-lg border p-3 text-sm" name="category" placeholder="Property type" /><input className="rounded-lg border p-3 text-sm uppercase" maxLength={2} name="country" placeholder="Country code" /><input className="rounded-lg border p-3 text-sm" name="region" placeholder="Region / state" /><input className="rounded-lg border p-3 text-sm" name="city" placeholder="City" /><input className="rounded-lg border p-3 text-sm" name="district" placeholder="District" /><input className="rounded-lg border p-3 text-sm" min="0" name="bedroomsMin" placeholder="Minimum bedrooms" type="number" /><input className="rounded-lg border p-3 text-sm" min="0" name="bathroomsMin" placeholder="Minimum bathrooms" type="number" /><input className="rounded-lg border p-3 text-sm" min="0" name="minPriceMinor" placeholder="Minimum price (minor units)" type="number" /><input className="rounded-lg border p-3 text-sm" min="0" name="maxPriceMinor" placeholder="Maximum price (minor units)" type="number" /><input className="rounded-lg border p-3 text-sm uppercase" maxLength={3} name="currencyCode" placeholder="Currency" /><input className="rounded-lg border p-3 text-sm" name="availableOn" type="date" /><input className="rounded-lg border p-3 text-sm" name="amenities" placeholder="Amenities: parking,internet" /><button className="rounded-lg bg-slate-950 p-3 text-sm font-semibold text-white">Search properties</button></form>{error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}{result ? <><div className="flex items-center justify-between text-sm text-slate-600"><p>{result.pagination.total} verified and available listings</p><p>Availability linked to managed assets</p></div>{result.items.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{result.items.map((listing) => <ListingCard listing={listing} key={listing.id} />)}</div> : <p className="rounded-2xl border border-dashed bg-white p-12 text-center text-slate-500">No public listings match these filters.</p>}{result.pagination.totalPages > 1 && <div className="flex justify-center gap-2">{Array.from({ length: result.pagination.totalPages }, (_, index) => index + 1).slice(0, 10).map((page) => <button className={`rounded-lg border px-3 py-2 text-sm ${page === result.pagination.page ? "bg-slate-950 text-white" : "bg-white"}`} key={page} onClick={() => void search(`${query}${query ? "&" : ""}page=${page}`)}>{page}</button>)}</div>}</> : <p className="rounded-xl border bg-white p-6 text-slate-500">Loading public listings...</p>}</div>;
+}
+
+function ListingCard({ listing }: { listing: PublicListing }) {
+  const photo = listing.media.find((media) => media.type === "PHOTO");
+  const amount = listing.pricing.rentAmountMinor ?? listing.pricing.askingAmountMinor;
+  return <Link className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-500" href={`/marketplace/properties/${listing.id}`}>{photo ? <div aria-label={photo.altText ?? listing.title} className="h-52 bg-cover bg-center" role="img" style={{ backgroundImage: `url("${photo.url}")` }} /> : <div className="flex h-52 items-center justify-center bg-slate-100 text-sm text-slate-500">Photo metadata ready</div>}<div className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-emerald-700">{listing.listingType} · {listing.scope}</p><h2 className="mt-1 text-xl font-semibold">{listing.title}</h2></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{listing.verification.status}</span></div><p className="mt-2 text-sm text-slate-600">{listing.location.label || [listing.location.district, listing.location.city, listing.location.region, listing.location.countryCode].filter(Boolean).join(", ")}</p><p className="mt-4 text-xl font-semibold">{amount ? money(amount, listing.pricing.currencyCode) : "Contact for price"}{listing.pricing.frequency && <span className="text-sm font-normal text-slate-500"> / {listing.pricing.frequency.toLowerCase()}</span>}</p><p className="mt-3 text-sm text-slate-500">{listing.attributes.bedrooms ?? "—"} beds · {listing.attributes.bathrooms ?? "—"} baths · {listing.attributes.sizeSqm ?? "—"} m²</p></div></Link>;
+}
+function money(value: string, currency: string) { return new Intl.NumberFormat("en", { style: "currency", currency }).format(Number(value) / 100); }

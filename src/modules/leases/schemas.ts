@@ -35,3 +35,7 @@ export const updateLeaseSchema = z.object(leaseFields).pick({
   if (input.endDate && input.startDate && input.endDate < input.startDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Lease end date cannot precede start date." });
   if (input.rentFrequency === "CUSTOM" && !input.customFrequency) context.addIssue({ code: "custom", path: ["customFrequency"], message: "A custom rent frequency description is required." });
 });
+
+export const renewalTransitionSchema = z.object({
+  status: z.enum(["REQUESTED", "UNDER_DISCUSSION", "APPROVED", "DECLINED", "COMPLETED"]),
+});

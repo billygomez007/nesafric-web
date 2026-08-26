@@ -1,4 +1,5 @@
 import { db } from "@/platform/database/client";
+import { Prisma } from "@/platform/database/generated/client";
 import { AppError, notFound } from "@/platform/errors";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { createLeaseSchema, updateLeaseSchema } from "./schemas";
@@ -10,30 +11,51 @@ function historyData(lease: { status: "DRAFT" | "ACTIVE" | "EXPIRING" | "EXPIRED
 export async function createLease(userId: string, organisationId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.leaseCreate);
   const data = createLeaseSchema.parse(input);
-  const property = await db.property.findFirst({ where: { id: data.propertyId, organisationId, archivedAt: null } });
+  if (data.status !== "DRAFT") {
+    throw new AppError("LEASE_EXECUTION_REQUIRED", 409, "New leases must remain draft until the execution requirements are complete.");
+  }
+  return db.$transaction((tx) => createLeaseInTransaction(tx, userId, organisationId, data));
+}
+
+export async function createLeaseInTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  organisationId: string,
+  data: ReturnType<typeof createLeaseSchema.parse>,
+) {
+  const property = await tx.property.findFirst({ where: { id: data.propertyId, organisationId, archivedAt: null } });
   if (!property) throw notFound();
   if (data.unitId) {
-    const unit = await db.unit.findFirst({ where: { id: data.unitId, propertyId: property.id, archivedAt: null } });
+    const unit = await tx.unit.findFirst({ where: { id: data.unitId, propertyId: property.id, archivedAt: null } });
     if (!unit) throw new AppError("INVALID_UNIT", 422, "The selected unit does not belong to this property.");
   }
-  const tenants = await db.tenantOrganisation.findMany({ where: { id: { in: data.tenantOrganisationIds }, organisationId, archivedAt: null } });
+  const tenants = await tx.tenantOrganisation.findMany({ where: { id: { in: data.tenantOrganisationIds }, organisationId, archivedAt: null } });
   if (tenants.length !== new Set(data.tenantOrganisationIds).size) throw new AppError("INVALID_TENANT", 422, "Every lease tenant must belong to this organisation.");
-  return db.$transaction(async (tx) => {
-    const { tenantOrganisationIds, documents, ...leaseData } = data;
-    const lease = await tx.lease.create({ data: { ...leaseData, propertyId: property.id, unitId: data.unitId, organisationId } });
-    await tx.leaseParty.createMany({ data: tenantOrganisationIds.map((tenantOrganisationId, index) => ({ leaseId: lease.id, tenantOrganisationId, role: "TENANT", isPrimary: index === 0 })) });
-    if (documents.length) await tx.leaseDocument.createMany({ data: documents.map((document) => ({ ...document, leaseId: lease.id })) });
-    await tx.leaseHistory.create({ data: { ...historyData(lease, userId, 1), leaseId: lease.id } });
-    await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "lease.created", entityType: "lease", entityId: lease.id } });
-    await tx.domainEvent.create({ data: { organisationId, name: "lease.created", aggregateType: "lease", aggregateId: lease.id, payload: { propertyId: lease.propertyId, unitId: lease.unitId } } });
-    if (lease.status === "ACTIVE") await tx.domainEvent.create({ data: { organisationId, name: "lease.activated", aggregateType: "lease", aggregateId: lease.id, payload: {} } });
-    return lease;
-  });
+  const { tenantOrganisationIds, documents, ...leaseData } = data;
+  const lease = await tx.lease.create({ data: { ...leaseData, propertyId: property.id, unitId: data.unitId, organisationId } });
+  await tx.leaseParty.createMany({ data: tenantOrganisationIds.map((tenantOrganisationId, index) => ({ leaseId: lease.id, tenantOrganisationId, role: "TENANT", isPrimary: index === 0 })) });
+  if (documents.length) await tx.leaseDocument.createMany({ data: documents.map((document) => ({ ...document, leaseId: lease.id })) });
+  await tx.leaseHistory.create({ data: { ...historyData(lease, userId, 1), leaseId: lease.id } });
+  await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "lease.created", entityType: "lease", entityId: lease.id } });
+  await tx.domainEvent.create({ data: { organisationId, name: "lease.created", aggregateType: "lease", aggregateId: lease.id, payload: { propertyId: lease.propertyId, unitId: lease.unitId } } });
+  if (lease.status === "ACTIVE") await tx.domainEvent.create({ data: { organisationId, name: "lease.activated", aggregateType: "lease", aggregateId: lease.id, payload: {} } });
+  return lease;
 }
 
 export async function getLease(userId: string, organisationId: string, leaseId: string) {
   await requirePermission(userId, organisationId, PERMISSIONS.leaseRead);
-  const lease = await db.lease.findFirst({ where: { id: leaseId, organisationId, archivedAt: null }, include: { property: true, unit: true, parties: { include: { tenantOrganisation: { include: { tenant: true } } } }, documents: true, history: { orderBy: { version: "desc" } } } });
+  const lease = await db.lease.findFirst({
+    where: { id: leaseId, organisationId, archivedAt: null },
+    include: {
+      property: true,
+      unit: true,
+      parties: { include: { tenantOrganisation: { include: { tenant: true } } } },
+      documents: true,
+      history: { orderBy: { version: "desc" } },
+      amendments: { orderBy: { sequence: "desc" } },
+      obligations: { orderBy: { dueDate: "asc" } },
+    },
+  });
   if (!lease) throw notFound();
   return lease;
 }
@@ -49,6 +71,12 @@ export async function updateLease(userId: string, organisationId: string, leaseI
   return db.$transaction(async (tx) => {
     const current = await tx.lease.findFirst({ where: { id: leaseId, organisationId, archivedAt: null }, include: { history: { select: { version: true }, orderBy: { version: "desc" }, take: 1 } } });
     if (!current) throw notFound();
+    if (current.executionStatus !== "DRAFT") {
+      const executionBoundFields = ["startDate", "endDate", "rentAmountMinor", "currencyCode", "rentFrequency", "customFrequency", "depositAmountMinor"];
+      if (executionBoundFields.some((field) => field in data)) {
+        throw new AppError("LEASE_TERMS_LOCKED", 409, "Lease terms cannot be changed after signing has started.");
+      }
+    }
     const nextStart = data.startDate ?? current.startDate;
     const nextEnd = data.endDate ?? current.endDate;
     if (nextEnd && nextEnd < nextStart) throw new AppError("INVALID_LEASE_DATES", 422, "Lease end date cannot precede start date.");
