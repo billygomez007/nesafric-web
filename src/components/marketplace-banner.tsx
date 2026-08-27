@@ -45,7 +45,7 @@ export function MarketplaceBanner({ placement, countryCode }: { placement: "MARK
   return (
     <a
       aria-label={`Promoted: ${banner.headline}`}
-      className="group relative block h-64 overflow-hidden rounded-3xl border border-white/10 bg-emerald-950 shadow-lg shadow-emerald-950/20 transition hover:shadow-xl hover:shadow-emerald-950/30 sm:h-80"
+      className="group relative flex min-h-64 flex-col overflow-hidden rounded-3xl border border-white/10 bg-emerald-950 shadow-lg shadow-emerald-950/20 transition hover:shadow-xl hover:shadow-emerald-950/30 sm:min-h-80"
       href={banner.destinationUrl}
       onClick={() => void fetch(`/api/public/campaigns/${banner.id}/click`, { method: "POST" })}
       rel="noopener"
@@ -63,7 +63,7 @@ export function MarketplaceBanner({ placement, countryCode }: { placement: "MARK
         />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-950/60 to-emerald-950/10" />
-      <div className="relative flex h-full flex-col justify-end gap-3 p-6 sm:p-10">
+      <div className="relative mt-auto flex flex-col gap-3 p-6 sm:p-10">
         <span className="w-fit rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-200 backdrop-blur">
           Featured
         </span>
