@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "../src/platform/database/generated/client";
 import { GHANA, GHS } from "../src/modules/geography/config";
 import { ENTITLEMENTS } from "../src/modules/entitlements/catalog";
+import { MARKETPLACE_ENTITLEMENTS } from "../src/modules/marketplace-professionals/catalog";
 
 const prisma = new PrismaClient();
 
@@ -119,6 +120,21 @@ const PLANS = [
       [ENTITLEMENTS.integrationsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
       [ENTITLEMENTS.automationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
       [ENTITLEMENTS.advancedReportingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.aiPropertyManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.maintenanceAiClassificationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.maintenanceAiDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.maintenanceVoiceDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.predictiveMaintenanceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.portfolioIntelligenceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceOutboundEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
     },
   },
   {
@@ -140,6 +156,21 @@ const PLANS = [
       [ENTITLEMENTS.integrationsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
       [ENTITLEMENTS.automationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
       [ENTITLEMENTS.advancedReportingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.aiPropertyManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.maintenanceAiClassificationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.maintenanceAiDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.maintenanceVoiceDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.predictiveMaintenanceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.portfolioIntelligenceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceOutboundEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 2 },
     },
   },
   {
@@ -161,6 +192,146 @@ const PLANS = [
       [ENTITLEMENTS.integrationsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
       [ENTITLEMENTS.automationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
       [ENTITLEMENTS.advancedReportingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.aiPropertyManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.maintenanceAiClassificationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.maintenanceAiDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.maintenanceVoiceDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.predictiveMaintenanceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.portfolioIntelligenceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.voiceOutboundEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, limitValue: 200 },
+      [ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 2_000 },
+      [ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 1_000 },
+      [ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 25 },
+    },
+  },
+] as const;
+
+/**
+ * Phase 21A item 8's separate commercial product family. Only `marketplace_free` is priced
+ * (GHS 0) at launch — the future paid tiers named in the phase brief (Professional, Brokerage,
+ * Enterprise) are intentionally not seeded yet ("do not implement final future pricing now"), but
+ * the schema/seed shape already supports adding them without a migration.
+ */
+const MARKETPLACE_PLANS = [
+  {
+    key: "marketplace_free", name: "Marketplace Free", sortOrder: 1,
+    description: "Free access to the NesAfric Real Estate Marketplace for agents, brokers, brokerages, real-estate companies, and developers.",
+    prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY" as const, amountMinor: "0" }],
+    entitlements: {
+      [MARKETPLACE_ENTITLEMENTS.activeListingsMax.key]: { kind: "LIMIT" as const, limitValue: 10 },
+      [MARKETPLACE_ENTITLEMENTS.teamMembersMax.key]: { kind: "LIMIT" as const, limitValue: 3 },
+      [MARKETPLACE_ENTITLEMENTS.developmentsMax.key]: { kind: "LIMIT" as const, limitValue: 2 },
+      [MARKETPLACE_ENTITLEMENTS.leadManagementEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.promotedListingsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.featuredProfileEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.advancedAnalyticsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiSalesAgentEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiLeadManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiListingAssistantEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiInventorySearchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiViewingSchedulerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundFollowupEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundCallsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [MARKETPLACE_ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [MARKETPLACE_ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [MARKETPLACE_ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+    },
+  },
+  {
+    key: "marketplace_pro", name: "Marketplace Pro", sortOrder: 2,
+    description: "For an active individual agent or small team bringing more inventory onto the marketplace.",
+    prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY" as const, amountMinor: "15000" }, { currencyCode: "GHS", billingCycle: "ANNUAL" as const, amountMinor: "150000" }],
+    entitlements: {
+      [MARKETPLACE_ENTITLEMENTS.activeListingsMax.key]: { kind: "LIMIT" as const, limitValue: 50 },
+      [MARKETPLACE_ENTITLEMENTS.teamMembersMax.key]: { kind: "LIMIT" as const, limitValue: 5 },
+      [MARKETPLACE_ENTITLEMENTS.developmentsMax.key]: { kind: "LIMIT" as const, limitValue: 5 },
+      [MARKETPLACE_ENTITLEMENTS.leadManagementEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.promotedListingsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.featuredProfileEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.advancedAnalyticsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiSalesAgentEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiLeadManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiListingAssistantEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiInventorySearchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiViewingSchedulerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundFollowupEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundCallsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [MARKETPLACE_ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [MARKETPLACE_ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
+      [MARKETPLACE_ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
+      [MARKETPLACE_ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 1 },
+    },
+  },
+  {
+    key: "marketplace_brokerage", name: "Brokerage", sortOrder: 3,
+    description: "For a brokerage or real-estate company running a full sales/leasing team on the marketplace.",
+    prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY" as const, amountMinor: "60000" }, { currencyCode: "GHS", billingCycle: "ANNUAL" as const, amountMinor: "600000" }],
+    entitlements: {
+      [MARKETPLACE_ENTITLEMENTS.activeListingsMax.key]: { kind: "LIMIT" as const, limitValue: 300 },
+      [MARKETPLACE_ENTITLEMENTS.teamMembersMax.key]: { kind: "LIMIT" as const, limitValue: 25 },
+      [MARKETPLACE_ENTITLEMENTS.developmentsMax.key]: { kind: "LIMIT" as const, limitValue: 20 },
+      [MARKETPLACE_ENTITLEMENTS.leadManagementEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.promotedListingsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.featuredProfileEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.advancedAnalyticsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiSalesAgentEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiLeadManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiListingAssistantEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiInventorySearchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiViewingSchedulerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundFollowupEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundCallsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, limitValue: 100 },
+      [MARKETPLACE_ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 1_000 },
+      [MARKETPLACE_ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 500 },
+      [MARKETPLACE_ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 10 },
+    },
+  },
+  {
+    key: "marketplace_enterprise", name: "Marketplace Enterprise", sortOrder: 4,
+    description: "For a major national/international real-estate company or developer with custom automation and policy needs.",
+    prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY" as const, amountMinor: "150000" }, { currencyCode: "GHS", billingCycle: "ANNUAL" as const, amountMinor: "1500000" }],
+    entitlements: {
+      [MARKETPLACE_ENTITLEMENTS.activeListingsMax.key]: { kind: "LIMIT" as const, isUnlimited: true },
+      [MARKETPLACE_ENTITLEMENTS.teamMembersMax.key]: { kind: "LIMIT" as const, isUnlimited: true },
+      [MARKETPLACE_ENTITLEMENTS.developmentsMax.key]: { kind: "LIMIT" as const, isUnlimited: true },
+      [MARKETPLACE_ENTITLEMENTS.leadManagementEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.promotedListingsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.featuredProfileEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.advancedAnalyticsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiSalesAgentEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiLeadManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiListingAssistantEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiInventorySearchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiViewingSchedulerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundFollowupEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.aiOutboundCallsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, isUnlimited: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, isUnlimited: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, isUnlimited: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
+      [MARKETPLACE_ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, isUnlimited: true },
     },
   },
 ] as const;
@@ -218,6 +389,32 @@ async function main() {
         ? { kind: entitlement.kind, isUnlimited: true, limitValue: null, booleanValue: null }
         : { kind: entitlement.kind, isUnlimited: false, limitValue: "limitValue" in entitlement ? entitlement.limitValue : null, booleanValue: "booleanValue" in entitlement ? entitlement.booleanValue : null };
       await prisma.planEntitlement.upsert({
+        where: { planId_featureKey: { planId: record.id, featureKey } },
+        update: data,
+        create: { planId: record.id, featureKey, ...data },
+      });
+    }
+  }
+
+  // Phase 21A: seed the marketplace's own, entirely separate plan/price/entitlement family.
+  for (const plan of MARKETPLACE_PLANS) {
+    const record = await prisma.marketplacePlan.upsert({
+      where: { key: plan.key },
+      update: { name: plan.name, description: plan.description, sortOrder: plan.sortOrder, isActive: true, isPublic: true },
+      create: { key: plan.key, name: plan.name, description: plan.description, sortOrder: plan.sortOrder },
+    });
+    for (const price of plan.prices) {
+      await prisma.marketplacePlanPrice.upsert({
+        where: { planId_currencyCode_billingCycle: { planId: record.id, currencyCode: price.currencyCode, billingCycle: price.billingCycle } },
+        update: { amountMinor: price.amountMinor, isActive: true },
+        create: { planId: record.id, currencyCode: price.currencyCode, billingCycle: price.billingCycle, amountMinor: price.amountMinor },
+      });
+    }
+    for (const [featureKey, entitlement] of Object.entries(plan.entitlements)) {
+      const data = "isUnlimited" in entitlement && entitlement.isUnlimited
+        ? { kind: entitlement.kind, isUnlimited: true, limitValue: null, booleanValue: null }
+        : { kind: entitlement.kind, isUnlimited: false, limitValue: "limitValue" in entitlement ? entitlement.limitValue : null, booleanValue: "booleanValue" in entitlement ? entitlement.booleanValue : null };
+      await prisma.marketplacePlanEntitlement.upsert({
         where: { planId_featureKey: { planId: record.id, featureKey } },
         update: data,
         create: { planId: record.id, featureKey, ...data },

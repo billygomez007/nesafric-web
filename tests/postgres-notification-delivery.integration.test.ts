@@ -8,7 +8,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/modules/notifications/service";
-import { NotificationProviders } from "@/modules/notifications/providers";
+import { defaultNotificationProviders, NotificationProviders } from "@/modules/notifications/providers";
 import { createOrganisation } from "@/modules/organisations/service";
 import { scheduleExpiryReminders } from "@/modules/reminders/service";
 import { createTenant } from "@/modules/tenants/service";
@@ -210,6 +210,22 @@ describe("PostgreSQL Phase 4B notification delivery", () => {
       deliveryAttempts: 1,
       providerReference: "email-123",
     });
+  });
+
+  it("delivers EMAIL and SMS via the real default providers' deterministic mock transport (no credentials configured)", async () => {
+    const fixture = await createFixture("RealProviders");
+    await db.tenantOrganisation.update({ where: { id: fixture.tenant.relationship.id }, data: { communicationSmsAllowed: true } });
+    await db.organisation.update({ where: { id: fixture.organisation.id }, data: { notifySms: true } });
+
+    const emailNotification = await createNotification(fixture, "EMAIL", 30);
+    await enqueueNotificationDelivery(emailNotification);
+    await runDueJobs(createJobHandlers(defaultNotificationProviders));
+    expect(await db.notification.findUniqueOrThrow({ where: { id: emailNotification.id } })).toMatchObject({ status: "SENT", deliveryAttempts: 1 });
+
+    const smsNotification = await createNotification(fixture, "SMS", 30);
+    await enqueueNotificationDelivery(smsNotification);
+    await runDueJobs(createJobHandlers(defaultNotificationProviders));
+    expect(await db.notification.findUniqueOrThrow({ where: { id: smsNotification.id } })).toMatchObject({ status: "SENT", deliveryAttempts: 1 });
   });
 
   it("skips disabled tenant channels without calling a provider", async () => {

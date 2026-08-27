@@ -44,6 +44,14 @@ enum AIEscalationStatus {
 enum AIEmployeeRole {
   RECEPTIONIST
   PROPERTY_MANAGER
+  /// Phase 21 item 9 — Property Operations.
+  AI_MAINTENANCE_COORDINATOR
+  /// Phase 21 item 9 — Marketplace/Sales. Assignable only to a `MarketplaceProfessional`
+  /// (`AIEmployee.marketplaceProfessionalId`), never to a PropertyOS `Organisation`.
+  AI_SALES_RECEPTIONIST
+  AI_SALES_AGENT
+  AI_LEAD_MANAGER
+  AI_LISTING_ASSISTANT
 }
 
 enum AIEmployeeStatus {
@@ -73,6 +81,11 @@ enum ConversationChannel {
   WHATSAPP
   SMS
   IN_APP
+  /// Phase 22 — a telephone call. `VoiceCall` carries the telephony-specific detail (direction,
+  /// provider call id, duration, recording, transcript); the `Conversation` row it belongs to
+  /// carries the same business context (related listing/tenant/lead/work order, assigned AI
+  /// employee, status, summary) every other channel already uses — no parallel domain model.
+  VOICE
 }
 
 enum ConversationStatus {
@@ -689,91 +702,101 @@ enum ApplicationDocumentType {
 }
 
 model User {
-  id                            String                              @id @default(uuid()) @db.Uuid
-  email                         String                              @unique @db.Citext
-  passwordHash                  String
-  displayName                   String
-  emailVerifiedAt               DateTime?
-  createdAt                     DateTime                            @default(now())
-  updatedAt                     DateTime                            @updatedAt
-  sessions                      Session[]
-  memberships                   OrganisationMember[]
-  invitations                   OrganisationInvitation[]            @relation("InvitationSender")
-  audits                        AuditEvent[]                        @relation("AuditActor")
-  tenantRelationships           TenantOrganisation[]
-  reportedMaintenanceRequests   MaintenanceRequest[]                @relation("MaintenanceReporter")
-  maintenanceHistory            MaintenanceHistory[]                @relation("MaintenanceHistoryActor")
-  requestedMaintenanceApprovals MaintenanceApproval[]               @relation("MaintenanceApprovalRequester")
-  decidedMaintenanceApprovals   MaintenanceApproval[]               @relation("MaintenanceApprovalDecision")
-  assignedWorkOrders            WorkOrder[]                         @relation("WorkOrderAssignee")
-  createdWorkOrders             WorkOrder[]                         @relation("WorkOrderCreator")
-  workOrderHistory              WorkOrderHistory[]                  @relation("WorkOrderHistoryActor")
-  individualProvider            ServiceProvider?                    @relation("IndividualProviderUser")
-  administeredProviders         ServiceProvider[]                   @relation("ProviderAdministrator")
-  providerEvidence              ProviderEvidence[]                  @relation("ProviderEvidenceSubmitter")
-  providerVerificationHistory   ProviderVerificationHistory[]       @relation("ProviderVerificationActor")
-  providerDirectoriesCreated    ProviderOrganisation[]              @relation("ProviderDirectoryCreator")
-  quotationRequestsCreated      ProviderQuotationRequest[]          @relation("QuotationRequester")
-  quotationsSubmitted           ProviderQuotation[]                 @relation("QuotationSubmitter")
-  quotationsRecorded            ProviderQuotation[]                 @relation("QuotationRecorder")
-  quotationReviews              ProviderQuotationReview[]           @relation("QuotationReviewer")
-  providerAssignmentsCreated    ProviderAssignment[]                @relation("ProviderAssignmentCreator")
-  providerAssignmentResponses   ProviderAssignment[]                @relation("ProviderAssignmentResponder")
-  providerRatings               ProviderRating[]                    @relation("ProviderRatingCreator")
-  marketplaceProfileChanges     ProviderMarketplaceProfileHistory[] @relation("MarketplaceProfileHistoryActor")
-  marketplaceEnquiriesCreated   MarketplaceEnquiry[]                @relation("MarketplaceEnquiryRequester")
-  marketplaceEnquiryHistory     MarketplaceEnquiryStatusHistory[]   @relation("MarketplaceEnquiryStatusActor")
-  listingsCreated               Listing[]                           @relation("ListingCreator")
-  listingStatusHistory          ListingStatusHistory[]              @relation("ListingStatusActor")
-  listingVerificationHistory    ListingVerificationHistory[]        @relation("ListingVerificationActor")
-  listingVerificationEvidence   ListingVerificationEvidence[]       @relation("ListingEvidenceSubmitter")
-  marketplaceLeads              MarketplaceLead[]                   @relation("MarketplaceLeadUser")
-  marketplaceLeadHistory        MarketplaceLeadStatusHistory[]      @relation("MarketplaceLeadStatusActor")
-  marketplaceLeadActivities     MarketplaceLeadActivity[]           @relation("MarketplaceLeadActivityActor")
-  viewingRequestsCreated        ViewingRequest[]                    @relation("ViewingRequestCreator")
-  viewingRequestHistory         ViewingRequestStatusHistory[]       @relation("ViewingRequestStatusActor")
-  applicantsCreated             Applicant[]                         @relation("ApplicantCreator")
-  applicationsCreated           RentalApplication[]                 @relation("ApplicationCreator")
-  applicationStatusHistory      RentalApplicationStatusHistory[]    @relation("ApplicationStatusActor")
-  applicationActivities         RentalApplicationActivity[]         @relation("ApplicationActivityActor")
-  applicationDocuments          RentalApplicationDocument[]         @relation("ApplicationDocumentUploader")
-  applicationConsents           ApplicationConsent[]                @relation("ApplicationConsentRecorder")
-  leaseExecutionDocuments       LeaseExecutionDocument[]            @relation("LeaseExecutionDocumentCreator")
-  leaseSignatureActions         LeaseSignatureRequest[]             @relation("LeaseSignatureActor")
-  moveInHistory                 MoveInHistory[]                     @relation("MoveInHistoryActor")
-  moveOutHistory                MoveOutHistory[]                    @relation("MoveOutHistoryActor")
-  noticesToVacateCreated        NoticeToVacate[]                    @relation("NoticeCreator")
-  noticeHistory                 NoticeToVacateHistory[]             @relation("NoticeHistoryActor")
-  depositDeductionsCreated      DepositDeduction[]                  @relation("DepositDeductionCreator")
-  depositDeductionsDecided      DepositDeduction[]                  @relation("DepositDeductionDecision")
-  depositSettlementsApproved    DepositSettlement[]                 @relation("DepositSettlementApprover")
-  depositRefundsRecorded        DepositSettlement[]                 @relation("DepositRefundRecorder")
-  depositRefundTransactions     DepositRefund[]                     @relation("DepositRefundTransactionRecorder")
-  turnoverHistory               VacancyTurnoverHistory[]            @relation("VacancyTurnoverHistoryActor")
-  aiSessions                    AISession[]
-  aiMessages                    AIMessage[]
-  aiToolExecutions              AIToolExecution[]
-  aiProposalsRequested          AIActionProposal[]                  @relation("AIProposalRequester")
-  aiProposalsDecided            AIActionProposal[]                  @relation("AIProposalDecision")
-  aiAutonomyConfigured          AIAutonomyConfiguration[]           @relation("AIAutonomyActor")
-  aiAutonomyUpdated             AIAutonomyConfiguration[]           @relation("AIAutonomyUpdater")
-  aiPoliciesCreated             AIAutonomyPolicy[]                  @relation("AIPolicyCreator")
-  aiPoliciesUpdated             AIAutonomyPolicy[]                  @relation("AIPolicyUpdater")
-  aiActivities                  AIActivity[]                        @relation("AIActivityActor")
-  aiEmployeesCreated            AIEmployee[]                        @relation("AIEmployeeCreator")
-  aiEmployeesUpdated            AIEmployee[]                        @relation("AIEmployeeUpdater")
-  aiHandoffsCreated             AIEmployeeHandoff[]                 @relation("AIHandoffCreator")
-  authoredMessages              Message[]                           @relation("MessageAuthor")
-  conversationAssignmentActions ConversationAssignment[]            @relation("ConversationAssignmentActor")
-  storageObjectsUploaded        StorageObject[]                     @relation("StorageObjectUploader")
-  storageObjectsArchived        StorageObject[]                     @relation("StorageObjectArchiver")
-  storageObjectHistory          StorageObjectHistory[]              @relation("StorageObjectHistoryActor")
-  generatedDocuments            GeneratedDocument[]                 @relation("GeneratedDocumentCreator")
-  documentTemplatesCreated      DocumentTemplate[]                  @relation("DocumentTemplateCreator")
-  calendarEventsCreated         CalendarEvent[]                     @relation("CalendarEventCreator")
-  integrationConfigsUpdated     IntegrationConfig[]                 @relation("IntegrationConfigUpdater")
-  platformPrincipal             PlatformPrincipal?
-  subscriptionStatusActions     SubscriptionStatusHistory[]         @relation("SubscriptionStatusActor")
+  id                                 String                                     @id @default(uuid()) @db.Uuid
+  email                              String                                     @unique @db.Citext
+  passwordHash                       String
+  displayName                        String
+  emailVerifiedAt                    DateTime?
+  createdAt                          DateTime                                   @default(now())
+  updatedAt                          DateTime                                   @updatedAt
+  sessions                           Session[]
+  memberships                        OrganisationMember[]
+  invitations                        OrganisationInvitation[]                   @relation("InvitationSender")
+  audits                             AuditEvent[]                               @relation("AuditActor")
+  tenantRelationships                TenantOrganisation[]
+  reportedMaintenanceRequests        MaintenanceRequest[]                       @relation("MaintenanceReporter")
+  maintenanceHistory                 MaintenanceHistory[]                       @relation("MaintenanceHistoryActor")
+  requestedMaintenanceApprovals      MaintenanceApproval[]                      @relation("MaintenanceApprovalRequester")
+  decidedMaintenanceApprovals        MaintenanceApproval[]                      @relation("MaintenanceApprovalDecision")
+  assignedWorkOrders                 WorkOrder[]                                @relation("WorkOrderAssignee")
+  createdWorkOrders                  WorkOrder[]                                @relation("WorkOrderCreator")
+  workOrderHistory                   WorkOrderHistory[]                         @relation("WorkOrderHistoryActor")
+  individualProvider                 ServiceProvider?                           @relation("IndividualProviderUser")
+  administeredProviders              ServiceProvider[]                          @relation("ProviderAdministrator")
+  providerEvidence                   ProviderEvidence[]                         @relation("ProviderEvidenceSubmitter")
+  providerVerificationHistory        ProviderVerificationHistory[]              @relation("ProviderVerificationActor")
+  providerDirectoriesCreated         ProviderOrganisation[]                     @relation("ProviderDirectoryCreator")
+  quotationRequestsCreated           ProviderQuotationRequest[]                 @relation("QuotationRequester")
+  quotationsSubmitted                ProviderQuotation[]                        @relation("QuotationSubmitter")
+  quotationsRecorded                 ProviderQuotation[]                        @relation("QuotationRecorder")
+  quotationReviews                   ProviderQuotationReview[]                  @relation("QuotationReviewer")
+  providerAssignmentsCreated         ProviderAssignment[]                       @relation("ProviderAssignmentCreator")
+  providerAssignmentResponses        ProviderAssignment[]                       @relation("ProviderAssignmentResponder")
+  providerRatings                    ProviderRating[]                           @relation("ProviderRatingCreator")
+  marketplaceProfileChanges          ProviderMarketplaceProfileHistory[]        @relation("MarketplaceProfileHistoryActor")
+  marketplaceEnquiriesCreated        MarketplaceEnquiry[]                       @relation("MarketplaceEnquiryRequester")
+  marketplaceEnquiryHistory          MarketplaceEnquiryStatusHistory[]          @relation("MarketplaceEnquiryStatusActor")
+  listingsCreated                    Listing[]                                  @relation("ListingCreator")
+  listingStatusHistory               ListingStatusHistory[]                     @relation("ListingStatusActor")
+  listingVerificationHistory         ListingVerificationHistory[]               @relation("ListingVerificationActor")
+  listingVerificationEvidence        ListingVerificationEvidence[]              @relation("ListingEvidenceSubmitter")
+  marketplaceLeads                   MarketplaceLead[]                          @relation("MarketplaceLeadUser")
+  marketplaceLeadHistory             MarketplaceLeadStatusHistory[]             @relation("MarketplaceLeadStatusActor")
+  marketplaceLeadActivities          MarketplaceLeadActivity[]                  @relation("MarketplaceLeadActivityActor")
+  viewingRequestsCreated             ViewingRequest[]                           @relation("ViewingRequestCreator")
+  viewingRequestHistory              ViewingRequestStatusHistory[]              @relation("ViewingRequestStatusActor")
+  applicantsCreated                  Applicant[]                                @relation("ApplicantCreator")
+  applicationsCreated                RentalApplication[]                        @relation("ApplicationCreator")
+  applicationStatusHistory           RentalApplicationStatusHistory[]           @relation("ApplicationStatusActor")
+  applicationActivities              RentalApplicationActivity[]                @relation("ApplicationActivityActor")
+  applicationDocuments               RentalApplicationDocument[]                @relation("ApplicationDocumentUploader")
+  applicationConsents                ApplicationConsent[]                       @relation("ApplicationConsentRecorder")
+  leaseExecutionDocuments            LeaseExecutionDocument[]                   @relation("LeaseExecutionDocumentCreator")
+  leaseSignatureActions              LeaseSignatureRequest[]                    @relation("LeaseSignatureActor")
+  moveInHistory                      MoveInHistory[]                            @relation("MoveInHistoryActor")
+  moveOutHistory                     MoveOutHistory[]                           @relation("MoveOutHistoryActor")
+  noticesToVacateCreated             NoticeToVacate[]                           @relation("NoticeCreator")
+  noticeHistory                      NoticeToVacateHistory[]                    @relation("NoticeHistoryActor")
+  depositDeductionsCreated           DepositDeduction[]                         @relation("DepositDeductionCreator")
+  depositDeductionsDecided           DepositDeduction[]                         @relation("DepositDeductionDecision")
+  depositSettlementsApproved         DepositSettlement[]                        @relation("DepositSettlementApprover")
+  depositRefundsRecorded             DepositSettlement[]                        @relation("DepositRefundRecorder")
+  depositRefundTransactions          DepositRefund[]                            @relation("DepositRefundTransactionRecorder")
+  turnoverHistory                    VacancyTurnoverHistory[]                   @relation("VacancyTurnoverHistoryActor")
+  aiSessions                         AISession[]
+  aiMessages                         AIMessage[]
+  aiToolExecutions                   AIToolExecution[]
+  aiProposalsRequested               AIActionProposal[]                         @relation("AIProposalRequester")
+  aiProposalsDecided                 AIActionProposal[]                         @relation("AIProposalDecision")
+  aiAutonomyConfigured               AIAutonomyConfiguration[]                  @relation("AIAutonomyActor")
+  aiAutonomyUpdated                  AIAutonomyConfiguration[]                  @relation("AIAutonomyUpdater")
+  aiPoliciesCreated                  AIAutonomyPolicy[]                         @relation("AIPolicyCreator")
+  aiPoliciesUpdated                  AIAutonomyPolicy[]                         @relation("AIPolicyUpdater")
+  aiActivities                       AIActivity[]                               @relation("AIActivityActor")
+  aiEmployeesCreated                 AIEmployee[]                               @relation("AIEmployeeCreator")
+  aiEmployeesUpdated                 AIEmployee[]                               @relation("AIEmployeeUpdater")
+  aiHandoffsCreated                  AIEmployeeHandoff[]                        @relation("AIHandoffCreator")
+  authoredMessages                   Message[]                                  @relation("MessageAuthor")
+  conversationAssignmentActions      ConversationAssignment[]                   @relation("ConversationAssignmentActor")
+  storageObjectsUploaded             StorageObject[]                            @relation("StorageObjectUploader")
+  storageObjectsArchived             StorageObject[]                            @relation("StorageObjectArchiver")
+  storageObjectHistory               StorageObjectHistory[]                     @relation("StorageObjectHistoryActor")
+  generatedDocuments                 GeneratedDocument[]                        @relation("GeneratedDocumentCreator")
+  documentTemplatesCreated           DocumentTemplate[]                         @relation("DocumentTemplateCreator")
+  calendarEventsCreated              CalendarEvent[]                            @relation("CalendarEventCreator")
+  integrationConfigsUpdated          IntegrationConfig[]                        @relation("IntegrationConfigUpdater")
+  platformPrincipal                  PlatformPrincipal?
+  subscriptionStatusActions          SubscriptionStatusHistory[]                @relation("SubscriptionStatusActor")
+  marketplaceProfessionalsCreated    MarketplaceProfessional[]                  @relation("MarketplaceProfessionalCreator")
+  marketplaceProfessionalMemberships MarketplaceProfessionalMember[]
+  marketplaceVerificationActions     MarketplaceProfessionalVerificationEvent[] @relation("MarketplaceProfessionalVerificationActor")
+  listingRepresentativeFor           Listing[]                                  @relation("ListingRepresentative")
+  marketplaceAssetsCreated           MarketplaceAsset[]                         @relation("MarketplaceAssetCreator")
+  listingAttributionActions          ListingAttributionHistory[]                @relation("ListingAttributionActor")
+  maintenanceDispatchAttemptsCreated MaintenanceDispatchAttempt[]               @relation("MaintenanceDispatchAttemptCreator")
+  campaignsCreated                   Campaign[]                                 @relation("CampaignCreator")
+  campaignsReviewed                  Campaign[]                                 @relation("CampaignReviewer")
+  voiceCallsInitiated                VoiceCall[]                                @relation("VoiceCallInitiator")
 }
 
 model Session {
@@ -785,6 +808,19 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+/// Production-hardening pass: DB-backed login rate limiting (item 2 of the security audit — no
+/// rate limiting existed anywhere in the app, including on /api/auth/login). A dedicated table
+/// (not in-memory) is used because a serverless/multi-instance deployment shares no process
+/// memory; Postgres is the one durable, shared store every request path already trusts.
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  emailKey  String
+  succeeded Boolean
+  createdAt DateTime @default(now())
+
+  @@index([emailKey, createdAt])
 }
 
 model Country {
@@ -806,88 +842,103 @@ model Currency {
 }
 
 model Organisation {
-  id                        String                            @id @default(uuid()) @db.Uuid
-  name                      String
-  type                      OrganisationType
-  countryCode               String                            @db.Char(2)
-  defaultCurrencyCode       String                            @db.Char(3)
-  createdAt                 DateTime                          @default(now())
-  updatedAt                 DateTime                          @updatedAt
-  archivedAt                DateTime?
-  country                   Country                           @relation(fields: [countryCode], references: [code])
-  members                   OrganisationMember[]
-  invitations               OrganisationInvitation[]
-  portfolios                Portfolio[]
-  properties                Property[]                        @relation("ManagingOrganisation")
-  auditEvents               AuditEvent[]
-  domainEvents              DomainEvent[]
-  tenants                   TenantOrganisation[]
-  leases                    Lease[]
-  reminderPolicies          ReminderPolicy[]
-  notifications             Notification[]
-  backgroundJobs            BackgroundJob[]
-  notifyEmail               Boolean                           @default(true)
-  notifySms                 Boolean                           @default(false)
-  notifyWhatsapp            Boolean                           @default(false)
-  rentObligations           RentObligation[]
-  paymentIntents            PaymentIntent[]
-  payments                  Payment[]
-  receipts                  Receipt[]
-  securityDeposits          SecurityDeposit[]
-  ledgerEntries             FinancialLedgerEntry[]
-  reconciliationEvents      PaymentReconciliationEvent[]
-  maintenanceRequests       MaintenanceRequest[]
-  workOrders                WorkOrder[]
-  maintenanceApprovals      MaintenanceApproval[]
-  providerProfile           ServiceProvider?                  @relation("CompanyProviderOrganisation")
-  providerDirectories       ProviderOrganisation[]            @relation("LandlordProviderDirectory")
-  quotationRequests         ProviderQuotationRequest[]        @relation("LandlordQuotationRequests")
-  providerQuotations        ProviderQuotation[]               @relation("LandlordProviderQuotations")
-  providerAssignments       ProviderAssignment[]              @relation("LandlordProviderAssignments")
-  providerRatings           ProviderRating[]                  @relation("LandlordProviderRatings")
-  marketplaceEnquiries      MarketplaceEnquiry[]              @relation("MarketplaceRequestingOrganisation")
-  listings                  Listing[]
-  moveOuts                  MoveOut[]
-  vacancyTurnovers          VacancyTurnover[]
-  depositSettlements        DepositSettlement[]
-  depositDeductions         DepositDeduction[]
-  depositRefunds            DepositRefund[]
-  aiSessions                AISession[]
-  aiToolExecutions          AIToolExecution[]
-  aiActionProposals         AIActionProposal[]
-  aiAutonomyConfig          AIAutonomyConfiguration?
-  aiAutonomyPolicies        AIAutonomyPolicy[]
-  aiActivities              AIActivity[]
-  aiEmployees               AIEmployee[]
-  aiEmployeeHandoffs        AIEmployeeHandoff[]
-  aiEmployeeActivities      AIEmployeeActivity[]
-  marketplaceLeads          MarketplaceLead[]
-  viewingRequests           ViewingRequest[]
-  moveIns                   MoveIn[]
-  noticesToVacate           NoticeToVacate[]
-  applicants                Applicant[]
-  rentalApplications        RentalApplication[]
-  conversations             Conversation[]
-  communicationChannels     CommunicationChannelConfig[]
-  conversationParticipants  ConversationParticipant[]
-  messages                  Message[]
-  messageDeliveries         MessageDelivery[]
-  conversationAssignments   ConversationAssignment[]
-  storageObjects            StorageObject[]
-  generatedDocuments        GeneratedDocument[]
-  documentTemplates         DocumentTemplate[]
-  signatureProviderEvents   SignatureProviderEvent[]
-  geocodeLookups            GeocodeLookup[]
-  calendarEvents            CalendarEvent[]
-  integrationConfigs        IntegrationConfig[]
-  subscription              OrganisationSubscription?
-  subscriptionInvoices      SubscriptionInvoice[]
-  subscriptionStatusHistory SubscriptionStatusHistory[]
-  entitlementOverrides      OrganisationEntitlementOverride[]
-  billingWebhookEvents      BillingWebhookEvent[]
-  platformSupportSessions   PlatformSupportSession[]
-  platformAuditEvents       PlatformAuditEvent[]
-  featureFlagOverrides      OrganisationFeatureFlagOverride[]
+  id                          String                            @id @default(uuid()) @db.Uuid
+  name                        String
+  type                        OrganisationType
+  countryCode                 String                            @db.Char(2)
+  defaultCurrencyCode         String                            @db.Char(3)
+  createdAt                   DateTime                          @default(now())
+  updatedAt                   DateTime                          @updatedAt
+  archivedAt                  DateTime?
+  country                     Country                           @relation(fields: [countryCode], references: [code])
+  members                     OrganisationMember[]
+  invitations                 OrganisationInvitation[]
+  portfolios                  Portfolio[]
+  properties                  Property[]                        @relation("ManagingOrganisation")
+  auditEvents                 AuditEvent[]
+  domainEvents                DomainEvent[]
+  tenants                     TenantOrganisation[]
+  leases                      Lease[]
+  reminderPolicies            ReminderPolicy[]
+  notifications               Notification[]
+  backgroundJobs              BackgroundJob[]
+  notifyEmail                 Boolean                           @default(true)
+  notifySms                   Boolean                           @default(false)
+  notifyWhatsapp              Boolean                           @default(false)
+  rentObligations             RentObligation[]
+  paymentIntents              PaymentIntent[]
+  payments                    Payment[]
+  receipts                    Receipt[]
+  securityDeposits            SecurityDeposit[]
+  ledgerEntries               FinancialLedgerEntry[]
+  reconciliationEvents        PaymentReconciliationEvent[]
+  maintenanceRequests         MaintenanceRequest[]
+  workOrders                  WorkOrder[]
+  maintenanceApprovals        MaintenanceApproval[]
+  providerProfile             ServiceProvider?                  @relation("CompanyProviderOrganisation")
+  providerDirectories         ProviderOrganisation[]            @relation("LandlordProviderDirectory")
+  quotationRequests           ProviderQuotationRequest[]        @relation("LandlordQuotationRequests")
+  providerQuotations          ProviderQuotation[]               @relation("LandlordProviderQuotations")
+  providerAssignments         ProviderAssignment[]              @relation("LandlordProviderAssignments")
+  providerRatings             ProviderRating[]                  @relation("LandlordProviderRatings")
+  marketplaceEnquiries        MarketplaceEnquiry[]              @relation("MarketplaceRequestingOrganisation")
+  listings                    Listing[]
+  moveOuts                    MoveOut[]
+  vacancyTurnovers            VacancyTurnover[]
+  depositSettlements          DepositSettlement[]
+  depositDeductions           DepositDeduction[]
+  depositRefunds              DepositRefund[]
+  aiSessions                  AISession[]
+  aiToolExecutions            AIToolExecution[]
+  aiActionProposals           AIActionProposal[]
+  aiAutonomyConfig            AIAutonomyConfiguration?
+  aiAutonomyPolicies          AIAutonomyPolicy[]
+  aiActivities                AIActivity[]
+  aiEmployees                 AIEmployee[]
+  aiEmployeeHandoffs          AIEmployeeHandoff[]
+  aiEmployeeActivities        AIEmployeeActivity[]
+  marketplaceLeads            MarketplaceLead[]
+  viewingRequests             ViewingRequest[]
+  moveIns                     MoveIn[]
+  noticesToVacate             NoticeToVacate[]
+  applicants                  Applicant[]
+  rentalApplications          RentalApplication[]
+  conversations               Conversation[]
+  communicationChannels       CommunicationChannelConfig[]
+  conversationParticipants    ConversationParticipant[]
+  messages                    Message[]
+  messageDeliveries           MessageDelivery[]
+  conversationAssignments     ConversationAssignment[]
+  storageObjects              StorageObject[]
+  generatedDocuments          GeneratedDocument[]
+  documentTemplates           DocumentTemplate[]
+  signatureProviderEvents     SignatureProviderEvent[]
+  geocodeLookups              GeocodeLookup[]
+  calendarEvents              CalendarEvent[]
+  integrationConfigs          IntegrationConfig[]
+  subscription                OrganisationSubscription?
+  subscriptionInvoices        SubscriptionInvoice[]
+  subscriptionStatusHistory   SubscriptionStatusHistory[]
+  entitlementOverrides        OrganisationEntitlementOverride[]
+  billingWebhookEvents        BillingWebhookEvent[]
+  platformSupportSessions     PlatformSupportSession[]
+  platformAuditEvents         PlatformAuditEvent[]
+  featureFlagOverrides        OrganisationFeatureFlagOverride[]
+  maintenanceDispatchAttempts MaintenanceDispatchAttempt[]
+  /// Present only when this Organisation exists purely as the technical backing store for a
+  /// Marketplace professional profile (Phase 21A item 7) — created by
+  /// `marketplace-professionals/service.ts`, never through the ordinary `createOrganisation`
+  /// onboarding path, and never given an `OrganisationSubscription` (item 8: marketplace
+  /// professionals are never attached to a PropertyOS management subscription). Every
+  /// PropertyOS-facing organisation listing (`listUserOrganisations`, the dashboard organisation
+  /// switcher) excludes organisations where this relation is non-null, so a marketplace account
+  /// never sees PropertyOS management screens merely because it has a marketplace profile.
+  marketplaceProfessional     MarketplaceProfessional?
+  voiceProviderConfig         VoiceProviderConfig?
+  voiceCalls                  VoiceCall[]
+  voiceContactPreferences     VoiceContactPreference[]
+  phoneNumbers                PhoneNumber[]
+  mediaStreamSessions         MediaStreamSession[]
 
   @@index([countryCode])
   @@index([archivedAt])
@@ -2095,37 +2146,38 @@ model LeaseHistory {
 }
 
 model MaintenanceRequest {
-  id                   String                     @id @default(uuid()) @db.Uuid
-  organisationId       String                     @db.Uuid
-  propertyId           String                     @db.Uuid
-  unitId               String?                    @db.Uuid
-  tenantOrganisationId String?                    @db.Uuid
-  reportedByUserId     String                     @db.Uuid
+  id                   String                       @id @default(uuid()) @db.Uuid
+  organisationId       String                       @db.Uuid
+  propertyId           String                       @db.Uuid
+  unitId               String?                      @db.Uuid
+  tenantOrganisationId String?                      @db.Uuid
+  reportedByUserId     String                       @db.Uuid
   title                String
   description          String
   category             String
-  priority             MaintenancePriority        @default(NORMAL)
-  status               MaintenanceStatus          @default(REPORTED)
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
+  priority             MaintenancePriority          @default(NORMAL)
+  status               MaintenanceStatus            @default(REPORTED)
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
   completedAt          DateTime?
   closedAt             DateTime?
-  organisation         Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  property             Property                   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit                 Unit?                      @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  tenantOrganisation   TenantOrganisation?        @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
-  reportedBy           User                       @relation("MaintenanceReporter", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+  organisation         Organisation                 @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property             Property                     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                 Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  tenantOrganisation   TenantOrganisation?          @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  reportedBy           User                         @relation("MaintenanceReporter", fields: [reportedByUserId], references: [id], onDelete: Restrict)
   attachments          MaintenanceAttachment[]
   history              MaintenanceHistory[]
   approvals            MaintenanceApproval[]
   workOrders           WorkOrder[]
   quotationRequests    ProviderQuotationRequest[]
   marketplaceEnquiries MarketplaceEnquiry[]
-  lease                Lease?                     @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  leaseId              String?                    @db.Uuid
+  lease                Lease?                       @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  leaseId              String?                      @db.Uuid
   depositDeductions    DepositDeduction[]
   turnoverTasks        VacancyTurnoverTask[]
   conversations        Conversation[]
+  dispatchAttempts     MaintenanceDispatchAttempt[]
 
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
@@ -2188,39 +2240,40 @@ model MaintenanceApproval {
 }
 
 model WorkOrder {
-  id                       String               @id @default(uuid()) @db.Uuid
-  organisationId           String               @db.Uuid
-  maintenanceRequestId     String               @db.Uuid
-  propertyId               String               @db.Uuid
-  unitId                   String?              @db.Uuid
-  createdByUserId          String               @db.Uuid
-  assigneeMemberId         String?              @db.Uuid
-  assigneeUserId           String?              @db.Uuid
+  id                       String                       @id @default(uuid()) @db.Uuid
+  organisationId           String                       @db.Uuid
+  maintenanceRequestId     String                       @db.Uuid
+  propertyId               String                       @db.Uuid
+  unitId                   String?                      @db.Uuid
+  createdByUserId          String                       @db.Uuid
+  assigneeMemberId         String?                      @db.Uuid
+  assigneeUserId           String?                      @db.Uuid
   title                    String
   description              String?
-  status                   WorkOrderStatus      @default(OPEN)
+  status                   WorkOrderStatus              @default(OPEN)
   dueAt                    DateTime?
-  estimateAmountMinor      Decimal?             @db.Decimal(19, 0)
-  actualCostAmountMinor    Decimal?             @db.Decimal(19, 0)
-  currencyCode             String               @db.Char(3)
+  estimateAmountMinor      Decimal?                     @db.Decimal(19, 0)
+  actualCostAmountMinor    Decimal?                     @db.Decimal(19, 0)
+  currencyCode             String                       @db.Char(3)
   paymentReference         String?
   financialLedgerReference String?
-  createdAt                DateTime             @default(now())
-  updatedAt                DateTime             @updatedAt
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
   assignedAt               DateTime?
   startedAt                DateTime?
   completedAt              DateTime?
-  organisation             Organisation         @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  maintenanceRequest       MaintenanceRequest   @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
-  property                 Property             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit                     Unit?                @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  createdBy                User                 @relation("WorkOrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  assigneeMember           OrganisationMember?  @relation("WorkOrderAssigneeMember", fields: [assigneeMemberId], references: [id], onDelete: Restrict)
-  assigneeUser             User?                @relation("WorkOrderAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  organisation             Organisation                 @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  maintenanceRequest       MaintenanceRequest           @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  property                 Property                     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                     Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  createdBy                User                         @relation("WorkOrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assigneeMember           OrganisationMember?          @relation("WorkOrderAssigneeMember", fields: [assigneeMemberId], references: [id], onDelete: Restrict)
+  assigneeUser             User?                        @relation("WorkOrderAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
   history                  WorkOrderHistory[]
   providerAssignments      ProviderAssignment[]
   providerRating           ProviderRating?
   conversations            Conversation[]
+  dispatchAttempts         MaintenanceDispatchAttempt[]
 
   @@index([organisationId, status, createdAt])
   @@index([maintenanceRequestId, createdAt])
@@ -2280,6 +2333,7 @@ model ServiceProvider {
   marketplaceProfile    ProviderMarketplaceProfile?
   marketplaceEnquiries  MarketplaceEnquiry[]
   conversations         Conversation[]
+  dispatchAttempts      MaintenanceDispatchAttempt[]
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
 }
@@ -2358,6 +2412,14 @@ model ProviderOrganisation {
   providerId             String                  @db.Uuid
   status                 ProviderDirectoryStatus @default(ACTIVE)
   internalNotes          String?
+  /// Phase 21 items 16-17 — the AI maintenance-dispatch provider hierarchy. Lower `priority`
+  /// values are contacted first among an organisation's own directory; `isBackup` providers are
+  /// only ever tried after every non-backup provider for the category has been exhausted. NesAfric
+  /// marketplace fallback (outside this organisation's own directory entirely) is the last resort,
+  /// resolved separately in `maintenance-dispatch/service.ts` and never automatic unless policy
+  /// / entitlement explicitly permits it.
+  priority               Int                     @default(100)
+  isBackup               Boolean                 @default(false)
   createdByUserId        String                  @db.Uuid
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -2366,7 +2428,7 @@ model ProviderOrganisation {
   createdBy              User                    @relation("ProviderDirectoryCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@unique([landlordOrganisationId, providerId])
-  @@index([landlordOrganisationId, status])
+  @@index([landlordOrganisationId, status, isBackup, priority])
   @@index([providerId, status])
 }
 
@@ -2595,71 +2657,160 @@ model MarketplaceEnquiryStatusHistory {
 }
 
 model Listing {
-  id                   String                        @id @default(uuid()) @db.Uuid
-  organisationId       String                        @db.Uuid
-  propertyId           String                        @db.Uuid
-  unitId               String?                       @db.Uuid
-  createdByUserId      String                        @db.Uuid
-  listingType          ListingType
-  category             String
-  title                String
-  publicDescription    String
-  askingAmountMinor    Decimal?                      @db.Decimal(19, 0)
-  rentAmountMinor      Decimal?                      @db.Decimal(19, 0)
-  currencyCode         String                        @db.Char(3)
-  frequency            RentFrequency?
-  availableFrom        DateTime
-  bedrooms             Int?
-  bathrooms            Decimal?                      @db.Decimal(4, 1)
-  sizeSqm              Decimal?                      @db.Decimal(12, 2)
-  countryCode          String                        @db.Char(2)
-  region               String?
-  city                 String?
-  district             String?
-  locality             String?
-  publicLocationLabel  String?
-  mapLatitude          Decimal?                      @db.Decimal(10, 7)
-  mapLongitude         Decimal?                      @db.Decimal(10, 7)
-  mapPrecision         ListingLocationPrecision?
-  contactName          String?
-  contactEmail         String?
-  contactPhone         String?
-  showContactEmail     Boolean                       @default(false)
-  showContactPhone     Boolean                       @default(false)
-  enquiryEnabled       Boolean                       @default(true)
-  privateNotes         String?
-  status               ListingStatus                 @default(DRAFT)
-  verificationStatus   ListingVerificationStatus     @default(UNVERIFIED)
-  evidenceReady        Boolean                       @default(false)
-  submittedAt          DateTime?
-  publishedAt          DateTime?
-  pausedAt             DateTime?
-  reservedAt           DateTime?
-  rentedAt             DateTime?
-  archivedAt           DateTime?
-  rejectedAt           DateTime?
-  createdAt            DateTime                      @default(now())
-  updatedAt            DateTime                      @updatedAt
-  organisation         Organisation                  @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  property             Property                      @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit                 Unit?                         @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  createdBy            User                          @relation("ListingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  amenities            ListingAmenity[]
-  media                ListingMedia[]
-  verificationEvidence ListingVerificationEvidence[]
-  statusHistory        ListingStatusHistory[]
-  verificationHistory  ListingVerificationHistory[]
-  leads                MarketplaceLead[]
-  viewingRequests      ViewingRequest[]
-  rentalApplications   RentalApplication[]
-  conversations        Conversation[]
+  id                          String                        @id @default(uuid()) @db.Uuid
+  organisationId              String                        @db.Uuid
+  propertyId                  String?                       @db.Uuid
+  marketplaceAssetId          String?                       @db.Uuid
+  unitId                      String?                       @db.Uuid
+  createdByUserId             String                        @db.Uuid
+  listingType                 ListingType
+  category                    String
+  title                       String
+  publicDescription           String
+  askingAmountMinor           Decimal?                      @db.Decimal(19, 0)
+  rentAmountMinor             Decimal?                      @db.Decimal(19, 0)
+  currencyCode                String                        @db.Char(3)
+  frequency                   RentFrequency?
+  availableFrom               DateTime
+  bedrooms                    Int?
+  bathrooms                   Decimal?                      @db.Decimal(4, 1)
+  sizeSqm                     Decimal?                      @db.Decimal(12, 2)
+  countryCode                 String                        @db.Char(2)
+  region                      String?
+  city                        String?
+  district                    String?
+  locality                    String?
+  publicLocationLabel         String?
+  mapLatitude                 Decimal?                      @db.Decimal(10, 7)
+  mapLongitude                Decimal?                      @db.Decimal(10, 7)
+  mapPrecision                ListingLocationPrecision?
+  contactName                 String?
+  contactEmail                String?
+  contactPhone                String?
+  showContactEmail            Boolean                       @default(false)
+  showContactPhone            Boolean                       @default(false)
+  enquiryEnabled              Boolean                       @default(true)
+  privateNotes                String?
+  status                      ListingStatus                 @default(DRAFT)
+  verificationStatus          ListingVerificationStatus     @default(UNVERIFIED)
+  evidenceReady               Boolean                       @default(false)
+  /// Phase 21A item 5 ("Marketplace Listing Authority") — purely additive attribution, optional
+  /// on every existing listing. `organisationId`/`propertyId` above remain the authoritative,
+  /// required PropertyOS scoping (unchanged, so every pre-21A isolation guarantee still holds);
+  /// these fields separately record *who is marketing* the listing when that differs from "the
+  /// organisation that manages the property in PropertyOS" — e.g. a brokerage marketing a
+  /// landlord's property, or a developer's sales representative. `listingAuthority` names the
+  /// relationship; `marketplaceProfessionalId`/`listingRepresentativeUserId` name the parties.
+  listingAuthority            ListingAuthority?
+  marketplaceProfessionalId   String?                       @db.Uuid
+  listingRepresentativeUserId String?                       @db.Uuid
+  /// Present when this listing markets inventory from a developer's `Development`/
+  /// `DevelopmentUnit` (Phase 21A item 3) rather than (or in addition to) the PropertyOS
+  /// `Property`/`Unit` above.
+  developmentId               String?                       @db.Uuid
+  developmentUnitId           String?                       @db.Uuid
+  submittedAt                 DateTime?
+  publishedAt                 DateTime?
+  pausedAt                    DateTime?
+  reservedAt                  DateTime?
+  rentedAt                    DateTime?
+  archivedAt                  DateTime?
+  rejectedAt                  DateTime?
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
+  organisation                Organisation                  @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property                    Property?                     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  marketplaceAsset            MarketplaceAsset?             @relation(fields: [marketplaceAssetId], references: [id], onDelete: Restrict)
+  unit                        Unit?                         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  createdBy                   User                          @relation("ListingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  marketplaceProfessional     MarketplaceProfessional?      @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: SetNull)
+  listingRepresentative       User?                         @relation("ListingRepresentative", fields: [listingRepresentativeUserId], references: [id], onDelete: SetNull)
+  development                 Development?                  @relation(fields: [developmentId], references: [id], onDelete: SetNull)
+  developmentUnit             DevelopmentUnit?              @relation(fields: [developmentUnitId], references: [id], onDelete: SetNull)
+  amenities                   ListingAmenity[]
+  media                       ListingMedia[]
+  verificationEvidence        ListingVerificationEvidence[]
+  statusHistory               ListingStatusHistory[]
+  verificationHistory         ListingVerificationHistory[]
+  leads                       MarketplaceLead[]
+  viewingRequests             ViewingRequest[]
+  rentalApplications          RentalApplication[]
+  conversations               Conversation[]
+  attributionHistory          ListingAttributionHistory[]
 
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
+  @@index([marketplaceAssetId, createdAt])
   @@index([unitId, createdAt])
   @@index([status, listingType, countryCode, availableFrom])
   @@index([currencyCode, rentAmountMinor])
   @@index([currencyCode, askingAmountMinor])
+  @@index([marketplaceProfessionalId, status])
+  @@index([developmentId])
+  @@index([developmentUnitId])
+}
+
+/// Public-marketing inventory owned by a marketplace professional. It intentionally contains no
+/// PropertyOS operational, tenancy, accounting, maintenance, or legal-ownership fields.
+model MarketplaceAsset {
+  id                        String                @id @default(uuid()) @db.Uuid
+  marketplaceProfessionalId String                @db.Uuid
+  developmentUnitId         String?               @unique @db.Uuid
+  createdByUserId           String                @db.Uuid
+  name                      String
+  category                  String
+  subtype                   String?
+  purpose                   ListingType
+  bedrooms                  Int?
+  bathrooms                 Decimal?              @db.Decimal(4, 1)
+  sizeSqm                   Decimal?              @db.Decimal(12, 2)
+  currencyCode              String                @db.Char(3)
+  priceMinor                Decimal               @db.Decimal(19, 0)
+  countryCode               String                @db.Char(2)
+  region                    String?
+  city                      String?
+  district                  String?
+  locality                  String?
+  publicLocationLabel       String?
+  mapLatitude               Decimal?              @db.Decimal(10, 7)
+  mapLongitude              Decimal?              @db.Decimal(10, 7)
+  amenities                 String[]
+  furnishing                String?
+  mediaUrls                 String[]
+  availabilityStatus        DevelopmentUnitStatus @default(AVAILABLE)
+  availableFrom             DateTime
+  authorityEvidenceReady    Boolean               @default(false)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  archivedAt                DateTime?
+
+  marketplaceProfessional MarketplaceProfessional @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Restrict)
+  developmentUnit         DevelopmentUnit?        @relation(fields: [developmentUnitId], references: [id], onDelete: Restrict)
+  createdBy               User                    @relation("MarketplaceAssetCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  listings                Listing[]
+
+  @@index([marketplaceProfessionalId, archivedAt, availabilityStatus])
+  @@index([countryCode, city, purpose])
+}
+
+/// Append-only snapshots for every accepted listing-attribution change.
+model ListingAttributionHistory {
+  id                            String            @id @default(uuid()) @db.Uuid
+  listingId                     String            @db.Uuid
+  actorUserId                   String            @db.Uuid
+  fromMarketplaceProfessionalId String?           @db.Uuid
+  toMarketplaceProfessionalId   String?           @db.Uuid
+  fromRepresentativeUserId      String?           @db.Uuid
+  toRepresentativeUserId        String?           @db.Uuid
+  fromAuthority                 ListingAuthority?
+  toAuthority                   ListingAuthority?
+  reason                        String?
+  createdAt                     DateTime          @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  actor   User    @relation("ListingAttributionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([listingId, createdAt])
 }
 
 model ListingAmenity {
@@ -3201,38 +3352,50 @@ model AIEscalation {
 }
 
 model AIEmployee {
-  id                      String                     @id @default(uuid()) @db.Uuid
-  organisationId          String                     @db.Uuid
-  name                    String
-  role                    AIEmployeeRole
-  description             String?
-  status                  AIEmployeeStatus           @default(ACTIVE)
-  scope                   AIEmployeeScope            @default(ORGANISATION)
-  responsibilities        Json
-  instructions            Json
-  escalationConfiguration Json
-  workingHours            Json?
-  timezone                String                     @default("UTC")
-  providerKey             String?
-  modelKey                String?
-  createdByUserId         String                     @db.Uuid
-  updatedByUserId         String                     @db.Uuid
-  createdAt               DateTime                   @default(now())
-  updatedAt               DateTime                   @updatedAt
-  archivedAt              DateTime?
-  organisation            Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  createdBy               User                       @relation("AIEmployeeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  updatedBy               User                       @relation("AIEmployeeUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
-  portfolios              AIEmployeePortfolio[]
-  properties              AIEmployeeProperty[]
-  toolPermissions         AIEmployeeToolPermission[]
-  autonomyPolicies        AIEmployeeAutonomyPolicy[]
-  activities              AIEmployeeActivity[]
-  handoffs                AIEmployeeHandoff[]
-  conversations           Conversation[]
+  id                        String                       @id @default(uuid()) @db.Uuid
+  /// Phase 21 item 9 — exactly one of `organisationId`/`marketplaceProfessionalId` is set,
+  /// enforced in `ai-employees/service.ts` (a PropertyOS AI employee) and
+  /// `marketplace-ai/service.ts` (a Marketplace AI employee) respectively — never both, so a
+  /// single employee can never straddle both workspaces (item 24).
+  organisationId            String?                      @db.Uuid
+  marketplaceProfessionalId String?                      @db.Uuid
+  name                      String
+  role                      AIEmployeeRole
+  description               String?
+  status                    AIEmployeeStatus             @default(ACTIVE)
+  scope                     AIEmployeeScope              @default(ORGANISATION)
+  responsibilities          Json
+  instructions              Json
+  escalationConfiguration   Json
+  workingHours              Json?
+  timezone                  String                       @default("UTC")
+  providerKey               String?
+  modelKey                  String?
+  createdByUserId           String                       @db.Uuid
+  updatedByUserId           String                       @db.Uuid
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
+  archivedAt                DateTime?
+  organisation              Organisation?                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  marketplaceProfessional   MarketplaceProfessional?     @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Restrict)
+  createdBy                 User                         @relation("AIEmployeeCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy                 User                         @relation("AIEmployeeUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  portfolios                AIEmployeePortfolio[]
+  properties                AIEmployeeProperty[]
+  toolPermissions           AIEmployeeToolPermission[]
+  autonomyPolicies          AIEmployeeAutonomyPolicy[]
+  activities                AIEmployeeActivity[]
+  handoffs                  AIEmployeeHandoff[]
+  conversations             Conversation[]
+  initiatedDispatchAttempts MaintenanceDispatchAttempt[]
+  voiceCalls                VoiceCall[]
+  assignedPhoneNumbers      PhoneNumber[]
+  voicePersonaConfig        VoicePersonaConfig?
 
   @@unique([organisationId, name])
+  @@unique([marketplaceProfessionalId, name])
   @@index([organisationId, status, role])
+  @@index([marketplaceProfessionalId, status, role])
 }
 
 model AIEmployeePortfolio {
@@ -3279,54 +3442,69 @@ model AIEmployeeAutonomyPolicy {
 }
 
 model AIEmployeeActivity {
-  id               String       @id @default(uuid()) @db.Uuid
-  organisationId   String       @db.Uuid
-  aiEmployeeId     String       @db.Uuid
-  type             String
-  status           String
-  actionKey        String?
-  policyDecision   String?
-  reason           String
-  affectedEntities Json
-  result           Json?
-  failureCode      String?
-  failureMessage   String?
-  idempotencyKey   String
-  triggeringUserId String?      @db.Uuid
-  humanApproverId  String?      @db.Uuid
-  createdAt        DateTime     @default(now())
-  completedAt      DateTime?
-  organisation     Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  aiEmployee       AIEmployee   @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+  id                        String                   @id @default(uuid()) @db.Uuid
+  /// Phase 21 item 9/24 — exactly one of these is set, mirroring `AIEmployee`.
+  organisationId            String?                  @db.Uuid
+  marketplaceProfessionalId String?                  @db.Uuid
+  aiEmployeeId              String                   @db.Uuid
+  type                      String
+  status                    String
+  actionKey                 String?
+  policyDecision            String?
+  reason                    String
+  affectedEntities          Json
+  result                    Json?
+  failureCode               String?
+  failureMessage            String?
+  idempotencyKey            String
+  triggeringUserId          String?                  @db.Uuid
+  humanApproverId           String?                  @db.Uuid
+  createdAt                 DateTime                 @default(now())
+  completedAt               DateTime?
+  organisation              Organisation?            @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  marketplaceProfessional   MarketplaceProfessional? @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Restrict)
+  aiEmployee                AIEmployee               @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
 
   @@unique([organisationId, idempotencyKey])
+  @@unique([marketplaceProfessionalId, idempotencyKey])
   @@index([aiEmployeeId, status, createdAt])
   @@index([organisationId, createdAt])
+  @@index([marketplaceProfessionalId, createdAt])
 }
 
 model AIEmployeeHandoff {
-  id                    String              @id @default(uuid()) @db.Uuid
-  organisationId        String              @db.Uuid
-  aiEmployeeId          String              @db.Uuid
-  conversationId        String?
-  operationalItemType   String?
-  operationalItemId     String?
-  reason                String
-  urgency               AISeverity
-  assignedMemberId      String?             @db.Uuid
-  assignedTeamReference String?
-  status                AIHandoffStatus     @default(OPEN)
-  contextSummary        String
-  createdByUserId       String?             @db.Uuid
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  resolvedAt            DateTime?
-  organisation          Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  aiEmployee            AIEmployee          @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
-  assignedMember        OrganisationMember? @relation(fields: [assignedMemberId], references: [id], onDelete: SetNull)
-  createdBy             User?               @relation("AIHandoffCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  id                             String                         @id @default(uuid()) @db.Uuid
+  /// Phase 21 item 9/24 — exactly one of these is set, mirroring `AIEmployee`. A Marketplace AI
+  /// employee (e.g. AI Sales Agent) escalating to a human uses `marketplaceProfessionalId` and
+  /// `assignedRepresentativeMemberId` instead of the PropertyOS `organisationId`/
+  /// `assignedMemberId` pair.
+  organisationId                 String?                        @db.Uuid
+  marketplaceProfessionalId      String?                        @db.Uuid
+  aiEmployeeId                   String                         @db.Uuid
+  conversationId                 String?
+  operationalItemType            String?
+  operationalItemId              String?
+  reason                         String
+  urgency                        AISeverity
+  assignedMemberId               String?                        @db.Uuid
+  assignedRepresentativeMemberId String?                        @db.Uuid
+  assignedTeamReference          String?
+  status                         AIHandoffStatus                @default(OPEN)
+  contextSummary                 String
+  createdByUserId                String?                        @db.Uuid
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
+  resolvedAt                     DateTime?
+  organisation                   Organisation?                  @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  marketplaceProfessional        MarketplaceProfessional?       @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Restrict)
+  aiEmployee                     AIEmployee                     @relation(fields: [aiEmployeeId], references: [id], onDelete: Restrict)
+  assignedMember                 OrganisationMember?            @relation(fields: [assignedMemberId], references: [id], onDelete: SetNull)
+  assignedRepresentativeMember   MarketplaceProfessionalMember? @relation(fields: [assignedRepresentativeMemberId], references: [id], onDelete: SetNull)
+  createdBy                      User?                          @relation("AIHandoffCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  voiceCalls                     VoiceCall[]
 
   @@index([organisationId, status, urgency])
+  @@index([marketplaceProfessionalId, status, urgency])
   @@index([aiEmployeeId, createdAt])
 }
 
@@ -3439,6 +3617,7 @@ model Conversation {
   participants         ConversationParticipant[]
   messages             Message[]
   assignments          ConversationAssignment[]
+  voiceCalls           VoiceCall[]
 
   @@index([organisationId, status, updatedAt])
   @@index([organisationId, channel, channelAddress])
@@ -4218,4 +4397,833 @@ model OrganisationFeatureFlagOverride {
   createdByPlatformPrincipal   PlatformPrincipal? @relation(fields: [createdByPlatformPrincipalId], references: [id], onDelete: SetNull)
 
   @@unique([organisationId, flagKey])
+}
+
+// =============================================================================
+// Phase 21A — Real Estate Marketplace Professional Foundation
+// =============================================================================
+// A completely distinct account family from PropertyOS management organisations (see the
+// `Organisation.marketplaceProfessional` doc comment above). One `User` may hold memberships in
+// any number of PropertyOS management organisations AND any number of `MarketplaceProfessional`
+// profiles simultaneously (item 7's "dual-workspace accounts") — the two are never conflated,
+// never share a subscription/entitlement track, and a marketplace-only account is never granted
+// PropertyOS management screens or permissions.
+
+/// Extensible — new professional/business categories can be added without a migration touching
+/// existing rows (item 1).
+enum MarketplaceProfessionalType {
+  INDIVIDUAL_AGENT
+  BROKER
+  BROKERAGE
+  REAL_ESTATE_COMPANY
+  DEVELOPER
+  PROPERTY_MARKETING_COMPANY
+  OTHER
+}
+
+enum MarketplaceProfessionalStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+/// Deliberately the same vocabulary as `ListingVerificationStatus`/provider verification
+/// elsewhere in this schema, kept as its own enum so marketplace-professional verification can
+/// evolve independently of either.
+enum MarketplaceVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+/// Company/team structure (item 2). OWNER created the profile (or was granted ownership) and can
+/// manage billing/team/verification; ADMIN can manage team/listings/developments but not
+/// ownership; AGENT operates within the company (listings, leads, viewings) without team-management
+/// authority. Deliberately a flat, ordered enum rather than the full `Permission`/`Role` engine —
+/// marketplace team roles are simple by design (see `requireMarketplaceRole`).
+enum MarketplaceMemberRole {
+  OWNER
+  ADMIN
+  AGENT
+}
+
+enum MarketplaceMemberStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  REMOVED
+}
+
+/// Item 4/5 — the relationship between the party marketing a listing and the underlying asset.
+/// Never assumes the listing party owns the property.
+enum ListingAuthority {
+  OWNER_SELF
+  PROPERTY_MANAGER
+  MANAGING_AGENT
+  BROKERAGE_AUTHORIZED
+  DEVELOPER
+  THIRD_PARTY_AUTHORIZED
+}
+
+enum DevelopmentStatus {
+  PLANNING
+  UNDER_CONSTRUCTION
+  COMPLETED
+  HANDED_OVER
+  ARCHIVED
+}
+
+enum DevelopmentUnitStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+  RENTED
+  UNAVAILABLE
+}
+
+/// The professional/business marketplace identity (item 1): an individual agent, broker,
+/// brokerage, real-estate company, developer, or property-marketing company. Backed by a hidden,
+/// technical `Organisation` (`backingOrganisationId`) purely so listing/lead/viewing creation can
+/// reuse the existing, already-isolated Listing/MarketplaceLead/ViewingRequest domains (item 5,
+/// "reuse existing... architecture... do not create competing duplicate domains") without ever
+/// surfacing PropertyOS management screens to a marketplace-only account (item 6/11) or attaching
+/// a PropertyOS management subscription (item 8) — the backing organisation intentionally has no
+/// `OrganisationSubscription` row.
+model MarketplaceProfessional {
+  id                             String                        @id @default(uuid()) @db.Uuid
+  backingOrganisationId          String                        @unique @db.Uuid
+  type                           MarketplaceProfessionalType
+  displayName                    String
+  legalName                      String?
+  /// Public profile URL segment (item 10): `/marketplace/professionals/{slug}`.
+  slug                           String                        @unique
+  logoUrl                        String?
+  description                    String?
+  websiteUrl                     String?
+  contactEmail                   String?
+  contactPhone                   String?
+  countryCode                    String                        @db.Char(2)
+  /// Free-form readiness fields (item 1/10): specialities/categories, services offered, and
+  /// service areas. Deliberately simple scalar arrays rather than new join tables for this
+  /// foundation phase — extensible to a controlled taxonomy later without a breaking change.
+  specialities                   String[]
+  servicesOffered                String[]
+  serviceAreas                   String[]
+  status                         MarketplaceProfessionalStatus @default(ACTIVE)
+  verificationStatus             MarketplaceVerificationStatus @default(UNVERIFIED)
+  /// Evidence *references* only (item 1's "verification evidence readiness") — no file storage
+  /// integration in this foundation phase, matching how Phase 8 provider evidence started.
+  verificationEvidenceReferences String[]
+  createdByUserId                String                        @db.Uuid
+  createdAt                      DateTime                      @default(now())
+  updatedAt                      DateTime                      @updatedAt
+  archivedAt                     DateTime?
+
+  backingOrganisation  Organisation                               @relation(fields: [backingOrganisationId], references: [id], onDelete: Restrict)
+  createdBy            User                                       @relation("MarketplaceProfessionalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  members              MarketplaceProfessionalMember[]
+  verificationHistory  MarketplaceProfessionalVerificationEvent[]
+  developments         Development[]
+  listings             Listing[]
+  marketplaceAssets    MarketplaceAsset[]
+  subscription         MarketplaceSubscription?
+  aiemployees          AIEmployee[]
+  aiEmployeeActivities AIEmployeeActivity[]
+  aiEmployeeHandoffs   AIEmployeeHandoff[]
+  campaigns            Campaign[]
+
+  @@index([type, status])
+  @@index([verificationStatus])
+  @@index([countryCode])
+}
+
+/// Company/team structure (item 2): who may act on behalf of a `MarketplaceProfessional`.
+model MarketplaceProfessionalMember {
+  id                        String                  @id @default(uuid()) @db.Uuid
+  marketplaceProfessionalId String                  @db.Uuid
+  userId                    String                  @db.Uuid
+  role                      MarketplaceMemberRole
+  status                    MarketplaceMemberStatus @default(ACTIVE)
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+
+  marketplaceProfessional MarketplaceProfessional @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Cascade)
+  user                    User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  assignedHandoffs        AIEmployeeHandoff[]
+
+  @@unique([marketplaceProfessionalId, userId])
+  @@index([userId, status])
+}
+
+/// Append-only verification-status audit trail (item 1 + item 11's "audit attribution"), the same
+/// pattern as `ProviderVerificationHistory`/`ListingVerificationHistory` elsewhere in this schema.
+model MarketplaceProfessionalVerificationEvent {
+  id                        String                         @id @default(uuid()) @db.Uuid
+  marketplaceProfessionalId String                         @db.Uuid
+  fromStatus                MarketplaceVerificationStatus?
+  toStatus                  MarketplaceVerificationStatus
+  reason                    String?
+  actorUserId               String?                        @db.Uuid
+  createdAt                 DateTime                       @default(now())
+
+  marketplaceProfessional MarketplaceProfessional @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Cascade)
+  actorUser               User?                   @relation("MarketplaceProfessionalVerificationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([marketplaceProfessionalId, createdAt])
+}
+
+/// A developer's project (item 3). Deliberately does not require any PropertyOS `Property`/`Unit`
+/// backing — a developer may participate in the marketplace without ever subscribing to
+/// PropertyOS management (item 8). Not a construction-management ERP: no cost tracking, no
+/// contractor/procurement workflow, just enough structure to showcase a project and its
+/// sellable/rentable inventory.
+model Development {
+  id                        String            @id @default(uuid()) @db.Uuid
+  marketplaceProfessionalId String            @db.Uuid
+  name                      String
+  description               String?
+  status                    DevelopmentStatus @default(PLANNING)
+  countryCode               String            @db.Char(2)
+  region                    String?
+  city                      String?
+  district                  String?
+  addressLine1              String?
+  latitude                  Decimal?          @db.Decimal(10, 7)
+  longitude                 Decimal?          @db.Decimal(10, 7)
+  amenities                 String[]
+  mediaUrls                 String[]
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  archivedAt                DateTime?
+
+  marketplaceProfessional MarketplaceProfessional @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Cascade)
+  units                   DevelopmentUnit[]
+  listings                Listing[]
+  phoneNumbers            PhoneNumber[]
+
+  @@index([marketplaceProfessionalId, status])
+  @@index([countryCode, city])
+}
+
+/// A single sellable/rentable inventory item within a `Development` (item 3's "units/property
+/// inventory"). `status` is the source of truth for availability; a `DevelopmentUnit` may
+/// optionally be published as a full marketplace `Listing` (see `Listing.developmentUnitId`) once
+/// it is ready to receive public enquiries/leads/viewings through the existing Listing pipeline.
+model DevelopmentUnit {
+  id            String                @id @default(uuid()) @db.Uuid
+  developmentId String                @db.Uuid
+  name          String
+  unitType      String?
+  status        DevelopmentUnitStatus @default(AVAILABLE)
+  bedrooms      Int?
+  bathrooms     Decimal?              @db.Decimal(4, 1)
+  sizeSqm       Decimal?              @db.Decimal(12, 2)
+  priceMinor    Decimal?              @db.Decimal(19, 0)
+  currencyCode  String?               @db.Char(3)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  archivedAt    DateTime?
+
+  development      Development       @relation(fields: [developmentId], references: [id], onDelete: Cascade)
+  listings         Listing[]
+  marketplaceAsset MarketplaceAsset?
+
+  @@index([developmentId, status])
+}
+
+/// Mirrors `SubscriptionPlan` (Phase 20) for the marketplace's own, entirely separate commercial
+/// product family (item 8). Never referenced by `OrganisationSubscription`.
+model MarketplacePlan {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  isPublic    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prices        MarketplacePlanPrice[]
+  entitlements  MarketplacePlanEntitlement[]
+  subscriptions MarketplaceSubscription[]
+
+  @@index([isActive, isPublic, sortOrder])
+}
+
+/// Mirrors `PlanPrice`. At launch only a GHS 0 `MONTHLY` row exists for the free plan (item 8) —
+/// this table exists so a real price can be introduced for a future paid tier without a schema
+/// change ("do not hard-code marketplace professionals never pay").
+model MarketplacePlanPrice {
+  id           String       @id @default(uuid()) @db.Uuid
+  planId       String       @db.Uuid
+  currencyCode String       @db.Char(3)
+  billingCycle BillingCycle
+  amountMinor  Decimal      @db.Decimal(19, 0)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+
+  plan MarketplacePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, currencyCode, billingCycle])
+}
+
+/// Mirrors `PlanEntitlement`. Feature keys are marketplace-specific (active listings, team
+/// members, developments, promoted/featured placement, etc.) and validated against their own
+/// catalog (`src/modules/marketplace-professionals/entitlements.ts`), kept separate from the
+/// PropertyOS `ENTITLEMENTS` catalog (item 8).
+model MarketplacePlanEntitlement {
+  id           String          @id @default(uuid()) @db.Uuid
+  planId       String          @db.Uuid
+  featureKey   String
+  kind         EntitlementKind
+  booleanValue Boolean?
+  limitValue   BigInt?
+  isUnlimited  Boolean         @default(false)
+
+  plan MarketplacePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, featureKey])
+}
+
+/// Mirrors `OrganisationSubscription`'s shape but is a fully separate table, FK'd to
+/// `MarketplaceProfessional` instead of `Organisation` (item 8: never the same commercial track
+/// as a PropertyOS management subscription). Every `MarketplaceProfessional` gets exactly one of
+/// these, defaulted to the free plan at `ACTIVE` (not `TRIALING` — the free tier does not expire).
+model MarketplaceSubscription {
+  id                        String             @id @default(uuid()) @db.Uuid
+  marketplaceProfessionalId String             @unique @db.Uuid
+  planId                    String             @db.Uuid
+  status                    SubscriptionStatus @default(ACTIVE)
+  billingCycle              BillingCycle       @default(MONTHLY)
+  currencyCode              String             @db.Char(3)
+  cancelAtPeriodEnd         Boolean            @default(false)
+  cancelledAt               DateTime?
+  currentPeriodStart        DateTime
+  currentPeriodEnd          DateTime
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  marketplaceProfessional MarketplaceProfessional @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Restrict)
+  plan                    MarketplacePlan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([planId])
+}
+
+// =============================================================================
+// Phase 21 — AI Maintenance Dispatch foundation (items 16-19)
+// =============================================================================
+
+/// Structured dispatch status, ready for Phase 22 voice-call integration. No telephony exists
+/// yet — `CONTACTED` today means a deterministic notification (in-app/message) was sent, not a
+/// phone call.
+enum DispatchAttemptStatus {
+  CONTACT_PENDING
+  CONTACTED
+  ACCEPTED
+  DECLINED
+  NO_RESPONSE
+  BACKUP_REQUIRED
+  ASSIGNED
+}
+
+/// One attempt to dispatch a work order to a provider, in hierarchy order (item 17: private/
+/// assigned -> preferred -> backup -> NesAfric marketplace fallback). Multiple rows accumulate as
+/// the dispatch engine escalates through the hierarchy (item 18: "first provider does not respond
+/// within X minutes -> contact backup").
+model MaintenanceDispatchAttempt {
+  id                      String                @id @default(uuid()) @db.Uuid
+  organisationId          String                @db.Uuid
+  workOrderId             String                @db.Uuid
+  maintenanceRequestId    String                @db.Uuid
+  tier                    String
+  serviceProviderId       String?               @db.Uuid
+  status                  DispatchAttemptStatus @default(CONTACT_PENDING)
+  reason                  String?
+  contactedAt             DateTime?
+  respondedAt             DateTime?
+  initiatedByAIEmployeeId String?               @db.Uuid
+  createdByUserId         String?               @db.Uuid
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  organisation          Organisation       @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  workOrder             WorkOrder          @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  maintenanceRequest    MaintenanceRequest @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
+  serviceProvider       ServiceProvider?   @relation(fields: [serviceProviderId], references: [id], onDelete: Restrict)
+  initiatedByAIEmployee AIEmployee?        @relation(fields: [initiatedByAIEmployeeId], references: [id], onDelete: SetNull)
+  createdBy             User?              @relation("MaintenanceDispatchAttemptCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  voiceCalls            VoiceCall[]
+
+  @@index([organisationId, status, createdAt])
+  @@index([workOrderId, createdAt])
+  @@index([serviceProviderId, status])
+}
+
+/// Phase 21B (items 18-23): the central NesAfric campaign & promotion system. Deliberately one
+/// model covering both NesAfric-owned announcements (`isPlatformOwned`, e.g. the thin homepage
+/// announcement bar) and marketplace-professional self-service promotion requests
+/// (`advertiserMarketplaceProfessionalId`) — the two are distinguished by placement and ownership,
+/// never by separate tables, so platform review/scheduling/analytics is uniform across both.
+enum CampaignPlacement {
+  /// The one homepage placement (item 18/24): a small dismissible announcement bar,
+  /// NesAfric-owned only — never available to `createCampaign` (self-service).
+  HOMEPAGE_ANNOUNCEMENT
+  MARKETPLACE_PRIMARY
+  MARKETPLACE_INLINE
+  DEVELOPMENT_FEATURED
+  PROFESSIONAL_FEATURED
+  SEARCH_FEATURED
+}
+
+enum CampaignStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  REJECTED
+  ARCHIVED
+}
+
+model Campaign {
+  id                                  String            @id @default(uuid()) @db.Uuid
+  name                                String
+  placement                           CampaignPlacement
+  status                              CampaignStatus    @default(DRAFT)
+  priority                            Int               @default(0)
+  headline                            String
+  supportingText                      String?
+  ctaLabel                            String?
+  destinationUrl                      String
+  desktopMediaUrl                     String?
+  mobileMediaUrl                      String?
+  countryCode                         String?           @db.Char(2)
+  region                              String?
+  startAt                             DateTime?
+  endAt                               DateTime?
+  impressionCount                     Int               @default(0)
+  clickCount                          Int               @default(0)
+  /// NesAfric-owned campaigns (homepage announcements, platform-curated marketplace placements)
+  /// have no advertiser; self-service submissions from a marketplace professional always do.
+  isPlatformOwned                     Boolean           @default(false)
+  advertiserMarketplaceProfessionalId String?           @db.Uuid
+  createdByUserId                     String            @db.Uuid
+  reviewedByUserId                    String?           @db.Uuid
+  reviewedAt                          DateTime?
+  rejectionReason                     String?
+  createdAt                           DateTime          @default(now())
+  updatedAt                           DateTime          @updatedAt
+  archivedAt                          DateTime?
+
+  advertiser MarketplaceProfessional? @relation(fields: [advertiserMarketplaceProfessionalId], references: [id], onDelete: Cascade)
+  createdBy  User                     @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy User?                    @relation("CampaignReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([placement, status, priority])
+  @@index([advertiserMarketplaceProfessionalId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 22 - AI Voice Receptionist + Voice Sales + Artisan Calling
+// ---------------------------------------------------------------------------
+
+enum VoiceCallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum VoiceCallStatus {
+  QUEUED
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  NO_ANSWER
+  BUSY
+  CANCELED
+}
+
+enum VoiceCallOutcome {
+  NONE
+  INFORMATION_PROVIDED
+  LEAD_CAPTURED
+  VIEWING_SCHEDULED
+  MAINTENANCE_REQUEST_CREATED
+  ARTISAN_ACCEPTED
+  ARTISAN_DECLINED
+  ARTISAN_NO_RESPONSE
+  HANDED_OFF_TO_HUMAN
+  NO_ACTION
+  FAILED
+}
+
+enum VoiceConsentStatus {
+  NOT_REQUIRED
+  PENDING
+  GRANTED
+  DECLINED
+}
+
+/// Provider-neutral per-organisation voice configuration (item 1/15). Exactly one row per
+/// `organisationId` — for a Marketplace professional this is their hidden backing organisation,
+/// the same indirection every other marketplace-scoped domain already uses (no separate
+/// `marketplaceProfessionalId` column needed here).
+model VoiceProviderConfig {
+  id                             String   @id @default(uuid()) @db.Uuid
+  organisationId                 String   @unique @db.Uuid
+  providerKey                    String   @default("MOCK")
+  phoneNumber                    String?
+  inboundEnabled                 Boolean  @default(true)
+  outboundEnabled                Boolean  @default(false)
+  timezone                       String   @default("UTC")
+  /// "HH:MM" 24-hour, evaluated in `timezone` (item 15).
+  businessHoursStart             String   @default("08:00")
+  businessHoursEnd               String   @default("18:00")
+  maxRetryAttempts               Int      @default(2)
+  retryDelaySeconds              Int      @default(900)
+  maxOutboundCallsPerDay         Int      @default(50)
+  recordingEnabled               Boolean  @default(false)
+  consentRequired                Boolean  @default(true)
+  status                         String   @default("ACTIVE")
+  /// Phase 22B item 2 — which registered speech provider adapters handle this organisation's
+  /// calls. Independent of `providerKey` (telephony transport) since STT/TTS/telephony are three
+  /// separately swappable provider-neutral concerns.
+  sttProviderKey                 String   @default("MOCK")
+  ttsProviderKey                 String   @default("MOCK")
+  /// Phase 22B item 12 — configurable, country/jurisdiction-driven call-opening disclosures.
+  /// Never a hard-coded legal assumption: an organisation with no `countryCode` set gets no
+  /// inferred disclosure text, only whatever it explicitly configures here.
+  countryCode                    String?
+  openingDisclosureText          String?
+  recordingDisclosureText        String?
+  disclosureRequired             Boolean  @default(true)
+  /// Phase 22C item 1 — the wss:// URL of the deployed media-bridge process that terminates the
+  /// telephony provider's real-time audio stream (see `MediaStreamSession`). Never set in this
+  /// environment (no such process is deployed); `null` means Twilio TwiML generation cannot
+  /// request media streaming, which `getVoiceHealthStatus` reports honestly rather than claiming
+  /// live audio is available.
+  mediaStreamWsUrl               String?
+  /// Phase 22C item 12 — cost-protection ceilings, operator-configurable per organisation exactly
+  /// like the existing `maxOutboundCallsPerDay`/`retryDelaySeconds`.
+  maxCallDurationSeconds         Int      @default(1800)
+  maxConsecutiveOutboundFailures Int      @default(3)
+  /// Phase 22C item 11 — concurrency readiness, config-driven (never a hard-coded plan name).
+  maxConcurrentCallsPerEmployee  Int      @default(3)
+  maxConcurrentOutboundCalls     Int      @default(10)
+  /// Phase 22C item 10 — what happens to a NEW inbound call once this organisation's monthly
+  /// voice-minute entitlement is already exhausted. `HANDOFF` (the safe default) never drops an
+  /// emergency/tenant caller silently — it always still connects them to a human-handoff record,
+  /// exactly like the existing "no AI employee configured" fallback already does; it only skips AI
+  /// handling. `AI_ANYWAY` is an explicit, logged grace opt-in an organisation can choose.
+  exhaustedMinutesBehavior       String   @default("HANDOFF")
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+}
+
+/// A single telephone call (item 12). Deliberately thin: every business-context field (related
+/// listing/tenant/lead/property/work order, assigned AI employee, status, rolling summary) lives
+/// on the `Conversation` this call belongs to — the same channel-agnostic model WhatsApp/SMS/web
+/// chat already use — rather than being duplicated here. This model holds only what is specific
+/// to the *telephony* leg of that conversation.
+model VoiceCall {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  organisationId         String                    @db.Uuid
+  conversationId         String                    @db.Uuid
+  aiEmployeeId           String?                   @db.Uuid
+  direction              VoiceCallDirection
+  status                 VoiceCallStatus           @default(QUEUED)
+  fromNumber             String
+  toNumber               String
+  providerKey            String
+  providerCallId         String
+  queuedAt               DateTime                  @default(now())
+  ringingAt              DateTime?
+  answeredAt             DateTime?
+  endedAt                DateTime?
+  durationSeconds        Int?
+  recordingUrl           String?
+  recordingConsentStatus VoiceConsentStatus        @default(NOT_REQUIRED)
+  /// Full-call transcript, present only once the call completes and only when permitted (item 12:
+  /// "Do not expose private transcripts publicly" — never selected in any public-facing query).
+  transcriptText         String?
+  aiSummary              String?
+  outcome                VoiceCallOutcome          @default(NONE)
+  handoffId              String?                   @db.Uuid
+  /// Mirrors `ConversationIdentityLevel` (item 5) — a phone number match alone reaches CLAIMED at
+  /// most; VERIFIED requires the voice-specific second factor in `verifyVoiceCallerIdentity`.
+  callerIdentityLevel    ConversationIdentityLevel @default(NONE)
+  initiatedByUserId      String?                   @db.Uuid
+  /// Set only for an outbound artisan call (item 7) — links back to the existing
+  /// `MaintenanceDispatchAttempt` this call is fulfilling, so dispatch-hierarchy state (item 6/13)
+  /// is never duplicated here.
+  dispatchAttemptId      String?                   @db.Uuid
+  retryOfCallId          String?                   @db.Uuid
+  retryCount             Int                       @default(0)
+  failureReason          String?
+  /// Phase 22B item 14 — real, per-call usage/cost readiness. Accumulated as the call progresses
+  /// (never estimated/fabricated up front) — defaults to 0 rather than `null` so `{ increment }`
+  /// updates always land on a real numeric starting value (Postgres arithmetic on NULL is NULL).
+  sttSecondsUsed         Float                     @default(0)
+  ttsCharactersUsed      Int                       @default(0)
+  aiModelTokensUsed      Int                       @default(0)
+  providerCostAmount     Decimal?                  @db.Decimal(10, 4)
+  providerCostCurrency   String?
+  /// Phase 22B item 8 — human-transfer readiness, independent of the existing `handoffId`
+  /// (an `AIEmployeeHandoff`/`escalateLeadToHuman` queue entry always exists for a transfer;
+  /// these fields record whether the *live call itself* was also bridged to a human number).
+  transferStatus         VoiceTransferStatus       @default(NONE)
+  transferTargetNumber   String?
+  transferredAt          DateTime?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  organisation        Organisation                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  conversation        Conversation                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  aiEmployee          AIEmployee?                 @relation(fields: [aiEmployeeId], references: [id], onDelete: SetNull)
+  handoff             AIEmployeeHandoff?          @relation(fields: [handoffId], references: [id], onDelete: SetNull)
+  initiatedBy         User?                       @relation("VoiceCallInitiator", fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+  dispatchAttempt     MaintenanceDispatchAttempt? @relation(fields: [dispatchAttemptId], references: [id], onDelete: SetNull)
+  retryOf             VoiceCall?                  @relation("VoiceCallRetry", fields: [retryOfCallId], references: [id], onDelete: SetNull)
+  retries             VoiceCall[]                 @relation("VoiceCallRetry")
+  events              VoiceCallEvent[]
+  turns               VoiceCallTurn[]
+  streamingSession    VoiceStreamingSession?
+  mediaStreamSessions MediaStreamSession[]
+
+  @@unique([providerKey, providerCallId])
+  @@index([organisationId, status, createdAt])
+  @@index([organisationId, direction, createdAt])
+  @@index([conversationId])
+  @@index([dispatchAttemptId])
+}
+
+/// Raw provider webhook/event audit trail (item 1/13/20). `[providerKey, externalEventId]` is the
+/// idempotency key every webhook receiver checks first — an identical event delivered twice (a
+/// provider retry) is a no-op, never a double-processed call state transition.
+model VoiceCallEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  callId          String   @db.Uuid
+  providerKey     String
+  externalEventId String
+  type            String
+  payload         Json
+  occurredAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@unique([providerKey, externalEventId])
+  @@index([callId, occurredAt])
+}
+
+/// Do-not-call / contact preference registry (item 15), scoped per organisation (a Marketplace
+/// professional's backing organisation for marketplace-side opt-outs).
+model VoiceContactPreference {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @db.Uuid
+  phoneNumber    String
+  doNotCall      Boolean  @default(true)
+  reason         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([organisationId, phoneNumber])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 22B — Real-Time Telephony + Speech AI
+// ---------------------------------------------------------------------------
+
+enum VoiceTransferStatus {
+  NONE
+  REQUESTED
+  CONNECTED
+  FAILED
+}
+
+enum VoiceCallTurnSpeaker {
+  CALLER
+  AI
+  SYSTEM
+}
+
+enum VoiceStreamingSessionStatus {
+  ACTIVE
+  CLOSED
+  TIMED_OUT
+}
+
+/// The live turn-taking state of an in-progress call (item 3). Distinct from `VoiceCallStatus`
+/// (the telephony leg's own lifecycle) — a call can be `IN_PROGRESS` for its entire duration while
+/// this state cycles between listening, AI speech, and processing many times.
+enum VoiceConversationState {
+  LISTENING
+  AI_SPEAKING
+  PROCESSING
+  SILENCE_WARNING
+}
+
+enum PhoneNumberPurpose {
+  TENANT_SUPPORT
+  SALES
+  DEVELOPMENT
+  GENERAL_OFFICE
+}
+
+enum PhoneNumberStatus {
+  ACTIVE
+  INACTIVE
+  RELEASED
+}
+
+/// Phone-number assignment readiness (item 9). Deliberately additive to — never a replacement
+/// for — `VoiceProviderConfig.phoneNumber` (the original single-number-per-organisation field from
+/// Phase 22): `startInboundCall` routing checks this table first (by `[providerKey, e164Number]`)
+/// and only falls back to the legacy single-number lookup when no row matches, so an organisation
+/// that has never configured a `PhoneNumber` row keeps working exactly as before. Never stores a
+/// provider secret — only the number itself and NesAfric-side routing/assignment metadata.
+model PhoneNumber {
+  id                   String             @id @default(uuid()) @db.Uuid
+  organisationId       String             @db.Uuid
+  developmentId        String?            @db.Uuid
+  e164Number           String
+  providerKey          String             @default("MOCK")
+  purpose              PhoneNumberPurpose @default(GENERAL_OFFICE)
+  label                String?
+  inboundEnabled       Boolean            @default(true)
+  outboundEnabled      Boolean            @default(false)
+  assignedAIEmployeeId String?            @db.Uuid
+  status               PhoneNumberStatus  @default(ACTIVE)
+  /// Phase 22C item 11 — per-number concurrency readiness.
+  maxConcurrentCalls   Int                @default(5)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  organisation       Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  development        Development? @relation(fields: [developmentId], references: [id], onDelete: SetNull)
+  assignedAIEmployee AIEmployee?  @relation(fields: [assignedAIEmployeeId], references: [id], onDelete: SetNull)
+
+  @@unique([providerKey, e164Number])
+  @@index([organisationId, status])
+  @@index([developmentId])
+}
+
+/// Approved voice-persona configuration for one AI employee (item 10). Purely presentational/
+/// operational data (what the AI says at the top of a call, what it's called, what voice it
+/// speaks with) — never consulted for RBAC/entitlement/autonomy decisions, so a persona field can
+/// never override system safety policy no matter what an organisation configures here.
+model VoicePersonaConfig {
+  id                       String   @id @default(uuid()) @db.Uuid
+  aiEmployeeId             String   @unique @db.Uuid
+  employeeDisplayName      String?
+  greetingScript           String?
+  businessName             String?
+  voiceProfileId           String?
+  speakingStyle            String?
+  language                 String   @default("en")
+  supportedLanguages       String[] @default(["en"])
+  escalationPhrase         String?
+  officeHoursOverrideStart String?
+  officeHoursOverrideEnd   String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  aiEmployee AIEmployee @relation(fields: [aiEmployeeId], references: [id], onDelete: Cascade)
+}
+
+/// One turn of a live conversation (item 3/17). Structured, sequenced turn history — distinct
+/// from `VoiceCall.transcriptText` (a flattened human-readable log line) — so barge-in/interruption
+/// and turn order are queryable/testable state rather than only present in prose.
+model VoiceCallTurn {
+  id          String               @id @default(uuid()) @db.Uuid
+  callId      String               @db.Uuid
+  sequence    Int
+  speaker     VoiceCallTurnSpeaker
+  text        String
+  isFinal     Boolean              @default(true)
+  /// True when this turn (always an AI turn) was cut short by caller barge-in (item 3).
+  interrupted Boolean              @default(false)
+  startedAt   DateTime             @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime             @default(now())
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, sequence])
+}
+
+/// The live streaming/turn-taking session for one in-progress call (item 3/17) — one row per
+/// `VoiceCall`, created when the call is answered and closed when it ends. Represents the
+/// "streaming-session lifecycle" (item 19's test list) independently of real audio transport: it
+/// is driven by transcript deltas (from a real STT stream, or a test's simulated deltas) rather
+/// than raw audio frames, so its turn-taking/barge-in/silence-timeout logic is fully testable
+/// without a live media connection.
+model VoiceStreamingSession {
+  id                      String                      @id @default(uuid()) @db.Uuid
+  callId                  String                      @unique @db.Uuid
+  status                  VoiceStreamingSessionStatus @default(ACTIVE)
+  state                   VoiceConversationState      @default(LISTENING)
+  pendingTranscriptBuffer String?
+  turnSequence            Int                         @default(0)
+  silenceTimeoutSeconds   Int                         @default(8)
+  lastActivityAt          DateTime                    @default(now())
+  startedAt               DateTime                    @default(now())
+  endedAt                 DateTime?
+  disconnectReason        String?
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 22C — Live Media Bridge + Voice Runtime Enforcement
+// ---------------------------------------------------------------------------
+
+enum MediaStreamStatus {
+  PENDING
+  CONNECTED
+  CLOSED
+  EXPIRED
+  REJECTED
+}
+
+/// The authenticated, provider-verified real-time media connection for one call (item 1/2). A
+/// `streamToken` is issued server-side the moment a call is answered and handed to the telephony
+/// provider (never to the caller/client); whoever presents that exact token is the only party ever
+/// trusted to submit audio for the `callId`/`organisationId` this row resolves to — those two ids
+/// are NEVER accepted as caller-supplied input anywhere in `media-bridge.ts` (item 2's "never
+/// trust organisation/user IDs supplied by the audio client itself"). A partial unique index (see
+/// the migration) enforces at most one `PENDING`/`CONNECTED` row per `callId` at the database
+/// level, closing the race window a purely application-level check could not (item 10/11).
+model MediaStreamSession {
+  id               String            @id @default(uuid()) @db.Uuid
+  callId           String            @db.Uuid
+  organisationId   String            @db.Uuid
+  providerKey      String
+  streamToken      String            @unique
+  tokenExpiresAt   DateTime
+  status           MediaStreamStatus @default(PENDING)
+  connectedAt      DateTime?
+  lastFrameAt      DateTime?
+  closedAt         DateTime?
+  disconnectReason String?
+  frameCount       Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  call         VoiceCall    @relation(fields: [callId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([organisationId, status])
+  @@index([status, tokenExpiresAt])
 }

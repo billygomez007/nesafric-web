@@ -1,0 +1,18 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+
+export function MarketplaceListingForm({ professionalId }: { professionalId: string }) {
+  const router = useRouter(); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); const form = new FormData(event.currentTarget);
+    const purpose = String(form.get("purpose")); const price = String(form.get("priceMinor")); const photo = String(form.get("photoUrl")); const availableFrom = String(form.get("availableFrom"));
+    const common = { category: String(form.get("category")), title: String(form.get("title")), publicDescription: String(form.get("description")), currencyCode: "GHS", availableFrom, countryCode: "GH", city: String(form.get("city")), media: [{ type: "PHOTO", publicUrl: photo }], amenities: [] };
+    const body = { asset: { name: common.title, category: common.category, purpose, currencyCode: "GHS", priceMinor: price, countryCode: "GH", city: common.city, mediaUrls: [photo], amenities: [], availableFrom, authorityEvidenceReady: false, ...(form.get("developmentUnitId") ? { developmentUnitId: String(form.get("developmentUnitId")) } : {}) }, listing: { ...common, listingType: purpose, ...(purpose === "RENT" ? { rentAmountMinor: price, frequency: "MONTHLY" } : { askingAmountMinor: price }) }, listingAuthority: String(form.get("listingAuthority")) };
+    const response = await fetch(`/api/marketplace-professionals/${professionalId}/listings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const result = await response.json(); setBusy(false);
+    if (!response.ok) return setError(result.error?.message ?? "Unable to create listing."); router.push(`/pro/${professionalId}/listings`); router.refresh();
+  }
+  const input = "rounded-lg border border-slate-300 px-3 py-2";
+  return <form className="grid max-w-2xl gap-4" onSubmit={submit}><div><h1 className="text-2xl font-semibold">New standalone listing</h1><p className="mt-1 text-sm text-slate-600">Create marketplace inventory without adding a PropertyOS-managed property.</p></div>{error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-900">{error}</p>}<input className={input} name="title" placeholder="Property title" required /><textarea className={input} minLength={20} name="description" placeholder="Public description" required /><div className="grid gap-4 sm:grid-cols-2"><input className={input} name="category" placeholder="Category (e.g. apartment)" required /><select className={input} name="purpose"><option value="RENT">For rent</option><option value="SALE">For sale</option></select><input className={input} name="priceMinor" pattern="\d+" placeholder="Price in minor units" required /><input className={input} name="availableFrom" type="date" required /><input className={input} name="city" placeholder="City" required /><input className={input} name="photoUrl" placeholder="Public photo URL" type="url" required /><select className={input} name="listingAuthority"><option value="BROKERAGE_AUTHORIZED">Brokerage authorised</option><option value="MANAGING_AGENT">Managing agent</option><option value="OWNER_SELF">Owner self</option><option value="DEVELOPER">Developer</option><option value="THIRD_PARTY_AUTHORIZED">Third-party authorised</option></select><input className={input} name="developmentUnitId" placeholder="Development unit ID (optional)" /></div><button className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:opacity-50" disabled={busy}>{busy ? "Creating…" : "Create draft listing"}</button></form>;
+}

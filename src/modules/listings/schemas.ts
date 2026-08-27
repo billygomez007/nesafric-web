@@ -42,7 +42,8 @@ export const listingMediaSchema = z.object({
 });
 
 const listingFields = {
-  propertyId: id,
+  propertyId: id.nullable().optional(),
+  marketplaceAssetId: id.nullable().optional(),
   unitId: id.nullable().optional(),
   listingType: z.enum(["RENT", "SALE"]),
   category: z.string().trim().min(1).max(100),
@@ -74,10 +75,20 @@ const listingFields = {
   privateNotes: optionalText(10_000),
   amenities: z.array(listingAmenitySchema).max(200).default([]),
   media: z.array(listingMediaSchema).max(100).default([]),
+  /// Phase 21A item 5 — optional marketplace-professional attribution. Every existing caller
+  /// that omits these behaves byte-identical to before this phase.
+  listingAuthority: z.enum(["OWNER_SELF", "PROPERTY_MANAGER", "MANAGING_AGENT", "BROKERAGE_AUTHORIZED", "DEVELOPER", "THIRD_PARTY_AUTHORIZED"]).nullable().optional(),
+  marketplaceProfessionalId: id.nullable().optional(),
+  listingRepresentativeUserId: id.nullable().optional(),
+  developmentId: id.nullable().optional(),
+  developmentUnitId: id.nullable().optional(),
 };
 
 function validateListing(
   listing: {
+    propertyId?: string | null;
+    marketplaceAssetId?: string | null;
+    unitId?: string | null;
     listingType?: "RENT" | "SALE";
     askingAmountMinor?: string | null;
     rentAmountMinor?: string | null;
@@ -93,6 +104,12 @@ function validateListing(
   },
   context: z.RefinementCtx,
 ) {
+  if (Boolean(listing.propertyId) === Boolean(listing.marketplaceAssetId)) {
+    context.addIssue({ code: "custom", path: ["propertyId"], message: "Exactly one managed property or marketplace asset source is required." });
+  }
+  if (listing.unitId && !listing.propertyId) {
+    context.addIssue({ code: "custom", path: ["unitId"], message: "A PropertyOS unit requires a managed property source." });
+  }
   if (listing.listingType === "RENT") {
     if (!listing.rentAmountMinor) context.addIssue({ code: "custom", path: ["rentAmountMinor"], message: "Rent amount is required for rental listings." });
     if (!listing.frequency) context.addIssue({ code: "custom", path: ["frequency"], message: "Frequency is required for rental listings." });
@@ -122,6 +139,45 @@ function validateListing(
 }
 
 export const createListingSchema = z.object(listingFields).strict().superRefine(validateListing);
+
+export const createMarketplaceAssetSchema = z.object({
+  developmentUnitId: id.nullable().optional(),
+  name: z.string().trim().min(3).max(200),
+  category: z.string().trim().min(1).max(100),
+  subtype: optionalText(100),
+  purpose: z.enum(["RENT", "SALE"]),
+  bedrooms: z.number().int().min(0).max(100).nullable().optional(),
+  bathrooms: z.number().min(0).max(100).multipleOf(0.5).nullable().optional(),
+  sizeSqm: z.number().positive().max(100_000_000).nullable().optional(),
+  currencyCode: currency,
+  priceMinor: minorUnits,
+  countryCode: country,
+  region: optionalText(150), city: optionalText(150), district: optionalText(150), locality: optionalText(150),
+  publicLocationLabel: optionalText(250),
+  mapLatitude: z.number().min(-90).max(90).nullable().optional(),
+  mapLongitude: z.number().min(-180).max(180).nullable().optional(),
+  amenities: z.array(z.string().trim().min(1).max(120)).max(200).default([]),
+  furnishing: optionalText(100),
+  mediaUrls: z.array(z.string().url().max(2_000)).max(100).default([]),
+  availableFrom: z.coerce.date(),
+  authorityEvidenceReady: z.boolean().default(false),
+}).strict().superRefine((asset, context) => {
+  if ((asset.mapLatitude == null) !== (asset.mapLongitude == null)) context.addIssue({ code: "custom", path: ["mapLatitude"], message: "Map latitude and longitude must be provided together." });
+});
+
+export const createMarketplaceNativeListingSchema = z.object({
+  asset: createMarketplaceAssetSchema,
+  listing: z.object({ ...listingFields, propertyId: z.never().optional(), marketplaceAssetId: z.never().optional(), unitId: z.never().optional(), marketplaceProfessionalId: z.never().optional(), developmentId: z.never().optional(), developmentUnitId: z.never().optional() }).strict(),
+  listingRepresentativeUserId: id.nullable().optional(),
+  listingAuthority: z.enum(["OWNER_SELF", "PROPERTY_MANAGER", "MANAGING_AGENT", "BROKERAGE_AUTHORIZED", "DEVELOPER", "THIRD_PARTY_AUTHORIZED"]),
+}).strict();
+
+export const updateListingAttributionSchema = z.object({
+  listingRepresentativeUserId: id.nullable().optional(),
+  listingAuthority: z.enum(["OWNER_SELF", "PROPERTY_MANAGER", "MANAGING_AGENT", "BROKERAGE_AUTHORIZED", "DEVELOPER", "THIRD_PARTY_AUTHORIZED"]).optional(),
+  marketplaceProfessionalId: id.optional(),
+  reason: z.string().trim().min(3).max(2_000),
+}).strict().refine((value) => value.listingRepresentativeUserId !== undefined || value.listingAuthority !== undefined || value.marketplaceProfessionalId !== undefined, "An attribution change is required.");
 
 const updateListingFields = {
   ...listingFields,

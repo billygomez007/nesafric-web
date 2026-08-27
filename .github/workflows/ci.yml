@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same branch/PR to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Local-only, non-secret credentials for the ephemeral CI Postgres service container.
+  # Never used against any real database; safe to keep in plain text.
+  DATABASE_URL: postgresql://propertyos:propertyos@localhost:5432/propertyos?schema=public
+  SESSION_SECRET: ci-only-session-secret-not-a-real-secret-32chars
+
+jobs:
+  build-and-test:
+    name: Install, migrate, typecheck, lint, test, build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: propertyos
+          POSTGRES_PASSWORD: propertyos
+          POSTGRES_DB: propertyos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U propertyos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Seed foundational reference data
+        run: npm run db:seed
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Production build
+        run: npm run build

@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { getDashboard } from "@/modules/assets/dashboard";
-import { createProperty, getProperty } from "@/modules/assets/service";
+import { createPortfolio, createProperty, getProperty, listPortfolios, listProperties } from "@/modules/assets/service";
 import { registerUser } from "@/modules/identity/service";
 import { getLease, updateLease } from "@/modules/leases/service";
 import { createLease } from "./helpers/lease";
@@ -48,6 +48,7 @@ async function cleanDatabase() {
   await db.unit.deleteMany();
   await db.building.deleteMany();
   await db.property.deleteMany();
+  await db.portfolio.deleteMany();
   await db.subscriptionInvoice.deleteMany();
   await db.subscriptionStatusHistory.deleteMany();
   await db.organisationEntitlementOverride.deleteMany();
@@ -117,6 +118,31 @@ describe("PostgreSQL Phase 4C detail UI read models", () => {
     const propertyA = await getProperty(fixtureA.owner.id, fixtureA.organisation.id, fixtureA.property.id);
     expect(propertyA.units.map(({ id }) => id).sort()).toEqual(fixtureA.units.map(({ id }) => id).sort());
     await expect(getProperty(fixtureA.owner.id, fixtureA.organisation.id, fixtureB.property.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const propertiesA = await listProperties(fixtureA.owner.id, fixtureA.organisation.id);
+    expect(propertiesA.map(({ id }) => id)).toEqual([fixtureA.property.id]);
+    expect(propertiesA[0]._count.units).toBe(2);
+    expect(propertiesA).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: fixtureB.property.id })]));
+
+    expect(await listProperties(fixtureA.owner.id, fixtureA.organisation.id, { search: "does-not-exist" })).toEqual([]);
+    expect(await listProperties(fixtureA.owner.id, fixtureA.organisation.id, { status: "ARCHIVED" })).toEqual([]);
+    expect((await listProperties(fixtureA.owner.id, fixtureA.organisation.id, { search: fixtureA.property.referenceNumber })).map(({ id }) => id)).toEqual([fixtureA.property.id]);
+
+    const portfolio = await createPortfolio(fixtureA.owner.id, fixtureA.organisation.id, { name: "Flagship Portfolio" });
+    await createProperty(fixtureA.owner.id, fixtureA.organisation.id, {
+      name: "Portfolio Residence",
+      referenceNumber: `${fixtureA.property.referenceNumber}-2`,
+      category: "Residential",
+      countryCode: "GH",
+      currencyCode: "GHS",
+      portfolioId: portfolio.id,
+      units: [],
+    });
+    const scopedProperties = await listProperties(fixtureA.owner.id, fixtureA.organisation.id, { portfolioId: portfolio.id });
+    expect(scopedProperties.map(({ portfolio }) => portfolio?.id)).toEqual([portfolio.id]);
+
+    const portfoliosA = await listPortfolios(fixtureA.owner.id, fixtureA.organisation.id);
+    expect(portfoliosA.map(({ id }) => id)).toEqual([portfolio.id]);
 
     const tenantsA = await listTenants(fixtureA.owner.id, fixtureA.organisation.id);
     expect(tenantsA.map(({ id }) => id)).toEqual([fixtureA.tenant.relationship.id]);

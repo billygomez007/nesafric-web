@@ -15,6 +15,14 @@ export const PLATFORM_PERMISSIONS = {
   analyticsRead: "analytics.read",
   auditRead: "platform_audit.read",
   jobsManage: "jobs.manage",
+  /// Phase 21A: reviewing (verifying/rejecting/suspending) a Marketplace professional profile's
+  /// public trust status. Deliberately its own permission rather than reusing `entitlementsOverride`
+  /// — a distinct platform capability, not a commercial-entitlement one.
+  marketplaceVerify: "marketplace.verify",
+  /// Phase 21B (item 21): reviewing/scheduling/pausing NesAfric campaign & promotion placements
+  /// (homepage announcements and marketplace banners). Its own permission — distinct from
+  /// `marketplaceVerify` (trust/verification) and `plansManage` (commercial plans).
+  campaignReview: "campaign.review",
 } as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
@@ -24,8 +32,8 @@ const ALL_PERMISSIONS = Object.values(PLATFORM_PERMISSIONS);
 
 const ROLE_PERMISSIONS: Record<PlatformRoleValue, readonly PlatformPermission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
-  BILLING_ADMIN: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.orgsManage, PLATFORM_PERMISSIONS.plansManage, PLATFORM_PERMISSIONS.entitlementsOverride, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead],
-  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead],
+  BILLING_ADMIN: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.orgsManage, PLATFORM_PERMISSIONS.plansManage, PLATFORM_PERMISSIONS.entitlementsOverride, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.campaignReview],
+  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify],
   READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead],
 };
 

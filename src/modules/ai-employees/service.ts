@@ -195,11 +195,11 @@ async function requireEmployee(userId: string, organisationId: string, employeeI
 
 async function employeePropertyIds(employee: Awaited<ReturnType<typeof requireEmployee>>) {
   if (employee.scope === "ORGANISATION") {
-    return (await db.property.findMany({ where: { organisationId: employee.organisationId, archivedAt: null }, select: { id: true } })).map(({ id }) => id);
+    return (await db.property.findMany({ where: { organisationId: employee.organisationId!, archivedAt: null }, select: { id: true } })).map(({ id }) => id);
   }
   const direct = employee.properties.map(({ propertyId }) => propertyId);
   const portfolioIds = employee.portfolios.map(({ portfolioId }) => portfolioId);
-  const portfolioProperties = await db.property.findMany({ where: { organisationId: employee.organisationId, portfolioId: { in: portfolioIds }, archivedAt: null }, select: { id: true } });
+  const portfolioProperties = await db.property.findMany({ where: { organisationId: employee.organisationId!, portfolioId: { in: portfolioIds }, archivedAt: null }, select: { id: true } });
   return [...new Set([...direct, ...portfolioProperties.map(({ id }) => id)])];
 }
 
@@ -287,7 +287,7 @@ export async function executeEmployeeAction(userId: string, organisationId: stri
   const metadata = getAIActionPolicyMetadata(data.actionKey);
   if (!metadata) throw new AppError("AI_ACTION_NOT_ALLOWED", 400, "The action is not supported.");
   const propertyId = await actionPropertyId(organisationId, data.arguments);
-  await enforceScope(employee, propertyId);
+  await enforceScope(employee, propertyId ?? undefined);
   const policy = employee.autonomyPolicies.map(({ policy }) => policy)
     .filter(({ enabled, actionKey }) => enabled && actionKey === data.actionKey)
     .find(({ propertyId: policyPropertyId }) => !policyPropertyId || policyPropertyId === propertyId);
@@ -345,7 +345,7 @@ export async function executeEmployeeAction(userId: string, organisationId: stri
     if (recent >= policy.maxExecutions) throw new AppError("AI_AUTOMATION_FREQUENCY_BLOCKED", 409, "The configured autonomous-action frequency limit has been reached.");
   }
   if (!AUTO_EXECUTE_ACTION_ALLOWLIST.has(data.actionKey)) throw new AppError("AI_ACTION_NOT_AUTO_EXECUTE_ELIGIBLE", 403, "Platform policy does not allow this action to auto-execute.");
-  if (!(await deterministicOwner(employee, propertyId, data.actionKey))) throw new AppError("AI_EMPLOYEE_ASSIGNMENT_CONFLICT", 409, "Another overlapping AI employee owns this operational action.");
+  if (!(await deterministicOwner(employee, propertyId ?? undefined, data.actionKey))) throw new AppError("AI_EMPLOYEE_ASSIGNMENT_CONFLICT", 409, "Another overlapping AI employee owns this operational action.");
   const activity = await claimEmployeeActivity({ ...activityInput, type: "AUTO_EXECUTION" });
   try {
     const execution = await executeAIActionThroughDomainService(userId, organisationId, data.actionKey, data.arguments);
@@ -365,7 +365,7 @@ export async function executeEmployeeReadTool(userId: string, organisationId: st
   const employee = await requireEmployee(userId, organisationId, employeeId, true);
   if (!employee.toolPermissions.some((permission) => permission.toolKey === toolKey)) throw new AppError("AI_EMPLOYEE_TOOL_DENIED", 403, "The AI employee is not permitted to use this tool.");
   const propertyId = await actionPropertyId(organisationId, input as Record<string, unknown>);
-  await enforceScope(employee, propertyId);
+  await enforceScope(employee, propertyId ?? undefined);
   if (employee.scope !== "ORGANISATION" && !propertyId) throw new AppError("AI_EMPLOYEE_SCOPE_REQUIRED", 422, "This tool cannot safely operate without a property identifier for a scoped employee.");
   return executeAIReadThroughTool(userId, organisationId, toolKey, input);
 }

@@ -372,12 +372,12 @@ async function detectConditions(organisationId: string, now: Date): Promise<Cond
   ) => conditions.push({ key, conditionKey, severity, reason, affectedEntities: [entity], propertyId, ageMinutes: age(date), metadata: {} });
   emergencyMaintenance.forEach((item) => recommendation(`emergency-maintenance:${item.id}`, "maintenance.emergency_unresolved", "CRITICAL", "Emergency maintenance remains unresolved.", { type: "maintenance_request", id: item.id }, item.propertyId, item.createdAt));
   stalledWorkOrders.forEach((item) => recommendation(`stalled-work-order:${item.id}`, "work_order.stalled", "HIGH", "A work order has had no activity for more than 48 hours.", { type: "work_order", id: item.id }, item.propertyId, item.updatedAt));
-  applications.forEach((item) => recommendation(`application-review:${item.id}`, "application.awaiting_review", "MEDIUM", "A rental application is awaiting review.", { type: "application", id: item.id }, item.listing.propertyId, item.lastActivityAt));
-  viewings.forEach((item) => recommendation(`viewing-unconfirmed:${item.id}`, "viewing.unconfirmed", "MEDIUM", "A viewing request remains unconfirmed.", { type: "viewing", id: item.id }, item.listing.propertyId, item.createdAt));
+  applications.forEach((item) => recommendation(`application-review:${item.id}`, "application.awaiting_review", "MEDIUM", "A rental application is awaiting review.", { type: "application", id: item.id }, item.listing.propertyId ?? undefined, item.lastActivityAt));
+  viewings.forEach((item) => recommendation(`viewing-unconfirmed:${item.id}`, "viewing.unconfirmed", "MEDIUM", "A viewing request remains unconfirmed.", { type: "viewing", id: item.id }, item.listing.propertyId ?? undefined, item.createdAt));
   moveIns.forEach((item) => recommendation(`move-in-incomplete:${item.id}`, "move_in.incomplete", "HIGH", "A scheduled move-in is incomplete.", { type: "lease", id: item.leaseId }, item.lease.propertyId, item.scheduledDate ?? now));
   moveOuts.forEach((item) => recommendation(`move-out-pending:${item.id}`, "move_out.pending", "HIGH", "A move-out is awaiting settlement or closure.", { type: "lease", id: item.leaseId }, item.lease.propertyId, item.updatedAt));
   vacantUnits.forEach((item) => recommendation(`vacancy-unmarketed:${item.id}`, "vacancy.not_marketed", "MEDIUM", "An available unit has no published or reserved listing.", { type: "unit", id: item.id }, item.propertyId, item.updatedAt));
-  staleLeads.forEach((item) => recommendation(`lead-stale:${item.id}`, "lead.no_follow_up", "MEDIUM", "A marketplace lead has no activity for seven days.", { type: "lead", id: item.id }, item.listing.propertyId, item.lastActivityAt));
+  staleLeads.forEach((item) => recommendation(`lead-stale:${item.id}`, "lead.no_follow_up", "MEDIUM", "A marketplace lead has no activity for seven days.", { type: "lead", id: item.id }, item.listing.propertyId ?? undefined, item.lastActivityAt));
   return conditions;
 }
 

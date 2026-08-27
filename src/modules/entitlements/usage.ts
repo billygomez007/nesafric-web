@@ -78,6 +78,27 @@ async function countIntegrationOperations(organisationId: string, period: UsageP
   });
 }
 
+/** Phase 22B item 14 — voice minutes, reusing the exact same "aggregate over the authoritative
+ * table" discipline as every other flow metric here; `VoiceCall.durationSeconds` is only ever set
+ * once a call genuinely completes, so this can never over-count a call still in progress. */
+async function sumVoiceMinutes(organisationId: string, direction: "INBOUND" | "OUTBOUND", period: UsagePeriod) {
+  const result = await db.voiceCall.aggregate({
+    where: { organisationId, direction, durationSeconds: { not: null }, createdAt: { gte: period.start, lt: period.end } },
+    _sum: { durationSeconds: true },
+  });
+  return Math.ceil((result._sum.durationSeconds ?? 0) / 60);
+}
+
+async function countVoiceCallVolume(organisationId: string, period: UsagePeriod) {
+  return db.voiceCall.count({ where: { organisationId, createdAt: { gte: period.start, lt: period.end } } });
+}
+
+/** Phase 22C item 11 — a "capacity" metric (like `propertiesMax`), not billing-period scoped: it
+ * is the number of calls genuinely in progress *right now*, always live. */
+async function countConcurrentVoiceCalls(organisationId: string) {
+  return db.voiceCall.count({ where: { organisationId, status: { in: ["QUEUED", "RINGING", "IN_PROGRESS"] } } });
+}
+
 /** Resolves current usage for a single feature key. Returns `null` for boolean features and any
  * feature key this module does not know how to measure (there is nothing to compare a limit to). */
 export async function getCurrentUsage(organisationId: string, featureKey: string, period: UsagePeriod): Promise<number | null> {
@@ -93,6 +114,10 @@ export async function getCurrentUsage(organisationId: string, featureKey: string
     case ENTITLEMENTS.documentsMonthlyMax.key: return countGeneratedDocuments(organisationId, period);
     case ENTITLEMENTS.messagesMonthlyMax.key: return countOutboundMessages(organisationId, period);
     case ENTITLEMENTS.integrationOperationsMonthlyMax.key: return countIntegrationOperations(organisationId, period);
+    case ENTITLEMENTS.voiceCallVolumeMax.key: return countVoiceCallVolume(organisationId, period);
+    case ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key: return sumVoiceMinutes(organisationId, "INBOUND", period);
+    case ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key: return sumVoiceMinutes(organisationId, "OUTBOUND", period);
+    case ENTITLEMENTS.voiceConcurrentCallsMax.key: return countConcurrentVoiceCalls(organisationId);
     default: return null;
   }
 }

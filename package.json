@@ -15,7 +15,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "platform-admin:bootstrap": "tsx scripts/bootstrap-platform-admin.ts"
+    "platform-admin:bootstrap": "tsx scripts/bootstrap-platform-admin.ts",
+    "worker": "tsx scripts/run-worker.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1118.0",

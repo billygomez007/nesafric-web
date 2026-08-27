@@ -6,7 +6,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * (HMAC + expiry) with the same shape as an S3 presigned URL, rather than a stub string.
  */
 function secret() {
-  return process.env.STORAGE_LOCAL_SIGNING_SECRET?.trim() || process.env.SESSION_SECRET?.trim() || "propertyos-local-storage-signing-secret";
+  const configured = process.env.STORAGE_LOCAL_SIGNING_SECRET?.trim() || process.env.SESSION_SECRET?.trim();
+  if (configured) return configured;
+  // A hardcoded fallback here would make locally-stored signed URLs forgeable using a secret
+  // published in this very repository. Only acceptable outside production, where a fixed
+  // deterministic secret keeps local/dev/test signed URLs reproducible without any env setup.
+  if (process.env.NODE_ENV === "production") throw new Error("STORAGE_LOCAL_SIGNING_SECRET or SESSION_SECRET must be configured in production.");
+  return "propertyos-local-storage-signing-secret";
 }
 
 function safeEqual(expected: string, actual: string) {

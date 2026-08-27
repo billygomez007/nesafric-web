@@ -89,7 +89,7 @@ export async function geocodeProperty(userId: string, organisationId: string, pr
 export async function applyPropertyLocationToListing(userId: string, organisationId: string, listingId: string) {
   await requirePermission(userId, organisationId, PERMISSIONS.listingManage);
   const listing = await db.listing.findFirst({ where: { id: listingId, organisationId }, include: { property: true } });
-  if (!listing) throw notFound();
+  if (!listing || !listing.property || !listing.propertyId) throw notFound();
   if (listing.property.latitude == null || listing.property.longitude == null) {
     throw new AppError("PROPERTY_NOT_GEOCODED", 409, "This property has no geocoded coordinates yet. Geocode the property first.");
   }

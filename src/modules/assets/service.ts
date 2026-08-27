@@ -1,4 +1,5 @@
 import { db } from "@/platform/database/client";
+import { Prisma } from "@/platform/database/generated/client";
 import { AppError, notFound } from "@/platform/errors";
 import { requirePermission, PERMISSIONS } from "@/platform/authorization/permissions";
 import { recordAudit } from "@/modules/audit/service";
@@ -13,6 +14,32 @@ export async function createPortfolio(userId: string, organisationId: string, in
   const portfolio = await db.portfolio.create({ data: { ...data, organisationId } });
   await recordAudit({ organisationId, actorUserId: userId, action: "portfolio.created", entityType: "portfolio", entityId: portfolio.id });
   return portfolio;
+}
+
+export async function listPortfolios(userId: string, organisationId: string) {
+  await requirePermission(userId, organisationId, PERMISSIONS.propertyRead);
+  return db.portfolio.findMany({ where: { organisationId, archivedAt: null }, orderBy: { name: "asc" } });
+}
+
+export async function listProperties(userId: string, organisationId: string, filters?: { status?: string; portfolioId?: string; category?: string; search?: string }) {
+  await requirePermission(userId, organisationId, PERMISSIONS.propertyRead);
+  const where: Prisma.PropertyWhereInput = { organisationId, archivedAt: null };
+  if (filters?.status) where.status = filters.status as Prisma.PropertyWhereInput["status"];
+  if (filters?.portfolioId) where.portfolioId = filters.portfolioId;
+  if (filters?.category) where.category = filters.category as Prisma.PropertyWhereInput["category"];
+  if (filters?.search) {
+    const search = filters.search.trim();
+    if (search) where.OR = [{ name: { contains: search, mode: "insensitive" } }, { referenceNumber: { contains: search, mode: "insensitive" } }, { city: { contains: search, mode: "insensitive" } }];
+  }
+  return db.property.findMany({
+    where,
+    select: {
+      id: true, name: true, referenceNumber: true, category: true, status: true, city: true, geocodeStatus: true,
+      portfolio: { select: { id: true, name: true } },
+      _count: { select: { units: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function createProperty(userId: string, organisationId: string, input: unknown) {
@@ -47,7 +74,7 @@ export async function createProperty(userId: string, organisationId: string, inp
 
 export async function getProperty(userId: string, organisationId: string, propertyId: string) {
   await requirePermission(userId, organisationId, PERMISSIONS.propertyRead);
-  const property = await db.property.findFirst({ where: activePropertyScope(organisationId, propertyId), include: { buildings: { where: { archivedAt: null }, include: { units: { where: { archivedAt: null } } } }, units: { where: { archivedAt: null, buildingId: null } } } });
+  const property = await db.property.findFirst({ where: activePropertyScope(organisationId, propertyId), include: { portfolio: { select: { id: true, name: true } }, buildings: { where: { archivedAt: null }, include: { units: { where: { archivedAt: null } } } }, units: { where: { archivedAt: null, buildingId: null } } } });
   if (!property) throw notFound();
   return property;
 }

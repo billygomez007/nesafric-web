@@ -28,6 +28,13 @@ export async function getOptionalUser() {
   return session?.user ?? null;
 }
 
+/** Invalidates the caller's server-side session record (not just the cookie), so a captured
+ * token can't remain usable after logout. Safe to call with no active session. */
+export async function destroySession() {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (token) await db.session.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+}
+
 export async function requireUser() {
   const user = await getOptionalUser();
   if (!user) throw unauthenticated();

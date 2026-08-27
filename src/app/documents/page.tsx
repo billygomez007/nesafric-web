@@ -1,9 +1,10 @@
-import Link from "next/link";
+import { AppShell } from "@/components/app-shell";
 import { DocumentCenter } from "@/components/document-center";
 
 export default function DocumentCenterPage() {
-  return <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-    <div className="mb-6"><Link className="text-sm font-semibold text-emerald-700" href="/dashboard">← Dashboard</Link></div>
-    <DocumentCenter />
-  </main>;
+  return (
+    <AppShell description="Uploaded files and generated documents across every domain." eyebrow="DOCUMENTS" title="Document Center">
+      <DocumentCenter />
+    </AppShell>
+  );
 }

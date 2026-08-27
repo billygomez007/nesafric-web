@@ -554,6 +554,7 @@ export async function createDraftLeaseFromApplication(userId: string, organisati
     if (application.listing.listingType !== "RENT" || !application.listing.rentAmountMinor || !application.listing.frequency) {
       throw new AppError("LISTING_RENT_TERMS_REQUIRED", 409, "The rental listing does not have complete default rent terms.");
     }
+    if (!application.listing.propertyId) throw new AppError("PROPERTYOS_LISTING_REQUIRED", 422, "Marketplace-native listings cannot be converted into PropertyOS leases.");
     const property = await tx.property.findFirst({
       where: { id: application.listing.propertyId, organisationId, archivedAt: null, status: "ACTIVE" },
       select: { id: true },

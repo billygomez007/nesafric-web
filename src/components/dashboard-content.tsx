@@ -9,6 +9,7 @@ type MaintenanceMetrics = { open: number; byStatus: Record<string, number>; open
 type OnboardingStep = { key: string; label: string; done: boolean };
 type Onboarding = { steps: OnboardingStep[]; optionalSteps: OnboardingStep[]; complete: boolean };
 type BillingSummary = { status: string; cancelAtPeriodEnd: boolean; features: Array<{ label: string; reached: boolean; approaching: boolean }> };
+type Opportunity = { key: string; tone: "info" | "upgrade"; message: string; href: string };
 
 const READ_ONLY_STATUSES = new Set(["SUSPENDED", "CANCELLED"]);
 
@@ -18,6 +19,7 @@ export function DashboardContent() {
   const [maintenance, setMaintenance] = useState<MaintenanceMetrics | null>(null);
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
   const [billing, setBilling] = useState<BillingSummary | null>(null);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
     const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
@@ -26,6 +28,7 @@ export function DashboardContent() {
     fetch("/api/maintenance/dashboard", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setMaintenance(await response.json()); });
     fetch("/api/organisations/" + organisationId + "/onboarding", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setOnboarding(await response.json()); });
     fetch("/api/organisations/" + organisationId + "/billing", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setBilling(await response.json()); });
+    fetch("/api/organisations/" + organisationId + "/dashboard-opportunities", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setOpportunities((await response.json()).opportunities); });
   }, []);
   if (error) return <p className="mt-8 rounded border border-amber-200 bg-amber-50 p-4 text-amber-900">{error}</p>;
   if (!data) return <p className="mt-8 text-slate-600">Loading organisation dashboard...</p>;
@@ -37,6 +40,7 @@ export function DashboardContent() {
     {billing && billing.cancelAtPeriodEnd && !READ_ONLY_STATUSES.has(billing.status) && <p className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">This subscription is scheduled to cancel at the end of the current billing period. <Link className="font-semibold underline" href="/settings/billing">Manage billing →</Link></p>}
     {reachedFeatures.length > 0 && <p className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">Plan limit reached for: {reachedFeatures.map((feature) => feature.label).join(", ")}. <Link className="font-semibold underline" href="/settings/billing">Upgrade →</Link></p>}
     {reachedFeatures.length === 0 && approachingFeatures.length > 0 && <p className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Approaching plan limit for: {approachingFeatures.map((feature) => feature.label).join(", ")}. <Link className="font-semibold underline" href="/settings/billing">View usage →</Link></p>}
+    {opportunities.length > 0 && <ul className="mt-6 grid gap-1.5">{opportunities.map((opportunity) => <li key={opportunity.key}><Link className={`block rounded-lg border px-4 py-2 text-sm ${opportunity.tone === "upgrade" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"}`} href={opportunity.href}>{opportunity.message}</Link></li>)}</ul>}
     {onboarding && !onboarding.complete && <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="font-semibold">Get set up</h2>
       <ul className="mt-3 grid gap-2 text-sm">

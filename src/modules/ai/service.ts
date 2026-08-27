@@ -283,6 +283,52 @@ async function listingSummary({ organisationId }: ToolContext) {
   return { byStatus: Object.fromEntries(rows.map((row) => [row.status, row._count._all])) };
 }
 
+/**
+ * Phase 21 item 15 — the landlord/property-manager AI Receptionist becomes listing-aware. Given a
+ * free-text query, identifies the matching published listing belonging to this organisation and
+ * answers only from its current, approved public fields — never private management data (owner
+ * identity, internal notes, tenant details). Availability always reflects the listing's live
+ * status at query time, exactly like the Marketplace AI Sales Receptionist's equivalent tool.
+ */
+async function listingAvailabilityCheck({ organisationId }: ToolContext, input: Record<string, unknown>) {
+  const query = typeof input.query === "string" ? input.query : "";
+  const listingId = typeof input.listingId === "string" ? input.listingId : undefined;
+  const listing = await db.listing.findFirst({
+    where: {
+      organisationId, status: "PUBLISHED",
+      ...(listingId ? { id: listingId } : {
+        OR: [
+          { title: { contains: query, mode: "insensitive" } },
+          { city: { contains: query, mode: "insensitive" } },
+          { district: { contains: query, mode: "insensitive" } },
+        ],
+      }),
+    },
+    select: {
+      id: true, title: true, listingType: true, publicDescription: true, rentAmountMinor: true,
+      askingAmountMinor: true, currencyCode: true, frequency: true, bedrooms: true, bathrooms: true,
+      city: true, region: true, availableFrom: true, enquiryEnabled: true,
+      showContactEmail: true, contactEmail: true, showContactPhone: true, contactPhone: true,
+      amenities: { select: { label: true } },
+    },
+  });
+  if (!listing) return { found: false };
+  return {
+    found: true,
+    available: listing.enquiryEnabled,
+    listing: {
+      id: listing.id, title: listing.title, description: listing.publicDescription,
+      price: listing.listingType === "RENT" ? listing.rentAmountMinor?.toString() : listing.askingAmountMinor?.toString(),
+      currencyCode: listing.currencyCode, frequency: listing.frequency,
+      bedrooms: listing.bedrooms, bathrooms: listing.bathrooms?.toString() ?? null,
+      location: { city: listing.city, region: listing.region },
+      availableFrom: listing.availableFrom,
+      amenities: listing.amenities.map((amenity) => amenity.label),
+      contact: { email: listing.showContactEmail ? listing.contactEmail : null, phone: listing.showContactPhone ? listing.contactPhone : null },
+    },
+  };
+}
+
 async function staleLeadSummary({ organisationId }: ToolContext) {
   const cutoff = new Date(Date.now() - 7 * 86_400_000);
   const leads = await db.marketplaceLead.findMany({
@@ -459,6 +505,14 @@ const tools: Record<string, ToolDefinition> = Object.fromEntries([
   readTool("providers.assignments", "List active artisan and provider assignments.", PERMISSIONS.providerRead, providerAssignmentSummary),
   readTool("providers.quotations", "List open quotation requests and recorded quote totals.", PERMISSIONS.providerRead, quotationSummary),
   readTool("listings.summary", "Summarise marketplace listings by lifecycle status.", PERMISSIONS.listingRead, listingSummary),
+  readTool(
+    "listings.availability_check",
+    "Identify a specific published listing by id or free-text query and answer only from its current approved public fields (item 15).",
+    PERMISSIONS.listingRead,
+    listingAvailabilityCheck,
+    z.object({ listingId: z.string().uuid().optional(), query: z.string().trim().min(1).max(500).optional() }).strict(),
+    { type: "object", properties: { listingId: { type: "string" }, query: { type: "string" } }, additionalProperties: false },
+  ),
   readTool("leads.stale", "List active marketplace leads with no activity for seven days.", PERMISSIONS.listingLeadRead, staleLeadSummary),
   readTool("applications.summary", "List active rental applications using non-sensitive operational fields.", PERMISSIONS.applicationRead, applicationSummary),
   readTool("viewings.upcoming", "List requested and upcoming confirmed property viewings.", PERMISSIONS.listingViewingRead, upcomingViewingSummary),

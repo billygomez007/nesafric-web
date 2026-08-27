@@ -4,6 +4,7 @@ import { InAppChannelAdapter } from "./webchat";
 import { EmailChannelAdapter } from "./email";
 import { WhatsAppChannelAdapter } from "./whatsapp";
 import { SmsChannelAdapter } from "./sms";
+import { VoiceChannelAdapter } from "./voice";
 
 export const defaultChannelAdapters: Record<ConversationChannel, ChannelAdapter> = {
   WEB_CHAT: new InAppChannelAdapter("WEB_CHAT"),
@@ -11,6 +12,7 @@ export const defaultChannelAdapters: Record<ConversationChannel, ChannelAdapter>
   EMAIL: new EmailChannelAdapter(),
   WHATSAPP: new WhatsAppChannelAdapter(),
   SMS: new SmsChannelAdapter(),
+  VOICE: new VoiceChannelAdapter(),
 };
 
 export type ChannelAdapters = Record<ConversationChannel, ChannelAdapter>;
@@ -19,5 +21,5 @@ export function getChannelAdapter(channel: ConversationChannel, adapters: Channe
   return adapters[channel];
 }
 
-export { InAppChannelAdapter, EmailChannelAdapter, WhatsAppChannelAdapter, SmsChannelAdapter };
+export { InAppChannelAdapter, EmailChannelAdapter, WhatsAppChannelAdapter, SmsChannelAdapter, VoiceChannelAdapter };
 export * from "./types";

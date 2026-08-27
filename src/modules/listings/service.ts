@@ -13,8 +13,12 @@ import { isRealGeocodingProviderConfigured } from "@/modules/geocoding/service";
 import { upsertCalendarEvent } from "@/modules/calendar/service";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
+import { requireMarketplaceMember, requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
+import { assertMarketplaceOperational } from "@/modules/marketplace-professionals/entitlements";
+import { MARKETPLACE_ENTITLEMENTS } from "@/modules/marketplace-professionals/catalog";
 import {
   createListingSchema,
+  createMarketplaceNativeListingSchema,
   createMarketplaceLeadSchema,
   createViewingRequestSchema,
   leadIdSchema,
@@ -25,6 +29,7 @@ import {
   marketplaceLeadListSchema,
   publicListingSearchSchema,
   updateListingSchema,
+  updateListingAttributionSchema,
   updateMarketplaceLeadSchema,
   updateViewingRequestSchema,
   viewingRequestIdSchema,
@@ -33,6 +38,12 @@ import {
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
+
+async function requirePropertyOsOrMarketplaceAccess(userId: string, organisationId: string, permission: string, minRole: "AGENT" | "ADMIN" = "AGENT") {
+  const professional = await db.marketplaceProfessional.findUnique({ where: { backingOrganisationId: organisationId }, select: { id: true } });
+  if (professional) return requireMarketplaceRole(userId, professional.id, minRole);
+  return requirePermission(userId, organisationId, permission);
+}
 
 export const PUBLIC_LISTING_RATE_LIMIT = {
   policy: "public-listing-marketplace",
@@ -52,6 +63,7 @@ export const PUBLIC_LISTING_WRITE_RATE_LIMIT = {
 
 const listingInclude = {
   property: { select: { id: true, name: true, referenceNumber: true, status: true, archivedAt: true } },
+  marketplaceAsset: true,
   unit: { select: { id: true, name: true, status: true, archivedAt: true } },
   amenities: { orderBy: [{ category: "asc" as const }, { label: "asc" as const }] },
   media: { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] },
@@ -63,7 +75,19 @@ const listingInclude = {
 const publicListingInclude = {
   amenities: { orderBy: [{ category: "asc" as const }, { label: "asc" as const }] },
   media: { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] },
+  // Item 13 (public attribution): only the marketplace professional's already-public directory
+  // fields are selected here — never the private backing organisation or landlord relationship.
+  marketplaceProfessional: { select: { displayName: true, slug: true, type: true, verificationStatus: true } },
 } satisfies Prisma.ListingInclude;
+
+const LISTED_BY_LABEL: Record<string, string> = {
+  OWNER_SELF: "Owner",
+  PROPERTY_MANAGER: "Property manager",
+  MANAGING_AGENT: "Managing agent",
+  BROKERAGE_AUTHORIZED: "Agent",
+  DEVELOPER: "Developer",
+  THIRD_PARTY_AUTHORIZED: "Agent",
+};
 
 async function record(
   tx: Tx,
@@ -90,6 +114,8 @@ function listingWriteData(data: ReturnType<typeof createListingSchema.parse>) {
   const { amenities, media, ...fields } = data;
   return {
     ...fields,
+    propertyId: fields.propertyId ?? null,
+    marketplaceAssetId: fields.marketplaceAssetId ?? null,
     unitId: fields.unitId ?? null,
     askingAmountMinor: decimal(fields.askingAmountMinor),
     rentAmountMinor: decimal(fields.rentAmountMinor),
@@ -151,11 +177,50 @@ async function validateAsset(
   }
 }
 
+/**
+ * Phase 21A item 5/11 — when a listing names a marketplace professional/representative/
+ * development, verifies the acting user actually belongs to that professional and, when a
+ * development/development-unit is named, that it belongs to the same professional. A no-op when
+ * none of these optional fields are set, so every existing PropertyOS-only listing creation path
+ * is completely unaffected.
+ */
+async function validateMarketplaceAttribution(
+  tx: Tx | typeof db,
+  userId: string,
+  data: { marketplaceProfessionalId?: string | null; listingRepresentativeUserId?: string | null; developmentId?: string | null; developmentUnitId?: string | null },
+) {
+  if (!data.marketplaceProfessionalId) {
+    if (data.developmentId || data.developmentUnitId) {
+      throw new AppError("MARKETPLACE_PROFESSIONAL_REQUIRED", 422, "A development-linked listing must also identify the marketplace professional marketing it.");
+    }
+    return;
+  }
+  await requireMarketplaceMember(userId, data.marketplaceProfessionalId);
+  if (data.listingRepresentativeUserId) {
+    const representative = await tx.marketplaceProfessionalMember.findUnique({ where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId: data.marketplaceProfessionalId, userId: data.listingRepresentativeUserId } } });
+    if (!representative || representative.status !== "ACTIVE") throw new AppError("INVALID_LISTING_REPRESENTATIVE", 422, "The representative must be an active member of the listing professional.");
+  }
+  if (data.developmentId) {
+    const development = await tx.development.findFirst({ where: { id: data.developmentId, marketplaceProfessionalId: data.marketplaceProfessionalId, archivedAt: null }, select: { id: true } });
+    if (!development) throw new AppError("INVALID_LISTING_DEVELOPMENT", 422, "The development must belong to the listing's marketplace professional.");
+  }
+  if (data.developmentUnitId) {
+    const unit = await tx.developmentUnit.findFirst({ where: { id: data.developmentUnitId, developmentId: data.developmentId ?? undefined, archivedAt: null }, select: { id: true } });
+    if (!unit) throw new AppError("INVALID_LISTING_DEVELOPMENT_UNIT", 422, "The development unit must belong to the listing's development.");
+  }
+}
+
 async function isAssetAvailable(
   tx: Tx | typeof db,
-  listing: { propertyId: string; unitId: string | null },
+  listing: { propertyId: string | null; unitId: string | null; marketplaceAssetId: string | null },
   at = new Date(),
 ) {
+  if (listing.marketplaceAssetId) {
+    return Boolean(await tx.marketplaceAsset.findFirst({
+      where: { id: listing.marketplaceAssetId, archivedAt: null, availabilityStatus: "AVAILABLE" }, select: { id: true },
+    }));
+  }
+  if (!listing.propertyId) return false;
   const property = await tx.property.findFirst({
     where: { id: listing.propertyId, archivedAt: null, status: "ACTIVE" },
     select: { id: true },
@@ -186,8 +251,11 @@ export async function createListing(userId: string, organisationId: string, inpu
   // Representative entitlement check (item 2): published/active listing count is capped per plan.
   await assertOperational(organisationId, ENTITLEMENTS.listingsMax.key);
   const data = createListingSchema.parse(input);
+  if (!data.propertyId || data.marketplaceAssetId) throw new AppError("PROPERTYOS_LISTING_SOURCE_REQUIRED", 422, "This endpoint requires a PropertyOS property source.");
+  const propertyId = data.propertyId;
   return db.$transaction(async (tx) => {
-    await validateAsset(tx, organisationId, data.propertyId, data.unitId, data.countryCode, data.currencyCode);
+    await validateAsset(tx, organisationId, propertyId, data.unitId, data.countryCode, data.currencyCode);
+    await validateMarketplaceAttribution(tx, userId, data);
     const listing = await tx.listing.create({
       data: {
         organisationId,
@@ -206,9 +274,221 @@ export async function createListing(userId: string, organisationId: string, inpu
   });
 }
 
+/** Creates both the professional-owned source asset and its first listing atomically. No
+ * PropertyOS Property, Unit, subscription, or visible organisation is created. */
+export async function createMarketplaceNativeListing(userId: string, marketplaceProfessionalId: string, input: unknown) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  await assertMarketplaceOperational(marketplaceProfessionalId, MARKETPLACE_ENTITLEMENTS.activeListingsMax.key);
+  const data = createMarketplaceNativeListingSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const professional = await tx.marketplaceProfessional.findFirst({ where: { id: marketplaceProfessionalId, archivedAt: null, status: "ACTIVE" } });
+    if (!professional) throw notFound();
+    const [country, currency] = await Promise.all([
+      tx.country.findUnique({ where: { code: data.asset.countryCode } }),
+      tx.currency.findUnique({ where: { code: data.asset.currencyCode } }),
+    ]);
+    if (!country?.isActive || !currency?.isActive) throw new AppError("INVALID_LISTING_CONFIGURATION", 422, "The listing country or currency is not supported.");
+    let developmentId: string | null = null;
+    if (data.asset.developmentUnitId) {
+      const unit = await tx.developmentUnit.findFirst({
+        where: { id: data.asset.developmentUnitId, archivedAt: null, development: { marketplaceProfessionalId, archivedAt: null } },
+        include: { development: true },
+      });
+      if (!unit) throw new AppError("INVALID_LISTING_DEVELOPMENT_UNIT", 422, "The development unit must belong to this professional.");
+      developmentId = unit.developmentId;
+    }
+    await validateMarketplaceAttribution(tx, userId, { marketplaceProfessionalId, listingRepresentativeUserId: data.listingRepresentativeUserId });
+    const asset = await tx.marketplaceAsset.create({
+      data: {
+        ...data.asset,
+        marketplaceProfessionalId,
+        createdByUserId: userId,
+        bathrooms: decimal(data.asset.bathrooms), sizeSqm: decimal(data.asset.sizeSqm), priceMinor: decimal(data.asset.priceMinor)!,
+        mapLatitude: decimal(data.asset.mapLatitude), mapLongitude: decimal(data.asset.mapLongitude),
+      },
+    });
+    const parsedListing = createListingSchema.parse({
+      ...data.listing,
+      propertyId: null,
+      marketplaceAssetId: asset.id,
+      listingType: data.asset.purpose,
+      category: data.listing.category ?? data.asset.category,
+      title: data.listing.title ?? data.asset.name,
+      currencyCode: data.asset.currencyCode,
+      availableFrom: data.asset.availableFrom,
+      bedrooms: data.listing.bedrooms ?? data.asset.bedrooms,
+      bathrooms: data.listing.bathrooms ?? data.asset.bathrooms,
+      sizeSqm: data.listing.sizeSqm ?? data.asset.sizeSqm,
+      countryCode: data.asset.countryCode,
+      region: data.listing.region ?? data.asset.region,
+      city: data.listing.city ?? data.asset.city,
+      district: data.listing.district ?? data.asset.district,
+      locality: data.listing.locality ?? data.asset.locality,
+      publicLocationLabel: data.listing.publicLocationLabel ?? data.asset.publicLocationLabel,
+      mapLatitude: data.listing.mapLatitude ?? data.asset.mapLatitude,
+      mapLongitude: data.listing.mapLongitude ?? data.asset.mapLongitude,
+      askingAmountMinor: data.asset.purpose === "SALE" ? data.asset.priceMinor : null,
+      rentAmountMinor: data.asset.purpose === "RENT" ? data.asset.priceMinor : null,
+      marketplaceProfessionalId,
+      listingRepresentativeUserId: data.listingRepresentativeUserId ?? null,
+      listingAuthority: data.listingAuthority,
+      developmentId,
+      developmentUnitId: data.asset.developmentUnitId ?? null,
+    });
+    const listing = await tx.listing.create({
+      data: {
+        organisationId: professional.backingOrganisationId,
+        createdByUserId: userId,
+        ...listingWriteData(parsedListing),
+        statusHistory: { create: { actorUserId: userId, toStatus: "DRAFT" } },
+        attributionHistory: { create: { actorUserId: userId, toMarketplaceProfessionalId: marketplaceProfessionalId, toRepresentativeUserId: data.listingRepresentativeUserId, toAuthority: data.listingAuthority, reason: "Initial attribution" } },
+      },
+      include: listingInclude,
+    });
+    await record(tx, professional.backingOrganisationId, userId, "marketplace_listing.created", "listing", listing.id, { marketplaceAssetId: asset.id, marketplaceProfessionalId, developmentUnitId: data.asset.developmentUnitId ?? null });
+    return listing;
+  });
+}
+
+/**
+ * Phase 21B item 11 — paginated so a large brokerage/developer's full inventory (hundreds of
+ * listings) is never loaded into memory at once. Same page/pageSize contract as `listListings`.
+ */
+export async function listMarketplaceProfessionalListings(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const filters = listingManagementListSchema.parse(query);
+  const where: Prisma.ListingWhereInput = {
+    marketplaceProfessionalId,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.listingType ? { listingType: filters.listingType } : {}),
+  };
+  const [items, total] = await db.$transaction([
+    db.listing.findMany({
+      where,
+      include: listingInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (filters.page - 1) * filters.pageSize,
+      take: filters.pageSize,
+    }),
+    db.listing.count({ where }),
+  ]);
+  return { items, total, page: filters.page, pageSize: filters.pageSize };
+}
+
+export async function listMarketplaceProfessionalLeads(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  // Scope by the listing's `marketplaceProfessionalId`, not by `organisationId`: a third-party
+  // listing (brokerage marketing a landlord's property) attributes its lead to the landlord's
+  // organisation, so filtering on `organisationId` alone would silently drop those leads from
+  // this professional's CRM inbox.
+  const filters = marketplaceLeadListSchema.parse(query);
+  const where: Prisma.MarketplaceLeadWhereInput = {
+    listing: { marketplaceProfessionalId },
+    ...(filters.listingId ? { listingId: filters.listingId } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.assigneeMemberId ? { assigneeMemberId: filters.assigneeMemberId } : {}),
+  };
+  const [items, total] = await db.$transaction([
+    db.marketplaceLead.findMany({
+      where,
+      include: leadInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (filters.page - 1) * filters.pageSize,
+      take: filters.pageSize,
+    }),
+    db.marketplaceLead.count({ where }),
+  ]);
+  return {
+    items,
+    pagination: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.ceil(total / filters.pageSize) },
+  };
+}
+
+export async function getMarketplaceProfessionalLead(userId: string, marketplaceProfessionalId: string, leadId: string) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  leadId = leadIdSchema.parse(leadId);
+  const lead = await db.marketplaceLead.findFirst({ where: { id: leadId, listing: { marketplaceProfessionalId } }, include: leadInclude });
+  if (!lead) throw notFound();
+  return lead;
+}
+
+export async function updateMarketplaceProfessionalLead(userId: string, marketplaceProfessionalId: string, leadId: string, input: unknown) {
+  await requireMarketplaceRole(userId, marketplaceProfessionalId, "AGENT");
+  leadId = leadIdSchema.parse(leadId);
+  const lead = await db.marketplaceLead.findFirst({ where: { id: leadId, listing: { marketplaceProfessionalId } }, select: { organisationId: true } });
+  if (!lead) throw notFound();
+  return updateMarketplaceLead(userId, lead.organisationId, leadId, input, true);
+}
+
+export async function listMarketplaceProfessionalViewings(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { backingOrganisationId: true } });
+  if (!professional) throw notFound();
+  return listViewingRequests(userId, professional.backingOrganisationId, query);
+}
+
+export async function getMarketplaceProfessionalListing(userId: string, marketplaceProfessionalId: string, listingId: string) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const listing = await db.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, include: listingInclude });
+  if (!listing) throw notFound();
+  return listing;
+}
+
+export async function updateMarketplaceProfessionalListing(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { backingOrganisationId: true } });
+  if (!professional || !await db.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, select: { id: true } })) throw notFound();
+  return updateListing(userId, professional.backingOrganisationId, listingId, input);
+}
+
+export async function transitionMarketplaceProfessionalListing(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { backingOrganisationId: true } });
+  if (!professional || !await db.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, select: { id: true } })) throw notFound();
+  return transitionListing(userId, professional.backingOrganisationId, listingId, input);
+}
+
+export async function submitMarketplaceProfessionalListingVerification(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { backingOrganisationId: true } });
+  if (!professional || !await db.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, select: { id: true } })) throw notFound();
+  return updateListingVerification(userId, professional.backingOrganisationId, listingId, input);
+}
+
+export async function updateMarketplaceListingAttribution(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
+  await requireMarketplaceRole(userId, marketplaceProfessionalId, "ADMIN");
+  const data = updateListingAttributionSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const listing = await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId } });
+    if (!listing) throw notFound();
+    if (data.marketplaceProfessionalId && data.marketplaceProfessionalId !== marketplaceProfessionalId) {
+      throw new AppError("LISTING_TRANSFER_REQUIRES_EXPLICIT_WORKFLOW", 409, "A listing cannot be silently transferred to another professional.");
+    }
+    const representativeId = data.listingRepresentativeUserId === undefined ? listing.listingRepresentativeUserId : data.listingRepresentativeUserId;
+    await validateMarketplaceAttribution(tx, userId, { marketplaceProfessionalId, listingRepresentativeUserId: representativeId });
+    const updated = await tx.listing.update({
+      where: { id: listing.id },
+      data: {
+        listingRepresentativeUserId: representativeId,
+        listingAuthority: data.listingAuthority ?? listing.listingAuthority,
+        attributionHistory: { create: {
+          actorUserId: userId,
+          fromMarketplaceProfessionalId: listing.marketplaceProfessionalId, toMarketplaceProfessionalId: marketplaceProfessionalId,
+          fromRepresentativeUserId: listing.listingRepresentativeUserId, toRepresentativeUserId: representativeId,
+          fromAuthority: listing.listingAuthority, toAuthority: data.listingAuthority ?? listing.listingAuthority,
+          reason: data.reason,
+        } },
+      }, include: listingInclude,
+    });
+    await record(tx, listing.organisationId, userId, "listing.attribution_updated", "listing", listing.id, { representativeId, listingAuthority: updated.listingAuthority });
+    return updated;
+  });
+}
+
 function editableListingInput(listing: Prisma.ListingGetPayload<{ include: typeof listingInclude }>) {
   return {
     propertyId: listing.propertyId,
+    marketplaceAssetId: listing.marketplaceAssetId,
     unitId: listing.unitId,
     listingType: listing.listingType,
     category: listing.category,
@@ -260,7 +540,7 @@ function editableListingInput(listing: Prisma.ListingGetPayload<{ include: typeo
 }
 
 export async function updateListing(userId: string, organisationId: string, listingId: string, input: unknown) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingManage);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingManage);
   listingId = listingIdSchema.parse(listingId);
   const patch = updateListingSchema.parse(input);
   const definedPatch = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
@@ -271,7 +551,10 @@ export async function updateListing(userId: string, organisationId: string, list
       throw new AppError("LISTING_NOT_EDITABLE", 409, "Only draft, rejected, or paused listings can be edited.");
     }
     const data = createListingSchema.parse({ ...editableListingInput(current), ...definedPatch });
-    await validateAsset(tx, organisationId, data.propertyId, data.unitId, data.countryCode, data.currencyCode);
+    if (data.propertyId !== current.propertyId || data.marketplaceAssetId !== current.marketplaceAssetId || data.unitId !== current.unitId) {
+      throw new AppError("LISTING_SOURCE_IMMUTABLE", 409, "A listing's inventory source cannot be changed.");
+    }
+    if (data.propertyId) await validateAsset(tx, organisationId, data.propertyId, data.unitId, data.countryCode, data.currencyCode);
     const { amenities, media, ...fields } = listingWriteData(data);
     await tx.listingAmenity.deleteMany({ where: { listingId } });
     await tx.listingMedia.deleteMany({ where: { listingId } });
@@ -288,7 +571,7 @@ export async function updateListing(userId: string, organisationId: string, list
 }
 
 export async function getListing(userId: string, organisationId: string, listingId: string) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingRead);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingRead);
   listingId = listingIdSchema.parse(listingId);
   const listing = await db.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
   if (!listing) throw notFound();
@@ -296,7 +579,7 @@ export async function getListing(userId: string, organisationId: string, listing
 }
 
 export async function listListings(userId: string, organisationId: string, query: unknown = {}) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingRead);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingRead);
   const filters = listingManagementListSchema.parse(query);
   const where: Prisma.ListingWhereInput = {
     organisationId,
@@ -356,11 +639,11 @@ async function ensurePublicationReady(tx: Tx, listing: Prisma.ListingGetPayload<
   const conflictingListing = await tx.listing.findFirst({
     where: {
       id: { not: listing.id },
-      propertyId: listing.propertyId,
+      ...(listing.marketplaceAssetId ? { marketplaceAssetId: listing.marketplaceAssetId } : { propertyId: listing.propertyId }),
       status: { in: ["PUBLISHED", "PAUSED", "RESERVED"] },
-      OR: listing.unitId
+      ...(listing.marketplaceAssetId ? {} : { OR: listing.unitId
         ? [{ unitId: listing.unitId }, { unitId: null }]
-        : [{}],
+        : [{}] }),
     },
     select: { id: true },
   });
@@ -372,11 +655,9 @@ async function ensurePublicationReady(tx: Tx, listing: Prisma.ListingGetPayload<
 export async function transitionListing(userId: string, organisationId: string, listingId: string, input: unknown) {
   listingId = listingIdSchema.parse(listingId);
   const data = listingTransitionSchema.parse(input);
-  await requirePermission(
-    userId,
-    organisationId,
-    data.status === "PUBLISHED" || data.status === "REJECTED" ? PERMISSIONS.listingPublish : PERMISSIONS.listingManage,
-  );
+  const professional = await db.marketplaceProfessional.findUnique({ where: { backingOrganisationId: organisationId }, select: { id: true } });
+  if (professional) await requireMarketplaceRole(userId, professional.id, data.status === "PUBLISHED" || data.status === "REJECTED" ? "ADMIN" : "AGENT");
+  else await requirePermission(userId, organisationId, data.status === "PUBLISHED" || data.status === "REJECTED" ? PERMISSIONS.listingPublish : PERMISSIONS.listingManage);
   return db.$transaction(async (tx) => {
     const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
     if (!listing) throw notFound();
@@ -386,7 +667,7 @@ export async function transitionListing(userId: string, organisationId: string, 
     if (data.status === "PENDING_REVIEW" && !listing.media.some(({ type }) => type === "PHOTO")) {
       throw new AppError("LISTING_PHOTO_REQUIRED", 409, "At least one public photo is required before review.");
     }
-    if (data.status === "PUBLISHED" && listing.status === "RESERVED" && listing.unitId) {
+    if (data.status === "PUBLISHED" && listing.status === "RESERVED" && listing.unitId && listing.propertyId) {
       const released = await tx.unit.updateMany({
         where: { id: listing.unitId, propertyId: listing.propertyId, status: "RESERVED", archivedAt: null },
         data: { status: "AVAILABLE" },
@@ -398,7 +679,7 @@ export async function transitionListing(userId: string, organisationId: string, 
       throw new AppError("INVALID_LISTING_TRANSITION", 409, "Only rental listings can be marked rented.");
     }
     const now = new Date();
-    if (listing.unitId) {
+    if (listing.unitId && listing.propertyId) {
       if (data.status === "RESERVED") {
         const changed = await tx.unit.updateMany({
           where: { id: listing.unitId, propertyId: listing.propertyId, status: "AVAILABLE", archivedAt: null },
@@ -412,6 +693,11 @@ export async function transitionListing(userId: string, organisationId: string, 
       if (listing.status === "RESERVED" && ["PUBLISHED", "ARCHIVED"].includes(data.status)) {
         await tx.unit.updateMany({ where: { id: listing.unitId, status: "RESERVED" }, data: { status: "AVAILABLE" } });
       }
+    }
+    if (listing.marketplaceAssetId) {
+      if (data.status === "RESERVED") await tx.marketplaceAsset.update({ where: { id: listing.marketplaceAssetId }, data: { availabilityStatus: "RESERVED" } });
+      if (data.status === "RENTED") await tx.marketplaceAsset.update({ where: { id: listing.marketplaceAssetId }, data: { availabilityStatus: listing.listingType === "RENT" ? "RENTED" : "SOLD" } });
+      if (listing.status === "RESERVED" && ["PUBLISHED", "ARCHIVED"].includes(data.status)) await tx.marketplaceAsset.updateMany({ where: { id: listing.marketplaceAssetId, availabilityStatus: "RESERVED" }, data: { availabilityStatus: "AVAILABLE" } });
     }
     const timestamps = {
       ...(data.status === "PENDING_REVIEW" ? { submittedAt: now } : {}),
@@ -456,11 +742,9 @@ export async function updateListingVerification(
 ) {
   listingId = listingIdSchema.parse(listingId);
   const data = listingVerificationSchema.parse(input);
-  await requirePermission(
-    userId,
-    organisationId,
-    data.status === "PENDING" ? PERMISSIONS.listingManage : PERMISSIONS.listingVerify,
-  );
+  const professional = await db.marketplaceProfessional.findUnique({ where: { backingOrganisationId: organisationId }, select: { id: true } });
+  if (professional && data.status === "PENDING") await requireMarketplaceMember(userId, professional.id);
+  else await requirePermission(userId, organisationId, data.status === "PENDING" ? PERMISSIONS.listingManage : PERMISSIONS.listingVerify);
   return db.$transaction(async (tx) => {
     const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
     if (!listing) throw notFound();
@@ -538,9 +822,12 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   const conditions: Prisma.Sql[] = [
     Prisma.sql`l."status" = 'PUBLISHED'::"ListingStatus"`,
     Prisma.sql`l."verificationStatus" = 'VERIFIED'::"ListingVerificationStatus"`,
-    Prisma.sql`p."archivedAt" IS NULL AND p."status" = 'ACTIVE'::"PropertyStatus"`,
     Prisma.sql`(
-      (l."unitId" IS NOT NULL
+      (l."marketplaceAssetId" IS NOT NULL
+        AND ma."archivedAt" IS NULL
+        AND ma."availabilityStatus" = 'AVAILABLE'::"DevelopmentUnitStatus")
+      OR
+      (l."propertyId" IS NOT NULL AND p."archivedAt" IS NULL AND p."status" = 'ACTIVE'::"PropertyStatus" AND l."unitId" IS NOT NULL
         AND u."archivedAt" IS NULL
         AND u."status" = 'AVAILABLE'::"UnitStatus"
         AND NOT EXISTS (
@@ -553,7 +840,7 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
         )
       )
       OR
-      (l."unitId" IS NULL
+      (l."propertyId" IS NOT NULL AND p."archivedAt" IS NULL AND p."status" = 'ACTIVE'::"PropertyStatus" AND l."unitId" IS NULL
         AND NOT EXISTS (
           SELECT 1 FROM "Unit" pu
           WHERE pu."propertyId" = l."propertyId"
@@ -577,8 +864,8 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   )`);
   if (filters.listingType) conditions.push(Prisma.sql`l."listingType" = ${filters.listingType}::"ListingType"`);
   if (filters.category) conditions.push(Prisma.sql`lower(l."category") = lower(${filters.category})`);
-  if (filters.scope === "PROPERTY") conditions.push(Prisma.sql`l."unitId" IS NULL`);
-  if (filters.scope === "UNIT") conditions.push(Prisma.sql`l."unitId" IS NOT NULL`);
+  if (filters.scope === "PROPERTY") conditions.push(Prisma.sql`l."unitId" IS NULL AND l."marketplaceAssetId" IS NULL`);
+  if (filters.scope === "UNIT") conditions.push(Prisma.sql`l."unitId" IS NOT NULL OR l."marketplaceAssetId" IS NOT NULL`);
   if (filters.currencyCode) conditions.push(Prisma.sql`l."currencyCode" = ${filters.currencyCode}`);
   if (filters.minPriceMinor) conditions.push(Prisma.sql`${price} >= ${filters.minPriceMinor}::numeric`);
   if (filters.maxPriceMinor) conditions.push(Prisma.sql`${price} <= ${filters.maxPriceMinor}::numeric`);
@@ -610,8 +897,9 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   return Prisma.sql`
     SELECT l."id", count(*) OVER() AS total
     FROM "Listing" l
-    JOIN "Property" p ON p."id" = l."propertyId"
+    LEFT JOIN "Property" p ON p."id" = l."propertyId"
     LEFT JOIN "Unit" u ON u."id" = l."unitId"
+    LEFT JOIN "MarketplaceAsset" ma ON ma."id" = l."marketplaceAssetId"
     WHERE ${Prisma.join(conditions, " AND ")}
     ORDER BY l."publishedAt" DESC NULLS LAST, l."availableFrom" ASC, l."id" ASC
     LIMIT ${filters.pageSize} OFFSET ${offset}
@@ -622,7 +910,8 @@ function publicProjection(listing: Prisma.ListingGetPayload<{ include: typeof pu
   return {
     id: listing.id,
     listingType: listing.listingType,
-    scope: listing.unitId ? "UNIT" : "PROPERTY",
+    scope: listing.marketplaceAssetId ? "MARKETPLACE_ASSET" : listing.unitId ? "UNIT" : "PROPERTY",
+    source: listing.marketplaceAssetId ? "MARKETPLACE_NATIVE" : "PROPERTY_OS",
     category: listing.category,
     title: listing.title,
     description: listing.publicDescription,
@@ -679,6 +968,19 @@ function publicProjection(listing: Prisma.ListingGetPayload<{ include: typeof pu
       enquiryEnabled: listing.enquiryEnabled,
     },
     verification: { status: listing.verificationStatus, evidenceReady: listing.evidenceReady },
+    // Item 13: public "Listed by" attribution — the relationship label plus the professional's
+    // already-public directory identity only. Never the private landlord/organisation identity.
+    attribution: listing.marketplaceProfessional
+      ? {
+          listedBy: LISTED_BY_LABEL[listing.listingAuthority ?? ""] ?? "Agent",
+          professional: {
+            displayName: listing.marketplaceProfessional.displayName,
+            slug: listing.marketplaceProfessional.slug,
+            type: listing.marketplaceProfessional.type,
+            verificationStatus: listing.marketplaceProfessional.verificationStatus,
+          },
+        }
+      : { listedBy: "Owner", professional: null },
     publishedAt: listing.publishedAt,
   };
 }
@@ -775,7 +1077,7 @@ export async function createMarketplaceLead(listingId: string, userId: string | 
 }
 
 export async function listMarketplaceLeads(userId: string, organisationId: string, query: unknown = {}) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingLeadRead);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingLeadRead);
   const filters = marketplaceLeadListSchema.parse(query);
   const where: Prisma.MarketplaceLeadWhereInput = {
     organisationId,
@@ -800,7 +1102,7 @@ export async function listMarketplaceLeads(userId: string, organisationId: strin
 }
 
 export async function getMarketplaceLead(userId: string, organisationId: string, leadId: string) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingLeadRead);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingLeadRead);
   leadId = leadIdSchema.parse(leadId);
   const lead = await db.marketplaceLead.findFirst({ where: { id: leadId, organisationId }, include: leadInclude });
   if (!lead) throw notFound();
@@ -824,8 +1126,14 @@ export async function updateMarketplaceLead(
   organisationId: string,
   leadId: string,
   input: unknown,
+  // `updateMarketplaceProfessionalLead` passes true: it already authorized the caller against the
+  // marketplace professional that actually owns this lead's listing (via `requireMarketplaceRole`
+  // scoped to that professional's id). Re-deriving access from `organisationId` here would fail
+  // for a third-party listing, whose lead is attributed to the *landlord's* organisation, not the
+  // professional's backing organisation — see `requirePropertyOsOrMarketplaceAccess`.
+  preAuthorized = false,
 ) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingLeadManage);
+  if (!preAuthorized) await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingLeadManage);
   leadId = leadIdSchema.parse(leadId);
   const data = updateMarketplaceLeadSchema.parse(input);
   return db.$transaction(async (tx) => {
@@ -835,8 +1143,16 @@ export async function updateMarketplaceLead(
       throw new AppError("INVALID_LEAD_TRANSITION", 409, "The lead cannot transition to that status.");
     }
     if (data.assigneeMemberId) {
+      // A third-party listing (e.g. a brokerage marketing a landlord's property) attributes its
+      // leads to the landlord's `organisationId`, but the representative handling the lead is a
+      // member of the marketplace professional's hidden backing organisation, not the landlord's.
+      // Accept either scope so assignment works for both marketplace-native and third-party leads.
+      const listingRecord = await tx.listing.findUnique({ where: { id: lead.listingId }, select: { marketplaceProfessionalId: true } });
+      const backingOrganisationId = listingRecord?.marketplaceProfessionalId
+        ? (await tx.marketplaceProfessional.findUnique({ where: { id: listingRecord.marketplaceProfessionalId }, select: { backingOrganisationId: true } }))?.backingOrganisationId
+        : undefined;
       const assignee = await tx.organisationMember.findFirst({
-        where: { id: data.assigneeMemberId, organisationId, status: "ACTIVE", archivedAt: null },
+        where: { id: data.assigneeMemberId, organisationId: { in: [organisationId, ...(backingOrganisationId ? [backingOrganisationId] : [])] }, status: "ACTIVE", archivedAt: null },
         select: { id: true },
       });
       if (!assignee) throw new AppError("INVALID_LEAD_ASSIGNEE", 422, "The assignee must be an active member of this organisation.");
@@ -964,7 +1280,7 @@ export async function createViewingRequest(
 }
 
 export async function listViewingRequests(userId: string, organisationId: string, query: unknown = {}) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingViewingRead);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingViewingRead);
   const filters = viewingRequestListSchema.parse(query);
   const where: Prisma.ViewingRequestWhereInput = {
     organisationId,
@@ -990,7 +1306,7 @@ export async function listViewingRequests(userId: string, organisationId: string
 }
 
 export async function getViewingRequest(userId: string, organisationId: string, viewingRequestId: string) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingViewingRead);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingViewingRead);
   viewingRequestId = viewingRequestIdSchema.parse(viewingRequestId);
   const viewing = await db.viewingRequest.findFirst({
     where: { id: viewingRequestId, organisationId },
@@ -1015,7 +1331,7 @@ export async function updateViewingRequest(
   viewingRequestId: string,
   input: unknown,
 ) {
-  await requirePermission(userId, organisationId, PERMISSIONS.listingViewingManage);
+  await requirePropertyOsOrMarketplaceAccess(userId, organisationId, PERMISSIONS.listingViewingManage);
   viewingRequestId = viewingRequestIdSchema.parse(viewingRequestId);
   const data = updateViewingRequestSchema.parse(input);
   return db.$transaction(async (tx) => {

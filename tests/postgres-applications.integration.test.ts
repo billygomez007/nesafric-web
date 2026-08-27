@@ -187,7 +187,7 @@ describe("PostgreSQL Phase 10 rental applications", () => {
       }],
       consents: [{ type: "APPLICATION_PROCESSING", textVersion: "v1", granted: true }],
     });
-    expect(application.listing.property.id).toBe(property.id);
+    expect(application.listing.property!.id).toBe(property.id);
     expect(application.listing.unit?.id).toBe(unit.id);
     expect((await db.marketplaceLead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("APPLICATION_STARTED");
 

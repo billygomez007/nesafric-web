@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PropertyOS AI",
-  description: "Property operating system foundation",
+  title: "NesAfric — PropertyOS | The Operating System for Real Estate",
+  description:
+    "NesAfric brings property management, leasing, payments, maintenance, marketplace operations and AI employees into one intelligent platform — built for landlords, property managers and developers.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

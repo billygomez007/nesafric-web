@@ -3,7 +3,7 @@ import { startWebChatConversation } from "@/modules/conversations/service";
 import { errorResponse } from "@/platform/errors";
 import { getOptionalUser } from "@/platform/auth/session";
 
-export const PUBLIC_WEB_CHAT_RATE_LIMIT = {
+const PUBLIC_WEB_CHAT_RATE_LIMIT = {
   policy: "public-web-chat",
   limit: 30,
   windowSeconds: 60,
