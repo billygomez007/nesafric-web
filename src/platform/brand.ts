@@ -25,8 +25,8 @@ export const BRAND = {
     /** Square dark-canvas mark, source for favicon/apple-touch-icon/social. */
     square: "/brand/umo-afric-mark-square.png",
     og: "/brand/umo-afric-og.png",
-    width: 2032,
-    height: 475,
+    width: 1454,
+    height: 374,
   },
 
   contact: {

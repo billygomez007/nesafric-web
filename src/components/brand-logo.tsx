@@ -11,7 +11,7 @@ import { BRAND } from "@/platform/brand";
 // from the raw dark-surface artwork — each needs its own width/height source.
 const DIMENSIONS = {
   dark: { width: BRAND.logo.width, height: BRAND.logo.height },
-  light: { width: 2398, height: 741 },
+  light: { width: 1716, height: 583 },
 } as const;
 
 export function BrandLogo({ variant = "dark", height = 28, className = "" }: { variant?: "dark" | "light"; height?: number; className?: string }) {
