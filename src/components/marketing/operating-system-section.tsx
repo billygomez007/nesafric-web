@@ -1,3 +1,5 @@
+import { ProductMockup } from "@/components/marketing/product-mockup";
+
 const MODULES = [
   "Properties",
   "Tenants",
@@ -40,6 +42,13 @@ export function OperatingSystemSection() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="mt-16">
+          <ProductMockup
+            alt="Umo Afric dashboard showing property management, marketplace, leads, payments and AI employees working together in one platform"
+            src="/marketing/mockups/homepage-platform-overview.png"
+          />
         </div>
       </div>
     </section>

@@ -1,3 +1,5 @@
+import { ProductMockup } from "@/components/marketing/product-mockup";
+
 const AI_ROLES = [
   {
     title: "AI Receptionist",
@@ -21,10 +23,12 @@ export function AICapabilitiesSection({
   kicker = "AI, BUILT IN",
   heading = "Your real-estate business. Now with AI built in.",
   intro = "AI employees work inside your Umo Afric workspace — available according to your plan — to take on the repetitive work around the business, not the judgment calls that need you.",
+  mockup,
 }: {
   kicker?: string;
   heading?: string;
   intro?: string;
+  mockup?: { src: string; alt: string };
 }) {
   return (
     <section className="bg-slate-950 py-24 sm:py-32">
@@ -43,6 +47,12 @@ export function AICapabilitiesSection({
             </div>
           ))}
         </div>
+
+        {mockup && (
+          <div className="mt-14">
+            <ProductMockup alt={mockup.alt} src={mockup.src} />
+          </div>
+        )}
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-5">
           <div>

@@ -3,6 +3,7 @@ import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { PageViewTracker } from "@/components/marketing/page-view-tracker";
 import { ProfessionalsHero } from "@/components/marketing/professionals-hero";
+import { ProductMockup } from "@/components/marketing/product-mockup";
 import { SoloAgentSection } from "@/components/marketing/solo-agent-section";
 import { BrokerageSection } from "@/components/marketing/brokerage-section";
 import { WorkflowStorySection } from "@/components/marketing/workflow-story-section";
@@ -30,6 +31,12 @@ export default function ForProfessionalsPage() {
       <SiteNav />
       <main>
         <ProfessionalsHero />
+        <section className="bg-slate-950 px-6 pb-24 sm:px-8 sm:pb-32">
+          <ProductMockup
+            alt="Umo Afric real estate business workspace showing lead pipeline, active listings, developments and AI sales agent activity"
+            src="/marketing/mockups/professionals-business-workspace.png"
+          />
+        </section>
         <SoloAgentSection />
         <BrokerageSection />
         <WorkflowStorySection />

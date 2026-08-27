@@ -1,3 +1,5 @@
+import { ProductMockup } from "@/components/marketing/product-mockup";
+
 const RECEPTIONIST_LOG = [
   { role: "Prospect", text: "Is the 2-bedroom unit in Osu still available for September?", tone: "text-slate-400" },
   { role: "AI Receptionist", text: "Yes — available from 15 September. Would you like to schedule a viewing?", tone: "text-emerald-300" },
@@ -83,6 +85,13 @@ export function AIEmployeesSection() {
               <p className="mt-2 text-sm leading-6 text-slate-400">{employee.description}</p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-16">
+          <ProductMockup
+            alt="Umo AI Receptionist responding to a property enquiry and handing off a qualified viewing request to an agent"
+            src="/marketing/mockups/ai-receptionist-workflow.png"
+          />
         </div>
 
         <div className="mt-16 border-t border-white/10 pt-12">

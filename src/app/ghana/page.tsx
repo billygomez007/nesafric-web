@@ -5,6 +5,7 @@ import { PageViewTracker } from "@/components/marketing/page-view-tracker";
 import { GhanaHero } from "@/components/marketing/ghana-hero";
 import { GhanaPitchSection } from "@/components/marketing/ghana-pitch-section";
 import { WorkflowStorySection } from "@/components/marketing/workflow-story-section";
+import { GhanaMobileShowcaseSection } from "@/components/marketing/ghana-mobile-showcase-section";
 import { AICapabilitiesSection } from "@/components/marketing/ai-capabilities-section";
 import { GhanaMarketplaceSection } from "@/components/marketing/ghana-marketplace-section";
 import { LaunchOfferSection } from "@/components/marketing/launch-offer-section";
@@ -32,6 +33,7 @@ export default function GhanaLaunchPage() {
         <GhanaHero />
         <GhanaPitchSection />
         <WorkflowStorySection />
+        <GhanaMobileShowcaseSection />
         <AICapabilitiesSection />
         <GhanaMarketplaceSection />
         <LaunchOfferSection />
