@@ -20,7 +20,7 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <header className="border-b bg-slate-950 px-4 py-14 text-white sm:px-6">
+      <header className="border-b bg-navy px-4 py-14 text-white sm:px-6">
         <div className="mx-auto max-w-5xl">
           <nav className="flex items-center justify-between text-sm"><Link href="/"><BrandLogo height={22} /></Link><Link href="/marketplace/properties">Browse properties</Link></nav>
           <div className="mt-10 flex flex-wrap items-center gap-4">
@@ -31,7 +31,7 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-semibold sm:text-4xl">{profile.displayName}</h1>
                 {profile.verificationStatus === "VERIFIED" && (
-                  <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-300">Verified</span>
+                  <span className="rounded-full bg-premium px-3 py-1 text-xs font-semibold text-navy">Verified</span>
                 )}
               </div>
               <p className="mt-1 text-sm text-slate-300">{TYPE_LABELS[profile.type] ?? profile.type}</p>
@@ -63,7 +63,7 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
             {profile.listings.length === 0 ? <p className="mt-3 text-sm text-slate-500">No published listings yet.</p> : (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {profile.listings.map((listing) => (
-                  <Link className="rounded-xl border p-4 transition hover:border-emerald-500" href={`/marketplace/properties/${listing.id}`} key={listing.id}>
+                  <Link className="rounded-xl border p-4 transition hover:border-brand" href={`/marketplace/properties/${listing.id}`} key={listing.id}>
                     <p className="font-semibold">{listing.title}</p>
                     <p className="mt-1 text-sm text-slate-500">{listing.city ?? ""} · {listing.listingType}</p>
                   </Link>

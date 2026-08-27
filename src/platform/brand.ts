@@ -17,16 +17,20 @@ export const BRAND = {
      * Relative paths — used directly in on-site `<img>`/`next/image` tags. Email HTML needs
      * absolute, publicly-fetchable URLs instead: wrap these in `absoluteUrl()` when building
      * an email template.
+     *
+     * Both variants are the same artwork (navy symbol + turquoise "o"), rendered on a fully
+     * transparent background — `onDark` has the navy ink recolored to white so it reads on
+     * dark surfaces. Both share identical dimensions.
      */
-    /** For dark surfaces (marketing header/footer, dark hero sections): transparent background. */
-    onDark: "/brand/umo-afric-logo.png",
-    /** For light surfaces (authenticated app shells): same artwork on a dark rounded chip. */
-    onLight: "/brand/umo-afric-logo-chip.png",
-    /** Square dark-canvas mark, source for favicon/apple-touch-icon/social. */
+    /** For light surfaces (marketing pages, auth, light app shells): navy symbol + turquoise "o". */
+    onLight: "/brand/umo-afric-logo-navy.png",
+    /** For dark surfaces (navy header/footer, dark hero sections): white symbol + turquoise "o". */
+    onDark: "/brand/umo-afric-logo-white.png",
+    /** Square white-rounded mark, source for favicon/apple-touch-icon/social. */
     square: "/brand/umo-afric-mark-square.png",
     og: "/brand/umo-afric-og.png",
-    width: 1872,
-    height: 465,
+    width: 2010,
+    height: 648,
   },
 
   contact: {

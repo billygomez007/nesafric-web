@@ -46,7 +46,7 @@ export function renderEmail(content: EmailContent): { html: string; text: string
 }
 
 function renderHtml(content: EmailContent): string {
-  const logoUrl = absoluteUrl(BRAND.logo.onLight);
+  const logoUrl = absoluteUrl(BRAND.logo.onDark);
   const badge = content.badge
     ? `<span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;background:${BADGE_COLORS[content.badge.tone].bg};color:${BADGE_COLORS[content.badge.tone].text};">${escapeHtml(content.badge.label)}</span>`
     : "";

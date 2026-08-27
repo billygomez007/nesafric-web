@@ -22,7 +22,7 @@ const ORGANIZATION_JSON_LD = {
   description:
     "UmoAfric is the intelligent real estate operating and marketplace platform for Ghana — property management, listings, leads and AI-powered operations in one place.",
   url: `https://${BRAND.domain}`,
-  logo: `https://${BRAND.domain}${BRAND.logo.onDark}`,
+  logo: `https://${BRAND.domain}${BRAND.logo.onLight}`,
   email: BRAND.contact.info,
   telephone: BRAND.contact.phoneTel,
   address: { "@type": "PostalAddress", streetAddress: BRAND.contact.address, addressCountry: "GH" },
