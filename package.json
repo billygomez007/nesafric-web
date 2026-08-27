@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -22,11 +23,13 @@
     "@aws-sdk/client-s3": "^3.1118.0",
     "@aws-sdk/s3-request-presigner": "^3.1118.0",
     "@pdf-lib/fontkit": "^1.1.1",
+    "@prisma/adapter-pg": "^6.19.2",
     "@prisma/client": "^6.19.2",
     "argon2": "^0.45.1",
     "jose": "^6.2.10",
     "next": "16.3.2",
     "pdf-lib": "^1.17.1",
+    "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.4.3"

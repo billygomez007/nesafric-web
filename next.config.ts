@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // Use native Node `require` for the Postgres driver adapter stack instead of bundling —
+  // avoids production-only breakage of `pg`'s conditional/dynamic requires under Vercel's
+  // per-route serverless packaging.
+  serverExternalPackages: ["pg", "pg-cloudflare", "@prisma/adapter-pg"],
 };
 
 export default nextConfig;

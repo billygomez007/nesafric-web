@@ -1,0 +1,21 @@
+name: Staging background jobs
+
+# Drains the staging BackgroundJob queue (reminders, notification delivery, AI proactive
+# evaluation, conversation delivery, calendar sync) on a schedule, since the staging app runs on
+# Vercel (serverless — no long-running `npm run worker` process). See src/app/api/jobs/run/route.ts.
+# Staging-only: STAGING_JOBS_RUN_SECRET is a generated, non-production credential.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/jobs/run
+        run: |
+          curl --fail-with-body -sS -X POST \
+            -H "x-jobs-run-secret: ${{ secrets.STAGING_JOBS_RUN_SECRET }}" \
+            https://nesafric-web-staging.vercel.app/api/jobs/run

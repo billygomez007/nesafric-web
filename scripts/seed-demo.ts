@@ -39,6 +39,8 @@ import { createMaintenanceRequest, transitionMaintenanceRequest, createWorkOrder
 import { createServiceProvider, addProviderToDirectory, submitProviderVerification, reviewProviderVerification } from "@/modules/providers/service";
 import { createListing, updateListingVerification, transitionListing } from "@/modules/listings/service";
 import { createMarketplaceLead, createViewingRequest } from "@/modules/listings/service";
+import { createMarketplaceProfessional } from "@/modules/marketplace-professionals/service";
+import { createDevelopment, createDevelopmentUnit } from "@/modules/developments/service";
 import { db } from "@/platform/database/client";
 
 const DEMO_PASSWORD = "DemoPassword123!";
@@ -87,6 +89,8 @@ async function main() {
   const platformAdminUser = await registerUser({ displayName: "NesAfric Admin (Demo Platform Admin)", email: "platform-admin@propertyos.demo", password: DEMO_PASSWORD });
   const providerUser = await registerUser({ displayName: "Kojo Plumbing Services (Demo Provider)", email: "provider@propertyos.demo", password: DEMO_PASSWORD });
   const prospect = await registerUser({ displayName: "Abena Prospect (Demo Prospect)", email: "prospect@propertyos.demo", password: DEMO_PASSWORD });
+  const brokerUser = await registerUser({ displayName: "Adjoa Brokerage (Demo Brokerage)", email: "broker@propertyos.demo", password: DEMO_PASSWORD });
+  const developerUser = await registerUser({ displayName: "Coastal Developments (Demo Developer)", email: "developer@propertyos.demo", password: DEMO_PASSWORD });
 
   console.log("Creating demo organisation...");
   const organisation = await createOrganisation(landlord.id, { name: DEMO_ORGANISATION_NAME, type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
@@ -209,6 +213,26 @@ async function main() {
     requesterNote: "Available any afternoon that week.",
   });
 
+  console.log("Creating a marketplace brokerage profile...");
+  await createMarketplaceProfessional(brokerUser.id, {
+    type: "BROKERAGE", displayName: "Adjoa Brokerage (Demo)", countryCode: "GH",
+    description: "Demo brokerage profile for marketplace QA.", contactEmail: "broker@propertyos.demo",
+    specialities: ["residential", "rentals"], serviceAreas: ["Greater Accra"],
+  });
+
+  console.log("Creating a marketplace developer profile with a development and unit...");
+  const developerProfile = await createMarketplaceProfessional(developerUser.id, {
+    type: "DEVELOPER", displayName: "Coastal Developments (Demo)", countryCode: "GH",
+    description: "Demo developer profile for marketplace QA.", contactEmail: "developer@propertyos.demo",
+  });
+  const development = await createDevelopment(developerUser.id, developerProfile.id, {
+    name: "Coastal Breeze Estate (Demo)", description: "A demo residential development for marketplace QA.",
+    countryCode: "GH", region: "Greater Accra", city: "Accra", district: "East Legon",
+  });
+  await createDevelopmentUnit(developerUser.id, developerProfile.id, development.id, {
+    name: "Block B, Unit 3", unitType: "3-bedroom townhouse", bedrooms: 3, bathrooms: 2, sizeSqm: 180, priceMinor: "85000000", currencyCode: "GHS",
+  });
+
   console.log("\nDemo data created.\n");
   console.log("Registered demo users (all share the password below) — DEVELOPMENT/DEMO CREDENTIALS ONLY,");
   console.log("never valid against and never to be used against a production deployment:");
@@ -218,6 +242,8 @@ async function main() {
   console.log(`  Platform admin (not yet promoted — see next step): ${platformAdminUser.email}`);
   console.log(`  Service provider login        : ${providerUser.email}`);
   console.log(`  Prospect / marketplace visitor: ${prospect.email}`);
+  console.log(`  Marketplace brokerage login    : ${brokerUser.email}`);
+  console.log(`  Marketplace developer login    : ${developerUser.email}`);
   console.log("\nNext step (also development-only — never exposed through any HTTP endpoint):");
   console.log(`  npm run platform-admin:bootstrap -- ${platformAdminUser.email} SUPER_ADMIN`);
 }

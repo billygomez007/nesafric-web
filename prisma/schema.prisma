@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/platform/database/generated"
+  provider   = "prisma-client"
+  output     = "../src/platform/database/generated"
+  engineType = "client"
 }
 
 enum AIAutonomyLevel {
