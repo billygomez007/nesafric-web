@@ -94,7 +94,7 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
                 <div>
                   <p className="font-semibold text-slate-950">{item.title}</p>
                   <p className="mt-1 text-sm text-slate-500">
-                    {item.listingType} · {item.city ?? "Location not set"} · {item.marketplaceAssetId ? "Marketplace native" : "PropertyOS backed"} · verification {item.verificationStatus.toLowerCase()}
+                    {item.listingType} · {item.city ?? "Location not set"} · {item.marketplaceAssetId ? "Marketplace native" : "UmoAfric backed"} · verification {item.verificationStatus.toLowerCase()}
                     {item.listingRepresentativeUserId && " · has a representative"}
                   </p>
                 </div>

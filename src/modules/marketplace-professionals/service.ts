@@ -182,7 +182,7 @@ export async function addMarketplaceMember(userId: string, marketplaceProfession
   await assertMarketplaceOperational(marketplaceProfessionalId, MARKETPLACE_ENTITLEMENTS.teamMembersMax.key);
   const data = addMarketplaceMemberSchema.parse(input);
   const targetUser = await db.user.findUnique({ where: { email: data.email.toLowerCase() } });
-  if (!targetUser) throw new AppError("USER_NOT_FOUND", 404, "No PropertyOS account exists for that email. They must register first.");
+  if (!targetUser) throw new AppError("USER_NOT_FOUND", 404, "No UmoAfric account exists for that email. They must register first.");
   const existing = await db.marketplaceProfessionalMember.findUnique({ where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId, userId: targetUser.id } } });
   if (existing && existing.status !== "REMOVED") throw new AppError("ALREADY_MEMBER", 409, "That user is already a member of this marketplace profile.");
   const professional = await professionalOrThrow(marketplaceProfessionalId);

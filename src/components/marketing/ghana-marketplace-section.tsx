@@ -5,12 +5,12 @@ export function GhanaMarketplaceSection() {
     <section className="bg-slate-50 py-24 sm:py-32">
       <div className="mx-auto max-w-5xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">UMO AFRIC MARKETPLACE</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">UMOAFRIC MARKETPLACE</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             Not a wall of anonymous ads — a professional marketplace.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-600">
-            Every listing on Umo Afric is published under a professional profile, not posted anonymously.
+            Every listing on UmoAfric is published under a professional profile, not posted anonymously.
             Buyers and renters can see who they&apos;re dealing with — and whether that professional&apos;s
             identity has been verified.
           </p>

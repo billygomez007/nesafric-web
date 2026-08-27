@@ -4,7 +4,7 @@ const CAPABILITIES = [
   "Receive enquiries and manage leads in one pipeline",
   "Schedule and track viewings",
   "Review applications and qualify buyers or tenants",
-  "Convert an enquiry into a signed lease — without leaving Umo Afric",
+  "Convert an enquiry into a signed lease — without leaving UmoAfric",
 ];
 
 export function MarketplaceSection() {
@@ -39,7 +39,7 @@ export function MarketplaceSection() {
           </div>
 
           <div className="lg:order-1">
-            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">UMO AFRIC MARKETPLACE</p>
+            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">UMOAFRIC MARKETPLACE</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
               Every serious source of real estate, in one place.
             </h2>

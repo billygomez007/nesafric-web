@@ -13,7 +13,7 @@ const PLACEMENTS = [
 
 const STATUS_COPY: Record<string, string> = {
   DRAFT: "Draft — not yet submitted",
-  PENDING_APPROVAL: "Submitted — awaiting Umo Afric review",
+  PENDING_APPROVAL: "Submitted — awaiting UmoAfric review",
   APPROVED: "Approved",
   SCHEDULED: "Scheduled",
   ACTIVE: "Live",
@@ -67,7 +67,7 @@ export function MarketplacePromotions({ professionalId }: { professionalId: stri
     const response = await fetch(`/api/marketplace-professionals/${professionalId}/campaigns/${campaignId}/submit`, { method: "POST" });
     const body = await response.json();
     if (!response.ok) return setError(body.error?.message ?? "Unable to submit that request.");
-    setNotice("Submitted for Umo Afric review."); await load();
+    setNotice("Submitted for UmoAfric review."); await load();
   }
 
   return (
@@ -77,7 +77,7 @@ export function MarketplacePromotions({ professionalId }: { professionalId: stri
 
       <section className="rounded-xl border bg-white p-6 shadow-sm">
         <h2 className="font-semibold">Request a promotion</h2>
-        <p className="mt-1 text-sm text-slate-600">Requests are reviewed by Umo Afric before appearing publicly. This is request/submission readiness — not yet a live self-service ad purchase.</p>
+        <p className="mt-1 text-sm text-slate-600">Requests are reviewed by UmoAfric before appearing publicly. This is request/submission readiness — not yet a live self-service ad purchase.</p>
         <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={createRequest}>
           <input className="rounded border p-2 text-sm sm:col-span-2" name="name" placeholder="Internal name for this request" required />
           <select className="rounded border p-2 text-sm sm:col-span-2" name="placement" required>

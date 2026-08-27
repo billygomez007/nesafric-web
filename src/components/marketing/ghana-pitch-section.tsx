@@ -26,10 +26,10 @@ export function GhanaPitchSection() {
         <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
           You handle the deal.
           <br />
-          Umo Afric handles the work around it.
+          UmoAfric handles the work around it.
         </h2>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-600">
-          Umo Afric gives real-estate professionals an intelligent operating platform around their business —
+          UmoAfric gives real-estate professionals an intelligent operating platform around their business —
           a professional presence, listings, leads, viewings, a team, and AI working alongside you.
         </p>
       </div>

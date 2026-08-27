@@ -15,7 +15,7 @@ export function ProfessionalsHero() {
         <h1 className="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
           You handle the deal.
           <br />
-          Umo Afric handles the work around it.
+          UmoAfric handles the work around it.
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">
           List properties. Capture enquiries. Manage leads. Coordinate viewings. Organise your team. Put AI

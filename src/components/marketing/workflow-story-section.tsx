@@ -1,12 +1,12 @@
 const STEPS = [
   { label: "You list a property", detail: "Publish a listing or development in minutes, under your professional profile." },
-  { label: "A prospect discovers it", detail: "Found through the Umo Afric Marketplace — not a private, disconnected ad." },
-  { label: "Umo Afric captures the enquiry", detail: "Every enquiry lands in one pipeline — nothing lost in a WhatsApp thread." },
+  { label: "A prospect discovers it", detail: "Found through the UmoAfric Marketplace — not a private, disconnected ad." },
+  { label: "UmoAfric captures the enquiry", detail: "Every enquiry lands in one pipeline — nothing lost in a WhatsApp thread." },
   { label: "AI + platform help handle the questions", detail: "Routine listing and availability questions get answered immediately." },
   { label: "The lead enters your pipeline", detail: "Qualified, organised, and ready for you to work — not buried in your inbox." },
   { label: "A viewing is coordinated", detail: "Scheduling handled without the back-and-forth." },
   { label: "You step in", detail: "The moment that actually needs you — face to face, at the property." },
-  { label: "You view, negotiate, close", detail: "You close the deal. Umo Afric already did the work around it." },
+  { label: "You view, negotiate, close", detail: "You close the deal. UmoAfric already did the work around it." },
 ];
 
 export function WorkflowStorySection() {
@@ -19,7 +19,7 @@ export function WorkflowStorySection() {
             Stop spending your day on administrative follow-up.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-400">
-            Umo Afric handles the work around the opportunity, so you can concentrate on the moments where you
+            UmoAfric handles the work around the opportunity, so you can concentrate on the moments where you
             actually create value — the viewing, the negotiation, the close.
           </p>
         </div>
@@ -39,7 +39,7 @@ export function WorkflowStorySection() {
         <div className="mt-4 flex items-center gap-3 border-t border-white/10 pt-8">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           <p className="text-sm font-medium text-slate-300">
-            You handle the deal. <span className="text-white">Umo Afric handles the work around it.</span>
+            You handle the deal. <span className="text-white">UmoAfric handles the work around it.</span>
           </p>
         </div>
       </div>

@@ -10,7 +10,7 @@ export default function NewPaymentPage() {
           Payment history
         </Link>
       }
-      description="Record cash, direct bank transfer, or manual Mobile Money received outside PropertyOS."
+      description="Record cash, direct bank transfer, or manual Mobile Money received outside UmoAfric."
       eyebrow="OFFLINE COLLECTION"
       size="medium"
       title="Record manual payment"

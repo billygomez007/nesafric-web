@@ -5,7 +5,7 @@ const TRACKS = [
     items: [
       "A development profile and project showcase",
       "Unit-level inventory and live availability",
-      "Public listings on the Umo Afric Marketplace",
+      "Public listings on the UmoAfric Marketplace",
       "Leads and viewings coordinated in one pipeline",
       "A sales team working from a shared pipeline",
       "AI sales support for enquiries and inventory matching",

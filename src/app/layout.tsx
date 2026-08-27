@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 const TITLE = `${BRAND.name} — The Real Estate Operating & Marketplace Platform`;
 const DESCRIPTION =
-  "Umo Afric is the intelligent real estate operating and marketplace platform: owners, property managers and developers operate their portfolios; agents, brokers, brokerages and real estate companies market listings and grow their business; buyers and renters discover properties — with AI employees built in.";
+  "UmoAfric is the intelligent real estate operating and marketplace platform: owners, property managers and developers operate their portfolios; agents, brokers, brokerages and real estate companies market listings and grow their business; buyers and renters discover properties — with AI employees built in.";
 const SOCIAL_DESCRIPTION =
   "The intelligent real estate operating and marketplace platform — for owners, managers, agents, brokers, brokerages and developers.";
 

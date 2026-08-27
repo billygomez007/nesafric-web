@@ -54,12 +54,12 @@ export function contentFor(template: AccountEmailTemplate, displayName: string, 
       };
     case "ONBOARDING_COMPLETE_PROPERTYOS":
       return {
-        subject: "Your PropertyOS organisation is ready",
+        subject: "Your UmoAfric organisation is ready",
         sender: "hello",
         content: {
           heading: `${workspaceName ?? "Your organisation"} is ready`,
           greeting: `Hi ${displayName},`,
-          paragraphs: [`Your PropertyOS organisation, ${workspaceName ?? "your new organisation"}, has been created. You can now add properties, invite your team, and start managing your portfolio.`],
+          paragraphs: [`Your UmoAfric organisation, ${workspaceName ?? "your new organisation"}, has been created. You can now add properties, invite your team, and start managing your portfolio.`],
           cta: { label: "Go to your dashboard", path: "/dashboard" },
         },
       };

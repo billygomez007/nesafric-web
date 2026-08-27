@@ -11,7 +11,7 @@ import { FinalCtaSection } from "@/components/marketing/final-cta-section";
 export const metadata: Metadata = {
   title: "Property Management Software for Ghana",
   description:
-    "Umo Afric is an intelligent property management platform for landlords, property owners, property managers and developers in Ghana — properties, tenants, leases, rent, payments, maintenance and AI employees, all in one place.",
+    "UmoAfric is an intelligent property management platform for landlords, property owners, property managers and developers in Ghana — properties, tenants, leases, rent, payments, maintenance and AI employees, all in one place.",
   alternates: { canonical: "/for-property-owners" },
   openGraph: {
     title: "Run your property operation from one intelligent platform.",
@@ -30,7 +30,7 @@ export default function ForPropertyOwnersPage() {
         <PropertyOwnersHero />
         <section className="bg-slate-950 px-6 pb-24 sm:px-8 sm:pb-32">
           <ProductMockup
-            alt="Umo Afric property owner dashboard showing portfolio overview, rent collection and AI property manager activity"
+            alt="UmoAfric property owner dashboard showing portfolio overview, rent collection and AI property manager activity"
             src="/marketing/mockups/property-owners-dashboard.png"
           />
         </section>
@@ -41,7 +41,7 @@ export default function ForPropertyOwnersPage() {
           kicker="AI FOR OPERATIONS"
           mockup={{
             src: "/marketing/mockups/ai-workforce-command-center.png",
-            alt: "Umo Afric AI Workforce Command Center showing the AI Receptionist, AI Sales Agent, AI Property Manager and AI Maintenance Coordinator, plus a maintenance request handled end to end",
+            alt: "UmoAfric AI Workforce Command Center showing the AI Receptionist, AI Sales Agent, AI Property Manager and AI Maintenance Coordinator, plus a maintenance request handled end to end",
           }}
         />
         <FinalCtaSection />

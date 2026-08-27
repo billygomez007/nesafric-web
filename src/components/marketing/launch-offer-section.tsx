@@ -4,7 +4,7 @@ import Link from "next/link";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
 
 const INCLUDED = [
-  "A professional profile and company presence on the Umo Afric Marketplace",
+  "A professional profile and company presence on the UmoAfric Marketplace",
   "Up to 10 active listings",
   "Up to 2 active developments",
   "Up to 3 team members",

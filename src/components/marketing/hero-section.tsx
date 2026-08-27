@@ -21,7 +21,7 @@ export function HeroSection() {
       />
       <div className="relative mx-auto grid max-w-7xl gap-16 px-6 sm:px-8 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-12">
         <div className="marketing-fade-up">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">UMO AFRIC · REAL ESTATE OPERATING &amp; MARKETPLACE PLATFORM</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">UMOAFRIC · REAL ESTATE OPERATING &amp; MARKETPLACE PLATFORM</p>
           <h1 className="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
             One intelligent platform for real estate.
           </h1>
@@ -60,7 +60,7 @@ export function HeroSection() {
               <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
               <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
               <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
-              <span className="ml-3 text-[11px] font-medium text-slate-500">PropertyOS — Portfolio</span>
+              <span className="ml-3 text-[11px] font-medium text-slate-500">UmoAfric — Portfolio</span>
             </div>
             <div className="rounded-xl bg-slate-950/80 p-5">
               <div className="flex items-center justify-between">

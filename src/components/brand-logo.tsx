@@ -2,7 +2,7 @@ import Image from "next/image";
 import { BRAND } from "@/platform/brand";
 
 /**
- * The official Umo Afric wordmark. `variant="dark"` (default) is the transparent-background
+ * The official UmoAfric wordmark. `variant="dark"` (default) is the transparent-background
  * artwork for dark surfaces (marketing header/footer, hero sections); `variant="light"` is the
  * same artwork on a dark rounded chip, for light surfaces (authenticated app shells) where the
  * white-on-transparent artwork would otherwise have no contrast.

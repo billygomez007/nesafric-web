@@ -64,7 +64,7 @@ export function WorkspaceSwitcher({ current }: { current: { kind: "propertyos" |
             <p className="px-2 py-2 text-sm text-slate-500">Loading…</p>
           ) : workspaces.propertyOsOrganisations.length === 0 ? (
             <div className="px-2 py-2">
-              <p className="text-sm text-slate-500">No PropertyOS organisations yet.</p>
+              <p className="text-sm text-slate-500">No UmoAfric organisations yet.</p>
               <Link className="mt-1 inline-block text-sm font-semibold text-emerald-700" href="/onboarding" onClick={() => setOpen(false)}>Create one →</Link>
             </div>
           ) : (

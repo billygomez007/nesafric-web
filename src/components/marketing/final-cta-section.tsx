@@ -10,7 +10,7 @@ export function FinalCtaSection() {
       />
       <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
         <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-          Run your real estate business on Umo Afric.
+          Run your real estate business on UmoAfric.
         </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-400">
           Owners, managers, agents, brokers, brokerages and developers can operate, market and grow — from

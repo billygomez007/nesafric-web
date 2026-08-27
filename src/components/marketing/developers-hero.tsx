@@ -13,10 +13,10 @@ export function DevelopersHero() {
       <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
         <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">FOR PROPERTY DEVELOPERS</p>
         <h1 className="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
-          From development to deal — run it on Umo Afric.
+          From development to deal — run it on UmoAfric.
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-          Showcase your developments, manage unit inventory and availability, sell through the Umo Afric
+          Showcase your developments, manage unit inventory and availability, sell through the UmoAfric
           Marketplace — and bring delivered units into full property management, if and when you need it.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">

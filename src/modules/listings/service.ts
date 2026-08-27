@@ -251,7 +251,7 @@ export async function createListing(userId: string, organisationId: string, inpu
   // Representative entitlement check (item 2): published/active listing count is capped per plan.
   await assertOperational(organisationId, ENTITLEMENTS.listingsMax.key);
   const data = createListingSchema.parse(input);
-  if (!data.propertyId || data.marketplaceAssetId) throw new AppError("PROPERTYOS_LISTING_SOURCE_REQUIRED", 422, "This endpoint requires a PropertyOS property source.");
+  if (!data.propertyId || data.marketplaceAssetId) throw new AppError("PROPERTYOS_LISTING_SOURCE_REQUIRED", 422, "This endpoint requires a UmoAfric property source.");
   const propertyId = data.propertyId;
   return db.$transaction(async (tx) => {
     await validateAsset(tx, organisationId, propertyId, data.unitId, data.countryCode, data.currencyCode);

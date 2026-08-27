@@ -32,7 +32,7 @@ export function OperatingSystemSection() {
 
         <div className="mt-14 overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-200 bg-slate-950 px-6 py-4">
-            <p className="text-sm font-semibold tracking-tight text-white">Umo Afric</p>
+            <p className="text-sm font-semibold tracking-tight text-white">UmoAfric</p>
           </div>
           <div className="grid grid-cols-2 gap-px bg-slate-200 sm:grid-cols-3 lg:grid-cols-4">
             {MODULES.map((module) => (
@@ -46,7 +46,7 @@ export function OperatingSystemSection() {
 
         <div className="mt-16">
           <ProductMockup
-            alt="Umo Afric dashboard showing property management, marketplace, leads, payments and AI employees working together in one platform"
+            alt="UmoAfric dashboard showing property management, marketplace, leads, payments and AI employees working together in one platform"
             src="/marketing/mockups/homepage-platform-overview.png"
           />
         </div>

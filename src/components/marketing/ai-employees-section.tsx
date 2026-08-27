@@ -36,7 +36,7 @@ export function AIEmployeesSection() {
             A real AI workforce for real estate.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-400">
-            Eligible Umo Afric customers can deploy AI employees that work inside day-to-day operations, sales and
+            Eligible UmoAfric customers can deploy AI employees that work inside day-to-day operations, sales and
             support — according to their plan and configured capabilities.
           </p>
         </div>

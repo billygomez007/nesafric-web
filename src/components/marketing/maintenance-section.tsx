@@ -1,6 +1,6 @@
 const STEPS = [
   "Tenant reports issue",
-  "PropertyOS tracks it",
+  "UmoAfric tracks it",
   "Manager reviews",
   "Artisan assigned",
   "Quotation / work order",

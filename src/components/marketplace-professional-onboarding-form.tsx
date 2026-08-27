@@ -51,7 +51,7 @@ export function MarketplaceProfessionalOnboardingForm() {
       </div>
       {error && <p className="text-sm text-red-700">{error}</p>}
       <button className="rounded bg-slate-950 p-3 font-semibold text-white">Create marketplace profile</button>
-      <p className="text-xs text-slate-500">Free at launch. This is completely separate from PropertyOS management — no property-management subscription is created.</p>
+      <p className="text-xs text-slate-500">Free at launch. This is completely separate from UmoAfric management — no property-management subscription is created.</p>
     </form>
   );
 }

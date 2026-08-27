@@ -14,10 +14,10 @@ import { FinalCtaSection } from "@/components/marketing/final-cta-section";
 export const metadata: Metadata = {
   title: "For Real Estate Agents & Brokerages in Ghana",
   description:
-    "Umo Afric gives real estate agents, brokers, brokerages and real estate companies in Ghana a professional presence, listings, a lead pipeline, viewing coordination and AI sales support. Free for Marketplace Professionals during launch.",
+    "UmoAfric gives real estate agents, brokers, brokerages and real estate companies in Ghana a professional presence, listings, a lead pipeline, viewing coordination and AI sales support. Free for Marketplace Professionals during launch.",
   alternates: { canonical: "/for-professionals" },
   openGraph: {
-    title: "You handle the deal. Umo Afric handles the work around it.",
+    title: "You handle the deal. UmoAfric handles the work around it.",
     description:
       "List properties, capture enquiries, manage leads, coordinate viewings and organise your team — free for Marketplace Professionals during the Ghana launch.",
     url: "/for-professionals",
@@ -33,7 +33,7 @@ export default function ForProfessionalsPage() {
         <ProfessionalsHero />
         <section className="bg-slate-950 px-6 pb-24 sm:px-8 sm:pb-32">
           <ProductMockup
-            alt="Umo Afric real estate business workspace showing lead pipeline, active listings, developments and AI sales agent activity"
+            alt="UmoAfric real estate business workspace showing lead pipeline, active listings, developments and AI sales agent activity"
             src="/marketing/mockups/professionals-business-workspace.png"
           />
         </section>

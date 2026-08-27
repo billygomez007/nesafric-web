@@ -20,7 +20,7 @@ const ORGANIZATION_JSON_LD = {
   "@type": "Organization",
   name: BRAND.name,
   description:
-    "Umo Afric is the intelligent real estate operating and marketplace platform for Ghana — property management, listings, leads and AI-powered operations in one place.",
+    "UmoAfric is the intelligent real estate operating and marketplace platform for Ghana — property management, listings, leads and AI-powered operations in one place.",
   url: `https://${BRAND.domain}`,
   logo: `https://${BRAND.domain}${BRAND.logo.onDark}`,
   email: BRAND.contact.info,

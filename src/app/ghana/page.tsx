@@ -14,10 +14,10 @@ import { FinalCtaSection } from "@/components/marketing/final-cta-section";
 export const metadata: Metadata = {
   title: "Now Live in Ghana",
   description:
-    "Umo Afric is now live in Ghana — a real estate platform bringing property marketing, listings, leads, viewings, teams and AI-powered operations into one place. Marketplace Professional accounts are free during launch.",
+    "UmoAfric is now live in Ghana — a real estate platform bringing property marketing, listings, leads, viewings, teams and AI-powered operations into one place. Marketplace Professional accounts are free during launch.",
   alternates: { canonical: "/ghana" },
   openGraph: {
-    title: "Umo Afric is now live in Ghana",
+    title: "UmoAfric is now live in Ghana",
     description:
       "The new way to run real estate has arrived in Ghana. List properties, manage leads and viewings, and put AI to work around your real-estate business — free for Marketplace Professionals during launch.",
     url: "/ghana",

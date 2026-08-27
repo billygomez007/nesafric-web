@@ -22,7 +22,7 @@ const AI_ROLES = [
 export function AICapabilitiesSection({
   kicker = "AI, BUILT IN",
   heading = "Your real-estate business. Now with AI built in.",
-  intro = "AI employees work inside your Umo Afric workspace — available according to your plan — to take on the repetitive work around the business, not the judgment calls that need you.",
+  intro = "AI employees work inside your UmoAfric workspace — available according to your plan — to take on the repetitive work around the business, not the judgment calls that need you.",
   mockup,
 }: {
   kicker?: string;

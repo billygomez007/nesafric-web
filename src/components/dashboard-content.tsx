@@ -37,7 +37,7 @@ export function DashboardContent() {
     fetch("/api/organisations/" + organisationId + "/dashboard-opportunities", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setOpportunities((await response.json()).opportunities); });
   }, []);
   if (noOrganisation) return <section className="mt-8 rounded-xl border bg-white p-6 text-center shadow-sm">
-    <h2 className="font-semibold">Set up your PropertyOS organisation</h2>
+    <h2 className="font-semibold">Set up your UmoAfric organisation</h2>
     <p className="mt-2 text-sm text-slate-600">This is where your properties, tenants, leases and rent collection will live. You don&apos;t have an organisation yet — create one to get started.</p>
     <Link className="mt-4 inline-block rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white" href="/onboarding">Create your organisation</Link>
   </section>;

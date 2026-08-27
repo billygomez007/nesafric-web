@@ -87,7 +87,7 @@ async function main() {
   console.log("Registering demo users...");
   const landlord = await registerUser({ displayName: "Kwame Mensah (Demo Landlord)", email: "landlord@propertyos.demo", password: DEMO_PASSWORD });
   const manager = await registerUser({ displayName: "Ama Boateng (Demo Property Manager)", email: "manager@propertyos.demo", password: DEMO_PASSWORD });
-  const platformAdminUser = await registerUser({ displayName: "Umo Afric Admin (Demo Platform Admin)", email: "platform-admin@propertyos.demo", password: DEMO_PASSWORD });
+  const platformAdminUser = await registerUser({ displayName: "UmoAfric Admin (Demo Platform Admin)", email: "platform-admin@propertyos.demo", password: DEMO_PASSWORD });
   const providerUser = await registerUser({ displayName: "Kojo Plumbing Services (Demo Provider)", email: "provider@propertyos.demo", password: DEMO_PASSWORD });
   const prospect = await registerUser({ displayName: "Abena Prospect (Demo Prospect)", email: "prospect@propertyos.demo", password: DEMO_PASSWORD });
   const brokerUser = await registerUser({ displayName: "Adjoa Brokerage (Demo Brokerage)", email: "broker@propertyos.demo", password: DEMO_PASSWORD });
@@ -248,7 +248,7 @@ async function main() {
   await db.campaign.create({
     data: {
       ...campaignDefaults,
-      name: "Umo Afric — Marketplace primary hero (Demo)", placement: "MARKETPLACE_PRIMARY", status: "ACTIVE", priority: 100,
+      name: "UmoAfric — Marketplace primary hero (Demo)", placement: "MARKETPLACE_PRIMARY", status: "ACTIVE", priority: 100,
       headline: "Discover Ghana's most trusted property marketplace",
       supportingText: "Verified listings, vetted professionals, and secure transactions — all in one place.",
       ctaLabel: "Explore listings", destinationUrl: listingUrl,
@@ -277,7 +277,7 @@ async function main() {
   await db.campaign.create({
     data: {
       ...campaignDefaults,
-      name: "Umo Afric — browse all properties (Demo)", placement: "MARKETPLACE_INLINE", status: "ACTIVE", priority: 10,
+      name: "UmoAfric — browse all properties (Demo)", placement: "MARKETPLACE_INLINE", status: "ACTIVE", priority: 10,
       headline: "New listings added every week", supportingText: "Browse verified properties for rent and sale across Ghana.",
       ctaLabel: "Browse properties", destinationUrl: absoluteUrl("/marketplace/properties"),
       desktopMediaUrl: "https://placehold.co/1200x600/052e28/052e28/png", mobileMediaUrl: null,

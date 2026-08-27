@@ -232,7 +232,7 @@ export function AIPropertyManager() {
       if (!response.ok) throw new Error(await responseError(response, "Unable to send the message."));
       const result = await response.json() as { providerUnavailable?: boolean };
       if (result.providerUnavailable) {
-        setNotice("The configured AI provider is unavailable. PropertyOS used its deterministic fallback.");
+        setNotice("The configured AI provider is unavailable. UmoAfric used its deterministic fallback.");
       }
       setMessage("");
       await loadSessions(organisationId, selected.id);
@@ -471,7 +471,7 @@ export function AIPropertyManager() {
 
               </div>
               <form className="flex gap-2 border-t p-4" onSubmit={sendMessage}>
-                <label className="sr-only" htmlFor="ai-message">Message PropertyOS AI</label>
+                <label className="sr-only" htmlFor="ai-message">Message UmoAfric AI</label>
                 <textarea className="min-h-11 flex-1 resize-y rounded-xl border px-3 py-2 text-sm" id="ai-message" maxLength={4000} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about your portfolio operations…" rows={2} value={message} />
                 <button className="self-end rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={!message.trim() || busy === "message"} type="submit">Send</button>
               </form>

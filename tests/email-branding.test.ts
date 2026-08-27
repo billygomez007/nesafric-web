@@ -23,7 +23,7 @@ describe("renderEmail escaping", () => {
     expect(html).not.toContain("<script>bad()</script>");
   });
 
-  it("resolves a CTA path to an absolute Umo Afric application URL, never an external origin", () => {
+  it("resolves a CTA path to an absolute UmoAfric application URL, never an external origin", () => {
     const { html } = renderEmail({ heading: "Test", paragraphs: [], cta: { label: "Go", path: "/dashboard" } });
     expect(html).toContain(`href="${BRAND.siteUrl}/dashboard"`);
   });
@@ -63,8 +63,8 @@ describe("account email sender-identity mapping", () => {
   it("sends the welcome email from hello@, matching the brand's relationship-communication identity", () => {
     const welcome = contentFor("WELCOME", "Ama");
     expect(welcome.sender).toBe("hello");
-    expect(BRAND.sender[welcome.sender]).toBe("Umo Afric <hello@umoafric.com>");
-    expect(welcome.subject).toBe("Welcome to Umo Afric");
+    expect(BRAND.sender[welcome.sender]).toBe("UmoAfric <hello@umoafric.com>");
+    expect(welcome.subject).toBe("Welcome to UmoAfric");
   });
 
   it("sends onboarding-completion emails from hello@ too", () => {
@@ -79,10 +79,10 @@ describe("account email sender-identity mapping", () => {
 });
 
 describe("brand sender identities", () => {
-  it("maps every sender to the correct official Umo Afric address", () => {
-    expect(BRAND.sender.hello).toBe("Umo Afric <hello@umoafric.com>");
-    expect(BRAND.sender.notifications).toBe("Umo Afric <notifications@umoafric.com>");
-    expect(BRAND.sender.support).toBe("Umo Afric <support@umoafric.com>");
-    expect(BRAND.sender.info).toBe("Umo Afric <info@umoafric.com>");
+  it("maps every sender to the correct official UmoAfric address", () => {
+    expect(BRAND.sender.hello).toBe("UmoAfric <hello@umoafric.com>");
+    expect(BRAND.sender.notifications).toBe("UmoAfric <notifications@umoafric.com>");
+    expect(BRAND.sender.support).toBe("UmoAfric <support@umoafric.com>");
+    expect(BRAND.sender.info).toBe("UmoAfric <info@umoafric.com>");
   });
 });

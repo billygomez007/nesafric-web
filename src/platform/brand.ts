@@ -7,7 +7,7 @@
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://umoafric.com").replace(/\/$/, "");
 
 export const BRAND = {
-  name: "Umo Afric",
+  name: "UmoAfric",
   tagline: "Everything Property.",
   domain: "umoafric.com",
   siteUrl: SITE_URL,
@@ -45,10 +45,10 @@ export const BRAND = {
 
   /** RFC 5322 "display name <address>" sender identities, mapped to their intended purpose. */
   sender: {
-    hello: "Umo Afric <hello@umoafric.com>",
-    notifications: "Umo Afric <notifications@umoafric.com>",
-    support: "Umo Afric <support@umoafric.com>",
-    info: "Umo Afric <info@umoafric.com>",
+    hello: "UmoAfric <hello@umoafric.com>",
+    notifications: "UmoAfric <notifications@umoafric.com>",
+    support: "UmoAfric <support@umoafric.com>",
+    info: "UmoAfric <info@umoafric.com>",
   },
 } as const;
 

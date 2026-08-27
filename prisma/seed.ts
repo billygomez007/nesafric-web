@@ -37,7 +37,7 @@ const permissions = [
   ["provider.read", "View the organisation provider directory and provider performance"],
   ["provider.manage", "Manage provider directory records and quotation requests"],
   ["provider.verify", "Review provider verification evidence and status"],
-  ["provider.quote_record", "Record provider quotations received outside PropertyOS"],
+  ["provider.quote_record", "Record provider quotations received outside UmoAfric"],
   ["provider.quote_review", "Approve or reject submitted provider quotations"],
   ["provider.assign", "Assign approved providers to work orders"],
   ["provider.rate", "Rate providers after completed work orders"],
@@ -69,7 +69,7 @@ const permissions = [
   ["deposit.settlement.approve", "Approve deductions and deposit settlements"],
   ["deposit.refund.record", "Record completed deposit refunds"],
   ["lease.close", "Close leases after move-out requirements are satisfied"],
-  ["ai.use", "Use the organisation-scoped PropertyOS AI workspace"],
+  ["ai.use", "Use the organisation-scoped UmoAfric AI workspace"],
   ["ai.command_center", "View cross-domain operational command-center metrics and signals"],
   ["ai.propose", "Create approval-gated AI action proposals"],
   ["ai.approve", "Approve or reject authorised AI action proposals"],
@@ -221,7 +221,7 @@ const PLANS = [
 const MARKETPLACE_PLANS = [
   {
     key: "marketplace_free", name: "Marketplace Free", sortOrder: 1,
-    description: "Free access to the Umo Afric Real Estate Marketplace for agents, brokers, brokerages, real-estate companies, and developers.",
+    description: "Free access to the UmoAfric Real Estate Marketplace for agents, brokers, brokerages, real-estate companies, and developers.",
     prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY" as const, amountMinor: "0" }],
     entitlements: {
       [MARKETPLACE_ENTITLEMENTS.activeListingsMax.key]: { kind: "LIMIT" as const, limitValue: 10 },

@@ -22,7 +22,7 @@ export function GhanaHero() {
             Built for African real estate. Now live in Ghana.
           </p>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-            Umo Afric brings property marketing, listings, leads, viewings, teams and AI-powered real-estate
+            UmoAfric brings property marketing, listings, leads, viewings, teams and AI-powered real-estate
             operations into one intelligent platform.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
@@ -31,7 +31,7 @@ export function GhanaHero() {
               href="/register"
               onClick={() => trackCampaignEvent("join_free_click", { placement: "ghana_hero" })}
             >
-              Join Umo Afric Free
+              Join UmoAfric Free
             </Link>
             <Link
               className="rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:border-white/40"

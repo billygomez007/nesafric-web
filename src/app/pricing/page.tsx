@@ -7,7 +7,7 @@ import { LaunchOfferSection } from "@/components/marketing/launch-offer-section"
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Umo Afric pricing: Marketplace Professional access is free during the Ghana launch. PropertyOS property-management plans start from GHS 250/month.",
+    "UmoAfric pricing: Marketplace Professional access is free during the Ghana launch. UmoAfric property-management plans start from GHS 250/month.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -35,9 +35,9 @@ export default function PricingPage() {
           <div className="mx-auto max-w-3xl px-6 sm:px-8">
             <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-10">
               <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">PROPERTY MANAGEMENT</p>
-              <h2 className="mt-3 text-2xl font-semibold text-slate-950">PropertyOS management plans</h2>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-950">UmoAfric management plans</h2>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-                For landlords, property managers and developers operating a portfolio, PropertyOS plans start
+                For landlords, property managers and developers operating a portfolio, UmoAfric plans start
                 from <strong className="font-semibold text-slate-950">GHS 250/month</strong> for an individual
                 landlord, scaling up for growing portfolios and larger teams. Tell us the size of your
                 portfolio and we&apos;ll point you to the right plan.

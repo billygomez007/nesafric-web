@@ -1,7 +1,7 @@
 import { BRAND, absoluteUrl } from "@/platform/brand";
 
 /**
- * The Umo Afric branded transactional email design system: one base layout plus a small set of
+ * The UmoAfric branded transactional email design system: one base layout plus a small set of
  * reusable content components (heading, paragraphs, detail rows, badge, CTA, support block,
  * footer), rather than hand-rolled HTML per email. Every render produces both an HTML document
  * and a plain-text alternative from the same structured content, so the two can never drift.
@@ -10,7 +10,7 @@ import { BRAND, absoluteUrl } from "@/platform/brand";
  * labels/values) is HTML-escaped before it reaches the template — there is no raw-HTML slot, so
  * user-controlled data (organisation names, tenant names, notes, references) can never inject
  * markup. `cta.url` must be a same-origin application path — `absoluteUrl()` is the only way to
- * produce one, so an email can never link off the Umo Afric domain.
+ * produce one, so an email can never link off the UmoAfric domain.
  */
 
 function escapeHtml(value: string): string {

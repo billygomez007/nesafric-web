@@ -16,7 +16,7 @@ export function GhanaMobileShowcaseSection() {
 
       <div className="mt-14 px-6 sm:px-8">
         <ProductMockup
-          alt="Umo Afric mobile experiences for tenants, agents and landlords, shown side by side on three phones"
+          alt="UmoAfric mobile experiences for tenants, agents and landlords, shown side by side on three phones"
           maxWidthClassName="max-w-4xl"
           src="/marketing/mockups/mobile-three-experiences.png"
           theme="light"

@@ -61,7 +61,7 @@ export function MarketplaceDirectory() {
         <div className="mx-auto max-w-6xl">
           <nav className="flex items-center justify-between text-sm text-slate-300"><Link href="/"><BrandLogo height={22} /></Link><Link href="/marketplace/properties">Browse properties</Link></nav>
           <h1 className="mt-8 text-3xl font-semibold sm:text-4xl">Professional Directory</h1>
-          <p className="mt-3 max-w-2xl text-slate-300">Agents, brokerages, real estate companies, and developers verified and active on Umo Afric.</p>
+          <p className="mt-3 max-w-2xl text-slate-300">Agents, brokerages, real estate companies, and developers verified and active on UmoAfric.</p>
         </div>
       </header>
 

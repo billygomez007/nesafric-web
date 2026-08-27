@@ -19,9 +19,9 @@ export default function MarketplaceProfessionalsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
-      <p className="text-sm font-semibold text-emerald-700">UMO AFRIC REAL ESTATE MARKETPLACE</p>
+      <p className="text-sm font-semibold text-emerald-700">UMOAFRIC REAL ESTATE MARKETPLACE</p>
       <h1 className="mt-2 text-3xl font-semibold">Your marketplace profiles</h1>
-      <p className="mt-2 text-slate-600">Agents, brokers, brokerages, real-estate companies, and developers each operate as a professional profile here — separate from any PropertyOS management organisation.</p>
+      <p className="mt-2 text-slate-600">Agents, brokers, brokerages, real-estate companies, and developers each operate as a professional profile here — separate from any UmoAfric management organisation.</p>
 
       {error && <p className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>}
       {!error && !professionals && <p className="mt-6 text-slate-600">Loading…</p>}

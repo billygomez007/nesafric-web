@@ -108,7 +108,7 @@ function validateListing(
     context.addIssue({ code: "custom", path: ["propertyId"], message: "Exactly one managed property or marketplace asset source is required." });
   }
   if (listing.unitId && !listing.propertyId) {
-    context.addIssue({ code: "custom", path: ["unitId"], message: "A PropertyOS unit requires a managed property source." });
+    context.addIssue({ code: "custom", path: ["unitId"], message: "A UmoAfric unit requires a managed property source." });
   }
   if (listing.listingType === "RENT") {
     if (!listing.rentAmountMinor) context.addIssue({ code: "custom", path: ["rentAmountMinor"], message: "Rent amount is required for rental listings." });

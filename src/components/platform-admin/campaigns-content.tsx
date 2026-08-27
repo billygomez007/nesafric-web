@@ -93,7 +93,7 @@ export function CampaignsAdminContent() {
       {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
 
       <section className="rounded-xl border bg-white p-5 shadow-sm">
-        <h2 className="font-semibold">Create a Umo Afric-owned campaign</h2>
+        <h2 className="font-semibold">Create a UmoAfric-owned campaign</h2>
         <p className="mt-1 text-sm text-slate-600">Homepage announcements and platform-curated marketplace placements. Starts APPROVED (or SCHEDULED once a start date is set) — never a self-service submission.</p>
         <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={createPlatformCampaign}>
           <input className="rounded border p-2 text-sm" name="name" placeholder="Internal name" required />
@@ -124,7 +124,7 @@ export function CampaignsAdminContent() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-medium">{campaign.name}</p>
-                    <p className="text-xs text-slate-500">{campaign.placement.replaceAll("_", " ")} · {campaign.isPlatformOwned ? "Umo Afric" : campaign.advertiser?.displayName ?? "Unknown advertiser"}</p>
+                    <p className="text-xs text-slate-500">{campaign.placement.replaceAll("_", " ")} · {campaign.isPlatformOwned ? "UmoAfric" : campaign.advertiser?.displayName ?? "Unknown advertiser"}</p>
                   </div>
                   <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold">{campaign.status.replaceAll("_", " ")}</span>
                 </div>

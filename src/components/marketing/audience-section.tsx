@@ -18,7 +18,7 @@ const PATHWAYS = [
     forLabel: "For",
     forWho: "Real Estate Agents · Brokers · Brokerages · Real Estate Companies · Property Developers",
     description:
-      "Build a professional profile, publish listings and developments, manage inventory, leads, viewings and CRM, and reach buyers and renters through the Umo Afric Marketplace — with AI sales support.",
+      "Build a professional profile, publish listings and developments, manage inventory, leads, viewings and CRM, and reach buyers and renters through the UmoAfric Marketplace — with AI sales support.",
     cta: { label: "Market Properties", href: "/register" },
   },
 ];
@@ -33,7 +33,7 @@ export function AudienceSection() {
             Two connected ways to run a real estate business.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-600">
-            Whichever side of real estate you&apos;re on, Umo Afric runs the operation — and connects it to
+            Whichever side of real estate you&apos;re on, UmoAfric runs the operation — and connects it to
             everyone else on the platform.
           </p>
         </div>
@@ -58,7 +58,7 @@ export function AudienceSection() {
         </div>
 
         <p className="mt-10 max-w-3xl text-sm leading-6 text-slate-500">
-          Property developers often belong to both sides — operating delivered units on Umo Afric while marketing
+          Property developers often belong to both sides — operating delivered units on UmoAfric while marketing
           new developments through the Marketplace, from one account.
         </p>
       </div>

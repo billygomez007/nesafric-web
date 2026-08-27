@@ -1,5 +1,5 @@
 const TOOLS = [
-  { label: "Professional profile", detail: "Your public identity on the Umo Afric Marketplace." },
+  { label: "Professional profile", detail: "Your public identity on the UmoAfric Marketplace." },
   { label: "Property listings", detail: "Publish and manage your own inventory." },
   { label: "Lead inbox", detail: "Every enquiry, in one place — nothing lost." },
   { label: "Viewing management", detail: "Schedule and track viewings without the back-and-forth." },

@@ -92,7 +92,7 @@ export function PlatformAdminOrganisationDetail({ organisationId }: { organisati
           <p className="font-semibold">{feature.label} <span className="ml-1 text-xs font-normal text-slate-500">({feature.source})</span></p>
           {feature.kind === "BOOLEAN" ? <p>{feature.booleanValue ? "Enabled" : "Disabled"}</p> : <p>{feature.current ?? 0} / {feature.isUnlimited ? "Unlimited" : feature.limit}{feature.reached ? " — reached" : ""}</p>}
         </div>)}
-      </div> : <p className="mt-2 text-sm text-slate-600">This organisation has no PropertyOS subscription yet.</p>}
+      </div> : <p className="mt-2 text-sm text-slate-600">This organisation has no UmoAfric subscription yet.</p>}
     </section>
 
     <section className="rounded-xl border bg-white p-5 shadow-sm">
