@@ -14,14 +14,10 @@ const QUEUE = [
 
 export function HeroSection() {
   return (
-    <section className="marketing-grid relative overflow-hidden bg-slate-950 pt-20 pb-24 sm:pt-28 sm:pb-32">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[-12rem] h-[36rem] w-[64rem] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl"
-      />
+    <section className="marketing-grid relative overflow-hidden bg-navy pt-20 pb-24 sm:pt-28 sm:pb-32">
       <div className="relative mx-auto grid max-w-7xl gap-16 px-6 sm:px-8 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-12">
         <div className="marketing-fade-up">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">UMOAFRIC · REAL ESTATE OPERATING &amp; MARKETPLACE PLATFORM</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-brand">UMOAFRIC · REAL ESTATE OPERATING &amp; MARKETPLACE PLATFORM</p>
           <h1 className="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
             One intelligent platform for real estate.
           </h1>
@@ -31,7 +27,7 @@ export function HeroSection() {
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link
-              className="rounded-full bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300"
+              className="rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
               href="/register"
             >
               Manage Properties
@@ -62,10 +58,11 @@ export function HeroSection() {
               <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
               <span className="ml-3 text-[11px] font-medium text-slate-500">UmoAfric — Portfolio</span>
             </div>
-            <div className="rounded-xl bg-slate-950/80 p-5">
+            <div className="rounded-xl bg-navy/80 p-5">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium tracking-wide text-slate-500">SAMPLE PORTFOLIO VIEW</p>
-                <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[10px] font-semibold text-white">
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
                   LIVE
                 </span>
               </div>

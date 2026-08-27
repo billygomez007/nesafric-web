@@ -13,7 +13,7 @@ export function MaintenanceSection() {
     <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">MAINTENANCE &amp; SERVICE PROVIDERS</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-navy">MAINTENANCE &amp; SERVICE PROVIDERS</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             Every repair, tracked from report to resolution.
           </h2>
@@ -28,7 +28,7 @@ export function MaintenanceSection() {
               className="flex flex-1 items-center gap-3 border-b border-slate-200 px-6 py-5 last:border-0 lg:flex-col lg:items-start lg:gap-4 lg:border-b-0 lg:border-r lg:py-8"
               key={step}
             >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-white">
                 {index + 1}
               </span>
               <p className="text-sm font-medium leading-snug text-slate-800">{step}</p>

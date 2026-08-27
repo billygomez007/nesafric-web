@@ -12,7 +12,7 @@ export function TrustSection() {
     <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">TRUST &amp; CONTROL</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-navy">TRUST &amp; CONTROL</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             Built for operators who are accountable for what happens.
           </h2>

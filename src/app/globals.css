@@ -3,6 +3,35 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /*
+   * UmoAfric design tokens (approved palette). Semantic names so a future palette change
+   * touches this block, not every component. Orange is the brand/action color, used sparingly
+   * (buttons, active states, small highlights) — Deep Navy is the platform's actual visual
+   * foundation. See docs/brand-tokens note in this file's history for the full rationale.
+   */
+  --color-brand: #ff7a00;
+  --color-brand-hover: #e96f00;
+  --color-brand-active: #cc6200;
+
+  --color-navy: #0d1117; /* primary dark foundation: header, footer, dark hero sections */
+  --color-charcoal: #1f2937; /* secondary dark surface */
+
+  --color-surface: #f7f7f5; /* main light page background */
+  --color-surface-elevated: #ffffff; /* cards, forms, filters, dropdowns, modals */
+
+  --color-ink: #111827; /* primary text */
+  --color-muted: #6b7280; /* secondary/supporting text */
+  --color-hairline: #e5e7eb; /* subtle borders */
+
+  --color-premium: #ffc107; /* verified/premium/featured accents only — never a second brand color */
+
+  /* Semantic state colors — unchanged by the rebrand, kept distinct from --color-brand so
+     validation/status UI never gets confused with brand emphasis. */
+  --color-success: #047857;
+  --color-warning: #f59e0b;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
   /*
    * Without this, browsers render native form chrome (select/option lists, checkboxes, radios,
    * date pickers, scrollbars) in dark UA styling whenever the visitor's OS is in dark mode —
@@ -17,8 +46,24 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-montserrat);
   --font-mono: var(--font-geist-mono);
+
+  --color-brand: var(--color-brand);
+  --color-brand-hover: var(--color-brand-hover);
+  --color-brand-active: var(--color-brand-active);
+  --color-navy: var(--color-navy);
+  --color-charcoal: var(--color-charcoal);
+  --color-surface: var(--color-surface);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-ink: var(--color-ink);
+  --color-muted: var(--color-muted);
+  --color-hairline: var(--color-hairline);
+  --color-premium: var(--color-premium);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+  --color-info: var(--color-info);
 }
 
 /*
@@ -35,7 +80,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-montserrat), Arial, Helvetica, sans-serif;
 }
 
 /* Marketing homepage only: a faint structural grid used behind hero/dark sections to suggest

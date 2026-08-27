@@ -16,7 +16,7 @@ export function SiteNav() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-navy/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 sm:px-8">
         <Link className="flex items-center" href="/">
           <BrandLogo height={30} />
@@ -29,7 +29,7 @@ export function SiteNav() {
             </Link>
           ))}
           <Link
-            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-300 transition-colors hover:border-emerald-400/50"
+            className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand transition-colors hover:border-brand/50"
             href="/ghana"
           >
             GHANA LAUNCH
@@ -41,7 +41,7 @@ export function SiteNav() {
             Sign In
           </Link>
           <Link
-            className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300"
+            className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
             href="/register"
           >
             Get Started
@@ -62,7 +62,7 @@ export function SiteNav() {
       </div>
 
       {open && (
-        <div className="border-t border-white/10 bg-slate-950 px-6 py-6 lg:hidden">
+        <div className="border-t border-white/10 bg-navy px-6 py-6 lg:hidden">
           <nav className="flex flex-col gap-4">
             {NAV_LINKS.map((link) => (
               <Link
@@ -75,7 +75,7 @@ export function SiteNav() {
               </Link>
             ))}
             <Link
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-300"
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand"
               href="/ghana"
               onClick={() => setOpen(false)}
             >
@@ -87,7 +87,7 @@ export function SiteNav() {
               Sign In
             </Link>
             <Link
-              className="rounded-full bg-white px-4 py-3 text-center text-sm font-semibold text-slate-950"
+              className="rounded-full bg-brand px-4 py-3 text-center text-sm font-semibold text-navy"
               href="/register"
               onClick={() => setOpen(false)}
             >

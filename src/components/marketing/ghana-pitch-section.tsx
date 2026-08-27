@@ -22,7 +22,7 @@ export function GhanaPitchSection() {
   return (
     <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-5xl px-6 text-center sm:px-8">
-        <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">THE IDEA</p>
+        <p className="text-xs font-semibold tracking-[0.22em] text-navy">THE IDEA</p>
         <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
           You handle the deal.
           <br />
@@ -43,7 +43,7 @@ export function GhanaPitchSection() {
           >
             <p className="font-semibold text-slate-950">{path.label}</p>
             <p className="mt-2 text-sm leading-6 text-slate-600">{path.description}</p>
-            <span className="mt-4 inline-flex items-center text-sm font-semibold text-emerald-700 transition-colors group-hover:text-emerald-800">
+            <span className="mt-4 inline-flex items-center text-sm font-semibold text-navy transition-colors group-hover:text-brand-active">
               Learn more →
             </span>
           </Link>

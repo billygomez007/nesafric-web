@@ -14,7 +14,7 @@ export function SoloAgentSection() {
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="grid gap-14 lg:grid-cols-2 lg:items-center lg:gap-16">
           <div>
-            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">FOR THE INDIVIDUAL AGENT</p>
+            <p className="text-xs font-semibold tracking-[0.22em] text-navy">FOR THE INDIVIDUAL AGENT</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
               Run like a team — even when it&apos;s just you.
             </h2>
@@ -35,7 +35,7 @@ export function SoloAgentSection() {
                       <p className="text-sm font-semibold text-slate-900">{tool.label}</p>
                       <p className="text-xs text-slate-500">{tool.detail}</p>
                     </div>
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
                   </div>
                 ))}
               </div>

@@ -21,6 +21,6 @@ export function OnboardingForm() {
     <label className="text-sm font-medium">Organisation type<select className="mt-1 w-full rounded border p-3" name="type"><option value="INDIVIDUAL_LANDLORD">Individual landlord</option><option value="PROPERTY_MANAGEMENT">Property management company</option><option value="REAL_ESTATE">Real estate company</option><option value="DEVELOPER">Property developer</option><option value="OTHER">Other</option></select></label>
     <div className="grid grid-cols-2 gap-4"><label className="text-sm font-medium">Country<input className="mt-1 w-full rounded border bg-slate-50 p-3" value="Ghana (GH)" readOnly /></label><label className="text-sm font-medium">Default currency<input className="mt-1 w-full rounded border bg-slate-50 p-3" value="GHS" readOnly /></label></div>
     {error && <p className="text-sm text-red-700">{error}</p>}
-    <button className="rounded bg-slate-950 p-3 font-semibold text-white">Continue to property setup</button>
+    <button className="rounded bg-brand p-3 font-semibold text-navy transition-colors hover:bg-brand-hover">Continue to property setup</button>
   </form>;
 }

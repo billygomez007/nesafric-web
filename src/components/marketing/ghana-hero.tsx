@@ -5,14 +5,10 @@ import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
 
 export function GhanaHero() {
   return (
-    <section className="marketing-grid relative overflow-hidden bg-slate-950 pt-20 pb-24 sm:pt-28 sm:pb-32">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[-12rem] h-[36rem] w-[64rem] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl"
-      />
+    <section className="marketing-grid relative overflow-hidden bg-navy pt-20 pb-24 sm:pt-28 sm:pb-32">
       <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
         <div className="marketing-fade-up">
-          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-emerald-300">
+          <span className="inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-brand">
             NOW LIVE IN GHANA
           </span>
           <h1 className="mt-8 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
@@ -27,7 +23,7 @@ export function GhanaHero() {
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Link
-              className="rounded-full bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300"
+              className="rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
               href="/register"
               onClick={() => trackCampaignEvent("join_free_click", { placement: "ghana_hero" })}
             >

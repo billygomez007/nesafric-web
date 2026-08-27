@@ -15,7 +15,7 @@ export function PaymentsSection() {
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="grid gap-14 lg:grid-cols-2 lg:items-center lg:gap-16">
           <div>
-            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">PAYMENTS</p>
+            <p className="text-xs font-semibold tracking-[0.22em] text-navy">PAYMENTS</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
               Modern financial operations, built in.
             </h2>
@@ -26,7 +26,7 @@ export function PaymentsSection() {
             <ul className="mt-8 space-y-3.5">
               {FEATURES.map((feature) => (
                 <li className="flex items-start gap-3 text-sm leading-6 text-slate-700" key={feature}>
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
                   {feature}
                 </li>
               ))}
@@ -45,13 +45,13 @@ export function PaymentsSection() {
             <div className="mt-6 rounded-xl border border-slate-200 p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-slate-950">Receipt</p>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Reconciled</span>
+                <span className="rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-semibold text-success">Reconciled</span>
               </div>
               <div className="mt-4 space-y-2.5 text-sm">
                 <div className="flex justify-between"><span className="text-slate-500">Tenant</span><span className="font-medium text-slate-800">Sample Tenant</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Method</span><span className="font-medium text-slate-800">Mobile Money</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Amount</span><span className="font-medium text-slate-800">GHS 2,500.00</span></div>
-                <div className="flex justify-between border-t border-slate-100 pt-2.5"><span className="text-slate-500">Status</span><span className="font-medium text-emerald-700">Confirmed</span></div>
+                <div className="flex justify-between border-t border-slate-100 pt-2.5"><span className="text-slate-500">Status</span><span className="font-medium text-success">Confirmed</span></div>
               </div>
             </div>
           </div>

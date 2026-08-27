@@ -19,6 +19,6 @@ export function AuthForm({ mode }: { mode: "register" | "login" }) {
     <label className="block text-sm font-medium">Email<input className="mt-1 w-full rounded border p-3" name="email" type="email" required /></label>
     <label className="block text-sm font-medium">Password<input className="mt-1 w-full rounded border p-3" name="password" type="password" minLength={mode === "register" ? 12 : undefined} required /></label>
     {error && <p className="text-sm text-red-700">{error}</p>}
-    <button className="w-full rounded bg-slate-950 p-3 font-semibold text-white">{mode === "register" ? "Create account" : "Sign in"}</button>
+    <button className="w-full rounded bg-brand p-3 font-semibold text-navy transition-colors hover:bg-brand-hover">{mode === "register" ? "Create account" : "Sign in"}</button>
   </form>;
 }

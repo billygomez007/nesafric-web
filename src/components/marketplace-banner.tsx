@@ -45,7 +45,7 @@ export function MarketplaceBanner({ placement, countryCode }: { placement: "MARK
   return (
     <a
       aria-label={`Promoted: ${banner.headline}`}
-      className="group relative flex min-h-64 flex-col overflow-hidden rounded-3xl border border-white/10 bg-emerald-950 shadow-lg shadow-emerald-950/20 transition hover:shadow-xl hover:shadow-emerald-950/30 sm:min-h-80"
+      className="group relative flex min-h-64 flex-col overflow-hidden rounded-3xl border border-white/10 bg-navy shadow-lg shadow-navy/20 transition hover:shadow-xl hover:shadow-navy/30 sm:min-h-80"
       href={banner.destinationUrl}
       onClick={() => void fetch(`/api/public/campaigns/${banner.id}/click`, { method: "POST" })}
       rel="noopener"
@@ -62,15 +62,15 @@ export function MarketplaceBanner({ placement, countryCode }: { placement: "MARK
           style={{ backgroundImage: `url("${banner.mobileMediaUrl ?? banner.desktopMediaUrl}")` }}
         />
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-950/60 to-emerald-950/10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/60 to-navy/10" />
       <div className="relative mt-auto flex flex-col gap-3 p-6 sm:p-10">
-        <span className="w-fit rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-200 backdrop-blur">
+        <span className="w-fit rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand backdrop-blur">
           Featured
         </span>
         <h2 className="max-w-2xl text-2xl font-semibold text-white sm:text-4xl">{banner.headline}</h2>
-        {banner.supportingText && <p className="max-w-xl text-sm text-emerald-100 sm:text-base">{banner.supportingText}</p>}
+        {banner.supportingText && <p className="max-w-xl text-sm text-slate-300 sm:text-base">{banner.supportingText}</p>}
         {banner.ctaLabel && (
-          <span className="mt-2 w-fit rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 transition group-hover:bg-emerald-50">
+          <span className="mt-2 w-fit rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-navy transition group-hover:bg-brand-hover">
             {banner.ctaLabel}
           </span>
         )}

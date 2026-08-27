@@ -11,10 +11,10 @@ const STEPS = [
 
 export function WorkflowStorySection() {
   return (
-    <section className="bg-slate-950 py-24 sm:py-32">
+    <section className="bg-navy py-24 sm:py-32">
       <div className="mx-auto max-w-5xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">FROM LISTING TO CLOSED DEAL</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-brand">FROM LISTING TO CLOSED DEAL</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Stop spending your day on administrative follow-up.
           </h2>
@@ -27,7 +27,7 @@ export function WorkflowStorySection() {
         <ol className="relative mt-16 border-l border-white/10 pl-8 sm:pl-10">
           {STEPS.map((step, index) => (
             <li className="relative pb-10 last:pb-0" key={step.label}>
-              <span className="absolute -left-[2.55rem] flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-slate-950 text-xs font-semibold text-emerald-300 sm:-left-[3.05rem]">
+              <span className="absolute -left-[2.55rem] flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-navy text-xs font-semibold text-brand sm:-left-[3.05rem]">
                 {index + 1}
               </span>
               <p className="text-lg font-semibold text-white">{step.label}</p>
@@ -37,7 +37,7 @@ export function WorkflowStorySection() {
         </ol>
 
         <div className="mt-4 flex items-center gap-3 border-t border-white/10 pt-8">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-brand" />
           <p className="text-sm font-medium text-slate-300">
             You handle the deal. <span className="text-white">UmoAfric handles the work around it.</span>
           </p>

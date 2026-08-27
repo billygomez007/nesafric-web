@@ -18,8 +18,8 @@ export function LaunchOfferSection({ ctaLabel = "Claim Your Free Professional Ac
       <div className="mx-auto max-w-5xl px-6 sm:px-8">
         <div className="overflow-hidden rounded-3xl border border-slate-200 shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
-            <div className="bg-slate-950 p-10 sm:p-12">
-              <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">GHANA LAUNCH</p>
+            <div className="bg-navy p-10 sm:p-12">
+              <p className="text-xs font-semibold tracking-[0.22em] text-brand">GHANA LAUNCH</p>
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
                 Marketplace Professional.
                 <br />
@@ -31,7 +31,7 @@ export function LaunchOfferSection({ ctaLabel = "Claim Your Free Professional Ac
               <ul className="mt-8 space-y-3">
                 {INCLUDED.map((item) => (
                   <li className="flex items-start gap-3 text-sm leading-6 text-slate-300" key={item}>
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
                     {item}
                   </li>
                 ))}
@@ -47,7 +47,7 @@ export function LaunchOfferSection({ ctaLabel = "Claim Your Free Professional Ac
                 simply today&apos;s offer for professionals joining now.
               </p>
               <Link
-                className="mt-8 inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                className="mt-8 inline-flex items-center justify-center rounded-full bg-navy px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
                 href="/register"
                 onClick={() => trackCampaignEvent("join_free_click", { placement: "launch_offer" })}
               >

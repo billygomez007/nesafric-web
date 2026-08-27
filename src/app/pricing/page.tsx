@@ -18,7 +18,7 @@ export default function PricingPage() {
       <main>
         <section className="bg-white pt-20 pb-4 sm:pt-28">
           <div className="mx-auto max-w-3xl px-6 text-center sm:px-8">
-            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">PRICING</p>
+            <p className="text-xs font-semibold tracking-[0.22em] text-navy">PRICING</p>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
               Simple, honest pricing.
             </h1>
@@ -34,7 +34,7 @@ export default function PricingPage() {
         <section className="bg-slate-50 py-24 sm:py-32">
           <div className="mx-auto max-w-3xl px-6 sm:px-8">
             <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-10">
-              <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">PROPERTY MANAGEMENT</p>
+              <p className="text-xs font-semibold tracking-[0.22em] text-navy">PROPERTY MANAGEMENT</p>
               <h2 className="mt-3 text-2xl font-semibold text-slate-950">UmoAfric management plans</h2>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
                 For landlords, property managers and developers operating a portfolio, UmoAfric plans start

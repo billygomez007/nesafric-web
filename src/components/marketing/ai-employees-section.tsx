@@ -2,7 +2,7 @@ import { ProductMockup } from "@/components/marketing/product-mockup";
 
 const RECEPTIONIST_LOG = [
   { role: "Prospect", text: "Is the 2-bedroom unit in Osu still available for September?", tone: "text-slate-400" },
-  { role: "AI Receptionist", text: "Yes — available from 15 September. Would you like to schedule a viewing?", tone: "text-emerald-300" },
+  { role: "AI Receptionist", text: "Yes — available from 15 September. Would you like to schedule a viewing?", tone: "text-brand" },
   { role: "Escalated", text: "Move-in date flexibility requested → routed to Property Manager.", tone: "text-amber-300" },
 ];
 
@@ -28,10 +28,10 @@ const AI_EMPLOYEES = [
 
 export function AIEmployeesSection() {
   return (
-    <section className="scroll-mt-16 bg-slate-950 py-24 sm:py-32" id="ai-employees">
+    <section className="scroll-mt-16 bg-navy py-24 sm:py-32" id="ai-employees">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">AI EMPLOYEES</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-brand">AI EMPLOYEES</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             A real AI workforce for real estate.
           </h2>
@@ -48,7 +48,7 @@ export function AIEmployeesSection() {
               Handles property enquiries, tenant questions, viewing requests, maintenance intake and routine
               communication — escalating to humans when necessary.
             </p>
-            <div className="mt-6 space-y-3 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+            <div className="mt-6 space-y-3 rounded-xl border border-white/10 bg-navy/60 p-4">
               {RECEPTIONIST_LOG.map((entry) => (
                 <div key={entry.text}>
                   <p className={`text-[11px] font-semibold tracking-wide ${entry.tone}`}>{entry.role.toUpperCase()}</p>
@@ -64,7 +64,7 @@ export function AIEmployeesSection() {
               Monitors rent, leases, vacancies, maintenance, work orders, move-ins, move-outs and operational
               exceptions across the portfolio.
             </p>
-            <div className="mt-6 space-y-2 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+            <div className="mt-6 space-y-2 rounded-xl border border-white/10 bg-navy/60 p-4">
               {MANAGER_SIGNALS.map((signal) => (
                 <div className="flex items-center justify-between border-b border-white/5 py-2.5 last:border-0" key={signal.label}>
                   <div>

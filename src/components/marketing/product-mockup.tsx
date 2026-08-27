@@ -6,7 +6,7 @@ const MOCKUP_WIDTH = 1536;
 const MOCKUP_HEIGHT = 1024;
 
 const THEME_FRAME = {
-  dark: "border border-white/10 bg-slate-950 shadow-[0_40px_80px_-32px_rgba(0,0,0,0.6)]",
+  dark: "border border-white/10 bg-navy shadow-[0_40px_80px_-32px_rgba(0,0,0,0.6)]",
   light: "border border-slate-200 bg-white shadow-xl shadow-slate-200/60",
 } as const;
 

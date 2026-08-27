@@ -14,10 +14,10 @@ const STAGES = [
 
 export function LifecycleSection() {
   return (
-    <section className="scroll-mt-16 bg-slate-950 py-24 sm:py-32" id="lifecycle">
+    <section className="scroll-mt-16 bg-navy py-24 sm:py-32" id="lifecycle">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">FULL PROPERTY LIFECYCLE</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-brand">FULL PROPERTY LIFECYCLE</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             From first listing to every renewal — one continuous system.
           </h2>
@@ -38,7 +38,7 @@ export function LifecycleSection() {
               )}
             </div>
           ))}
-          <div className="flex items-center gap-2 pl-1 text-emerald-300">
+          <div className="flex items-center gap-2 pl-1 text-brand">
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} viewBox="0 0 24 24">
               <path d="M4 4v5h5" />
               <path d="M4.5 9A8 8 0 1 0 6 4.5" />

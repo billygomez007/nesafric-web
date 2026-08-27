@@ -28,7 +28,7 @@ export function PortfolioSection() {
     <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">PORTFOLIO CONTROL</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-navy">PORTFOLIO CONTROL</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             See your entire portfolio, in one view.
           </h2>
@@ -38,7 +38,7 @@ export function PortfolioSection() {
         </div>
 
         <div className="mt-14 overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-6 py-3.5">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-navy px-6 py-3.5">
             <p className="text-xs font-medium tracking-wide text-slate-400">SAMPLE PORTFOLIO VIEW</p>
             <p className="text-xs font-medium text-slate-500">Illustrative data</p>
           </div>

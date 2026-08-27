@@ -31,10 +31,10 @@ export function AICapabilitiesSection({
   mockup?: { src: string; alt: string };
 }) {
   return (
-    <section className="bg-slate-950 py-24 sm:py-32">
+    <section className="bg-navy py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">{kicker}</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-brand">{kicker}</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">{heading}</h2>
           <p className="mt-4 text-base leading-7 text-slate-400">{intro}</p>
         </div>

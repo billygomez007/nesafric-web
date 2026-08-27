@@ -3,11 +3,7 @@ import { BRAND } from "@/platform/brand";
 
 export function FinalCtaSection() {
   return (
-    <section className="marketing-grid relative overflow-hidden bg-slate-950 py-24 sm:py-32">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[28rem] w-[56rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/10 blur-3xl"
-      />
+    <section className="marketing-grid relative overflow-hidden bg-navy py-24 sm:py-32">
       <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
         <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Run your real estate business on UmoAfric.
@@ -18,7 +14,7 @@ export function FinalCtaSection() {
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Link
-            className="rounded-full bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300"
+            className="rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
             href="/register"
           >
             Manage Properties

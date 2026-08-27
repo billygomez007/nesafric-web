@@ -12,7 +12,7 @@ export function PropertyOwnersCapabilitiesSection() {
     <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">THE OPERATING PLATFORM</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-navy">THE OPERATING PLATFORM</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             Everything the property operation needs, connected.
           </h2>
@@ -29,7 +29,7 @@ export function PropertyOwnersCapabilitiesSection() {
               <ul className="mt-3 space-y-2">
                 {cluster.items.map((item) => (
                   <li className="flex items-start gap-2.5 text-sm leading-6 text-slate-600" key={item}>
-                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-emerald-500" />
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-brand" />
                     {item}
                   </li>
                 ))}

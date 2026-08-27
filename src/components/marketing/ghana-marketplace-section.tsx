@@ -5,7 +5,7 @@ export function GhanaMarketplaceSection() {
     <section className="bg-slate-50 py-24 sm:py-32">
       <div className="mx-auto max-w-5xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">UMOAFRIC MARKETPLACE</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-navy">UMOAFRIC MARKETPLACE</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
             Not a wall of anonymous ads — a professional marketplace.
           </h2>

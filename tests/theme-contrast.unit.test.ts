@@ -25,6 +25,8 @@ const DARK_SURFACE_FILES = new Set([
   "src/app/marketplace/page.tsx", // dark bg-slate-950 page header
   "src/app/marketplace/professionals/[slug]/page.tsx", // dark bg-slate-950 page header
   "src/components/marketplace-carousel.tsx", // dark bg-slate-950 campaign carousel slides
+  "src/components/marketplace-banner.tsx", // dark bg-navy campaign hero banner
+  "src/app/marketplace/properties/page.tsx", // dark bg-navy page header
 ]);
 
 const ALL_APP_TSX_FILES = listTsxFiles("src")

@@ -50,7 +50,7 @@ export function MarketplaceProfessionalOnboardingForm() {
         <label className="text-sm font-medium">Marketplace plan<input className="mt-1 w-full rounded border bg-slate-50 p-3" readOnly value="Free" /></label>
       </div>
       {error && <p className="text-sm text-red-700">{error}</p>}
-      <button className="rounded bg-slate-950 p-3 font-semibold text-white">Create marketplace profile</button>
+      <button className="rounded bg-brand p-3 font-semibold text-navy transition-colors hover:bg-brand-hover">Create marketplace profile</button>
       <p className="text-xs text-slate-500">Free at launch. This is completely separate from UmoAfric management — no property-management subscription is created.</p>
     </form>
   );

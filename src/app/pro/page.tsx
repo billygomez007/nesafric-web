@@ -19,7 +19,7 @@ export default function MarketplaceProfessionalsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
-      <p className="text-sm font-semibold text-emerald-700">UMOAFRIC REAL ESTATE MARKETPLACE</p>
+      <p className="text-sm font-semibold text-navy">UMOAFRIC REAL ESTATE MARKETPLACE</p>
       <h1 className="mt-2 text-3xl font-semibold">Your marketplace profiles</h1>
       <p className="mt-2 text-slate-600">Agents, brokers, brokerages, real-estate companies, and developers each operate as a professional profile here — separate from any UmoAfric management organisation.</p>
 
@@ -33,7 +33,7 @@ export default function MarketplaceProfessionalsPage() {
       {professionals && professionals.length > 0 && (
         <div className="mt-8 grid gap-3">
           {professionals.map((professional) => (
-            <Link className="rounded-xl border bg-white p-5 shadow-sm transition hover:border-emerald-500" href={`/pro/${professional.id}`} key={professional.id}>
+            <Link className="rounded-xl border bg-white p-5 shadow-sm transition hover:border-brand" href={`/pro/${professional.id}`} key={professional.id}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold">{professional.displayName}</p>

@@ -40,7 +40,7 @@ const COLUMNS = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-slate-800 bg-slate-950">
+    <footer className="border-t border-slate-800 bg-navy">
       <div className="mx-auto max-w-7xl px-6 py-16 sm:px-8">
         <div className="grid gap-12 lg:grid-cols-[1.4fr_repeat(4,1fr)]">
           <div>
@@ -51,18 +51,18 @@ export function SiteFooter() {
             <dl className="mt-6 space-y-3 text-sm text-slate-400">
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">General enquiries</dt>
-                <dd><a className="transition-colors hover:text-white" href={`mailto:${BRAND.contact.hello}`}>{BRAND.contact.hello}</a></dd>
+                <dd><a className="transition-colors hover:text-brand" href={`mailto:${BRAND.contact.hello}`}>{BRAND.contact.hello}</a></dd>
               </div>
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Support</dt>
-                <dd><a className="transition-colors hover:text-white" href={`mailto:${BRAND.contact.support}`}>{BRAND.contact.support}</a></dd>
+                <dd><a className="transition-colors hover:text-brand" href={`mailto:${BRAND.contact.support}`}>{BRAND.contact.support}</a></dd>
               </div>
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Corporate</dt>
-                <dd><a className="transition-colors hover:text-white" href={`mailto:${BRAND.contact.info}`}>{BRAND.contact.info}</a></dd>
+                <dd><a className="transition-colors hover:text-brand" href={`mailto:${BRAND.contact.info}`}>{BRAND.contact.info}</a></dd>
               </div>
               <div>
-                <a className="transition-colors hover:text-white" href={`tel:${BRAND.contact.phoneTel}`}>{BRAND.contact.phoneDisplay}</a>
+                <a className="transition-colors hover:text-brand" href={`tel:${BRAND.contact.phoneTel}`}>{BRAND.contact.phoneDisplay}</a>
               </div>
               <div className="text-slate-500">{BRAND.contact.address}</div>
             </dl>
@@ -73,7 +73,7 @@ export function SiteFooter() {
               <ul className="mt-4 space-y-3">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <Link className="text-sm text-slate-400 transition-colors hover:text-white" href={link.href}>
+                    <Link className="text-sm text-slate-400 transition-colors hover:text-brand" href={link.href}>
                       {link.label}
                     </Link>
                   </li>
@@ -83,7 +83,7 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="mt-16 flex flex-col gap-4 border-t border-slate-800 pt-8 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} {BRAND.name}. All rights reserved. · <a className="hover:text-slate-300" href={`https://${BRAND.domain}`}>{BRAND.domain}</a></p>
+          <p>© {new Date().getFullYear()} {BRAND.name}. All rights reserved. · <a className="hover:text-brand" href={`https://${BRAND.domain}`}>{BRAND.domain}</a></p>
           <p>Built for owners, operators, agents, brokers, brokerages and developers.</p>
         </div>
       </div>

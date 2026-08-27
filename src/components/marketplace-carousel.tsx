@@ -94,7 +94,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
     <div
       aria-label="Featured marketplace campaigns"
       aria-roledescription="carousel"
-      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-950"
+      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-navy"
       onBlur={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onKeyDown={onKeyDown}
@@ -121,14 +121,14 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
           {(active.mobileMediaUrl ?? active.desktopMediaUrl) && (
             <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
           )}
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/70 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/70 to-transparent" />
           <div className={`relative flex h-full max-w-lg flex-col justify-center gap-2 py-6 sm:py-8 ${multi ? "pl-14 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-8"}`}>
             <span className="w-fit rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200 backdrop-blur">
               Promoted
             </span>
             <h3 className="text-lg font-semibold text-white sm:text-xl">{active.headline}</h3>
             {active.supportingText && <p className="line-clamp-1 text-sm text-slate-300">{active.supportingText}</p>}
-            {active.ctaLabel && <span className="mt-1 w-fit rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-slate-950">{active.ctaLabel}</span>}
+            {active.ctaLabel && <span className="mt-1 w-fit rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy">{active.ctaLabel}</span>}
           </div>
         </a>
       )}

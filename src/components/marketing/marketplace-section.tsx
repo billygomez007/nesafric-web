@@ -14,13 +14,13 @@ export function MarketplaceSection() {
         <div className="grid gap-14 lg:grid-cols-2 lg:items-center lg:gap-16">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:order-2">
             <div className="overflow-hidden rounded-xl border border-slate-200">
-              <div className="flex h-36 items-center justify-center bg-slate-950">
+              <div className="flex h-36 items-center justify-center bg-navy">
                 <p className="text-xs font-medium tracking-wide text-slate-500">Listing photo</p>
               </div>
               <div className="p-5">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-950">Bright one-bedroom apartment, Osu</p>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Published</span>
+                  <span className="rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-semibold text-success">Published</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-500">GHS 2,200 / month · Accra</p>
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
@@ -39,7 +39,7 @@ export function MarketplaceSection() {
           </div>
 
           <div className="lg:order-1">
-            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">UMOAFRIC MARKETPLACE</p>
+            <p className="text-xs font-semibold tracking-[0.22em] text-navy">UMOAFRIC MARKETPLACE</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
               Every serious source of real estate, in one place.
             </h2>
@@ -50,7 +50,7 @@ export function MarketplaceSection() {
             <ul className="mt-8 space-y-3.5">
               {CAPABILITIES.map((capability) => (
                 <li className="flex items-start gap-3 text-sm leading-6 text-slate-700" key={capability}>
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
                   {capability}
                 </li>
               ))}
