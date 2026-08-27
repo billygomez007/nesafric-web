@@ -166,7 +166,9 @@ export function BillingSettings() {
           <p className="mt-1 text-xs text-slate-500">{feature.description}</p>
           {feature.kind === "BOOLEAN"
             ? <p className="mt-2 text-sm">{feature.booleanValue ? "Enabled" : "Not included on this plan"}</p>
-            : <p className="mt-2 text-sm">{feature.current ?? 0} / {feature.isUnlimited ? "Unlimited" : feature.limit} {feature.unit}</p>}
+            : !feature.isUnlimited && feature.limit === 0
+              ? <p className="mt-2 text-sm text-slate-500">Not included on this plan</p>
+              : <p className="mt-2 text-sm">{feature.current ?? 0} / {feature.isUnlimited ? "Unlimited" : feature.limit} {feature.unit}</p>}
         </div>)}
       </div>
     </section>

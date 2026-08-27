@@ -8,14 +8,27 @@ const id = z.string().uuid();
 export const SELF_SERVICE_PLACEMENTS = ["MARKETPLACE_INLINE", "DEVELOPMENT_FEATURED", "PROFESSIONAL_FEATURED", "SEARCH_FEATURED"] as const;
 export const ALL_PLACEMENTS = ["HOMEPAGE_ANNOUNCEMENT", "MARKETPLACE_PRIMARY", ...SELF_SERVICE_PLACEMENTS] as const;
 
+/** Only `http:`/`https:` may ever reach a public banner's `href` or `background-image` — rejects
+ * `javascript:`, `data:`, `vbscript:`, and every other scheme regardless of who authored the
+ * campaign (self-service submissions are platform-reviewed, but this is enforced at the schema
+ * boundary so it can never depend on review diligence alone). */
+const safeHttpUrl = (max: number) =>
+  z.string().trim().max(max).refine((value) => {
+    try {
+      return ["http:", "https:"].includes(new URL(value).protocol);
+    } catch {
+      return false;
+    }
+  }, "Must be an absolute http:// or https:// URL");
+
 const campaignFields = {
   name: text(200),
   headline: text(200),
   supportingText: z.string().trim().max(500).optional(),
   ctaLabel: text(60).optional(),
-  destinationUrl: z.string().trim().url().max(2000),
-  desktopMediaUrl: z.string().trim().url().max(2000).optional(),
-  mobileMediaUrl: z.string().trim().url().max(2000).optional(),
+  destinationUrl: safeHttpUrl(2000),
+  desktopMediaUrl: safeHttpUrl(2000).optional(),
+  mobileMediaUrl: safeHttpUrl(2000).optional(),
   countryCode: z.string().length(2).toUpperCase().optional(),
   region: text(120).optional(),
 };
@@ -51,6 +64,15 @@ export const setCampaignStatusSchema = z.object({
 export const publicBannerQuerySchema = z.object({
   placement: z.enum(ALL_PLACEMENTS),
   countryCode: z.string().length(2).toUpperCase().optional(),
+}).strict();
+
+/** Multi-campaign projection for a sliding/carousel placement — same eligibility inputs as
+ * `publicBannerQuerySchema`, plus a capped `limit` so a carousel can never request an unbounded
+ * page of campaigns. */
+export const publicBannerListQuerySchema = z.object({
+  placement: z.enum(ALL_PLACEMENTS),
+  countryCode: z.string().length(2).toUpperCase().optional(),
+  limit: z.coerce.number().int().min(1).max(10).default(6),
 }).strict();
 
 export const campaignListSchema = z.object({

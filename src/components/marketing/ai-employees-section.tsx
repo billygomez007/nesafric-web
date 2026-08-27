@@ -11,15 +11,32 @@ const MANAGER_SIGNALS = [
   { label: "Move-out scheduled", detail: "Unit D3 · inspection pending", level: "Scheduled" },
 ];
 
+const AI_EMPLOYEES = [
+  {
+    title: "AI Sales Agent",
+    description:
+      "Answers listing enquiries, understands live inventory across a portfolio or development, qualifies leads and coordinates viewings for agents, brokers, brokerages and developers.",
+  },
+  {
+    title: "AI Maintenance Coordinator",
+    description:
+      "Triages maintenance reports, assigns verified service providers, tracks work orders through to completion, and keeps tenants and owners updated automatically.",
+  },
+];
+
 export function AIEmployeesSection() {
   return (
-    <section className="bg-slate-950 py-24 sm:py-32" id="ai-employees">
+    <section className="scroll-mt-16 bg-slate-950 py-24 sm:py-32" id="ai-employees">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">AI EMPLOYEES</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Your property business can now have its own AI team.
+            A real AI workforce for real estate.
           </h2>
+          <p className="mt-4 text-base leading-7 text-slate-400">
+            Eligible Umo Afric customers can deploy AI employees that work inside day-to-day operations, sales and
+            support — according to their plan and configured capabilities.
+          </p>
         </div>
 
         <div className="mt-14 grid gap-6 lg:grid-cols-2">
@@ -59,11 +76,18 @@ export function AIEmployeesSection() {
               ))}
             </div>
           </div>
+
+          {AI_EMPLOYEES.map((employee) => (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-7" key={employee.title}>
+              <p className="text-sm font-semibold text-white">{employee.title}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{employee.description}</p>
+            </div>
+          ))}
         </div>
 
         <div className="mt-16 border-t border-white/10 pt-12">
           <p className="max-w-3xl text-2xl font-medium leading-tight tracking-tight text-white sm:text-3xl">
-            “Your AI doesn&apos;t just answer questions. It works inside your property operation.”
+            “Your AI doesn&apos;t just answer questions. It works inside your real estate operation.”
           </p>
         </div>
       </div>

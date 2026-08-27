@@ -159,7 +159,7 @@ export function MarketplaceLeadInbox({ professionalId }: { professionalId: strin
                       <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[lead.status] ?? "bg-slate-100 text-slate-700"}`}>{lead.status.replaceAll("_", " ")}</span>
                     </div>
                     <span className="text-sm text-slate-500">{lead.listing.title}</span>
-                    <span className="text-xs text-slate-400">{lead.assignee ? `Assigned to ${lead.assignee.user.displayName}` : "Unassigned"} · {new Date(lead.lastActivityAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-slate-500">{lead.assignee ? `Assigned to ${lead.assignee.user.displayName}` : "Unassigned"} · {new Date(lead.lastActivityAt).toLocaleDateString()}</span>
                   </button>
                 </li>
               ))}
@@ -167,9 +167,9 @@ export function MarketplaceLeadInbox({ professionalId }: { professionalId: strin
           )}
           {total > pageSize && (
             <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-sm">
-              <button className="font-medium text-slate-600 disabled:text-slate-300" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} type="button">← Previous</button>
+              <button className="font-medium text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} type="button">← Previous</button>
               <span className="text-slate-500">Page {page} of {totalPages}</span>
-              <button className="font-medium text-slate-600 disabled:text-slate-300" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} type="button">Next →</button>
+              <button className="font-medium text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} type="button">Next →</button>
             </div>
           )}
         </section>
@@ -206,7 +206,7 @@ export function MarketplaceLeadInbox({ professionalId }: { professionalId: strin
               <div className="grid gap-2">
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="lead-notes">Private notes</label>
                 <textarea className="min-h-24 rounded-lg border border-slate-200 px-3 py-2 text-sm" defaultValue={detail.privateNotes ?? ""} id="lead-notes" onBlur={(event) => void saveNotes(event.target.value)} />
-                <p className="text-xs text-slate-400">Notes are internal to your team and are never shown publicly.</p>
+                <p className="text-xs text-slate-500">Notes are internal to your team and are never shown publicly.</p>
               </div>
 
               {detail.viewingRequests.length > 0 && (
@@ -225,7 +225,7 @@ export function MarketplaceLeadInbox({ professionalId }: { professionalId: strin
                 <ul className="mt-2 grid gap-1.5">
                   {detail.history.map((entry) => (
                     <li className="text-sm text-slate-600" key={entry.id}>
-                      <span className="text-slate-400">{new Date(entry.createdAt).toLocaleDateString()}</span> — {entry.fromStatus ? `${entry.fromStatus.replaceAll("_", " ")} → ` : ""}{entry.toStatus.replaceAll("_", " ")}{entry.note ? `: ${entry.note}` : ""}
+                      <span className="text-slate-500">{new Date(entry.createdAt).toLocaleDateString()}</span> — {entry.fromStatus ? `${entry.fromStatus.replaceAll("_", " ")} → ` : ""}{entry.toStatus.replaceAll("_", " ")}{entry.note ? `: ${entry.note}` : ""}
                     </li>
                   ))}
                 </ul>

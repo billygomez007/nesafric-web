@@ -21,32 +21,36 @@ export function HeroSection() {
       />
       <div className="relative mx-auto grid max-w-7xl gap-16 px-6 sm:px-8 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-12">
         <div className="marketing-fade-up">
-          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">THE OPERATING SYSTEM FOR REAL ESTATE</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">UMO AFRIC · REAL ESTATE OPERATING &amp; MARKETPLACE PLATFORM</p>
           <h1 className="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
-            Own. Manage. Lease. Sell.
-            <br />
-            <span className="text-slate-400">Let AI run the rest.</span>
+            One intelligent platform for real estate.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
-            NesAfric brings property management, leasing, payments, maintenance, marketplace operations and AI
-            employees into one intelligent platform — built for landlords, property managers and developers.
+            Manage properties. Market listings. Run developments. Serve tenants. Convert leads. Coordinate
+            operations — with AI built into the platform.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link
               className="rounded-full bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300"
               href="/register"
             >
-              Get Started
+              Manage Properties
             </Link>
             <Link
               className="rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
-              href="mailto:hello@nesafric.com?subject=Book%20a%20demo%20%E2%80%94%20PropertyOS"
+              href="/register"
             >
-              Book a Demo
+              Market Properties
+            </Link>
+            <Link
+              className="text-sm font-semibold text-slate-300 transition-colors hover:text-white"
+              href="/marketplace/properties"
+            >
+              Explore Marketplace →
             </Link>
           </div>
           <p className="mt-8 text-xs font-medium tracking-[0.14em] text-slate-500">
-            FOR LANDLORDS · PROPERTY MANAGERS · DEVELOPERS
+            FOR OWNERS · MANAGERS · AGENTS · BROKERS · DEVELOPERS
           </p>
         </div>
 

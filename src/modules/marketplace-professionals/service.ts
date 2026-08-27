@@ -17,6 +17,7 @@ import {
 import { requireMarketplaceMember, requireMarketplaceRole } from "./permissions";
 import { assertMarketplaceOperational } from "./entitlements";
 import { MARKETPLACE_ENTITLEMENTS } from "./catalog";
+import { enqueueOnboardingCompleteEmail } from "@/modules/account-emails/service";
 import type { User } from "@/platform/database/generated/client";
 
 const PROFESSIONAL_TYPE_TO_ORGANISATION_TYPE: Record<string, "REAL_ESTATE" | "DEVELOPER" | "OTHER"> = {
@@ -98,6 +99,9 @@ export async function createMarketplaceProfessional(userId: string, input: unkno
     });
     await tx.auditEvent.create({ data: { organisationId: organisation.id, actorUserId: userId, action: "marketplace_professional.created", entityType: "marketplace_professional", entityId: professional.id } });
     await tx.domainEvent.create({ data: { organisationId: organisation.id, name: "marketplace_professional.created", aggregateType: "marketplace_professional", aggregateId: professional.id, payload: { type: professional.type, slug } } });
+    return professional;
+  }).then(async (professional) => {
+    await enqueueOnboardingCompleteEmail(userId, "ONBOARDING_COMPLETE_MARKETPLACE", professional.displayName);
     return professional;
   });
 }

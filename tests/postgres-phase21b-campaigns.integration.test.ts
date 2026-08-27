@@ -12,6 +12,7 @@ import {
   scheduleCampaign,
   setCampaignStatus,
   getPublicBanner,
+  getPublicBanners,
   recordCampaignImpression,
   recordCampaignClick,
 } from "@/modules/campaigns/service";
@@ -174,5 +175,53 @@ describe("PostgreSQL Phase 21B campaigns & promotions", () => {
     expect(allCampaigns.total).toBe(2);
     const pendingOnly = await listCampaignsForPlatform(principal, { status: "APPROVED" });
     expect(pendingOnly.items.every((entry) => entry.status === "APPROVED")).toBe(true);
+  });
+
+  it("projects multiple eligible campaigns for a sliding/carousel placement (getPublicBanners), ordered by priority, honoring a limit and country targeting, and excluding future, expired, paused, and archived campaigns", async () => {
+    const principal = await platformAdmin();
+
+    const untargeted = await createPlatformCampaign(principal, { name: "Untargeted", placement: "MARKETPLACE_INLINE", priority: 1, ...requestFields });
+    const matchingCountry = await createPlatformCampaign(principal, { name: "Ghana targeted", placement: "MARKETPLACE_INLINE", priority: 20, countryCode: "GH", ...requestFields });
+    const wrongCountry = await createPlatformCampaign(principal, { name: "Nigeria targeted", placement: "MARKETPLACE_INLINE", priority: 30, countryCode: "NG", ...requestFields });
+
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const farFuture = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const scheduledFuture = await createPlatformCampaign(principal, { name: "Not yet live", placement: "MARKETPLACE_INLINE", priority: 99, startAt: future, endAt: farFuture, ...requestFields });
+    expect(scheduledFuture.status).toBe("SCHEDULED");
+
+    const past = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const recentPast = new Date(Date.now() - 60_000);
+    const expired = await createPlatformCampaign(principal, { name: "Already expired", placement: "MARKETPLACE_INLINE", priority: 5, startAt: past, endAt: recentPast, ...requestFields });
+    expect(expired.status).toBe("SCHEDULED");
+
+    const toPause = await createPlatformCampaign(principal, { name: "Will be paused", placement: "MARKETPLACE_INLINE", priority: 50, ...requestFields });
+    await setCampaignStatus(principal, toPause.id, { status: "ACTIVE" });
+    await setCampaignStatus(principal, toPause.id, { status: "PAUSED" });
+
+    const toArchive = await createPlatformCampaign(principal, { name: "Will be archived", placement: "MARKETPLACE_INLINE", priority: 60, ...requestFields });
+    await setCampaignStatus(principal, toArchive.id, { status: "ACTIVE" });
+    await setCampaignStatus(principal, toArchive.id, { status: "PAUSED" });
+    await setCampaignStatus(principal, toArchive.id, { status: "ARCHIVED" });
+
+    // A Ghana viewer sees the Ghana-targeted and untargeted campaigns, ordered by priority — never the Nigeria-only one.
+    const ghanaBanners = await getPublicBanners({ placement: "MARKETPLACE_INLINE", countryCode: "GH" });
+    expect(ghanaBanners.map((b) => b.id)).toEqual([matchingCountry.id, untargeted.id]);
+
+    // A Nigeria viewer sees the reverse — the Ghana-only campaign never leaks across country targeting.
+    const nigeriaBanners = await getPublicBanners({ placement: "MARKETPLACE_INLINE", countryCode: "NG" });
+    expect(nigeriaBanners.map((b) => b.id)).toEqual([wrongCountry.id, untargeted.id]);
+
+    // No country filter: both targeted campaigns plus the untargeted one, ordered by priority — future, expired, paused, and archived all excluded.
+    const allBanners = await getPublicBanners({ placement: "MARKETPLACE_INLINE" });
+    expect(allBanners.map((b) => b.id)).toEqual([wrongCountry.id, matchingCountry.id, untargeted.id]);
+
+    // limit caps the result while preserving priority order.
+    const limited = await getPublicBanners({ placement: "MARKETPLACE_INLINE", limit: 2 });
+    expect(limited.map((b) => b.id)).toEqual([wrongCountry.id, matchingCountry.id]);
+
+    // Same safe public projection as getPublicBanner — never leaks status, review, advertiser, or counter fields.
+    expect(allBanners[0]).not.toHaveProperty("status");
+    expect(allBanners[0]).not.toHaveProperty("advertiserMarketplaceProfessionalId");
+    expect(allBanners[0]).not.toHaveProperty("impressionCount");
   });
 });

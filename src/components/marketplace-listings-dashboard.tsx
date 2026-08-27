@@ -115,8 +115,8 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
         <div className="flex items-center justify-between text-sm text-slate-600">
           <p>Page {data.page} of {totalPages} · {data.total} listings</p>
           <div className="flex gap-2">
-            <button className="rounded-md border px-3 py-1.5 font-medium disabled:opacity-40" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
-            <button className="rounded-md border px-3 py-1.5 font-medium disabled:opacity-40" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">Next</button>
+            <button className="rounded-md border px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
+            <button className="rounded-md border px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">Next</button>
           </div>
         </div>
       )}

@@ -1,10 +1,10 @@
 const CAPABILITIES = [
-  "List properties publicly, independent of operational assets",
+  "Publish listings and developments under a verified professional or company profile",
+  "Reach buyers and renters searching the open marketplace",
   "Receive enquiries and manage leads in one pipeline",
   "Schedule and track viewings",
-  "Review rental applications",
-  "Convert approved applicants into tenants",
-  "Draft and activate leases directly from an application",
+  "Review applications and qualify buyers or tenants",
+  "Convert an enquiry into a signed lease — without leaving Umo Afric",
 ];
 
 export function MarketplaceSection() {
@@ -23,6 +23,10 @@ export function MarketplaceSection() {
                   <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Published</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-500">GHS 2,200 / month · Accra</p>
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+                  Listed by Accra Realty Partners
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Verified</span>
+                </p>
               </div>
             </div>
             <div className="mt-5 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
@@ -35,13 +39,13 @@ export function MarketplaceSection() {
           </div>
 
           <div className="lg:order-1">
-            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">PROPERTY MARKETPLACE</p>
+            <p className="text-xs font-semibold tracking-[0.22em] text-emerald-700">UMO AFRIC MARKETPLACE</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-              Not just occupied properties — the whole pipeline.
+              Every serious source of real estate, in one place.
             </h2>
             <p className="mt-4 text-base leading-7 text-slate-600">
-              Landlords and developers can market vacant units and new developments, and carry every enquiry
-              through to a signed lease.
+              Owners, developers, agents, brokers, brokerages and real estate companies all publish through the
+              same marketplace — each with a professional profile buyers and renters can verify.
             </p>
             <ul className="mt-8 space-y-3.5">
               {CAPABILITIES.map((capability) => (

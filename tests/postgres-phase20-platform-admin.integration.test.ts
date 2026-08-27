@@ -96,9 +96,22 @@ describe("PostgreSQL Phase 20 platform administration (independent of organisati
     await createSupportSession(principal, orgA.id, { reason: "Investigating a billing question", durationMinutes: 30 });
     const detail = await getOrganisationDetailForPlatform(principal, orgA.id);
     expect(detail.organisation.id).toBe(orgA.id);
-    expect(detail.entitlements.planKey).toBe("starter");
+    expect(detail.entitlements!.planKey).toBe("starter");
+    // Regression guard: nested `entitlements` (via `subscription.plan.entitlements`) and
+    // `overrides` both carry a database-BigInt `limitValue` — must be serializable, or this
+    // response 500s the entire platform-admin organisation-detail screen.
+    expect(() => JSON.stringify(detail)).not.toThrow();
     // Still requires its own support session for a different organisation.
     await expect(getOrganisationDetailForPlatform(principal, orgB.id)).rejects.toMatchObject({ code: "SUPPORT_SESSION_REQUIRED" });
+
+    // Regression guard: an organisation shell can exist with no subscription at all (e.g. a user
+    // who only ever completed Marketplace Professional onboarding) — viewing it must degrade
+    // gracefully (`entitlements: null`), not throw NOT_FOUND from deep inside entitlement lookup.
+    await db.subscriptionStatusHistory.deleteMany({ where: { organisationId: orgA.id } });
+    await db.organisationSubscription.delete({ where: { organisationId: orgA.id } });
+    const detailWithoutSubscription = await getOrganisationDetailForPlatform(principal, orgA.id);
+    expect(detailWithoutSubscription.organisation.subscription).toBeNull();
+    expect(detailWithoutSubscription.entitlements).toBeNull();
 
     const auditActions = (await getPlatformAuditLog(principal)).map((entry) => entry.action);
     expect(auditActions).toEqual(expect.arrayContaining(["platform_admin.organisations_listed", "platform_admin.support_session_started", "platform_admin.organisation_viewed"]));
@@ -175,8 +188,17 @@ describe("PostgreSQL Phase 20 platform administration (independent of organisati
       entitlements: [{ featureKey: "listings.max", kind: "LIMIT", limitValue: 7 }],
     });
     expect(plan.prices[0]!.amountMinor.toString()).toBe("10000");
+    // Regression guard: `PlanEntitlement.limitValue` is stored as a database BigInt. Every
+    // plan-returning platform-admin function must normalize it to a plain number — a raw bigint
+    // makes `NextResponse.json()` throw "Do not know how to serialize a BigInt" and 500s the
+    // entire Plans screen, which `toMatchObject`-style assertions on the in-memory object (as
+    // opposed to actually serializing it) would never catch.
+    expect(typeof plan.entitlements[0]!.limitValue).toBe("number");
+    expect(() => JSON.stringify(plan)).not.toThrow();
     const updated = await updatePlan(principal, plan.id, { prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY", amountMinor: "12000" }] });
     expect(updated.prices.find((price) => price.billingCycle === "MONTHLY")!.amountMinor.toString()).toBe("12000");
+    expect(typeof updated.entitlements[0]!.limitValue).toBe("number");
+    expect(() => JSON.stringify(updated)).not.toThrow();
     await expect(createPlan(principal, { key: "listings.max", name: "x", prices: [], entitlements: [{ featureKey: "not.a.real.feature", kind: "BOOLEAN", booleanValue: true }] })).rejects.toMatchObject({ code: "ENTITLEMENT_UNKNOWN_FEATURE" });
 
     const flag = await createFeatureFlag(principal, { key: "phase20.beta_dashboard", description: "Beta dashboard UI", isEnabled: true, rolloutPercentage: 0 });

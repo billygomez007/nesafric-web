@@ -42,6 +42,7 @@ import { createMarketplaceLead, createViewingRequest } from "@/modules/listings/
 import { createMarketplaceProfessional } from "@/modules/marketplace-professionals/service";
 import { createDevelopment, createDevelopmentUnit } from "@/modules/developments/service";
 import { db } from "@/platform/database/client";
+import { absoluteUrl } from "@/platform/brand";
 
 const DEMO_PASSWORD = "DemoPassword123!";
 const DEMO_ORGANISATION_NAME = "Golden Coast Properties (Demo)";
@@ -86,7 +87,7 @@ async function main() {
   console.log("Registering demo users...");
   const landlord = await registerUser({ displayName: "Kwame Mensah (Demo Landlord)", email: "landlord@propertyos.demo", password: DEMO_PASSWORD });
   const manager = await registerUser({ displayName: "Ama Boateng (Demo Property Manager)", email: "manager@propertyos.demo", password: DEMO_PASSWORD });
-  const platformAdminUser = await registerUser({ displayName: "NesAfric Admin (Demo Platform Admin)", email: "platform-admin@propertyos.demo", password: DEMO_PASSWORD });
+  const platformAdminUser = await registerUser({ displayName: "Umo Afric Admin (Demo Platform Admin)", email: "platform-admin@propertyos.demo", password: DEMO_PASSWORD });
   const providerUser = await registerUser({ displayName: "Kojo Plumbing Services (Demo Provider)", email: "provider@propertyos.demo", password: DEMO_PASSWORD });
   const prospect = await registerUser({ displayName: "Abena Prospect (Demo Prospect)", email: "prospect@propertyos.demo", password: DEMO_PASSWORD });
   const brokerUser = await registerUser({ displayName: "Adjoa Brokerage (Demo Brokerage)", email: "broker@propertyos.demo", password: DEMO_PASSWORD });
@@ -214,7 +215,7 @@ async function main() {
   });
 
   console.log("Creating a marketplace brokerage profile...");
-  await createMarketplaceProfessional(brokerUser.id, {
+  const brokerProfile = await createMarketplaceProfessional(brokerUser.id, {
     type: "BROKERAGE", displayName: "Adjoa Brokerage (Demo)", countryCode: "GH",
     description: "Demo brokerage profile for marketplace QA.", contactEmail: "broker@propertyos.demo",
     specialities: ["residential", "rentals"], serviceAreas: ["Greater Accra"],
@@ -231,6 +232,56 @@ async function main() {
   });
   await createDevelopmentUnit(developerUser.id, developerProfile.id, development.id, {
     name: "Block B, Unit 3", unitType: "3-bedroom townhouse", bedrooms: 3, bathrooms: 2, sizeSqm: 180, priceMinor: "85000000", currencyCode: "GHS",
+  });
+
+  console.log("Creating demo marketplace campaigns (Phase 21B banner placements)...");
+  // Inserted directly via `db.campaign.create` rather than `createCampaign`/`createPlatformCampaign`
+  // (which require an authenticated `PlatformPrincipal`) — platform-admin promotion is a deliberate
+  // separate manual step in this script (see the note above `platform-admin:bootstrap`), so no
+  // principal exists yet at seed time. `status: "ACTIVE"` with no `startAt`/`endAt` makes each
+  // immediately, indefinitely eligible for `getPublicBanner`/`getPublicBanners`, purely for local
+  // staging QA of the marketplace banner placements — never run against production (see the
+  // `NODE_ENV=production` guard above).
+  const listingUrl = absoluteUrl(`/marketplace/properties/${listing.id}`);
+  const professionalsUrl = absoluteUrl(`/marketplace/professionals/${brokerProfile.slug}`);
+  const campaignDefaults = { isPlatformOwned: true, createdByUserId: platformAdminUser.id, reviewedByUserId: platformAdminUser.id, reviewedAt: new Date(), countryCode: "GH" } as const;
+  await db.campaign.create({
+    data: {
+      ...campaignDefaults,
+      name: "Umo Afric — Marketplace primary hero (Demo)", placement: "MARKETPLACE_PRIMARY", status: "ACTIVE", priority: 100,
+      headline: "Discover Ghana's most trusted property marketplace",
+      supportingText: "Verified listings, vetted professionals, and secure transactions — all in one place.",
+      ctaLabel: "Explore listings", destinationUrl: listingUrl,
+      desktopMediaUrl: "https://placehold.co/1600x700/052e28/052e28/png",
+      mobileMediaUrl: "https://placehold.co/900x900/052e28/052e28/png",
+    },
+  });
+  await db.campaign.create({
+    data: {
+      ...campaignDefaults,
+      name: "Ocean View Apartments — featured listing (Demo)", placement: "MARKETPLACE_INLINE", status: "ACTIVE", priority: 30,
+      headline: "Bright one-bedroom apartment in Osu", supportingText: "Ocean View Apartments — flexible viewing, walking distance to Oxford Street.",
+      ctaLabel: "View listing", destinationUrl: listingUrl,
+      desktopMediaUrl: "https://placehold.co/1200x600/0f172a/0f172a/png", mobileMediaUrl: null,
+    },
+  });
+  await db.campaign.create({
+    data: {
+      ...campaignDefaults,
+      name: "Adjoa Brokerage — featured professional (Demo)", placement: "MARKETPLACE_INLINE", status: "ACTIVE", priority: 20,
+      headline: "Work with a verified Accra brokerage", supportingText: "Adjoa Brokerage — residential sales and rentals across Greater Accra.",
+      ctaLabel: "View profile", destinationUrl: professionalsUrl,
+      desktopMediaUrl: "https://placehold.co/1200x600/1e293b/1e293b/png", mobileMediaUrl: null,
+    },
+  });
+  await db.campaign.create({
+    data: {
+      ...campaignDefaults,
+      name: "Umo Afric — browse all properties (Demo)", placement: "MARKETPLACE_INLINE", status: "ACTIVE", priority: 10,
+      headline: "New listings added every week", supportingText: "Browse verified properties for rent and sale across Ghana.",
+      ctaLabel: "Browse properties", destinationUrl: absoluteUrl("/marketplace/properties"),
+      desktopMediaUrl: "https://placehold.co/1200x600/052e28/052e28/png", mobileMediaUrl: null,
+    },
   });
 
   console.log("\nDemo data created.\n");

@@ -8,7 +8,7 @@ type Detail = {
   overrides: Array<{ id: string; featureKey: string; kind: string; booleanValue: boolean | null; limitValue: string | null; isUnlimited: boolean; reason: string; expiresAt: string | null; revokedAt: string | null }>;
   statusHistory: Array<{ id: string; fromStatus: string | null; toStatus: string; reason: string; createdAt: string }>;
   supportSessions: Array<{ id: string; reason: string; startedAt: string; expiresAt: string; endedAt: string | null; revokedAt: string | null }>;
-  entitlements: { features: Array<{ featureKey: string; label: string; kind: string; booleanValue: boolean | null; limit: number | null; isUnlimited: boolean; current: number | null; reached: boolean; source: string }> };
+  entitlements: { features: Array<{ featureKey: string; label: string; kind: string; booleanValue: boolean | null; limit: number | null; isUnlimited: boolean; current: number | null; reached: boolean; source: string }> } | null;
 };
 
 export function PlatformAdminOrganisationDetail({ organisationId }: { organisationId: string }) {
@@ -78,21 +78,21 @@ export function PlatformAdminOrganisationDetail({ organisationId }: { organisati
         <div><dt className="inline font-semibold">Billing provider:</dt> <dd className="inline"> {subscription.billingProviderKey}</dd></div>
         <div><dt className="inline font-semibold">Current period ends:</dt> <dd className="inline"> {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</dd></div>
       </dl>}
-      <div className="mt-4 flex flex-wrap gap-2">
+      {subscription && <div className="mt-4 flex flex-wrap gap-2">
         <button className="rounded border px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/suspend", { reason: "Suspended by platform operator" })}>Suspend</button>
         <button className="rounded border px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/resume", { reason: "Resumed by platform operator" })}>Resume</button>
         <button className="rounded border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-700" onClick={() => void action("/cancel", { reason: "Cancelled by platform operator" })}>Cancel</button>
-      </div>
+      </div>}
     </section>
 
     <section className="rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="font-semibold">Entitlements &amp; usage</h2>
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
+      {detail.entitlements ? <div className="mt-3 grid gap-2 md:grid-cols-2">
         {detail.entitlements.features.map((feature) => <div className="rounded border p-3 text-sm" key={feature.featureKey}>
           <p className="font-semibold">{feature.label} <span className="ml-1 text-xs font-normal text-slate-500">({feature.source})</span></p>
           {feature.kind === "BOOLEAN" ? <p>{feature.booleanValue ? "Enabled" : "Disabled"}</p> : <p>{feature.current ?? 0} / {feature.isUnlimited ? "Unlimited" : feature.limit}{feature.reached ? " — reached" : ""}</p>}
         </div>)}
-      </div>
+      </div> : <p className="mt-2 text-sm text-slate-600">This organisation has no PropertyOS subscription yet.</p>}
     </section>
 
     <section className="rounded-xl border bg-white p-5 shadow-sm">

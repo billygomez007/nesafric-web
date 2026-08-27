@@ -105,7 +105,7 @@ export function PropertyList() {
               <p className="mt-1 text-sm text-slate-500">
                 {property.city ?? "No city set"} · {property._count.units} unit{property._count.units === 1 ? "" : "s"}
               </p>
-              {property.portfolio ? <p className="mt-1 text-xs text-slate-400">Portfolio: {property.portfolio.name}</p> : null}
+              {property.portfolio ? <p className="mt-1 text-xs text-slate-500">Portfolio: {property.portfolio.name}</p> : null}
               <span className="mt-4 inline-block text-sm font-semibold text-emerald-700">View property →</span>
             </Link>
           ))}

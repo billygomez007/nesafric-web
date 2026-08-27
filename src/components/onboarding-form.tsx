@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
 
 export function OnboardingForm() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export function OnboardingForm() {
     const response = await fetch("/api/organisations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: form.get("name"), type: form.get("type"), countryCode: "GH", defaultCurrencyCode: "GHS" }) });
     if (!response.ok) return setError((await response.json()).error?.message ?? "Unable to create organisation.");
     localStorage.setItem("propertyos.activeOrganisationId", (await response.json()).id);
+    trackCampaignEvent("manage_properties_registration_completed");
     router.push("/dashboard");
   }
   return <form className="mt-8 grid gap-4 rounded-xl border p-6" onSubmit={submit}>

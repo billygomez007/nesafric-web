@@ -66,7 +66,7 @@ export function MarketplaceTeamManager({ professionalId }: { professionalId: str
       {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
       <section className="rounded-xl border bg-white p-6 shadow-sm">
         <h2 className="font-semibold">Add a team member</h2>
-        <p className="mt-1 text-sm text-slate-600">The person must already have a PropertyOS account (they register once, for both sides of NesAfric).</p>
+        <p className="mt-1 text-sm text-slate-600">The person must already have a PropertyOS account (they register once, for both sides of Umo Afric).</p>
         <form className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]" onSubmit={addMember}>
           <input className="rounded border p-2 text-sm" name="email" placeholder="agent@example.com" required type="email" />
           <select className="rounded border p-2 text-sm" name="role">

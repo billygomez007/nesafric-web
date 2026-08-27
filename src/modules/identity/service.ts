@@ -3,13 +3,16 @@ import { AppError } from "@/platform/errors";
 import { hashPassword } from "@/platform/auth/passwords";
 import { loginSchema, registerSchema } from "./schemas";
 import { verifyPassword } from "@/platform/auth/passwords";
+import { enqueueWelcomeEmail } from "@/modules/account-emails/service";
 
 export async function registerUser(input: unknown) {
   const data = registerSchema.parse(input);
   const email = data.email.toLowerCase();
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) throw new AppError("EMAIL_EXISTS", 409, "An account with this email already exists.");
-  return db.user.create({ data: { email, displayName: data.displayName, passwordHash: await hashPassword(data.password) } });
+  const user = await db.user.create({ data: { email, displayName: data.displayName, passwordHash: await hashPassword(data.password) } });
+  await enqueueWelcomeEmail(user.id);
+  return user;
 }
 
 export async function authenticateUser(input: unknown) {

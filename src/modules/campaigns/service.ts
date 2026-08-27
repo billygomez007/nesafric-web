@@ -1,4 +1,4 @@
-import type { PlatformPrincipal } from "@/platform/database/generated/client";
+import type { PlatformPrincipal, $Enums } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission, type PlatformPermission } from "@/platform/platform-admin/permissions";
@@ -12,6 +12,7 @@ import {
   scheduleCampaignSchema,
   setCampaignStatusSchema,
   publicBannerQuerySchema,
+  publicBannerListQuerySchema,
   campaignListSchema,
 } from "./schemas";
 
@@ -131,6 +132,25 @@ export async function setCampaignStatus(principal: PlatformPrincipal, campaignId
   return db.campaign.update({ where: { id: campaignId }, data: { status: data.status, archivedAt: data.status === "ARCHIVED" ? new Date() : campaign.archivedAt } });
 }
 
+/** Shared eligibility filter behind both `getPublicBanner` and `getPublicBanners` — a campaign is
+ * publicly eligible only while live (`APPROVED`/`SCHEDULED`/`ACTIVE`, i.e. never `DRAFT`,
+ * `PENDING_APPROVAL`, `REJECTED`, `PAUSED`, `COMPLETED`, or `ARCHIVED`), never archived, within its
+ * scheduling window, and — when a viewer country is supplied — either untargeted or matching it. */
+const LIVE_STATUSES: $Enums.CampaignStatus[] = ["APPROVED", "SCHEDULED", "ACTIVE"];
+
+function eligibleCampaignWhere(placement: $Enums.CampaignPlacement, countryCode: string | undefined, now: Date) {
+  return {
+    placement,
+    status: { in: LIVE_STATUSES },
+    archivedAt: null,
+    AND: [
+      { OR: [{ startAt: null }, { startAt: { lte: now } }] },
+      { OR: [{ endAt: null }, { endAt: { gte: now } }] },
+      ...(countryCode ? [{ OR: [{ countryCode: null }, { countryCode }] }] : []),
+    ],
+  };
+}
+
 /**
  * Public banner projection (items 18/19/24) — the single best-priority campaign currently live
  * for a placement, filtered by country when supplied. Never exposes `advertiserMarketplaceProfessionalId`,
@@ -140,23 +160,26 @@ export async function setCampaignStatus(principal: PlatformPrincipal, campaignId
  */
 export async function getPublicBanner(query: unknown) {
   const { placement, countryCode } = publicBannerQuerySchema.parse(query);
-  const now = new Date();
   const candidates = await db.campaign.findMany({
-    where: {
-      placement,
-      status: { in: ["APPROVED", "SCHEDULED", "ACTIVE"] },
-      archivedAt: null,
-      AND: [
-        { OR: [{ startAt: null }, { startAt: { lte: now } }] },
-        { OR: [{ endAt: null }, { endAt: { gte: now } }] },
-        ...(countryCode ? [{ OR: [{ countryCode: null }, { countryCode }] }] : []),
-      ],
-    },
+    where: eligibleCampaignWhere(placement, countryCode, new Date()),
     select: safePublicFields,
     orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
     take: 1,
   });
   return candidates[0] ?? null;
+}
+
+/** Public multi-campaign projection for a sliding/carousel placement — same eligibility rule as
+ * `getPublicBanner`, but returns up to `limit` campaigns ordered by priority for a caller to
+ * rotate through, instead of only the single best match. */
+export async function getPublicBanners(query: unknown) {
+  const { placement, countryCode, limit } = publicBannerListQuerySchema.parse(query);
+  return db.campaign.findMany({
+    where: eligibleCampaignWhere(placement, countryCode, new Date()),
+    select: safePublicFields,
+    orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+    take: limit,
+  });
 }
 
 export async function recordCampaignImpression(campaignId: string) {

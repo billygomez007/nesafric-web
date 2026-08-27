@@ -128,7 +128,7 @@ export function MobileMoneyCheckout({
       <input className="mt-1 w-full rounded-lg border p-3" inputMode="numeric" min="1" onChange={(event) => setAmountMinor(event.target.value)} required value={amountMinor} />
     </label>
     {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    <button className="rounded-lg bg-emerald-700 p-3 font-semibold text-white disabled:opacity-50" disabled={submitting || !providerKey}>{submitting ? "Sending prompt..." : "Pay now"}</button>
+    <button className="rounded-lg bg-emerald-700 p-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting || !providerKey}>{submitting ? "Sending prompt..." : "Pay now"}</button>
     <p className="text-xs text-slate-500">We will only mark this as paid once your network confirms the transaction. This can take a moment after you approve the prompt on your phone.</p>
   </form>;
 }

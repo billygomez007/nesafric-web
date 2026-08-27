@@ -293,7 +293,7 @@ export async function startInboundCall(input: unknown) {
   const routing = phoneNumberRouting
     ?? await db.voiceProviderConfig.findFirst({ where: { phoneNumber: data.toNumber }, select: { organisationId: true, inboundEnabled: true } });
   if (!routing) {
-    throw new AppError("VOICE_NUMBER_NOT_ROUTABLE", 404, "No NesAfric organisation or marketplace profile is configured for this number.");
+    throw new AppError("VOICE_NUMBER_NOT_ROUTABLE", 404, "No Umo Afric organisation or marketplace profile is configured for this number.");
   }
   const organisationId = routing.organisationId;
   const professional = await findMarketplaceProfessionalByBackingOrg(organisationId);
@@ -1182,7 +1182,7 @@ const VOICE_TOOL_DEFINITIONS: AIToolDefinition[] = [
   { key: "voice.escalate_human", kind: "action", description: "The caller explicitly asked to speak with a human.", parameters: { type: "object", properties: { reason: { type: "string" } }, additionalProperties: false } },
 ];
 const VOICE_TOOL_KEYS = VOICE_TOOL_DEFINITIONS.map((definition) => definition.key);
-const VOICE_SYSTEM_PROMPT = "You are a NesAfric AI voice receptionist. Use only the supplied tools to decide what the caller needs. Never invent property, price, availability, or account information yourself — every fact must come from a tool result. If nothing matches, ask a clarifying question instead of guessing.";
+const VOICE_SYSTEM_PROMPT = "You are an Umo Afric AI voice receptionist. Use only the supplied tools to decide what the caller needs. Never invent property, price, availability, or account information yourself — every fact must come from a tool result. If nothing matches, ask a clarifying question instead of guessing.";
 
 /**
  * Item 4's reasoning step, reusing the existing provider-neutral `AIProvider` abstraction

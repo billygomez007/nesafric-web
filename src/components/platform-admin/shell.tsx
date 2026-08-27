@@ -35,13 +35,13 @@ export function PlatformAdminShell({ children }: { children: ReactNode }) {
   if (status === "loading") return <main className="mx-auto max-w-6xl px-6 py-12"><p className="text-slate-600">Checking platform access…</p></main>;
   if (status === "denied") return <main className="mx-auto max-w-2xl px-6 py-16">
     <h1 className="text-2xl font-semibold">Platform administration</h1>
-    <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">You do not have platform access. This is completely separate from your organisation memberships — organisation owners and administrators are never automatically granted platform access. Contact a NesAfric platform operator if you believe this is an error.</p>
+    <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">You do not have platform access. This is completely separate from your organisation memberships — organisation owners and administrators are never automatically granted platform access. Contact a Umo Afric platform operator if you believe this is an error.</p>
     <Link className="mt-6 inline-block font-semibold text-emerald-700" href="/dashboard">← Back to your organisation</Link>
   </main>;
 
   return <main className="mx-auto max-w-6xl px-6 py-12">
     <header className="flex flex-wrap items-center justify-between gap-4">
-      <div><p className="text-sm font-semibold text-emerald-700">NESAFRIC PLATFORM ADMINISTRATION</p><h1 className="text-3xl font-semibold">Platform console</h1></div>
+      <div><p className="text-sm font-semibold text-emerald-700">UMO AFRIC PLATFORM ADMINISTRATION</p><h1 className="text-3xl font-semibold">Platform console</h1></div>
       {role && <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">{role.replaceAll("_", " ")}</span>}
     </header>
     <nav className="mt-6 flex flex-wrap gap-2">

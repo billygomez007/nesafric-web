@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode } from "react";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { BrandLogo } from "@/components/brand-logo";
 
 /**
  * The Marketplace professional workspace's own chrome (Phase 21A item 6) — deliberately separate
@@ -41,9 +42,9 @@ export function MarketplaceProShell({ professionalId, children }: { professional
     <>
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-baseline gap-3">
-            <Link className="text-base font-semibold tracking-tight text-slate-950" href="/pro">NesAfric Marketplace</Link>
-            <span className="hidden text-[11px] font-medium tracking-[0.12em] text-slate-400 sm:inline">PROFESSIONAL</span>
+          <div className="flex items-center gap-3">
+            <Link className="flex items-center" href="/pro"><BrandLogo height={20} variant="light" /></Link>
+            <span className="hidden text-[11px] font-medium tracking-[0.12em] text-slate-500 sm:inline">MARKETPLACE</span>
           </div>
           <div className="flex items-center gap-2">
             <WorkspaceSwitcher current={{ kind: "marketplace", label: "Marketplace Professional" }} />

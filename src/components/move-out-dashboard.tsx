@@ -392,7 +392,7 @@ function MoveOutContent({
                 {data.turnover.tasks.map((task) => <TurnoverTaskCard key={task.id} task={task} leaseId={lease.id} busy={busy} mutate={mutate} canManage={data.capabilities.manage} />)}
               </div>
               {data.capabilities.manage && <TurnoverTaskForm leaseId={lease.id} busy={busy} mutate={mutate} />}
-              {data.capabilities.manage && readyActions.length > 0 && <div className="grid gap-2">{readyActions.map((status) => <button className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy} key={status} onClick={() => void mutate(`/api/leases/${lease.id}/move-out`, "PATCH", { action: "turnover.transition", status }, `Turnover moved to ${humanize(status)}.`)}>{humanize(status)}</button>)}</div>}
+              {data.capabilities.manage && readyActions.length > 0 && <div className="grid gap-2">{readyActions.map((status) => <button className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy} key={status} onClick={() => void mutate(`/api/leases/${lease.id}/move-out`, "PATCH", { action: "turnover.transition", status }, `Turnover moved to ${humanize(status)}.`)}>{humanize(status)}</button>)}</div>}
               <Timeline title="Turnover history" items={data.turnover.history} empty="No turnover history yet." compact />
             </>}
           </Panel>
@@ -450,7 +450,7 @@ function NoticeCreateForm({
     </div>
     <input className="rounded-lg border p-2 text-sm" name="reason" placeholder="Reason" />
     <textarea className="rounded-lg border p-2 text-sm" name="notes" placeholder="Notice notes" rows={3} />
-    <button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={busy}>Create notice</button>
+    <button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={busy}>Create notice</button>
   </form>;
 }
 
@@ -472,7 +472,7 @@ function NoticeTransitionForm({
     <h3 className="font-semibold">Notice action</h3>
     <select className="rounded-lg border p-2 text-sm" name="status"><option value="ACKNOWLEDGED">Acknowledge</option><option value="WITHDRAWN">Withdraw</option></select>
     <input className="rounded-lg border p-2 text-sm" name="note" placeholder="Optional note" />
-    <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Apply</button>
+    <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Apply</button>
   </form>;
 }
 
@@ -515,7 +515,7 @@ function ScheduleForm({
     </select>
     <textarea className="rounded-lg border p-2 text-sm" defaultValue={current?.notes ?? ""} name="notes" placeholder="Schedule notes" rows={3} />
     <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Closure requires a completed inspection, accounted-for keys, and a closed settlement.</p>
-    <button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={busy}>{current ? "Update schedule" : "Schedule move-out"}</button>
+    <button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={busy}>{current ? "Update schedule" : "Schedule move-out"}</button>
   </form>;
 }
 
@@ -563,7 +563,7 @@ function InspectionForm({
     <div className="grid gap-3 sm:grid-cols-2"><input className="rounded-lg border p-2 text-sm" name="inventoryCategory" placeholder="Inventory category" /><input className="rounded-lg border p-2 text-sm" name="inventoryItem" placeholder="Inventory item" /></div>
     <div className="grid gap-3 sm:grid-cols-3"><input className="rounded-lg border p-2 text-sm" defaultValue="1" min={1} name="inventoryQuantity" type="number" /><input className="rounded-lg border p-2 text-sm" name="inventoryCondition" placeholder="Inventory condition" /><input className="rounded-lg border p-2 text-sm" name="inventoryNotes" placeholder="Inventory note" /></div>
     <label className="flex gap-2 text-sm"><input name="inventoryMissing" type="checkbox" />Mark inventory as missing</label>
-    <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Save inspection</button>
+    <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Save inspection</button>
   </form>;
 }
 
@@ -592,7 +592,7 @@ function KeyReturnCard({
       returnedAt: toIso(String(form.get("returnedAt"))),
       notes: form.get("notes") || undefined,
     }, "Key return recorded.");
-  }}><div className="grid gap-3 sm:grid-cols-2"><input className="rounded-lg border p-2 text-sm" defaultValue={Math.max(keyItem.quantity - keyItem.missingQuantity, 0)} max={keyItem.quantity} min={0} name="returnedQuantity" required type="number" /><input className="rounded-lg border p-2 text-sm" defaultValue={keyItem.missingQuantity} max={keyItem.quantity} min={0} name="missingQuantity" required type="number" /></div><input className="rounded-lg border p-2 text-sm" name="returnedAt" required type="datetime-local" /><input className="rounded-lg border p-2 text-sm" name="notes" placeholder="Return notes" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Record return</button></form>}</div>;
+  }}><div className="grid gap-3 sm:grid-cols-2"><input className="rounded-lg border p-2 text-sm" defaultValue={Math.max(keyItem.quantity - keyItem.missingQuantity, 0)} max={keyItem.quantity} min={0} name="returnedQuantity" required type="number" /><input className="rounded-lg border p-2 text-sm" defaultValue={keyItem.missingQuantity} max={keyItem.quantity} min={0} name="missingQuantity" required type="number" /></div><input className="rounded-lg border p-2 text-sm" name="returnedAt" required type="datetime-local" /><input className="rounded-lg border p-2 text-sm" name="notes" placeholder="Return notes" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Record return</button></form>}</div>;
 }
 
 function SettlementPanel({
@@ -621,7 +621,7 @@ function SettlementPanel({
       void mutate(`/api/leases/${leaseId}/move-out`, "POST", {
         action: "deduction.create",
         category: form.get("category"),
-        amountMinor: form.get("amountMinor"),
+        amountMinor: String(Math.round(Number(form.get("amount")) * 100)),
         currencyCode,
         explanation: form.get("explanation"),
         evidenceReference: form.get("evidenceReference") || undefined,
@@ -629,29 +629,29 @@ function SettlementPanel({
     }}>
       <h3 className="font-semibold">Add deduction</h3>
       <select className="rounded-lg border p-2 text-sm" name="category"><option value="PROPERTY_DAMAGE">Property damage</option><option value="MISSING_INVENTORY">Missing inventory</option><option value="CLEANING">Cleaning</option><option value="UNPAID_RENT">Unpaid rent</option><option value="UNPAID_APPROVED_CHARGES">Approved charges</option><option value="KEY_REPLACEMENT">Key replacement</option><option value="OTHER">Other</option></select>
-      <input className="rounded-lg border p-2 text-sm" name="amountMinor" placeholder="Amount (minor units)" required />
+      <input className="rounded-lg border p-2 text-sm" min="0" name="amount" placeholder={`Amount (${currencyCode})`} required step="0.01" type="number" />
       <textarea className="rounded-lg border p-2 text-sm" name="explanation" placeholder="Explanation" required rows={3} />
       <input className="rounded-lg border p-2 text-sm" name="evidenceReference" placeholder="Evidence reference" />
-      <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Create deduction</button>
+      <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Create deduction</button>
     </form>}
     {canApprove && <form className="grid gap-3 border-t pt-4" onSubmit={(event) => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
       void mutate(`/api/leases/${leaseId}/move-out`, "POST", { action: "settlement.approve", reason: form.get("reason") }, "Settlement approved.");
-    }}><h3 className="font-semibold">Approve settlement</h3><textarea className="rounded-lg border p-2 text-sm" name="reason" placeholder="Approval note" required rows={2} /><button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={busy}>Approve</button></form>}
+    }}><h3 className="font-semibold">Approve settlement</h3><textarea className="rounded-lg border p-2 text-sm" name="reason" placeholder="Approval note" required rows={2} /><button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={busy}>Approve</button></form>}
     {canRefund && <form className="grid gap-3 border-t pt-4" onSubmit={(event) => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
       void mutate(`/api/leases/${leaseId}/move-out`, "POST", {
         action: "settlement.refund",
-        amountMinor: form.get("amountMinor"),
+        amountMinor: String(Math.round(Number(form.get("amount")) * 100)),
         reference: form.get("reference"),
         idempotencyKey: crypto.randomUUID(),
         evidenceReference: form.get("evidenceReference") || undefined,
         recordedAt: toIso(String(form.get("recordedAt"))),
       }, "Refund recorded.");
-    }}><h3 className="font-semibold">Record refund</h3><input className="rounded-lg border p-2 text-sm" name="amountMinor" placeholder="Amount (minor units)" required /><input className="rounded-lg border p-2 text-sm" name="reference" placeholder="Reference" required /><input className="rounded-lg border p-2 text-sm" name="evidenceReference" placeholder="Evidence reference" /><input className="rounded-lg border p-2 text-sm" name="recordedAt" required type="datetime-local" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Record refund</button></form>}
-    {canApprove && <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy} onClick={() => void mutate(`/api/leases/${leaseId}/move-out`, "POST", { action: "settlement.close" }, "Settlement closed.")}>Close settlement</button>}
+    }}><h3 className="font-semibold">Record refund</h3><input className="rounded-lg border p-2 text-sm" min="0" name="amount" placeholder={`Amount (${currencyCode})`} required step="0.01" type="number" /><input className="rounded-lg border p-2 text-sm" name="reference" placeholder="Reference" required /><input className="rounded-lg border p-2 text-sm" name="evidenceReference" placeholder="Evidence reference" /><input className="rounded-lg border p-2 text-sm" name="recordedAt" required type="datetime-local" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Record refund</button></form>}
+    {canApprove && <button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy} onClick={() => void mutate(`/api/leases/${leaseId}/move-out`, "POST", { action: "settlement.close" }, "Settlement closed.")}>Close settlement</button>}
     {settlement.ledgerEntries.length ? <MiniList title="Ledger activity" items={settlement.ledgerEntries.map((entry) => `${humanize(entry.type)} · ${entry.direction} · ${money(entry.amountMinor, entry.currencyCode)}`)} /> : null}
   </div>;
 }
@@ -674,11 +674,11 @@ function DeductionCard({
     const form = new FormData(event.currentTarget);
     const status = String(form.get("status"));
     void mutate(`/api/leases/${leaseId}/move-out/deductions/${deduction.id}`, "PATCH", { action: "decision", status, reason: form.get("reason") }, `Deduction ${humanize(status)}.`);
-  }}><select className="rounded-lg border p-2 text-sm" name="status"><option value="APPROVED">Approve</option><option value="REJECTED">Reject</option></select><input className="rounded-lg border p-2 text-sm" name="reason" placeholder="Decision reason" required /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Save decision</button></form>}{canApprove && deduction.status === "APPROVED" && <form className="mt-4 grid gap-2 border-t pt-4" onSubmit={(event) => {
+  }}><select className="rounded-lg border p-2 text-sm" name="status"><option value="APPROVED">Approve</option><option value="REJECTED">Reject</option></select><input className="rounded-lg border p-2 text-sm" name="reason" placeholder="Decision reason" required /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Save decision</button></form>}{canApprove && deduction.status === "APPROVED" && <form className="mt-4 grid gap-2 border-t pt-4" onSubmit={(event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     void mutate(`/api/leases/${leaseId}/move-out/deductions/${deduction.id}`, "PATCH", { action: "reversal", reason: form.get("reason") }, "Deduction reversed.");
-  }}><input className="rounded-lg border p-2 text-sm" name="reason" placeholder="Reversal reason" required /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Reverse deduction</button></form>}</div>;
+  }}><input className="rounded-lg border p-2 text-sm" name="reason" placeholder="Reversal reason" required /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Reverse deduction</button></form>}</div>;
 }
 
 function FinalStatementCard({ leaseId, statement }: { leaseId: string; statement: FinalStatement }) {
@@ -696,7 +696,7 @@ function FinalStatementCard({ leaseId, statement }: { leaseId: string; statement
       setBusy(false);
     }
   }
-  return <div className="grid gap-3 text-sm"><div className="rounded-xl border p-4"><p className="font-semibold">{statement.tenant.preferredName || statement.tenant.legalName}</p><p className="text-slate-500">{statement.property.name}{statement.unit ? ` · ${statement.unit.name}` : ""}</p><p className="mt-1 text-slate-500">Status: {humanize(statement.status)}</p><p className="mt-1 text-slate-500">Move-out: {statement.moveOutDate ? date(statement.moveOutDate) : "Pending"}</p></div><div className="grid gap-2 rounded-xl border p-4"><p>Deposit received: <strong>{money(statement.depositReceivedMinor, statement.currencyCode)}</strong></p><p>Approved deductions: <strong>{money(statement.approvedDeductionMinor, statement.currencyCode)}</strong></p><p>Outstanding rent: <strong>{money(statement.outstandingRentMinor, statement.currencyCode)}</strong></p><p>Refund due: <strong>{money(statement.refundAmountMinor, statement.currencyCode)}</strong></p></div>{statement.deductions.length ? <MiniList title="Statement deductions" items={statement.deductions.map((deduction) => `${humanize(deduction.category)} · ${money(deduction.amountMinor, deduction.currencyCode)} · ${humanize(deduction.status)}`)} /> : null}{pdfUrl ? <a className="rounded-lg border px-3 py-2 text-center text-sm font-semibold" href={pdfUrl} rel="noreferrer" target="_blank">Open PDF statement</a> : <button className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy} onClick={() => void downloadPdf()}>{busy ? "Generating..." : "Get PDF statement"}</button>}</div>;
+  return <div className="grid gap-3 text-sm"><div className="rounded-xl border p-4"><p className="font-semibold">{statement.tenant.preferredName || statement.tenant.legalName}</p><p className="text-slate-500">{statement.property.name}{statement.unit ? ` · ${statement.unit.name}` : ""}</p><p className="mt-1 text-slate-500">Status: {humanize(statement.status)}</p><p className="mt-1 text-slate-500">Move-out: {statement.moveOutDate ? date(statement.moveOutDate) : "Pending"}</p></div><div className="grid gap-2 rounded-xl border p-4"><p>Deposit received: <strong>{money(statement.depositReceivedMinor, statement.currencyCode)}</strong></p><p>Approved deductions: <strong>{money(statement.approvedDeductionMinor, statement.currencyCode)}</strong></p><p>Outstanding rent: <strong>{money(statement.outstandingRentMinor, statement.currencyCode)}</strong></p><p>Refund due: <strong>{money(statement.refundAmountMinor, statement.currencyCode)}</strong></p></div>{statement.deductions.length ? <MiniList title="Statement deductions" items={statement.deductions.map((deduction) => `${humanize(deduction.category)} · ${money(deduction.amountMinor, deduction.currencyCode)} · ${humanize(deduction.status)}`)} /> : null}{pdfUrl ? <a className="rounded-lg border px-3 py-2 text-center text-sm font-semibold" href={pdfUrl} rel="noreferrer" target="_blank">Open PDF statement</a> : <button className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy} onClick={() => void downloadPdf()}>{busy ? "Generating..." : "Get PDF statement"}</button>}</div>;
 }
 
 function TurnoverTaskCard({
@@ -716,7 +716,7 @@ function TurnoverTaskCard({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     void mutate(`/api/leases/${leaseId}/move-out`, "PATCH", { action: "turnover.task.update", taskId: task.id, status: form.get("status"), notes: form.get("notes") || undefined }, "Turnover task updated.");
-  }}><select className="rounded-lg border p-2 text-sm" defaultValue={task.status} name="status"><option value="PENDING">Pending</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option><option value="CANCELLED">Cancelled</option></select><input className="rounded-lg border p-2 text-sm" defaultValue={task.notes ?? ""} name="notes" placeholder="Task notes" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Save task</button></form>}</div>;
+  }}><select className="rounded-lg border p-2 text-sm" defaultValue={task.status} name="status"><option value="PENDING">Pending</option><option value="IN_PROGRESS">In progress</option><option value="COMPLETED">Completed</option><option value="CANCELLED">Cancelled</option></select><input className="rounded-lg border p-2 text-sm" defaultValue={task.notes ?? ""} name="notes" placeholder="Task notes" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Save task</button></form>}</div>;
 }
 
 function TurnoverTaskForm({
@@ -738,7 +738,7 @@ function TurnoverTaskForm({
       required: form.get("required") === "on",
       notes: form.get("notes") || undefined,
     }, "Turnover task created.");
-  }}><h3 className="font-semibold">Add task</h3><input className="rounded-lg border p-2 text-sm" name="key" placeholder="Task key" required /><input className="rounded-lg border p-2 text-sm" name="label" placeholder="Task label" required /><label className="flex gap-2 text-sm"><input defaultChecked name="required" type="checkbox" />Required for readiness</label><input className="rounded-lg border p-2 text-sm" name="notes" placeholder="Task notes" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={busy}>Add task</button></form>;
+  }}><h3 className="font-semibold">Add task</h3><input className="rounded-lg border p-2 text-sm" name="key" placeholder="Task key" required /><input className="rounded-lg border p-2 text-sm" name="label" placeholder="Task label" required /><label className="flex gap-2 text-sm"><input defaultChecked name="required" type="checkbox" />Required for readiness</label><input className="rounded-lg border p-2 text-sm" name="notes" placeholder="Task notes" /><button className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={busy}>Add task</button></form>;
 }
 
 function CloseLeaseForm({
@@ -754,7 +754,7 @@ function CloseLeaseForm({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     void mutate(`/api/leases/${leaseId}/move-out`, "POST", { action: "lease.close", actualMoveOutDate: form.get("actualMoveOutDate"), note: form.get("note") || undefined }, "Lease closed after move-out.");
-  }}><h3 className="font-semibold">Close lease</h3><input className="rounded-lg border p-2 text-sm" name="actualMoveOutDate" required type="date" /><textarea className="rounded-lg border p-2 text-sm" name="note" placeholder="Closure note" rows={2} /><button className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={busy}>Close lease</button></form>;
+  }}><h3 className="font-semibold">Close lease</h3><input className="rounded-lg border p-2 text-sm" name="actualMoveOutDate" required type="date" /><textarea className="rounded-lg border p-2 text-sm" name="note" placeholder="Closure note" rows={2} /><button className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={busy}>Close lease</button></form>;
 }
 
 function Timeline({ title, items, empty, compact = false }: { title: string; items: NoticeHistory[]; empty: string; compact?: boolean }) {

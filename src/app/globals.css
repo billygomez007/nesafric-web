@@ -3,6 +3,15 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /*
+   * Without this, browsers render native form chrome (select/option lists, checkboxes, radios,
+   * date pickers, scrollbars) in dark UA styling whenever the visitor's OS is in dark mode —
+   * independent of any author CSS. That produced dark-on-dark comboboxes (an open <select>'s
+   * options, and sometimes the closed box itself, painted with a dark native background) with no
+   * class in this codebase able to override it. Declaring the page as light-only keeps every
+   * native control on the light UA theme regardless of OS/browser preference.
+   */
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,12 +21,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/*
+ * NesAfric has no dark-theme design — every surface (cards, shells, forms) is built as an
+ * explicit light surface with explicit dark text, and dark sections (marketing hero, nav) set
+ * their own explicit light text color rather than relying on this variable. Auto-flipping
+ * --foreground/--background off the visitor's OS `prefers-color-scheme` (the Next.js template
+ * default, never actually adopted here) silently turned body-inherited text near-white while
+ * white `bg-white` cards stayed white, making headings, metric values and disabled text
+ * effectively invisible for any visitor whose OS is set to dark mode. Pinned to the light
+ * values so text color is predictable regardless of OS/browser theme.
+ */
 
 body {
   background: var(--background);

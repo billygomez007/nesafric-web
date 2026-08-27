@@ -401,8 +401,8 @@ export function AIPropertyManager() {
                         placeholder="Decision reason (required)"
                         value={decisionReasons[proposal.id] ?? ""}
                       />
-                      <button className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" disabled={(decisionReasons[proposal.id]?.trim().length ?? 0) < 3 || busy === proposal.id} onClick={() => void decideProposal(proposal.id, "APPROVE")} type="button">Approve</button>
-                      <button className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-40" disabled={(decisionReasons[proposal.id]?.trim().length ?? 0) < 3 || busy === proposal.id} onClick={() => void decideProposal(proposal.id, "REJECT")} type="button">Reject</button>
+                      <button className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={(decisionReasons[proposal.id]?.trim().length ?? 0) < 3 || busy === proposal.id} onClick={() => void decideProposal(proposal.id, "APPROVE")} type="button">Approve</button>
+                      <button className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={(decisionReasons[proposal.id]?.trim().length ?? 0) < 3 || busy === proposal.id} onClick={() => void decideProposal(proposal.id, "REJECT")} type="button">Reject</button>
                     </div>
                   )}
                   {proposal.executionResult !== null && <div className="mt-3"><p className="text-sm font-semibold text-emerald-700">Execution result</p><JsonDetails value={proposal.executionResult} /></div>}
@@ -418,7 +418,7 @@ export function AIPropertyManager() {
         <aside className="border-b bg-slate-50 p-4 lg:border-r lg:border-b-0">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">Conversations</h2>
-            <button className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50" disabled={busy === "session"} onClick={() => void createSession()} type="button">
+            <button className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={busy === "session"} onClick={() => void createSession()} type="button">
               New
             </button>
           </div>
@@ -473,7 +473,7 @@ export function AIPropertyManager() {
               <form className="flex gap-2 border-t p-4" onSubmit={sendMessage}>
                 <label className="sr-only" htmlFor="ai-message">Message PropertyOS AI</label>
                 <textarea className="min-h-11 flex-1 resize-y rounded-xl border px-3 py-2 text-sm" id="ai-message" maxLength={4000} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about your portfolio operations…" rows={2} value={message} />
-                <button className="self-end rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40" disabled={!message.trim() || busy === "message"} type="submit">Send</button>
+                <button className="self-end rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={!message.trim() || busy === "message"} type="submit">Send</button>
               </form>
             </>
           ) : (

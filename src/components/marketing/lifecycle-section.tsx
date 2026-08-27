@@ -14,7 +14,7 @@ const STAGES = [
 
 export function LifecycleSection() {
   return (
-    <section className="bg-slate-950 py-24 sm:py-32" id="lifecycle">
+    <section className="scroll-mt-16 bg-slate-950 py-24 sm:py-32" id="lifecycle">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold tracking-[0.22em] text-emerald-300">FULL PROPERTY LIFECYCLE</p>
@@ -22,7 +22,7 @@ export function LifecycleSection() {
             From first listing to every renewal — one continuous system.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-400">
-            NesAfric doesn&apos;t hand off between tools at each stage. The same platform carries a unit through
+            Umo Afric doesn&apos;t hand off between tools at each stage. The same platform carries a unit through
             its entire life, and back around again.
           </p>
         </div>

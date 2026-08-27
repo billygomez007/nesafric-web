@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
+import { BRAND } from "@/platform/brand";
 
 const COLUMNS = [
   {
@@ -11,18 +13,20 @@ const COLUMNS = [
     ],
   },
   {
-    title: "Solutions",
+    title: "For Real Estate",
     links: [
-      { href: "#solutions", label: "For landlords" },
-      { href: "#solutions", label: "For property managers" },
-      { href: "#solutions", label: "For developers" },
+      { href: "/for-professionals", label: "For Professionals" },
+      { href: "/for-developers", label: "For Developers" },
+      { href: "/for-property-owners", label: "For Property Owners" },
+      { href: "/pricing", label: "Pricing" },
     ],
   },
   {
     title: "Marketplace",
     links: [
       { href: "/marketplace/properties", label: "Browse properties" },
-      { href: "/marketplace", label: "Find service providers" },
+      { href: "/marketplace/professionals", label: "Find a professional" },
+      { href: "/ghana", label: "Ghana Launch" },
     ],
   },
   {
@@ -40,11 +44,28 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-6 py-16 sm:px-8">
         <div className="grid gap-12 lg:grid-cols-[1.4fr_repeat(4,1fr)]">
           <div>
-            <p className="text-lg font-semibold tracking-tight text-white">NesAfric</p>
-            <p className="mt-1 text-xs font-medium tracking-[0.14em] text-slate-500">PROPERTYOS</p>
+            <BrandLogo height={26} />
             <p className="mt-4 max-w-xs text-sm leading-6 text-slate-400">
-              The operating system for real estate — for landlords, property managers and developers.
+              The intelligent operating and marketplace platform for real estate.
             </p>
+            <dl className="mt-6 space-y-3 text-sm text-slate-400">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">General enquiries</dt>
+                <dd><a className="transition-colors hover:text-white" href={`mailto:${BRAND.contact.hello}`}>{BRAND.contact.hello}</a></dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Support</dt>
+                <dd><a className="transition-colors hover:text-white" href={`mailto:${BRAND.contact.support}`}>{BRAND.contact.support}</a></dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Corporate</dt>
+                <dd><a className="transition-colors hover:text-white" href={`mailto:${BRAND.contact.info}`}>{BRAND.contact.info}</a></dd>
+              </div>
+              <div>
+                <a className="transition-colors hover:text-white" href={`tel:${BRAND.contact.phoneTel}`}>{BRAND.contact.phoneDisplay}</a>
+              </div>
+              <div className="text-slate-500">{BRAND.contact.address}</div>
+            </dl>
           </div>
           {COLUMNS.map((column) => (
             <div key={column.title}>
@@ -62,8 +83,8 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="mt-16 flex flex-col gap-4 border-t border-slate-800 pt-8 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} NesAfric. All rights reserved.</p>
-          <p>Built for landlords, property managers and developers across Ghana and Africa.</p>
+          <p>© {new Date().getFullYear()} {BRAND.name}. All rights reserved. · <a className="hover:text-slate-300" href={`https://${BRAND.domain}`}>{BRAND.domain}</a></p>
+          <p>Built for owners, operators, agents, brokers, brokerages and developers.</p>
         </div>
       </div>
     </footer>

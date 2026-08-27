@@ -11,7 +11,7 @@ const METHODS = ["Mobile Money", "Card", "Bank Transfer", "Manual / Cash"];
 
 export function PaymentsSection() {
   return (
-    <section className="bg-slate-50 py-24 sm:py-32" id="payments">
+    <section className="scroll-mt-16 bg-slate-50 py-24 sm:py-32" id="payments">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="grid gap-14 lg:grid-cols-2 lg:items-center lg:gap-16">
           <div>

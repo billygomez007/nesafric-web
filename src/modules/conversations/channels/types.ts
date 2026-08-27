@@ -11,6 +11,13 @@ export type OutboundMessageRequest = {
   externalReferenceId?: string | null;
   providerKey?: string | null;
   config?: Record<string, unknown>;
+  /** EMAIL-only. Ignored by every other channel adapter. */
+  subject?: string;
+  /** EMAIL-only branded HTML body. When present, the adapter sends it alongside `body` as the
+   * plain-text alternative. Ignored by every other channel adapter. */
+  html?: string;
+  /** EMAIL-only. Where a reply to an automated message should land. */
+  replyTo?: string;
 };
 
 export type OutboundDeliveryResult = {

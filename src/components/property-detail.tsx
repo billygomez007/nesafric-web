@@ -103,29 +103,29 @@ export function PropertyDetail({ propertyId }: { propertyId: string }) {
 
         <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <dt className="text-xs font-semibold uppercase text-slate-400">Location</dt>
+            <dt className="text-xs font-semibold uppercase text-slate-500">Location</dt>
             <dd className="mt-1 text-sm text-slate-700">
               {[property.addressLine1, property.district, property.city, property.region].filter(Boolean).join(", ") || "No address set"}
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase text-slate-400">Digital address</dt>
+            <dt className="text-xs font-semibold uppercase text-slate-500">Digital address</dt>
             <dd className="mt-1 text-sm text-slate-700">{property.digitalAddress ?? "Not set"}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase text-slate-400">Geocoding</dt>
+            <dt className="text-xs font-semibold uppercase text-slate-500">Geocoding</dt>
             <dd className="mt-1 text-sm text-slate-700">{titleCase(property.geocodeStatus)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase text-slate-400">Portfolio</dt>
+            <dt className="text-xs font-semibold uppercase text-slate-500">Portfolio</dt>
             <dd className="mt-1 text-sm text-slate-700">{property.portfolio ? property.portfolio.name : "Not assigned"}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase text-slate-400">Currency</dt>
+            <dt className="text-xs font-semibold uppercase text-slate-500">Currency</dt>
             <dd className="mt-1 text-sm text-slate-700">{property.currencyCode}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase text-slate-400">Units</dt>
+            <dt className="text-xs font-semibold uppercase text-slate-500">Units</dt>
             <dd className="mt-1 text-sm text-slate-700">{totalUnits}</dd>
           </div>
         </dl>
@@ -139,7 +139,7 @@ export function PropertyDetail({ propertyId }: { propertyId: string }) {
 
       {property.buildings.length > 0 || unassignedUnits.length > 0 ? (
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold uppercase text-slate-400">Units</h3>
+          <h3 className="text-sm font-semibold uppercase text-slate-500">Units</h3>
           {property.buildings.map((building) => (
             <div className="mt-4" key={building.id}>
               <p className="text-sm font-semibold text-slate-700">{building.name}</p>
@@ -163,7 +163,7 @@ export function PropertyDetail({ propertyId }: { propertyId: string }) {
       )}
 
       <section className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold uppercase text-slate-400">Recent maintenance</h3>
+        <h3 className="text-sm font-semibold uppercase text-slate-500">Recent maintenance</h3>
         <ScopedMaintenanceHistory id={property.id} scope="properties" />
       </section>
     </div>

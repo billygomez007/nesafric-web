@@ -7,6 +7,7 @@ import { runProactiveEvaluationJob } from "@/modules/ai-autonomy/service";
 import { deliverConversationMessage } from "@/modules/conversations/service";
 import { defaultChannelAdapters, ChannelAdapters } from "@/modules/conversations/channels/registry";
 import { syncCalendarEventJob } from "@/modules/calendar/service";
+import { sendAccountEmail, type AccountEmailPayload } from "@/modules/account-emails/service";
 
 export function createJobHandlers(notificationProviders: NotificationProviders = defaultNotificationProviders, channelAdapters: ChannelAdapters = defaultChannelAdapters) {
   return {
@@ -30,6 +31,9 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   },
   "calendar-sync": async (payload: Record<string, unknown>) => {
     await syncCalendarEventJob(String(payload.organisationId), String(payload.calendarEventId));
+  },
+  "account-email": async (payload: Record<string, unknown>) => {
+    await sendAccountEmail(payload as unknown as AccountEmailPayload);
   },
   };
 }

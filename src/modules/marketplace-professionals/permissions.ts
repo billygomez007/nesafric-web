@@ -1,5 +1,6 @@
 import { db } from "@/platform/database/client";
 import { forbidden } from "@/platform/errors";
+import { isUuid } from "@/platform/validation/uuid";
 import type { MarketplaceMemberRole } from "@/platform/database/generated/client";
 
 /**
@@ -12,6 +13,7 @@ import type { MarketplaceMemberRole } from "@/platform/database/generated/client
 const RANK: Record<MarketplaceMemberRole, number> = { AGENT: 0, ADMIN: 1, OWNER: 2 };
 
 export async function requireMarketplaceRole(userId: string, marketplaceProfessionalId: string, minRole: MarketplaceMemberRole) {
+  if (!isUuid(marketplaceProfessionalId)) throw forbidden();
   const member = await db.marketplaceProfessionalMember.findUnique({
     where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId, userId } },
   });

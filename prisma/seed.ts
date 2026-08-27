@@ -1,10 +1,11 @@
 import "dotenv/config";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/platform/database/generated/client";
 import { GHANA, GHS } from "../src/modules/geography/config";
 import { ENTITLEMENTS } from "../src/modules/entitlements/catalog";
 import { MARKETPLACE_ENTITLEMENTS } from "../src/modules/marketplace-professionals/catalog";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
 const permissions = [
   ["organisation.manage_members", "Invite and manage organisation members"],
@@ -220,7 +221,7 @@ const PLANS = [
 const MARKETPLACE_PLANS = [
   {
     key: "marketplace_free", name: "Marketplace Free", sortOrder: 1,
-    description: "Free access to the NesAfric Real Estate Marketplace for agents, brokers, brokerages, real-estate companies, and developers.",
+    description: "Free access to the Umo Afric Real Estate Marketplace for agents, brokers, brokerages, real-estate companies, and developers.",
     prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY" as const, amountMinor: "0" }],
     entitlements: {
       [MARKETPLACE_ENTITLEMENTS.activeListingsMax.key]: { kind: "LIMIT" as const, limitValue: 10 },

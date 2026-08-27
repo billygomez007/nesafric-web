@@ -223,7 +223,7 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[call.status] ?? "bg-slate-100 text-slate-700"}`}>{call.status.replaceAll("_", " ")}</span>
-                      <span className="text-xs text-slate-400">{call.outcome.replaceAll("_", " ")}</span>
+                      <span className="text-xs text-slate-500">{call.outcome.replaceAll("_", " ")}</span>
                       {call.transferStatus !== "NONE" && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700">Transfer {call.transferStatus.toLowerCase()}</span>}
                     </div>
                   </button>
@@ -233,9 +233,9 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
           )}
           {total > pageSize && (
             <div className="flex items-center justify-between border-t px-5 py-3 text-sm">
-              <button className="font-medium text-slate-600 disabled:text-slate-300" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} type="button">← Previous</button>
+              <button className="font-medium text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} type="button">← Previous</button>
               <span className="text-slate-500">Page {page} of {totalPages}</span>
-              <button className="font-medium text-slate-600 disabled:text-slate-300" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} type="button">Next →</button>
+              <button className="font-medium text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} type="button">Next →</button>
             </div>
           )}
         </section>
@@ -275,7 +275,7 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
                   {selectedCall.conversation.tenantOrganisationId && <span className="rounded-full bg-slate-100 px-2 py-0.5">Tenant</span>}
                   {selectedCall.conversation.marketplaceLeadId && <span className="rounded-full bg-slate-100 px-2 py-0.5">Lead</span>}
                   {selectedCall.conversation.workOrderId && <span className="rounded-full bg-slate-100 px-2 py-0.5">Work order</span>}
-                  {!selectedCall.conversation.listingId && !selectedCall.conversation.tenantOrganisationId && !selectedCall.conversation.marketplaceLeadId && !selectedCall.conversation.workOrderId && <span className="text-slate-400">None</span>}
+                  {!selectedCall.conversation.listingId && !selectedCall.conversation.tenantOrganisationId && !selectedCall.conversation.marketplaceLeadId && !selectedCall.conversation.workOrderId && <span className="text-slate-500">None</span>}
                 </div>
               </div>
               {selectedCall.turns.length > 0 && (
@@ -294,7 +294,7 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
                   <pre className="mt-1 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{selectedCall.transcriptText}</pre>
                 </div>
               )}
-              <div className="text-xs text-slate-400">
+              <div className="text-xs text-slate-500">
                 {selectedCall.sttSecondsUsed ? `STT: ${selectedCall.sttSecondsUsed.toFixed(1)}s` : ""}
                 {selectedCall.ttsCharactersUsed ? ` · TTS: ${selectedCall.ttsCharactersUsed} chars` : ""}
               </div>
@@ -322,7 +322,7 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
             <label className="text-sm">STT provider<input className="mt-1 w-full rounded border p-2 text-sm" defaultValue={config.sttProviderKey} name="sttProviderKey" /></label>
             <label className="text-sm">TTS provider<input className="mt-1 w-full rounded border p-2 text-sm" defaultValue={config.ttsProviderKey} name="ttsProviderKey" /></label>
             <label className="text-sm">Country code<input className="mt-1 w-full rounded border p-2 text-sm" defaultValue={config.countryCode ?? ""} maxLength={2} name="countryCode" placeholder="GH" /></label>
-            <label className="text-sm sm:col-span-2">Opening disclosure<textarea className="mt-1 w-full rounded border p-2 text-sm" defaultValue={config.openingDisclosureText ?? ""} name="openingDisclosureText" placeholder="This call is being handled by NesAfric's AI receptionist." rows={2} /></label>
+            <label className="text-sm sm:col-span-2">Opening disclosure<textarea className="mt-1 w-full rounded border p-2 text-sm" defaultValue={config.openingDisclosureText ?? ""} name="openingDisclosureText" placeholder="This call is being handled by Umo Afric's AI receptionist." rows={2} /></label>
             <label className="text-sm sm:col-span-2">Recording disclosure<textarea className="mt-1 w-full rounded border p-2 text-sm" defaultValue={config.recordingDisclosureText ?? ""} name="recordingDisclosureText" placeholder="This call may be recorded for quality and training purposes." rows={2} /></label>
             <div className="grid content-center gap-2 text-sm">
               <label className="flex items-center gap-2"><input defaultChecked={config.inboundEnabled} name="inboundEnabled" type="checkbox" /> Inbound voice enabled</label>
@@ -334,7 +334,7 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
             <button className="justify-self-start rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white sm:col-span-2" type="submit">Save voice settings</button>
           </form>
         )}
-        <p className="mt-3 text-xs text-slate-400">Provider: {config?.status ?? "—"}. Deterministic test transport is used until production telephony credentials are configured.</p>
+        <p className="mt-3 text-xs text-slate-500">Provider: {config?.status ?? "—"}. Deterministic test transport is used until production telephony credentials are configured.</p>
       </section>
 
       <section className="rounded-xl border bg-white p-6 shadow-sm">
@@ -354,8 +354,8 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
           <ul className="mt-3 grid gap-1.5 text-sm">
             {phoneNumbers.map((number) => (
               <li className="flex items-center justify-between rounded border px-3 py-1.5" key={number.id}>
-                <span>{number.e164Number} <span className="text-xs text-slate-400">· {number.purpose.toLowerCase().replaceAll("_", " ")}{number.label ? ` · ${number.label}` : ""}</span></span>
-                <span className="text-xs text-slate-400">{number.assignedAIEmployee?.name ?? "Unassigned"} · {number.status.toLowerCase()}</span>
+                <span>{number.e164Number} <span className="text-xs text-slate-500">· {number.purpose.toLowerCase().replaceAll("_", " ")}{number.label ? ` · ${number.label}` : ""}</span></span>
+                <span className="text-xs text-slate-500">{number.assignedAIEmployee?.name ?? "Unassigned"} · {number.status.toLowerCase()}</span>
               </li>
             ))}
           </ul>
@@ -374,7 +374,7 @@ export function VoiceCallsWorkspace({ organisationId }: { organisationId: string
             {preferences.map((preference) => (
               <li className="flex items-center justify-between rounded border px-3 py-1.5" key={preference.id}>
                 <span>{preference.phoneNumber}</span>
-                <span className="text-xs text-slate-400">{preference.reason ?? "No reason given"}</span>
+                <span className="text-xs text-slate-500">{preference.reason ?? "No reason given"}</span>
               </li>
             ))}
           </ul>

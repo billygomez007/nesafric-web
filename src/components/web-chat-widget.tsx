@@ -81,7 +81,7 @@ export function WebChatWidget({ listingId, propertyId }: { listingId?: string; p
       <input className="rounded-lg border p-3 text-sm" onChange={(event) => setName(event.target.value)} placeholder="Your name" value={name} />
       <input className="rounded-lg border p-3 text-sm" onChange={(event) => setEmail(event.target.value)} placeholder="Email (optional)" value={email} />
       <textarea className="rounded-lg border p-3 text-sm" onChange={(event) => setMessage(event.target.value)} placeholder="How can we help?" rows={3} value={message} />
-      <button className="rounded-lg bg-slate-950 p-3 font-semibold text-white disabled:opacity-50" disabled={!message.trim()} onClick={start}>Start chat</button>
+      <button className="rounded-lg bg-slate-950 p-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={!message.trim()} onClick={start}>Start chat</button>
     </div>;
   }
 

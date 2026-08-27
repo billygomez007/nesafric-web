@@ -90,6 +90,6 @@ function PolicyEditor({ policy, onSaved, onError }: { policy: Policy; onSaved: (
     <label className="text-sm font-medium">Days before expiry<input className="mt-1 w-full rounded-lg border p-2.5" defaultValue={policy.daysOffset} min="0" max="3650" name="daysOffset" required type="number" /></label>
     <fieldset><legend className="text-sm font-medium">Channels</legend><div className="mt-2 flex flex-wrap gap-2">{channels.map((channel) => <label className="flex items-center gap-2 text-sm" key={channel}><input defaultChecked={policy.channels.includes(channel)} name={channel} type="checkbox" />{channel.replace("_", "-")}</label>)}</div></fieldset>
     <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium"><input defaultChecked={policy.enabled} name="enabled" type="checkbox" />Active</label>
-    <button className="rounded-lg border border-slate-900 px-4 py-2.5 text-sm font-semibold disabled:opacity-50" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+    <button className="rounded-lg border border-slate-900 px-4 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
   </form>;
 }

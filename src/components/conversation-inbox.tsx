@@ -31,7 +31,7 @@ const statusColor: Record<string, string> = {
   HUMAN_ACTIVE: "bg-emerald-50 text-emerald-800",
   WAITING_CUSTOMER: "bg-slate-100 text-slate-700",
   RESOLVED: "bg-slate-100 text-slate-500",
-  CLOSED: "bg-slate-100 text-slate-400",
+  CLOSED: "bg-slate-100 text-slate-500",
 };
 
 export function ConversationInbox() {

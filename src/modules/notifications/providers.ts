@@ -1,6 +1,9 @@
 import { db } from "@/platform/database/client";
 import { EmailChannelAdapter, SmsChannelAdapter, WhatsAppChannelAdapter } from "@/modules/conversations/channels/registry";
 import type { ChannelAdapter } from "@/modules/conversations/channels/types";
+import { BRAND } from "@/platform/brand";
+import { renderEmail } from "@/modules/notifications/email-templates/render";
+import { buildReminderEventEmail } from "@/modules/notifications/email-templates/events";
 
 export type DeliveryChannel = "IN_APP" | "EMAIL" | "SMS" | "WHATSAPP";
 
@@ -73,14 +76,19 @@ class ChannelAdapterNotificationProvider implements NotificationProvider {
   async deliver(request: DeliveryRequest): Promise<DeliveryResult> {
     const recipientAddress = await resolveTenantAddress(request.tenantOrganisationId, this.addressField);
     if (!recipientAddress) throw new Error(`No ${this.addressField} address is on file for this recipient.`);
+    const isEmail = this.adapter.channel === "EMAIL";
+    const email = isEmail ? buildReminderEventEmail(request.eventType) : null;
     const result = await this.adapter.send({
       organisationId: request.organisationId,
       conversationId: request.notificationId,
       messageId: request.notificationId,
       channel: this.adapter.channel,
       recipientAddress,
-      fromAddress: null,
-      body: renderMessageBody(request),
+      fromAddress: email ? BRAND.sender[email.sender] : null,
+      subject: email?.subject,
+      html: email ? renderEmail(email.content).html : undefined,
+      replyTo: email ? BRAND.contact.support : undefined,
+      body: email ? renderEmail(email.content).text : renderMessageBody(request),
     });
     if (result.status === "SENT" || result.status === "DELIVERED") return { status: result.status, providerReference: result.providerReference };
     throw new Error(result.failureReason ?? `${this.adapter.channel} delivery failed.`);

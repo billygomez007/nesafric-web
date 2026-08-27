@@ -158,7 +158,9 @@ export async function getEntitlementSnapshot(organisationId: string) {
     const current = definition.kind === "LIMIT" ? usage[definition.key] ?? 0 : null;
     const limit = effective.kind === "LIMIT" ? effective.limitValue : null;
     const approaching = effective.kind === "LIMIT" && !effective.isUnlimited && limit !== null && limit > 0 && current !== null ? current / limit >= APPROACHING_RATIO && current < limit : false;
-    const reached = effective.kind === "LIMIT" && !effective.isUnlimited && limit !== null && current !== null ? current >= limit : false;
+    // limit === 0 means the feature isn't included in the plan at all, not that a real allowance
+    // was used up — that case is surfaced as "unavailable", never as a misleading "limit reached".
+    const reached = effective.kind === "LIMIT" && !effective.isUnlimited && limit !== null && limit > 0 && current !== null ? current >= limit : false;
     return {
       featureKey: definition.key,
       label: definition.label,

@@ -11,6 +11,7 @@
  * touches `OrganisationMember`/`Role`/`Permission`.
  */
 import "dotenv/config";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/platform/database/generated/client";
 
 const VALID_ROLES = ["SUPER_ADMIN", "BILLING_ADMIN", "SUPPORT_AGENT", "READ_ONLY"] as const;
@@ -24,7 +25,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {

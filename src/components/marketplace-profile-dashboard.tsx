@@ -112,7 +112,7 @@ export function MarketplaceProfileDashboard({ professionalId }: { professionalId
             <div className="rounded-xl border bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-600">Active listings</p>
               <p className="mt-2 text-3xl font-semibold">{metrics.listings.active}</p>
-              <p className="mt-1 text-xs text-slate-400">{metrics.listings.draft} draft · {metrics.listings.pendingReview} in review · {metrics.listings.paused} paused</p>
+              <p className="mt-1 text-xs text-slate-500">{metrics.listings.draft} draft · {metrics.listings.pendingReview} in review · {metrics.listings.paused} paused</p>
             </div>
             <div className="rounded-xl border bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-600">New leads</p>
@@ -149,8 +149,12 @@ export function MarketplaceProfileDashboard({ professionalId }: { professionalId
             {entitlements.features.map((feature) => (
               <div className="flex justify-between rounded-lg border px-3 py-2" key={feature.featureKey}>
                 <dt className="text-slate-600">{feature.label}</dt>
-                <dd className={`font-medium ${feature.reached ? "text-red-700" : "text-slate-800"}`}>
-                  {feature.kind === "BOOLEAN" ? (feature.booleanValue ? "Enabled" : "Disabled") : `${feature.current ?? 0} / ${feature.isUnlimited ? "Unlimited" : feature.limit}`}
+                <dd className={`font-medium ${feature.reached ? "text-red-700" : !feature.isUnlimited && (feature.limit === 0 || (feature.kind === "BOOLEAN" && !feature.booleanValue)) ? "text-slate-500" : "text-slate-800"}`}>
+                  {feature.kind === "BOOLEAN"
+                    ? (feature.booleanValue ? "Enabled" : "Not included on this plan")
+                    : !feature.isUnlimited && feature.limit === 0
+                      ? "Not included on this plan"
+                      : `${feature.current ?? 0} / ${feature.isUnlimited ? "Unlimited" : feature.limit}`}
                 </dd>
               </div>
             ))}

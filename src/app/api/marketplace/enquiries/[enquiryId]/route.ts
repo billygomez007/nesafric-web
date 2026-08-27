@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getMarketplaceEnquiry, updateMarketplaceEnquiry } from "@/modules/marketplace/service";
 import { requireUser } from "@/platform/auth/session";
 import { errorResponse } from "@/platform/errors";
+import { getOrganisationIdHeader } from "@/platform/organisations/request";
 
 type Context = { params: Promise<{ enquiryId: string }> };
 
@@ -10,7 +11,7 @@ export async function GET(request: Request, { params }: Context) {
     return NextResponse.json(
       await getMarketplaceEnquiry(
         (await requireUser()).id,
-        request.headers.get("x-organisation-id"),
+        getOrganisationIdHeader(request),
         (await params).enquiryId,
       ),
     );
@@ -24,7 +25,7 @@ export async function PATCH(request: Request, { params }: Context) {
     return NextResponse.json(
       await updateMarketplaceEnquiry(
         (await requireUser()).id,
-        request.headers.get("x-organisation-id"),
+        getOrganisationIdHeader(request),
         (await params).enquiryId,
         await request.json(),
       ),

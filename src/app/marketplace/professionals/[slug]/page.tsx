@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublicMarketplaceProfessionalProfile } from "@/modules/marketplace-professionals/service";
+import { BrandLogo } from "@/components/brand-logo";
 
 const TYPE_LABELS: Record<string, string> = {
   INDIVIDUAL_AGENT: "Individual Agent",
@@ -21,7 +22,7 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
     <main className="min-h-screen bg-slate-50">
       <header className="border-b bg-slate-950 px-4 py-14 text-white sm:px-6">
         <div className="mx-auto max-w-5xl">
-          <nav className="flex justify-between text-sm"><Link href="/">NesAfric</Link><Link href="/marketplace/properties">Browse properties</Link></nav>
+          <nav className="flex items-center justify-between text-sm"><Link href="/"><BrandLogo height={22} /></Link><Link href="/marketplace/properties">Browse properties</Link></nav>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/10 text-xl font-semibold">
               {profile.displayName.slice(0, 1)}

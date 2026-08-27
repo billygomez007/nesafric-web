@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BRAND } from "@/platform/brand";
 
 export function FinalCtaSection() {
   return (
@@ -9,26 +10,35 @@ export function FinalCtaSection() {
       />
       <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
         <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-          Run your property business on NesAfric.
+          Run your real estate business on Umo Afric.
         </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-400">
-          Landlords, property managers and developers can operate their entire portfolio — from listing to
-          renewal — on one intelligent system.
+          Owners, managers, agents, brokers, brokerages and developers can operate, market and grow — from
+          listing to renewal, from lead to lease — on one intelligent platform.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Link
             className="rounded-full bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300"
             href="/register"
           >
-            Get Started
+            Manage Properties
           </Link>
           <Link
             className="rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
-            href="mailto:hello@nesafric.com?subject=Book%20a%20demo%20%E2%80%94%20PropertyOS"
+            href="/register"
           >
-            Book a Demo
+            Market Properties
           </Link>
         </div>
+        <p className="mt-6 text-sm text-slate-500">
+          Represent a brokerage or a large real estate company?{" "}
+          <Link
+            className="font-semibold text-slate-300 transition-colors hover:text-white"
+            href={`mailto:${BRAND.contact.hello}?subject=${encodeURIComponent(`Book a demo — ${BRAND.name}`)}`}
+          >
+            Book a demo
+          </Link>
+        </p>
       </div>
     </section>
   );

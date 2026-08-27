@@ -1,6 +1,7 @@
 import { Prisma, type PlatformPrincipal } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
+import { isUuid } from "@/platform/validation/uuid";
 import { PLATFORM_PERMISSIONS, type PlatformPermission } from "@/platform/platform-admin/permissions";
 import { platformRoleHasPermission } from "@/platform/platform-admin/permissions";
 import { platformSetSubscriptionStatus } from "@/modules/subscriptions/lifecycle";
@@ -18,6 +19,15 @@ import { createFeatureFlagSchema, organisationListQuerySchema, platformAuditQuer
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const MAX_ACTIVE_SUPPORT_SESSIONS_PER_PRINCIPAL = 3;
+
+// `limitValue` on plan entitlements and entitlement overrides is stored as `BigInt` (schema-
+// enforced, since some limits could in principle exceed safe-integer range). Every value actually
+// configured is a small business number (listing counts, team members, ...), so normalizing to a
+// plain JS number here is safe — without it, `NextResponse.json()` throws "Do not know how to
+// serialize a BigInt" and the platform-admin surface returning this record 500s on every request.
+function withPlainLimitValue<T extends { limitValue: bigint | null }>(record: T) {
+  return { ...record, limitValue: record.limitValue === null ? null : Number(record.limitValue) };
+}
 
 function requirePermission(principal: PlatformPrincipal, permission: PlatformPermission) {
   if (!platformRoleHasPermission(principal.role, permission)) throw new AppError("FORBIDDEN", 403, "You do not have permission to perform this action.");
@@ -53,6 +63,7 @@ export async function listOrganisationsForPlatform(principal: PlatformPrincipal,
 }
 
 async function requireActiveSupportSession(platformPrincipalId: string, organisationId: string) {
+  if (!isUuid(organisationId)) throw notFound();
   const now = new Date();
   const session = await db.platformSupportSession.findFirst({
     where: { platformPrincipalId, organisationId, expiresAt: { gt: now }, endedAt: null, revokedAt: null },
@@ -78,15 +89,23 @@ export async function getOrganisationDetailForPlatform(principal: PlatformPrinci
     },
   });
   if (!organisation) throw notFound();
+  // A PropertyOS organisation shell can exist without ever having a subscription — e.g. a user
+  // who registered and completed Marketplace Professional onboarding but never set up PropertyOS
+  // management. `getEntitlementSnapshot` requires an active subscription, so it's skipped (not
+  // treated as an error) rather than crashing the entire admin view for such an organisation.
   const [invoices, overrides, statusHistory, supportSessions, entitlements] = await Promise.all([
     db.subscriptionInvoice.findMany({ where: { organisationId }, orderBy: { periodStart: "desc" }, take: 24 }),
     db.organisationEntitlementOverride.findMany({ where: { organisationId }, orderBy: { createdAt: "desc" } }),
     db.subscriptionStatusHistory.findMany({ where: { organisationId }, orderBy: { createdAt: "desc" }, take: 50 }),
     db.platformSupportSession.findMany({ where: { organisationId }, orderBy: { startedAt: "desc" }, take: 20 }),
-    getEntitlementSnapshot(organisationId),
+    organisation.subscription ? getEntitlementSnapshot(organisationId) : Promise.resolve(null),
   ]);
   await recordPlatformAudit(principal, "platform_admin.organisation_viewed", "organisation", organisationId, organisationId, { supportSessionId: supportSession.id });
-  return { organisation, invoices, overrides, statusHistory, supportSessions, entitlements, viewingUnderSupportSessionId: supportSession.id };
+  const serializableOrganisation = {
+    ...organisation,
+    subscription: organisation.subscription && { ...organisation.subscription, plan: serializablePlan(organisation.subscription.plan) },
+  };
+  return { organisation: serializableOrganisation, invoices, overrides: overrides.map(withPlainLimitValue), statusHistory, supportSessions, entitlements, viewingUnderSupportSessionId: supportSession.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +114,7 @@ export async function getOrganisationDetailForPlatform(principal: PlatformPrinci
 
 export async function createSupportSession(principal: PlatformPrincipal, organisationId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.supportSessionCreate);
+  if (!isUuid(organisationId)) throw notFound();
   const data = createSupportSessionSchema.parse(input);
   const organisation = await db.organisation.findUnique({ where: { id: organisationId }, select: { id: true } });
   if (!organisation) throw notFound();
@@ -130,9 +150,14 @@ export async function listSupportSessionsForOrganisation(organisationId: string)
 // Plans (item 1's "configurable plans/prices")
 // ---------------------------------------------------------------------------
 
+function serializablePlan<T extends { entitlements: Array<{ limitValue: bigint | null }> }>(plan: T) {
+  return { ...plan, entitlements: plan.entitlements.map(withPlainLimitValue) };
+}
+
 export async function listPlansForPlatform(principal: PlatformPrincipal) {
   requirePermission(principal, PLATFORM_PERMISSIONS.plansManage);
-  return db.subscriptionPlan.findMany({ include: { prices: true, entitlements: true }, orderBy: { sortOrder: "asc" } });
+  const plans = await db.subscriptionPlan.findMany({ include: { prices: true, entitlements: true }, orderBy: { sortOrder: "asc" } });
+  return plans.map(serializablePlan);
 }
 
 function assertKnownFeatureKeys(entitlements: Array<{ featureKey: string }>) {
@@ -156,7 +181,7 @@ export async function createPlan(principal: PlatformPrincipal, input: unknown) {
     return created;
   });
   await recordPlatformAudit(principal, "platform_admin.plan_created", "subscription_plan", plan.id, undefined, { key: plan.key });
-  return plan;
+  return serializablePlan(plan);
 }
 
 export async function updatePlan(principal: PlatformPrincipal, planId: string, input: unknown) {
@@ -193,7 +218,7 @@ export async function updatePlan(principal: PlatformPrincipal, planId: string, i
     return tx.subscriptionPlan.findUniqueOrThrow({ where: { id: planId }, include: { prices: true, entitlements: true } });
   });
   await recordPlatformAudit(principal, "platform_admin.plan_updated", "subscription_plan", plan.id, undefined, { key: plan.key });
-  return plan;
+  return serializablePlan(plan);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,17 +238,17 @@ export async function createEntitlementOverride(principal: PlatformPrincipal, or
     },
   });
   await recordPlatformAudit(principal, "platform_admin.entitlement_override_created", "organisation_entitlement_override", override.id, organisationId, { featureKey: data.featureKey, reason: data.reason });
-  return override;
+  return withPlainLimitValue(override);
 }
 
 export async function revokeEntitlementOverride(principal: PlatformPrincipal, organisationId: string, overrideId: string) {
   requirePermission(principal, PLATFORM_PERMISSIONS.entitlementsOverride);
   const override = await db.organisationEntitlementOverride.findFirst({ where: { id: overrideId, organisationId } });
   if (!override) throw notFound();
-  if (override.revokedAt) return override;
+  if (override.revokedAt) return withPlainLimitValue(override);
   const updated = await db.organisationEntitlementOverride.update({ where: { id: overrideId }, data: { revokedAt: new Date(), revokedByPlatformPrincipalId: principal.id } });
   await recordPlatformAudit(principal, "platform_admin.entitlement_override_revoked", "organisation_entitlement_override", override.id, organisationId);
-  return updated;
+  return withPlainLimitValue(updated);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { db } from "@/platform/database/client";
 import { forbidden } from "@/platform/errors";
+import { isUuid } from "@/platform/validation/uuid";
 import { membershipHasPermission } from "./policy";
 
 export const PERMISSIONS = {
@@ -91,6 +92,7 @@ export const PERMISSIONS = {
 } as const;
 
 export async function requirePermission(userId: string, organisationId: string, permission: string) {
+  if (!isUuid(organisationId)) throw forbidden();
   const membership = await db.organisationMember.findFirst({
     where: { userId, organisationId, status: "ACTIVE", archivedAt: null },
     include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } },

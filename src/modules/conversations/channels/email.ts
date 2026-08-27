@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ChannelAdapter, NormalizedInboundMessage, OutboundDeliveryResult, OutboundMessageRequest } from "./types";
+import { BRAND } from "@/platform/brand";
+import { renderEmail } from "@/modules/notifications/email-templates/render";
 
 function hmacHex(secret: string, body: string) {
   return createHmac("sha256", secret).update(body).digest("hex");
@@ -26,6 +28,13 @@ export class EmailChannelAdapter implements ChannelAdapter {
     if (!request.recipientAddress) return { status: "FAILED", failureReason: "No recipient email address is available for this conversation." };
     const sendUrl = process.env.EMAIL_PROVIDER_SEND_URL;
     const apiKey = process.env.EMAIL_PROVIDER_API_KEY;
+    // Every outbound email gets the Umo Afric branded envelope, whether or not the caller built
+    // one explicitly — callers that only ever set `body` (e.g. conversation replies) still get a
+    // consistent, professional layout instead of a bare-text message. An explicit `html` from the
+    // caller is preserved untouched.
+    const html = request.html ?? renderEmail({ heading: request.subject ?? "New message", paragraphs: [request.body] }).html;
+    const from = request.fromAddress ?? BRAND.sender.notifications;
+    const replyTo = request.replyTo ?? BRAND.contact.support;
     if (!sendUrl || !apiKey) {
       return { status: "SENT", providerReference: `test-email:${request.messageId}` };
     }
@@ -34,9 +43,12 @@ export class EmailChannelAdapter implements ChannelAdapter {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          from: request.fromAddress,
+          from,
           to: request.recipientAddress,
+          subject: request.subject,
           text: request.body,
+          html,
+          replyTo,
           headers: request.externalReferenceId ? { "In-Reply-To": request.externalReferenceId } : undefined,
         }),
       });

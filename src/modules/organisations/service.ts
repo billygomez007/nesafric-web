@@ -8,6 +8,7 @@ import { createTrialSubscription } from "@/modules/subscriptions/lifecycle";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { createOrganisationSchema, inviteMemberSchema } from "./schemas";
+import { enqueueOnboardingCompleteEmail } from "@/modules/account-emails/service";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -35,6 +36,12 @@ export async function createOrganisation(userId: string, input: unknown, options
     // `MarketplaceSubscription` entirely. Every ordinary caller omits `options`, so this changes
     // nothing about existing behaviour.
     if (!options.skipSubscription) await createTrialSubscription(tx, organisation.id, currencyCode);
+    return organisation;
+  }).then(async (organisation) => {
+    // Skipped for the hidden technical-backing organisation `marketplace-professionals/service.ts`
+    // creates alongside a Marketplace profile — that isn't a PropertyOS organisation the user
+    // actually asked for, so it must never trigger a "your organisation is ready" email.
+    if (!options.skipSubscription) await enqueueOnboardingCompleteEmail(userId, "ONBOARDING_COMPLETE_PROPERTYOS", organisation.name);
     return organisation;
   });
 }

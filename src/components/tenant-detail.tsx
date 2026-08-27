@@ -137,7 +137,7 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
           ["communicationSmsAllowed", "SMS", tenant.communicationSmsAllowed],
           ["communicationWhatsappAllowed", "WhatsApp", tenant.communicationWhatsappAllowed],
         ].map(([name, label, enabled]) => <label className="flex items-center gap-3 rounded-xl border p-4 text-sm font-medium" key={String(name)}><input defaultChecked={Boolean(enabled)} name={String(name)} type="checkbox" />{label}</label>)}
-        <div className="sm:col-span-2 lg:col-span-4"><button className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={savingPreferences}>{savingPreferences ? "Saving..." : "Save preferences"}</button></div>
+        <div className="sm:col-span-2 lg:col-span-4"><button className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={savingPreferences}>{savingPreferences ? "Saving..." : "Save preferences"}</button></div>
       </form>
       {preferenceSuccess && <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{preferenceSuccess}</p>}
       {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}

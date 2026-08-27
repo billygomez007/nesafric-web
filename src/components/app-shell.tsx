@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { BrandLogo } from "@/components/brand-logo";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -59,9 +60,9 @@ function AppNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link className="flex items-baseline gap-2" href="/dashboard">
-          <span className="text-base font-semibold tracking-tight text-slate-950">NesAfric</span>
-          <span className="hidden text-[11px] font-medium tracking-[0.12em] text-slate-400 sm:inline">PROPERTYOS</span>
+        <Link className="flex items-center gap-2" href="/dashboard">
+          <BrandLogo height={22} variant="light" />
+          <span className="hidden text-[11px] font-medium tracking-[0.12em] text-slate-500 sm:inline">PROPERTYOS</span>
         </Link>
 
         <div className="hidden items-center gap-2 lg:flex">
@@ -125,7 +126,7 @@ function AppNav() {
             ))}
           </nav>
           <div className="mt-4 border-t border-slate-200 pt-4">
-            <p className="px-3 text-xs font-semibold tracking-wide text-slate-400">SETTINGS</p>
+            <p className="px-3 text-xs font-semibold tracking-wide text-slate-500">SETTINGS</p>
             <div className="mt-1 grid grid-cols-2 gap-1">
               {SETTINGS_LINKS.map((link) => (
                 <Link

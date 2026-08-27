@@ -21,15 +21,26 @@ export function DashboardContent() {
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [error, setError] = useState("");
+  const [noOrganisation, setNoOrganisation] = useState(false);
   useEffect(() => {
     const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
-    fetch("/api/dashboard", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => response.ok ? setData(await response.json()) : setError((await response.json()).error?.message ?? "Unable to load dashboard."));
+    fetch("/api/dashboard", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => {
+      if (response.ok) return setData(await response.json());
+      const body = await response.json();
+      if (body.error?.code === "ORGANISATION_REQUIRED") return setNoOrganisation(true);
+      setError(body.error?.message ?? "Unable to load dashboard.");
+    });
     fetch("/api/rent-collection/metrics", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setCollection(await response.json()); });
     fetch("/api/maintenance/dashboard", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setMaintenance(await response.json()); });
     fetch("/api/organisations/" + organisationId + "/onboarding", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setOnboarding(await response.json()); });
     fetch("/api/organisations/" + organisationId + "/billing", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setBilling(await response.json()); });
     fetch("/api/organisations/" + organisationId + "/dashboard-opportunities", { headers: { "x-organisation-id": organisationId ?? "" } }).then(async (response) => { if (response.ok) setOpportunities((await response.json()).opportunities); });
   }, []);
+  if (noOrganisation) return <section className="mt-8 rounded-xl border bg-white p-6 text-center shadow-sm">
+    <h2 className="font-semibold">Set up your PropertyOS organisation</h2>
+    <p className="mt-2 text-sm text-slate-600">This is where your properties, tenants, leases and rent collection will live. You don&apos;t have an organisation yet — create one to get started.</p>
+    <Link className="mt-4 inline-block rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white" href="/onboarding">Create your organisation</Link>
+  </section>;
   if (error) return <p className="mt-8 rounded border border-amber-200 bg-amber-50 p-4 text-amber-900">{error}</p>;
   if (!data) return <p className="mt-8 text-slate-600">Loading organisation dashboard...</p>;
   const collectionMoney = (value: string) => collection?.currencyCode ? new Intl.NumberFormat("en-GH", { style: "currency", currency: collection.currencyCode }).format(Number(value) / 100) : "—";
@@ -44,7 +55,7 @@ export function DashboardContent() {
     {onboarding && !onboarding.complete && <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="font-semibold">Get set up</h2>
       <ul className="mt-3 grid gap-2 text-sm">
-        {onboarding.steps.map((step) => <li className="flex items-center gap-2" key={step.key}><span className={step.done ? "text-emerald-600" : "text-slate-400"}>{step.done ? "✓" : "○"}</span><span className={step.done ? "text-slate-500 line-through" : ""}>{step.label}</span></li>)}
+        {onboarding.steps.map((step) => <li className="flex items-center gap-2" key={step.key}><span className={step.done ? "text-emerald-600" : "text-slate-500"}>{step.done ? "✓" : "○"}</span><span className={step.done ? "text-slate-500 line-through" : ""}>{step.label}</span></li>)}
         {onboarding.optionalSteps.map((step) => <li className="flex items-center gap-2 text-slate-500" key={step.key}><span>{step.done ? "✓" : "○"}</span><span>{step.label} (optional)</span></li>)}
       </ul>
     </section>}

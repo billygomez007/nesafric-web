@@ -138,7 +138,9 @@ export async function getMarketplaceEntitlementsSnapshot(marketplaceProfessional
       limit: effective.limitValue,
       isUnlimited: effective.isUnlimited,
       current,
-      reached: effective.kind === "LIMIT" && !effective.isUnlimited && current !== null && current >= (effective.limitValue ?? 0),
+      // limit === 0 means the feature isn't included in the plan at all, not that a real
+      // allowance was used up — never surface that as a misleading "limit reached".
+      reached: effective.kind === "LIMIT" && !effective.isUnlimited && current !== null && (effective.limitValue ?? 0) > 0 && current >= (effective.limitValue ?? 0),
     };
   }));
   return { status: subscription.status, planKey: subscription.plan.key, planName: subscription.plan.name, features: results };

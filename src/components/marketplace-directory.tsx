@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { MarketplaceBanner } from "@/components/marketplace-banner";
+import { BrandLogo } from "@/components/brand-logo";
 
 type DirectoryItem = {
   slug: string;
@@ -58,9 +59,9 @@ export function MarketplaceDirectory() {
     <main className="min-h-screen bg-slate-50">
       <header className="border-b bg-slate-950 px-4 py-14 text-white sm:px-6">
         <div className="mx-auto max-w-6xl">
-          <nav className="flex justify-between text-sm text-slate-300"><Link href="/">NesAfric</Link><Link href="/marketplace/properties">Browse properties</Link></nav>
+          <nav className="flex items-center justify-between text-sm text-slate-300"><Link href="/"><BrandLogo height={22} /></Link><Link href="/marketplace/properties">Browse properties</Link></nav>
           <h1 className="mt-8 text-3xl font-semibold sm:text-4xl">Professional Directory</h1>
-          <p className="mt-3 max-w-2xl text-slate-300">Agents, brokerages, real estate companies, and developers verified and active on NesAfric.</p>
+          <p className="mt-3 max-w-2xl text-slate-300">Agents, brokerages, real estate companies, and developers verified and active on Umo Afric.</p>
         </div>
       </header>
 
@@ -108,7 +109,7 @@ export function MarketplaceDirectory() {
                 <div className="flex flex-wrap gap-1.5">
                   {item.serviceAreas.slice(0, 3).map((area) => <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600" key={area}>{area}</span>)}
                 </div>
-                <p className="text-xs text-slate-400">{item._count.listings} active listing{item._count.listings === 1 ? "" : "s"}{item._count.developments > 0 ? ` · ${item._count.developments} development${item._count.developments === 1 ? "" : "s"}` : ""}</p>
+                <p className="text-xs text-slate-500">{item._count.listings} active listing{item._count.listings === 1 ? "" : "s"}{item._count.developments > 0 ? ` · ${item._count.developments} development${item._count.developments === 1 ? "" : "s"}` : ""}</p>
               </Link>
             ))}
           </div>
@@ -116,9 +117,9 @@ export function MarketplaceDirectory() {
 
         {total > pageSize && (
           <div className="mt-8 flex items-center justify-between text-sm">
-            <button className="font-medium text-slate-600 disabled:text-slate-300" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} type="button">← Previous</button>
+            <button className="font-medium text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} type="button">← Previous</button>
             <span className="text-slate-500">Page {page} of {totalPages}</span>
-            <button className="font-medium text-slate-600 disabled:text-slate-300" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} type="button">Next →</button>
+            <button className="font-medium text-slate-600 disabled:cursor-not-allowed disabled:text-slate-500" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} type="button">Next →</button>
           </div>
         )}
       </div>
