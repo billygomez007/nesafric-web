@@ -352,6 +352,14 @@ async function main() {
     { key: "administrator", name: "Administrator", keys: allPermissions.map(({ key }) => key) },
     { key: "property_manager", name: "Property manager", keys: ["property.create", "property.read", "property.update", "portfolio.create", "tenant.create", "tenant.read", "tenant.update", "lease.create", "lease.read", "lease.update", "lease.close", "reminder.manage", "rent_schedule.manage", "payment.read", "payment.record", "payment.reverse", "deposit.read", "deposit.record", "deposit.settlement.manage", "ledger.read", "maintenance.read", "maintenance.create", "maintenance.manage", "maintenance.approve", "maintenance.assign", "maintenance.cost", "provider.read", "provider.manage", "provider.quote_record", "provider.quote_review", "provider.assign", "provider.rate", "marketplace.enquiry.create", "marketplace.enquiry.read", "marketplace.enquiry.manage", "marketplace.quote_request", "listing.create", "listing.read", "listing.manage", "listing.publish", "listing.lead.read", "listing.lead.manage", "listing.viewing.read", "listing.viewing.manage", "application.create", "application.read", "application.review", "application.convert", "lease.execution.read", "lease.execution.manage", "lease.execution.sign", "move_in.read", "move_in.manage", "move_out.read", "move_out.manage", "ai.use", "ai.command_center", "ai.propose", "job.retry", "ai.autonomy.read", "ai.employee.read", "ai.employee.operate", "conversation.read", "conversation.manage", "conversation.assign", "communication_channel.manage", "document.read", "document.manage", "document.template.manage", "calendar.read", "calendar.manage", "integration.read", "integration.manage"] },
     { key: "viewer", name: "Viewer", keys: ["property.read", "tenant.read", "lease.read", "payment.read", "deposit.read", "ledger.read", "maintenance.read", "provider.read", "marketplace.enquiry.read", "listing.read", "listing.lead.read", "listing.viewing.read", "application.read", "lease.execution.read", "move_in.read", "move_out.read", "ai.use", "conversation.read", "document.read", "calendar.read", "integration.read"] },
+    // Phase 23: a limited-visibility seat for a company-type Property Service Professional's own
+    // team members. Reuses the existing organisation-membership/role architecture rather than a
+    // new team model — a company provider's `companyOrganisationId` is a real `Organisation`, and
+    // technicians are just members of it. Note: `ownsProvider` still only recognises
+    // organisation_owner/administrator for provider-mutating actions (evidence, profile, enquiry
+    // responses) — this role currently grants read visibility only; extending action-taking to
+    // technicians is deliberately deferred follow-up work.
+    { key: "technician", name: "Technician", keys: ["provider.read", "marketplace.enquiry.read"] },
   ];
   for (const definition of roles) {
     const role = await prisma.role.upsert({ where: { key: definition.key }, update: { name: definition.name }, create: { key: definition.key, name: definition.name } });
@@ -369,9 +377,46 @@ async function main() {
     ["structural", "Structural work"],
     ["security", "Security systems"],
     ["sanitation", "Sanitation"],
+    ["tiling", "Tiling"],
+    ["welding", "Welding"],
+    ["cleaning", "Cleaning"],
+    ["landscaping", "Landscaping"],
+    ["pest_control", "Pest control"],
+    ["locksmith", "Locksmith"],
+    ["moving", "Moving services"],
+    ["photography", "Property photography"],
+    ["facility_maintenance", "Facility maintenance"],
   ] as const;
   for (const [key, name] of categories) {
     await prisma.serviceCategory.upsert({ where: { key }, update: { name, active: true }, create: { key, name } });
+  }
+
+  // Phase 23: Ghana-launch mandatory identity/business document requirements for Property Service
+  // Professionals. Country/category/provider-type scoped so future countries or trade-specific
+  // credential rules never need a code change — only a new row here (or, eventually, a
+  // platform-admin-managed equivalent).
+  const providerDocumentRequirements = [
+    { countryCode: "GH", providerType: "INDIVIDUAL" as const, evidenceType: "GHANA_CARD_FRONT" as const, label: "Ghana Card (front)", description: "Front of the individual provider's Ghana Card." },
+    { countryCode: "GH", providerType: "INDIVIDUAL" as const, evidenceType: "GHANA_CARD_BACK" as const, label: "Ghana Card (back)", description: "Back of the individual provider's Ghana Card." },
+    { countryCode: "GH", providerType: "COMPANY" as const, evidenceType: "GHANA_CARD_FRONT" as const, label: "Ghana Card (front) of responsible representative", description: "Front of the Ghana Card belonging to the company's owner, director, or authorised representative." },
+    { countryCode: "GH", providerType: "COMPANY" as const, evidenceType: "GHANA_CARD_BACK" as const, label: "Ghana Card (back) of responsible representative", description: "Back of the Ghana Card belonging to the company's owner, director, or authorised representative." },
+    { countryCode: "GH", providerType: "COMPANY" as const, evidenceType: "BUSINESS_REGISTRATION" as const, label: "Business registration certificate", description: "Registrar-General business/company registration evidence." },
+  ];
+  for (const requirement of providerDocumentRequirements) {
+    // A compound unique index with a nullable column (`categoryId`) can't be targeted by Prisma's
+    // generated compound-where type when the value is null, so this uses find-then-write instead
+    // of `upsert`.
+    const existing = await prisma.providerDocumentRequirement.findFirst({
+      where: { countryCode: requirement.countryCode, categoryId: null, providerType: requirement.providerType, evidenceType: requirement.evidenceType },
+    });
+    if (existing) {
+      await prisma.providerDocumentRequirement.update({
+        where: { id: existing.id },
+        data: { label: requirement.label, description: requirement.description, required: true, active: true },
+      });
+    } else {
+      await prisma.providerDocumentRequirement.create({ data: { ...requirement, categoryId: null, required: true } });
+    }
   }
 
   // Phase 20: seed the default commercial plans/prices/entitlements.

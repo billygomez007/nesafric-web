@@ -26,7 +26,11 @@ export const uploadDocumentSchema = z.object({
   title: z.string().trim().max(160).optional(),
   altText: z.string().trim().max(500).optional(),
   documentType: z.enum(["ID", "INCOME", "EMPLOYMENT", "REFERENCE", "OTHER"]).optional(),
-  evidenceType: z.enum(["IDENTITY", "BUSINESS_REGISTRATION", "PROFESSIONAL_LICENSE", "INSURANCE", "ADDRESS", "OTHER"]).optional(),
+  evidenceType: z.enum([
+    "IDENTITY", "GHANA_CARD_FRONT", "GHANA_CARD_BACK", "BUSINESS_REGISTRATION",
+    "PROFESSIONAL_LICENSE", "TRADE_CERTIFICATE", "SAFETY_CERTIFICATION", "INSURANCE", "ADDRESS",
+    "PORTFOLIO_EVIDENCE", "REFERENCE_EVIDENCE", "TRAINING_CERTIFICATE", "OTHER",
+  ]).optional(),
   evidenceExpiresAt: z.coerce.date().optional(),
   areaId: id.optional(),
 }).strict().superRefine((value, context) => {

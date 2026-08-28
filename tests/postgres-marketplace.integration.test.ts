@@ -8,6 +8,8 @@ import {
   addProviderToDirectory,
   createServiceProvider,
   listServiceCategories,
+  reviewProviderEvidence,
+  reviewProviderIdentity,
   reviewProviderVerification,
   submitProviderVerification,
   updateServiceProvider,
@@ -25,6 +27,7 @@ import {
 
 async function cleanDatabase() {
   await db.$executeRaw`TRUNCATE TABLE "MarketplaceEnquiryStatusHistory", "ProviderMarketplaceProfileHistory"`;
+  await db.platformPrincipal.deleteMany();
   await db.marketplaceEnquiry.deleteMany();
   await db.providerMarketplaceServiceArea.deleteMany();
   await db.providerMarketplaceCategory.deleteMany();
@@ -35,6 +38,7 @@ async function cleanDatabase() {
   await db.providerQuotation.deleteMany();
   await db.providerQuotationRequest.deleteMany();
   await db.providerOrganisation.deleteMany();
+  await db.providerVerificationConsent.deleteMany();
   await db.providerVerificationHistory.deleteMany();
   await db.providerEvidence.deleteMany();
   await db.providerServiceArea.deleteMany();
@@ -85,6 +89,22 @@ async function cleanDatabase() {
   await db.user.deleteMany();
 }
 
+/** Drives the mandatory platform Ghana Card identity-verification gate to VERIFIED. Public
+ * listing (and therefore everything downstream in this file) is gated on `verificationStatus`,
+ * which can now only reach VERIFIED once this has run — assumes GHANA_CARD_FRONT/BACK evidence
+ * was already submitted for the given provider. */
+async function verifyProviderIdentity(providerId: string, email: string) {
+  const platformUser = await registerUser({ displayName: "Platform Reviewer", email, password: "secure-password-123" });
+  await db.platformPrincipal.create({ data: { userId: platformUser.id, role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "MANUAL" } });
+  const identityEvidence = await db.providerEvidence.findMany({
+    where: { providerId, type: { in: ["GHANA_CARD_FRONT", "GHANA_CARD_BACK"] }, reviewStatus: "PENDING" },
+  });
+  for (const evidence of identityEvidence) {
+    await reviewProviderEvidence(platformUser, evidence.id, { status: "APPROVED" });
+  }
+  return reviewProviderIdentity(platformUser, providerId, { status: "VERIFIED" });
+}
+
 describe("PostgreSQL Phase 8 provider marketplace", () => {
   beforeEach(cleanDatabase);
   afterAll(async () => {
@@ -119,14 +139,26 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
     });
     await addProviderToDirectory(landlord.id, organisation.id, { providerId: providerA.id, internalNotes: "Never public" });
     await submitProviderVerification(artisanA.id, providerA.id, {
-      evidence: [{ type: "IDENTITY", reference: "private/evidence/a" }],
+      evidence: [
+        { type: "IDENTITY", reference: "private/evidence/a" },
+        { type: "GHANA_CARD_FRONT", reference: "private/ghana-card-front-a" },
+        { type: "GHANA_CARD_BACK", reference: "private/ghana-card-back-a" },
+      ],
     });
+    await verifyProviderIdentity(providerA.id, "market-platform-reviewer-a@example.com");
     await reviewProviderVerification(landlord.id, organisation.id, providerA.id, { status: "VERIFIED" });
     await updateServiceProvider(artisanA.id, providerA.id, {
       availabilityStatus: "AVAILABLE",
       acceptingWork: true,
     });
     await updateServiceProvider(artisanB.id, providerB.id, { availabilityStatus: "LIMITED" });
+    await submitProviderVerification(artisanB.id, providerB.id, {
+      evidence: [
+        { type: "GHANA_CARD_FRONT", reference: "private/ghana-card-front-b" },
+        { type: "GHANA_CARD_BACK", reference: "private/ghana-card-back-b" },
+      ],
+    });
+    await verifyProviderIdentity(providerB.id, "market-platform-reviewer-b@example.com");
 
     await expect(updateMarketplaceProfile(outsider.id, providerA.id, { listed: true }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -303,13 +335,29 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
     });
     await addProviderToDirectory(landlord.id, organisation.id, { providerId: provider.id });
     await submitProviderVerification(providerUser.id, provider.id, {
-      evidence: [{ type: "IDENTITY", reference: "private/enquiry-evidence" }],
+      evidence: [
+        { type: "IDENTITY", reference: "private/enquiry-evidence" },
+        { type: "GHANA_CARD_FRONT", reference: "private/enquiry-ghana-card-front" },
+        { type: "GHANA_CARD_BACK", reference: "private/enquiry-ghana-card-back" },
+      ],
     });
+    await verifyProviderIdentity(provider.id, "enquiry-platform-reviewer@example.com");
     await reviewProviderVerification(landlord.id, organisation.id, provider.id, { status: "VERIFIED" });
     await updateServiceProvider(providerUser.id, provider.id, {
       availabilityStatus: "AVAILABLE",
       acceptingWork: true,
     });
+    // "Unready" deliberately stops short of identity verification's downstream `acceptingWork`
+    // step below — it still needs to reach VERIFIED to be listed at all (the actual readiness
+    // gap this test exercises is `requestMarketplaceQuote`'s own acceptingWork/availability
+    // checks, not public listing eligibility).
+    await submitProviderVerification(unreadyUser.id, unready.id, {
+      evidence: [
+        { type: "GHANA_CARD_FRONT", reference: "private/unready-ghana-card-front" },
+        { type: "GHANA_CARD_BACK", reference: "private/unready-ghana-card-back" },
+      ],
+    });
+    await verifyProviderIdentity(unready.id, "unready-platform-reviewer@example.com");
     await updateMarketplaceProfile(providerUser.id, provider.id, {
       listed: true,
       categoryIds: [plumbing.id],

@@ -23,6 +23,13 @@ export const PLATFORM_PERMISSIONS = {
   /// (homepage announcements and marketplace banners). Its own permission — distinct from
   /// `marketplaceVerify` (trust/verification) and `plansManage` (commercial plans).
   campaignReview: "campaign.review",
+  /// Phase 23: reviewing mandatory identity/business/credential evidence (Ghana Card etc.) for a
+  /// Property Service Professional and setting `ServiceProvider.identityVerifiedAt` /
+  /// `businessVerifiedAt` / `skillVerifiedAt`. Deliberately separate from `marketplaceVerify`
+  /// (which governs `MarketplaceProfessional` trust, a different domain) and from the org-scoped
+  /// `provider.verify` permission in `src/platform/authorization/permissions.ts` (a landlord's own
+  /// private-directory trust check, which cannot verify a provider with no landlord at all).
+  providerIdentityReview: "provider_identity.review",
 } as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
@@ -33,7 +40,7 @@ const ALL_PERMISSIONS = Object.values(PLATFORM_PERMISSIONS);
 const ROLE_PERMISSIONS: Record<PlatformRoleValue, readonly PlatformPermission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   BILLING_ADMIN: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.orgsManage, PLATFORM_PERMISSIONS.plansManage, PLATFORM_PERMISSIONS.entitlementsOverride, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.campaignReview],
-  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify],
+  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify, PLATFORM_PERMISSIONS.providerIdentityReview],
   READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead],
 };
 

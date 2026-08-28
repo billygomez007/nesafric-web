@@ -208,6 +208,13 @@ export async function updateMarketplaceProfile(userId: string, providerId: strin
     if (data.listed && (!categoryCount || !areaCount)) {
       throw new AppError("INCOMPLETE_MARKETPLACE_PROFILE", 409, "At least one explicit public category and service area are required to list.");
     }
+    if (data.listed && provider.verificationStatus !== "VERIFIED") {
+      throw new AppError(
+        "PROVIDER_NOT_VERIFIED",
+        409,
+        "Identity verification must be approved before this provider can be publicly listed.",
+      );
+    }
     if (data.serviceAreas) {
       const keys = data.serviceAreas.map((area) => [
         area.countryCode,
@@ -314,6 +321,7 @@ const publicProfile = (
   rank: RankRow,
 ) => ({
   id: profile.providerId,
+  slug: profile.provider.slug,
   displayName: profile.provider.displayName,
   type: profile.provider.type,
   description: profile.publicDescription,
@@ -366,6 +374,10 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
   const conditions: Prisma.Sql[] = [
     Prisma.sql`mp."listed" = true`,
     Prisma.sql`p."archivedAt" IS NULL`,
+    // Unconditional, regardless of any caller-supplied filter — a provider whose verification
+    // status has moved away from VERIFIED (rejected, suspended, flagged for more information)
+    // must disappear from public discovery immediately, not just at the point `listed` was set.
+    Prisma.sql`p."verificationStatus" = 'VERIFIED'`,
   ];
   if (filters.category || filters.categoryId) {
     conditions.push(Prisma.sql`EXISTS (
@@ -483,6 +495,15 @@ export async function discoverMarketplaceProviders(query: unknown = {}) {
   };
 }
 
+export async function getPublicMarketplaceProviderBySlug(slug: string) {
+  const provider = await db.serviceProvider.findFirst({
+    where: { slug, verificationStatus: "VERIFIED", archivedAt: null },
+    select: { id: true },
+  });
+  if (!provider) throw notFound();
+  return getPublicMarketplaceProvider(provider.id);
+}
+
 export async function getPublicMarketplaceProvider(providerId: string) {
   providerId = marketplaceProviderIdSchema.parse(providerId);
   const filters = publicMarketplaceDiscoverySchema.parse({ page: 1, pageSize: 1 });
@@ -519,7 +540,7 @@ export async function createMarketplaceEnquiry(userId: string, organisationId: s
       where: {
         providerId: data.providerId,
         listed: true,
-        provider: { archivedAt: null },
+        provider: { archivedAt: null, verificationStatus: "VERIFIED" },
         categories: { some: { categoryId: data.categoryId, category: { active: true } } },
       },
     });

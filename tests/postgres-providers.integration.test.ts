@@ -22,6 +22,8 @@ import {
   rateProvider,
   rejectProviderQuotation,
   respondToProviderAssignment,
+  reviewProviderEvidence,
+  reviewProviderIdentity,
   reviewProviderVerification,
   submitProviderQuotation,
   submitProviderVerification,
@@ -30,12 +32,14 @@ import {
 } from "@/modules/providers/service";
 
 async function cleanDatabase() {
+  await db.platformPrincipal.deleteMany();
   await db.providerRating.deleteMany();
   await db.providerAssignment.deleteMany();
   await db.providerQuotationReview.deleteMany();
   await db.providerQuotation.deleteMany();
   await db.providerQuotationRequest.deleteMany();
   await db.providerOrganisation.deleteMany();
+  await db.providerVerificationConsent.deleteMany();
   await db.providerVerificationHistory.deleteMany();
   await db.providerEvidence.deleteMany();
   await db.providerServiceArea.deleteMany();
@@ -85,6 +89,23 @@ async function cleanDatabase() {
   await db.organisation.deleteMany();
   await db.session.deleteMany();
   await db.user.deleteMany();
+}
+
+/** Creates a platform reviewer and drives the mandatory Ghana Card identity-verification gate
+ * (`identityVerifiedAt`) so a landlord's own `reviewProviderVerification` is able to reach
+ * VERIFIED afterward. Assumes GHANA_CARD_FRONT/BACK evidence was already submitted alongside
+ * whatever other evidence the test cares about. */
+async function verifyProviderIdentity(providerId: string, email: string) {
+  const platformUser = await registerUser({ displayName: "Platform Reviewer", email, password: "secure-password-123" });
+  await db.platformPrincipal.create({ data: { userId: platformUser.id, role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "MANUAL" } });
+  const identityEvidence = await db.providerEvidence.findMany({
+    where: { providerId, type: { in: ["GHANA_CARD_FRONT", "GHANA_CARD_BACK"] }, reviewStatus: "PENDING" },
+  });
+  for (const evidence of identityEvidence) {
+    await reviewProviderEvidence(platformUser, evidence.id, { status: "APPROVED" });
+  }
+  await reviewProviderIdentity(platformUser, providerId, { status: "VERIFIED" });
+  return platformUser;
 }
 
 describe("PostgreSQL Phase 7 service providers", () => {
@@ -148,10 +169,22 @@ describe("PostgreSQL Phase 7 service providers", () => {
     await expect(addProviderToDirectory(viewer.id, organisation.id, { providerId: company.id })).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     await submitProviderVerification(providerUser.id, provider.id, {
-      evidence: [{ type: "IDENTITY", reference: "evidence/id-001" }, { type: "PROFESSIONAL_LICENSE", reference: "evidence/license-001" }],
+      evidence: [
+        { type: "IDENTITY", reference: "evidence/id-001" },
+        { type: "PROFESSIONAL_LICENSE", reference: "evidence/license-001" },
+        { type: "GHANA_CARD_FRONT", reference: "evidence/ghana-card-front-001" },
+        { type: "GHANA_CARD_BACK", reference: "evidence/ghana-card-back-001" },
+      ],
     });
     await expect(reviewProviderVerification(viewer.id, organisation.id, provider.id, { status: "VERIFIED" }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(reviewProviderVerification(owner.id, organisation.id, provider.id, { status: "VERIFIED" }))
+      .rejects.toMatchObject({ code: "PLATFORM_IDENTITY_VERIFICATION_REQUIRED" });
+    // Platform identity review only clears the prerequisite (`identityVerifiedAt`) for a provider
+    // that already has an active landlord directory — the landlord's own `reviewProviderVerification`
+    // remains the one that actually finishes the VERIFIED transition (and its audit trail).
+    await verifyProviderIdentity(provider.id, "provider-platform-reviewer-1@example.com");
+    expect((await db.serviceProvider.findUniqueOrThrow({ where: { id: provider.id } })).verificationStatus).toBe("PENDING");
     await reviewProviderVerification(owner.id, organisation.id, provider.id, { status: "VERIFIED" });
     await updateServiceProvider(providerUser.id, provider.id, {
       availabilityStatus: "AVAILABLE",
@@ -286,7 +319,14 @@ describe("PostgreSQL Phase 7 service providers", () => {
       type: "INDIVIDUAL", displayName: "Quote Artisan", contactEmail: "quote-artisan@example.com",
     });
     await addProviderToDirectory(owner.id, organisation.id, { providerId: provider.id });
-    await submitProviderVerification(artisan.id, provider.id, { evidence: [{ type: "IDENTITY", reference: "quote/id" }] });
+    await submitProviderVerification(artisan.id, provider.id, {
+      evidence: [
+        { type: "IDENTITY", reference: "quote/id" },
+        { type: "GHANA_CARD_FRONT", reference: "quote/ghana-card-front" },
+        { type: "GHANA_CARD_BACK", reference: "quote/ghana-card-back" },
+      ],
+    });
+    await verifyProviderIdentity(provider.id, "quote-platform-reviewer@example.com");
     await reviewProviderVerification(owner.id, organisation.id, provider.id, { status: "VERIFIED" });
     const property = await createProperty(owner.id, organisation.id, {
       name: "Quote Property", referenceNumber: "QUOTE-1", category: "Residential", countryCode: "GH", currencyCode: "GHS",

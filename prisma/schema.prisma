@@ -564,6 +564,7 @@ enum ProviderVerificationStatus {
   UNVERIFIED
   PENDING
   VERIFIED
+  REQUIRES_MORE_INFORMATION
   REJECTED
   SUSPENDED
 }
@@ -582,11 +583,25 @@ enum ProviderDirectoryStatus {
 
 enum ProviderEvidenceType {
   IDENTITY
+  GHANA_CARD_FRONT
+  GHANA_CARD_BACK
   BUSINESS_REGISTRATION
   PROFESSIONAL_LICENSE
+  TRADE_CERTIFICATE
+  SAFETY_CERTIFICATION
   INSURANCE
   ADDRESS
+  PORTFOLIO_EVIDENCE
+  REFERENCE_EVIDENCE
+  TRAINING_CERTIFICATE
   OTHER
+}
+
+enum ProviderEvidenceReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUPERSEDED
 }
 
 enum QuotationRequestStatus {
@@ -725,6 +740,8 @@ model User {
   individualProvider                 ServiceProvider?                           @relation("IndividualProviderUser")
   administeredProviders              ServiceProvider[]                          @relation("ProviderAdministrator")
   providerEvidence                   ProviderEvidence[]                         @relation("ProviderEvidenceSubmitter")
+  providerEvidenceReviewed           ProviderEvidence[]                         @relation("ProviderEvidenceReviewer")
+  providerVerificationConsents       ProviderVerificationConsent[]              @relation("ProviderVerificationConsentAcceptor")
   providerVerificationHistory        ProviderVerificationHistory[]              @relation("ProviderVerificationActor")
   providerDirectoriesCreated         ProviderOrganisation[]                     @relation("ProviderDirectoryCreator")
   quotationRequestsCreated           ProviderQuotationRequest[]                 @relation("QuotationRequester")
@@ -2308,6 +2325,11 @@ model ServiceProvider {
   administratorUserId   String                        @db.Uuid
   displayName           String
   legalName             String?
+  /// Public profile URL segment: `/marketplace/services/{slug}`. Nullable — existing
+  /// landlord-only-directory providers created before this field existed are never forced to
+  /// have one; only providers actually intended for public listing need it, and application code
+  /// always generates one on create going forward.
+  slug                  String?                       @unique
   contactEmail          String?                       @db.Citext
   contactPhone          String?
   verificationStatus    ProviderVerificationStatus    @default(UNVERIFIED)
@@ -2316,6 +2338,17 @@ model ServiceProvider {
   evidenceReady         Boolean                       @default(false)
   acceptingWork         Boolean                       @default(false)
   biography             String?
+  /// Set only by a platform reviewer (`PlatformPrincipal` with `providerIdentityReview`) once
+  /// mandatory Ghana Card identity evidence has been approved. This is the gate that actually
+  /// governs public marketplace discoverability and UmoAfric-initiated work assignment — separate
+  /// from `verificationStatus`, which a landlord organisation can also drive for its own private
+  /// directory, but which can only reach VERIFIED once this is set.
+  identityVerifiedAt    DateTime?
+  /// Set once business-registration evidence (COMPANY-type providers) has been approved.
+  businessVerifiedAt    DateTime?
+  /// Set once a category-relevant credential (trade certificate, professional licence, etc.) has
+  /// been approved. Optional — many categories have no credential requirement.
+  skillVerifiedAt       DateTime?
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
   archivedAt            DateTime?
@@ -2326,6 +2359,7 @@ model ServiceProvider {
   serviceAreas          ProviderServiceArea[]
   evidence              ProviderEvidence[]
   verificationHistory   ProviderVerificationHistory[]
+  verificationConsents  ProviderVerificationConsent[]
   directories           ProviderOrganisation[]
   quotationRequests     ProviderQuotationRequest[]
   quotations            ProviderQuotation[]
@@ -2337,6 +2371,7 @@ model ServiceProvider {
   dispatchAttempts      MaintenanceDispatchAttempt[]
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
+  @@index([identityVerifiedAt])
 }
 
 model ServiceCategory {
@@ -2350,6 +2385,7 @@ model ServiceCategory {
   providers            ServiceProviderCategory[]
   marketplaceProfiles  ProviderMarketplaceCategory[]
   marketplaceEnquiries MarketplaceEnquiry[]
+  documentRequirements ProviderDocumentRequirement[]
 
   @@index([active, name])
 }
@@ -2379,18 +2415,74 @@ model ProviderServiceArea {
 }
 
 model ProviderEvidence {
-  id                String               @id @default(uuid()) @db.Uuid
-  providerId        String               @db.Uuid
+  id                String                       @id @default(uuid()) @db.Uuid
+  providerId        String                       @db.Uuid
   type              ProviderEvidenceType
   reference         String
   expiresAt         DateTime?
-  submittedByUserId String               @db.Uuid
-  createdAt         DateTime             @default(now())
-  provider          ServiceProvider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  submittedBy       User                 @relation("ProviderEvidenceSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  /// Per-document review lifecycle — separate from `ServiceProvider.verificationStatus`, which is
+  /// the aggregate outcome. Defaults to PENDING for every newly submitted document.
+  reviewStatus      ProviderEvidenceReviewStatus @default(PENDING)
+  reviewedByUserId  String?                      @db.Uuid
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  /// Masked display value only (e.g. last 4 characters of a Ghana Card number). The full number
+  /// is never persisted as a separate queryable field — it already lives in the evidence image
+  /// itself, which a reviewer reads directly; storing a second unmasked copy would be identity
+  /// data retention beyond what verification actually requires.
+  idNumberMasked    String?
+  nameOnDocument    String?
+  /// Set when a newer document of the same type supersedes this one — preserves immutable history
+  /// instead of deleting the old evidence.
+  supersededByEvidenceId String?             @unique @db.Uuid
+  submittedByUserId String                       @db.Uuid
+  createdAt         DateTime                     @default(now())
+  provider          ServiceProvider              @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  submittedBy       User                         @relation("ProviderEvidenceSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy        User?                        @relation("ProviderEvidenceReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  supersededByEvidence ProviderEvidence?         @relation("ProviderEvidenceSupersession", fields: [supersededByEvidenceId], references: [id], onDelete: Restrict)
+  supersedesEvidence   ProviderEvidence?         @relation("ProviderEvidenceSupersession")
 
   @@unique([providerId, type, reference])
   @@index([providerId, expiresAt])
+  @@index([providerId, type, reviewStatus])
+}
+
+model ProviderVerificationConsent {
+  id               String          @id @default(uuid()) @db.Uuid
+  providerId       String          @db.Uuid
+  version          String
+  accurate         Boolean
+  authorized       Boolean
+  reviewConsented  Boolean
+  termsAccepted    Boolean
+  acceptedByUserId String          @db.Uuid
+  acceptedAt       DateTime        @default(now())
+  provider         ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  acceptedBy       User            @relation("ProviderVerificationConsentAcceptor", fields: [acceptedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([providerId, acceptedAt])
+}
+
+model ProviderDocumentRequirement {
+  id           String                     @id @default(uuid()) @db.Uuid
+  /// Null = applies to every country.
+  countryCode  String?                    @db.Char(2)
+  /// Null = applies to every service category.
+  categoryId   String?                    @db.Uuid
+  /// Null = applies to both INDIVIDUAL and COMPANY providers.
+  providerType ServiceProviderType?
+  evidenceType ProviderEvidenceType
+  required     Boolean                    @default(true)
+  label        String
+  description  String?
+  active       Boolean                    @default(true)
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+  category     ServiceCategory?           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([countryCode, categoryId, providerType, evidenceType])
+  @@index([countryCode, categoryId, providerType, active])
 }
 
 model ProviderVerificationHistory {
@@ -2400,6 +2492,11 @@ model ProviderVerificationHistory {
   fromStatus  ProviderVerificationStatus
   toStatus    ProviderVerificationStatus
   reason      String?
+  /// Free-form context, e.g. `{ "authority": "PLATFORM" }` vs `{ "authority": "LANDLORD",
+  /// "landlordOrganisationId": "..." }` — lets the two review authorities described in
+  /// ServiceProvider.identityVerifiedAt's comment be told apart in history without a schema
+  /// change every time a new authority type is added.
+  metadata    Json?
   createdAt   DateTime                   @default(now())
   provider    ServiceProvider            @relation(fields: [providerId], references: [id], onDelete: Restrict)
   actor       User                       @relation("ProviderVerificationActor", fields: [actorUserId], references: [id], onDelete: Restrict)

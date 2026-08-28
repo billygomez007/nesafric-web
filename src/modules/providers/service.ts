@@ -1,6 +1,9 @@
+import { randomBytes } from "crypto";
 import { Prisma, ProviderQuotationStatus } from "@/platform/database/generated/client";
+import type { User } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
+import { requirePlatformPrincipal, PLATFORM_PERMISSIONS } from "@/platform/platform-admin/auth";
 import { AppError, forbidden, notFound } from "@/platform/errors";
 import {
   addProviderToDirectorySchema,
@@ -8,11 +11,15 @@ import {
   createServiceCategorySchema,
   createProviderSchema,
   createQuotationRequestSchema,
+  documentRequirementQuerySchema,
   providerListSchema,
   rateProviderSchema,
   respondAssignmentSchema,
+  reviewProviderEvidenceSchema,
+  reviewProviderIdentitySchema,
   reviewQuotationSchema,
   reviewVerificationSchema,
+  submitProviderVerificationConsentSchema,
   submitQuotationSchema,
   submitVerificationSchema,
   updateProviderDirectorySchema,
@@ -20,6 +27,21 @@ import {
   updateServiceCategorySchema,
   quotationListSchema,
 } from "./schemas";
+
+function slugify(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 140) || "provider";
+}
+
+async function uniqueProviderSlug(tx: Tx, base: string) {
+  const root = slugify(base);
+  let candidate = root;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const existing = await tx.serviceProvider.findUnique({ where: { slug: candidate }, select: { id: true } });
+    if (!existing) return candidate;
+    candidate = `${root}-${randomBytes(3).toString("hex")}`;
+  }
+  return `${root}-${randomBytes(6).toString("hex")}`;
+}
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -163,10 +185,12 @@ export async function createServiceProvider(userId: string, input: unknown) {
       if (!membership) throw forbidden();
     }
     const contactReady = Boolean(data.contactEmail || data.contactPhone);
+    const slug = await uniqueProviderSlug(tx, data.displayName);
     try {
       return await tx.serviceProvider.create({
         data: {
           type: data.type,
+          slug,
           individualUserId: data.type === "INDIVIDUAL" ? userId : undefined,
           companyOrganisationId: data.type === "COMPANY" ? data.companyOrganisationId : undefined,
           administratorUserId: userId,
@@ -308,13 +332,22 @@ export async function listProviders(userId: string, organisationId: string, quer
   });
 }
 
-export async function getProvider(userId: string, organisationId: string, providerId: string) {
+/** `organisationId` is nullable so a self-registered, directory-less individual provider (no
+ * landlord organisation at all) can view their own dashboard — the only case where an
+ * organisation-scoped permission check would be both impossible and unnecessary, since `own`
+ * already grants full access. A non-owner without an organisation is always rejected. */
+export async function getProvider(userId: string, organisationId: string | null, providerId: string) {
   const own = await ownsProvider(userId, providerId);
-  if (!own) await requirePermission(userId, organisationId, PERMISSIONS.providerRead);
-  const directory = await db.providerOrganisation.findFirst({
-    where: { landlordOrganisationId: organisationId, providerId },
-    include: { provider: { include: providerInclude } },
-  });
+  if (!own) {
+    if (!organisationId) throw forbidden();
+    await requirePermission(userId, organisationId, PERMISSIONS.providerRead);
+  }
+  const directory = organisationId
+    ? await db.providerOrganisation.findFirst({
+      where: { landlordOrganisationId: organisationId, providerId },
+      include: { provider: { include: providerInclude } },
+    })
+    : null;
   if (!directory && !own) throw notFound();
   const provider = directory?.provider ?? await db.serviceProvider.findUnique({ where: { id: providerId }, include: providerInclude });
   if (!provider) throw notFound();
@@ -325,7 +358,7 @@ export async function submitProviderVerification(userId: string, providerId: str
   const data = submitVerificationSchema.parse(input);
   return db.$transaction(async (tx) => {
     const provider = await requireProviderOwner(userId, providerId, tx);
-    if (!["UNVERIFIED", "REJECTED"].includes(provider.verificationStatus)) {
+    if (!["UNVERIFIED", "REJECTED", "REQUIRES_MORE_INFORMATION"].includes(provider.verificationStatus)) {
       throw new AppError("INVALID_VERIFICATION_STATE", 409, "Verification cannot be submitted in the current state.");
     }
     if (!provider.contactReady) throw new AppError("CONTACT_NOT_READY", 409, "Contact details are required for verification.");
@@ -333,11 +366,24 @@ export async function submitProviderVerification(userId: string, providerId: str
       throw new AppError("EXPIRED_PROVIDER_EVIDENCE", 422, "Expired evidence cannot be submitted for verification.");
     }
     for (const evidence of data.evidence) {
-      await tx.providerEvidence.upsert({
+      const created = await tx.providerEvidence.upsert({
         where: { providerId_type_reference: { providerId, type: evidence.type, reference: evidence.reference } },
         update: { expiresAt: evidence.expiresAt },
         create: { ...evidence, providerId, submittedByUserId: userId },
       });
+      // A resubmission for the same evidence type with a new document (different storage
+      // reference) supersedes whatever the previous, still-current document of that type was —
+      // preserving immutable review history instead of silently replacing it.
+      const previous = await tx.providerEvidence.findFirst({
+        where: { providerId, type: evidence.type, id: { not: created.id }, supersededByEvidenceId: null },
+        orderBy: { createdAt: "desc" },
+      });
+      if (previous) {
+        await tx.providerEvidence.update({
+          where: { id: previous.id },
+          data: { reviewStatus: "SUPERSEDED", supersededByEvidenceId: created.id },
+        });
+      }
     }
     const updated = await tx.serviceProvider.update({
       where: { id: providerId },
@@ -378,6 +424,13 @@ export async function reviewProviderVerification(
     if (data.status === "VERIFIED" && (!provider.contactReady || currentEvidence === 0)) {
       throw new AppError("PROVIDER_NOT_READY", 409, "Current evidence and contact details are required for verification.");
     }
+    if (data.status === "VERIFIED" && !provider.identityVerifiedAt) {
+      throw new AppError(
+        "PLATFORM_IDENTITY_VERIFICATION_REQUIRED",
+        409,
+        "UmoAfric identity verification (Ghana Card review) must be completed before this provider can be marked verified.",
+      );
+    }
     const updated = await tx.serviceProvider.update({
       where: { id: providerId },
       data: {
@@ -392,6 +445,7 @@ export async function reviewProviderVerification(
         fromStatus: provider.verificationStatus,
         toStatus: data.status,
         reason: data.reason,
+        metadata: json({ authority: "LANDLORD", landlordOrganisationId: organisationId }),
       },
     });
     await record(tx, organisationId, userId, `provider.${data.status.toLowerCase()}`, "service_provider", providerId, {
@@ -404,6 +458,168 @@ export async function reviewProviderVerification(
       });
     }
     return updated;
+  });
+}
+
+const IDENTITY_EVIDENCE_TYPES = ["GHANA_CARD_FRONT", "GHANA_CARD_BACK"] as const;
+const SKILL_EVIDENCE_TYPES = ["PROFESSIONAL_LICENSE", "TRADE_CERTIFICATE", "SAFETY_CERTIFICATION", "TRAINING_CERTIFICATE"] as const;
+
+/** Per-document platform review — approve/reject one piece of submitted evidence. Distinct from
+ * `reviewProviderIdentity`, which is the aggregate identity-verification decision. */
+export async function reviewProviderEvidence(platformUser: User, evidenceId: string, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = reviewProviderEvidenceSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const evidence = await tx.providerEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidence) throw notFound();
+    if (evidence.reviewStatus !== "PENDING") {
+      throw new AppError("INVALID_EVIDENCE_REVIEW_STATE", 409, "Only pending evidence may be reviewed.");
+    }
+    return tx.providerEvidence.update({
+      where: { id: evidenceId },
+      data: {
+        reviewStatus: data.status,
+        reviewedByUserId: principal.userId,
+        reviewedAt: new Date(),
+        rejectionReason: data.status === "REJECTED" ? data.reason : null,
+        idNumberMasked: data.idNumberMasked,
+        nameOnDocument: data.nameOnDocument,
+      },
+    });
+  });
+}
+
+/** Platform-authority identity/business/skill verification (Ghana Card etc.) — the gate described
+ * on `ServiceProvider.identityVerifiedAt`. Unlike `reviewProviderVerification` (a landlord's own
+ * directory-scoped decision), this requires no landlord relationship at all, since it is the only
+ * path by which a self-registered, directory-less provider can ever become VERIFIED. */
+export async function reviewProviderIdentity(platformUser: User, providerId: string, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = reviewProviderIdentitySchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const provider = await tx.serviceProvider.findUnique({ where: { id: providerId } });
+    if (!provider) throw notFound();
+    if (!["PENDING", "REQUIRES_MORE_INFORMATION"].includes(provider.verificationStatus)) {
+      throw new AppError("INVALID_VERIFICATION_STATE", 409, "Only pending or previously-flagged verification may be reviewed.");
+    }
+    const approved = await tx.providerEvidence.findMany({ where: { providerId, reviewStatus: "APPROVED" }, select: { type: true } });
+    const approvedTypes = new Set(approved.map((row) => row.type));
+    if (data.status === "VERIFIED") {
+      if (!IDENTITY_EVIDENCE_TYPES.every((type) => approvedTypes.has(type))) {
+        throw new AppError(
+          "GHANA_CARD_EVIDENCE_REQUIRED",
+          409,
+          "Both Ghana Card front and back must be approved before identity can be verified.",
+        );
+      }
+      if (provider.type === "COMPANY" && !approvedTypes.has("BUSINESS_REGISTRATION")) {
+        throw new AppError(
+          "BUSINESS_REGISTRATION_EVIDENCE_REQUIRED",
+          409,
+          "Approved business registration evidence is required before a company provider can be verified.",
+        );
+      }
+    }
+    // A rejection/more-information outcome always applies immediately, directory or not — a
+    // failed identity check is authoritative. But when this provider already has an active
+    // landlord directory relationship, a VERIFIED identity decision only clears the prerequisite
+    // (`identityVerifiedAt`) and leaves the actual `verificationStatus` transition to that
+    // landlord's own `reviewProviderVerification` — preserving its existing approval/audit flow
+    // instead of silently finishing the job on its behalf. Only a directory-less, self-registered
+    // provider (nobody else who could ever call that landlord path) gets VERIFIED set here too.
+    const hasDirectory = await tx.providerOrganisation.count({ where: { providerId, status: "ACTIVE" } }) > 0;
+    const setsVerificationStatus = data.status !== "VERIFIED" || !hasDirectory;
+    const now = new Date();
+    const updated = await tx.serviceProvider.update({
+      where: { id: providerId },
+      data: {
+        ...(setsVerificationStatus ? { verificationStatus: data.status } : {}),
+        identityVerifiedAt: data.status === "VERIFIED" ? now : provider.identityVerifiedAt,
+        businessVerifiedAt: approvedTypes.has("BUSINESS_REGISTRATION") ? (provider.businessVerifiedAt ?? now) : provider.businessVerifiedAt,
+        skillVerifiedAt: SKILL_EVIDENCE_TYPES.some((type) => approvedTypes.has(type)) ? (provider.skillVerifiedAt ?? now) : provider.skillVerifiedAt,
+        ...(setsVerificationStatus && data.status !== "VERIFIED" ? { acceptingWork: false, availabilityStatus: "UNAVAILABLE" } : {}),
+      },
+    });
+    await tx.providerVerificationHistory.create({
+      data: {
+        providerId,
+        actorUserId: principal.userId,
+        fromStatus: provider.verificationStatus,
+        toStatus: updated.verificationStatus,
+        reason: data.reason,
+        metadata: json({ authority: "PLATFORM", identityDecision: data.status, deferredToLandlord: !setsVerificationStatus }),
+      },
+    });
+    return updated;
+  });
+}
+
+/** Platform review queue listing — providers awaiting or previously flagged for identity review. */
+export async function listPendingProviderIdentityReviews(platformUser: User) {
+  await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  return db.serviceProvider.findMany({
+    where: { archivedAt: null, verificationStatus: { in: ["PENDING", "REQUIRES_MORE_INFORMATION"] } },
+    include: {
+      evidence: { where: { supersededByEvidenceId: null }, orderBy: { createdAt: "asc" } },
+      verificationConsents: { orderBy: { acceptedAt: "desc" }, take: 1 },
+    },
+    orderBy: { updatedAt: "asc" },
+  });
+}
+
+export async function getProviderIdentityReviewDetail(platformUser: User, providerId: string) {
+  await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const provider = await db.serviceProvider.findUnique({
+    where: { id: providerId },
+    include: {
+      evidence: { orderBy: { createdAt: "asc" } },
+      verificationHistory: { orderBy: { createdAt: "asc" } },
+      verificationConsents: { orderBy: { acceptedAt: "desc" } },
+      categories: { include: { category: true } },
+      serviceAreas: true,
+    },
+  });
+  if (!provider) throw notFound();
+  // `ProviderEvidence.reference` is a storage key, not a `StorageObject` id — the signed-url
+  // endpoint the review UI calls needs the latter, so it's resolved here rather than making the
+  // client do a second round trip per document.
+  const storageObjects = provider.evidence.length
+    ? await db.storageObject.findMany({
+      where: { storageKey: { in: provider.evidence.map((item) => item.reference) } },
+      select: { id: true, storageKey: true },
+    })
+    : [];
+  const storageObjectIdByKey = new Map(storageObjects.map((object) => [object.storageKey, object.id]));
+  return {
+    ...provider,
+    evidence: provider.evidence.map((item) => ({ ...item, storageObjectId: storageObjectIdByKey.get(item.reference) ?? null })),
+  };
+}
+
+export async function submitProviderVerificationConsent(userId: string, providerId: string, input: unknown) {
+  const data = submitProviderVerificationConsentSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    await requireProviderOwner(userId, providerId, tx);
+    return tx.providerVerificationConsent.create({
+      data: { providerId, acceptedByUserId: userId, ...data },
+    });
+  });
+}
+
+export async function getProviderDocumentRequirements(input: unknown) {
+  const filters = documentRequirementQuerySchema.parse(input);
+  const countryOr = filters.countryCode
+    ? [{ countryCode: null }, { countryCode: filters.countryCode }]
+    : [{ countryCode: null }];
+  const typeOr = filters.providerType
+    ? [{ providerType: null }, { providerType: filters.providerType }]
+    : [{ providerType: null }];
+  const categoryOr = filters.categoryIds.length
+    ? [{ categoryId: null }, { categoryId: { in: filters.categoryIds } }]
+    : [{ categoryId: null }];
+  return db.providerDocumentRequirement.findMany({
+    where: { active: true, AND: [{ OR: countryOr }, { OR: typeOr }, { OR: categoryOr }] },
+    orderBy: [{ required: "desc" }, { createdAt: "asc" }],
   });
 }
 
@@ -858,15 +1074,16 @@ export async function rateProvider(
   });
 }
 
-export async function getProviderJobHistory(userId: string, organisationId: string, providerId: string) {
+export async function getProviderJobHistory(userId: string, organisationId: string | null, providerId: string) {
   const own = await ownsProvider(userId, providerId);
   if (!own) {
+    if (!organisationId) throw forbidden();
     await requirePermission(userId, organisationId, PERMISSIONS.providerRead);
     const directory = await db.providerOrganisation.findFirst({ where: { landlordOrganisationId: organisationId, providerId } });
     if (!directory) throw notFound();
   }
   return db.providerAssignment.findMany({
-    where: { providerId, ...(own ? {} : { landlordOrganisationId: organisationId }) },
+    where: { providerId, ...(own ? {} : { landlordOrganisationId: organisationId as string }) },
     include: {
       quotation: true,
       workOrder: {
@@ -881,14 +1098,17 @@ export async function getProviderJobHistory(userId: string, organisationId: stri
   });
 }
 
-export async function getProviderMetrics(userId: string, organisationId: string, providerId: string) {
+export async function getProviderMetrics(userId: string, organisationId: string | null, providerId: string) {
   const own = await ownsProvider(userId, providerId);
   if (!own) {
+    if (!organisationId) throw forbidden();
     await requirePermission(userId, organisationId, PERMISSIONS.providerRead);
     const directory = await db.providerOrganisation.findFirst({ where: { landlordOrganisationId: organisationId, providerId } });
     if (!directory) throw notFound();
   }
-  const scope = { providerId, ...(own ? {} : { landlordOrganisationId: organisationId }) };
+  // `organisationId` is guaranteed non-null here whenever `own` is false — the guard above
+  // already throws otherwise.
+  const scope = { providerId, ...(own ? {} : { landlordOrganisationId: organisationId as string }) };
   const [assignments, ratings, completedOrders] = await Promise.all([
     db.providerAssignment.groupBy({ by: ["status"], where: scope, _count: { _all: true } }),
     db.providerRating.aggregate({
