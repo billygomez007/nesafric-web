@@ -18,7 +18,7 @@ export function GhanaLaunchSignal() {
             </p>
           </div>
           <Link
-            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-navy transition-colors hover:text-brand-active"
+            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-navy transition-colors hover:text-brand-strong"
             href="/ghana"
           >
             Discover the Ghana Launch →

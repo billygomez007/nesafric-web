@@ -6,13 +6,26 @@
 
   /*
    * UmoAfric design tokens (approved palette). Semantic names so a future palette change
-   * touches this block, not every component. Orange is the brand/action color, used sparingly
-   * (buttons, active states, small highlights) — Deep Navy is the platform's actual visual
-   * foundation. See docs/brand-tokens note in this file's history for the full rationale.
+   * touches this block, not every component. The brand accent is turquoise — sampled directly
+   * from the approved logo artwork (public/brand/umo-afric-logo-navy.png; dominant opaque
+   * non-navy pixel cluster averages to #00b6a3) rather than invented — used sparingly (buttons,
+   * active states, small highlights); Deep Navy is the platform's actual visual foundation.
+   * Orange/amber is no longer a brand color — see --color-warning below for its one legitimate
+   * remaining use.
+   *
+   * --color-brand fails badly as small text on a light background (2.55:1) — it's meant for
+   * backgrounds (with navy text), borders, and text on dark surfaces only (7.41:1 there).
+   * --color-brand-hover/-active step down the same hue for button hover/pressed backgrounds,
+   * chosen so navy text on top stays comfortably above 4.5:1 at every step.
+   * --color-brand-strong is a separate, deliberately darker step on the same hue — the darkest
+   * point that still clears 4.5:1 as TEXT on white (4.81:1) — for the one legitimate light-surface
+   * text use (e.g. a navy link's hover color). Never substitute --color-brand-active for this: it
+   * only satisfies contrast against navy backgrounds, not white ones.
    */
-  --color-brand: #ff7a00;
-  --color-brand-hover: #e96f00;
-  --color-brand-active: #cc6200;
+  --color-brand: #00b6a3;
+  --color-brand-hover: #00a392;
+  --color-brand-active: #009989;
+  --color-brand-strong: #00816e;
 
   --color-navy: #0d1117; /* primary dark foundation: header, footer, dark hero sections */
   --color-charcoal: #1f2937; /* secondary dark surface */
@@ -52,6 +65,7 @@
   --color-brand: var(--color-brand);
   --color-brand-hover: var(--color-brand-hover);
   --color-brand-active: var(--color-brand-active);
+  --color-brand-strong: var(--color-brand-strong);
   --color-navy: var(--color-navy);
   --color-charcoal: var(--color-charcoal);
   --color-surface: var(--color-surface);

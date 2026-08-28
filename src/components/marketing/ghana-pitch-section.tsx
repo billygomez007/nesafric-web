@@ -43,7 +43,7 @@ export function GhanaPitchSection() {
           >
             <p className="font-semibold text-slate-950">{path.label}</p>
             <p className="mt-2 text-sm leading-6 text-slate-600">{path.description}</p>
-            <span className="mt-4 inline-flex items-center text-sm font-semibold text-navy transition-colors group-hover:text-brand-active">
+            <span className="mt-4 inline-flex items-center text-sm font-semibold text-navy transition-colors group-hover:text-brand-strong">
               Learn more →
             </span>
           </Link>

@@ -48,7 +48,7 @@ export function AudienceSection() {
               </p>
               <p className="mt-4 text-sm leading-6 text-slate-600">{pathway.description}</p>
               <Link
-                className="mt-8 inline-flex items-center gap-1.5 text-sm font-semibold text-navy transition-colors hover:text-brand-active"
+                className="mt-8 inline-flex items-center gap-1.5 text-sm font-semibold text-navy transition-colors hover:text-brand-strong"
                 href={pathway.cta.href}
               >
                 {pathway.cta.label} →
