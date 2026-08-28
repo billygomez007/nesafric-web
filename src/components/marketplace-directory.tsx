@@ -18,7 +18,7 @@ type DirectoryItem = {
   _count: { listings: number; developments: number };
 };
 
-const TYPE_LABELS: Record<string, string> = {
+export const TYPE_LABELS: Record<string, string> = {
   INDIVIDUAL_AGENT: "Individual Agent",
   BROKER: "Broker",
   BROKERAGE: "Brokerage",

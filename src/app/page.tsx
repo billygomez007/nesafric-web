@@ -2,6 +2,7 @@ import { HomepageAnnouncementBar } from "@/components/homepage-announcement-bar"
 import { SiteNav } from "@/components/marketing/site-nav";
 import { HeroSection } from "@/components/marketing/hero-section";
 import { GhanaLaunchSignal } from "@/components/marketing/ghana-launch-signal";
+import { CompaniesCarouselSection } from "@/components/marketing/companies-carousel-section";
 import { AudienceSection } from "@/components/marketing/audience-section";
 import { OperatingSystemSection } from "@/components/marketing/operating-system-section";
 import { AIEmployeesSection } from "@/components/marketing/ai-employees-section";
@@ -41,6 +42,7 @@ export default function Home() {
       <main>
         <HeroSection />
         <GhanaLaunchSignal />
+        <CompaniesCarouselSection />
         <AudienceSection />
         <OperatingSystemSection />
         <AIEmployeesSection />
