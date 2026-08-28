@@ -41,8 +41,8 @@ export default function Home() {
       <SiteNav />
       <main>
         <HeroSection />
-        <GhanaLaunchSignal />
         <CompaniesCarouselSection />
+        <GhanaLaunchSignal />
         <AudienceSection />
         <OperatingSystemSection />
         <AIEmployeesSection />
