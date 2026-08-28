@@ -53,6 +53,14 @@ export const ENTITLEMENTS = {
   voiceHumanTransferEnabled: { key: "propertyos.voice.human_transfer_enabled", kind: "BOOLEAN", label: "Live human transfer", description: "Whether an in-progress AI voice call may be bridged live to a human number." },
   /// Phase 22C item 11 — concurrency ceiling, capability-based (never a hard-coded plan name).
   voiceConcurrentCallsMax: { key: "propertyos.voice.concurrent_calls_max", kind: "LIMIT", label: "Concurrent AI voice calls", description: "AI-handled voice calls (inbound + outbound) that may be simultaneously in progress across the organisation.", unit: "calls" },
+  /// Phase 23 — Property Service Professional commercial readiness. Ghana launch keeps every
+  /// provider on a free tier with no enforcement; these two keys exist only so a future paid
+  /// provider plan has a catalog entry to attach to rather than inventing one ad hoc. Not yet
+  /// enforced anywhere: an individual (non-company) provider has no `organisationId` at all, so
+  /// the existing org-scoped `assertOperational`/plan machinery has nothing to attach to until a
+  /// provider-specific plan model is designed — deliberately out of scope for this phase.
+  serviceProviderPublicProfileEnabled: { key: "service_provider.public_profile", kind: "BOOLEAN", label: "Public service-provider profile", description: "Whether a Property Service Professional's profile may be publicly listed on the marketplace. Readiness only in this phase." },
+  serviceProviderTeamMembersMax: { key: "service_provider.team_members_max", kind: "LIMIT", label: "Service company team members", description: "Active team members a company-type Property Service Professional may have. Readiness only in this phase.", unit: "members" },
 } as const satisfies Record<string, EntitlementDefinition>;
 
 export type EntitlementFeatureKey = (typeof ENTITLEMENTS)[keyof typeof ENTITLEMENTS]["key"];

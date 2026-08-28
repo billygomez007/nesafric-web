@@ -7,14 +7,15 @@ import type { PublicProvider } from "@/components/marketplace-search";
 type Property = { id: string; name: string; referenceNumber: string };
 type Maintenance = { id: string; title: string; property: { id: string; name: string }; status: string };
 
-export function MarketplaceProviderProfile({ providerId }: { providerId: string }) {
+export function MarketplaceProviderProfile({ providerId, slug }: { providerId?: string; slug?: string }) {
   const [provider, setProvider] = useState<PublicProvider | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [maintenance, setMaintenance] = useState<Maintenance[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   useEffect(() => {
-    fetch(`/api/public/marketplace/providers/${providerId}`).then(async (response) => {
+    const endpoint = slug ? `/api/public/marketplace/services/${slug}` : `/api/public/marketplace/providers/${providerId}`;
+    fetch(endpoint).then(async (response) => {
       if (!response.ok) throw new Error((await response.json()).error?.message ?? "Provider is not publicly listed.");
       setProvider((await response.json()).provider);
     }).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load provider."));
@@ -25,15 +26,16 @@ export function MarketplaceProviderProfile({ providerId }: { providerId: string 
         if (maintenanceResponse.ok) setMaintenance(await maintenanceResponse.json());
       });
     }
-  }, [providerId]);
+  }, [providerId, slug]);
   async function enquire(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!provider) return;
     const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
     if (!organisationId) return setError("Sign in and choose an organisation to contact this provider.");
     const data = new FormData(event.currentTarget);
     const maintenanceRequestId = String(data.get("maintenanceRequestId") || "");
     const selectedMaintenance = maintenance.find((request) => request.id === maintenanceRequestId);
-    const response = await fetch("/api/marketplace/enquiries", { method: "POST", headers: { "content-type": "application/json", "x-organisation-id": organisationId }, body: JSON.stringify({ providerId, categoryId: data.get("categoryId"), propertyId: selectedMaintenance?.property.id || data.get("propertyId") || undefined, maintenanceRequestId: maintenanceRequestId || undefined, message: data.get("message") }) });
+    const response = await fetch("/api/marketplace/enquiries", { method: "POST", headers: { "content-type": "application/json", "x-organisation-id": organisationId }, body: JSON.stringify({ providerId: provider.id, categoryId: data.get("categoryId"), propertyId: selectedMaintenance?.property.id || data.get("propertyId") || undefined, maintenanceRequestId: maintenanceRequestId || undefined, message: data.get("message") }) });
     if (!response.ok) return setError((await response.json()).error?.message ?? "Unable to send enquiry.");
     const enquiry = await response.json();
     if (data.get("requestQuote") === "on") {

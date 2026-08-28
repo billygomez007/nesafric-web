@@ -10,6 +10,7 @@ const NAV = [
   { href: "/platform-admin/organisations", label: "Organisations" },
   { href: "/platform-admin/plans", label: "Plans" },
   { href: "/platform-admin/campaigns", label: "Campaigns" },
+  { href: "/platform-admin/service-providers", label: "Service providers" },
   { href: "/platform-admin/flags", label: "Feature flags" },
   { href: "/platform-admin/health", label: "Health & jobs" },
   { href: "/platform-admin/audit", label: "Audit" },

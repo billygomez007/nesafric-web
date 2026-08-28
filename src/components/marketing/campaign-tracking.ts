@@ -22,7 +22,10 @@ export type CampaignEventName =
   | "professional_registration_started"
   | "professional_registration_completed"
   | "developer_registration_completed"
-  | "manage_properties_registration_completed";
+  | "manage_properties_registration_completed"
+  | "service_professional_registration_started"
+  | "service_provider_registration_started"
+  | "service_provider_registration_completed";
 
 export function trackCampaignEvent(event: CampaignEventName, params: Record<string, unknown> = {}) {
   if (typeof window === "undefined") return;

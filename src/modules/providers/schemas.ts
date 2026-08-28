@@ -12,10 +12,20 @@ export const serviceAreaSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const PROVIDER_EVIDENCE_TYPES = [
+  "IDENTITY", "GHANA_CARD_FRONT", "GHANA_CARD_BACK", "BUSINESS_REGISTRATION",
+  "PROFESSIONAL_LICENSE", "TRADE_CERTIFICATE", "SAFETY_CERTIFICATION", "INSURANCE", "ADDRESS",
+  "PORTFOLIO_EVIDENCE", "REFERENCE_EVIDENCE", "TRAINING_CERTIFICATE", "OTHER",
+] as const;
+
 export const providerEvidenceSchema = z.object({
-  type: z.enum(["IDENTITY", "BUSINESS_REGISTRATION", "PROFESSIONAL_LICENSE", "INSURANCE", "ADDRESS", "OTHER"]),
+  type: z.enum(PROVIDER_EVIDENCE_TYPES),
   reference: text(500),
-  expiresAt: z.coerce.date().optional(),
+  // `.nullable()` matters here: a caller forwarding a previously-uploaded evidence row verbatim
+  // (which always carries `expiresAt: null` rather than omitting the key) would otherwise have
+  // `null` coerced by `z.coerce.date()` into the Unix epoch — a very-definitely-expired date —
+  // rather than being treated as "no expiry".
+  expiresAt: z.coerce.date().nullable().optional().transform((value) => value ?? undefined),
 });
 
 export const createServiceCategorySchema = z.object({
@@ -61,9 +71,13 @@ export const updateProviderSchema = z.object({
   serviceAreas: z.array(serviceAreaSchema).max(100).optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
+export const PROVIDER_VERIFICATION_STATUSES = [
+  "UNVERIFIED", "PENDING", "VERIFIED", "REQUIRES_MORE_INFORMATION", "REJECTED", "SUSPENDED",
+] as const;
+
 export const providerListSchema = z.object({
   categoryId: id.optional(),
-  verificationStatus: z.enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED", "SUSPENDED"]).optional(),
+  verificationStatus: z.enum(PROVIDER_VERIFICATION_STATUSES).optional(),
   availabilityStatus: z.enum(["AVAILABLE", "LIMITED", "UNAVAILABLE"]).optional(),
   status: z.enum(["ACTIVE", "BLOCKED", "ARCHIVED"]).optional(),
 });
@@ -89,6 +103,42 @@ export const reviewVerificationSchema = z.object({
   if (value.status !== "VERIFIED" && !value.reason) {
     context.addIssue({ code: "custom", path: ["reason"], message: "A reason is required." });
   }
+});
+
+/** Platform-authority identity/business/skill verification — distinct from
+ * `reviewVerificationSchema`, which is a landlord's own directory-scoped decision. */
+export const reviewProviderIdentitySchema = z.object({
+  status: z.enum(["VERIFIED", "REJECTED", "REQUIRES_MORE_INFORMATION"]),
+  reason: z.string().trim().min(1).max(2000).optional(),
+}).superRefine((value, context) => {
+  if (value.status !== "VERIFIED" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "A reason is required." });
+  }
+});
+
+export const reviewProviderEvidenceSchema = z.object({
+  status: z.enum(["APPROVED", "REJECTED"]),
+  reason: z.string().trim().min(1).max(2000).optional(),
+  idNumberMasked: z.string().trim().max(20).optional(),
+  nameOnDocument: text(300).optional(),
+}).superRefine((value, context) => {
+  if (value.status === "REJECTED" && !value.reason) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "A reason is required." });
+  }
+});
+
+export const submitProviderVerificationConsentSchema = z.object({
+  version: text(40),
+  accurate: z.literal(true),
+  authorized: z.literal(true),
+  reviewConsented: z.literal(true),
+  termsAccepted: z.literal(true),
+});
+
+export const documentRequirementQuerySchema = z.object({
+  countryCode: z.string().trim().length(2).toUpperCase().optional(),
+  categoryIds: z.array(id).max(50).default([]),
+  providerType: z.enum(["INDIVIDUAL", "COMPANY"]).optional(),
 });
 
 export const createQuotationRequestSchema = z.object({
