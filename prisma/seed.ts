@@ -338,8 +338,11 @@ const MARKETPLACE_PLANS = [
 ] as const;
 
 async function main() {
-  await prisma.country.upsert({ where: { code: GHANA.code }, update: GHANA, create: GHANA });
-  await prisma.currency.upsert({ where: { code: GHS.code }, update: GHS, create: GHS });
+  // `isActive` is asserted explicitly on the update side too (not just relied on as the schema's
+  // create-time default): an upsert against a pre-existing, previously-deactivated row must
+  // reactivate it, exactly like every plan/price upsert below already does.
+  await prisma.country.upsert({ where: { code: GHANA.code }, update: { ...GHANA, isActive: true }, create: { ...GHANA, isActive: true } });
+  await prisma.currency.upsert({ where: { code: GHS.code }, update: { ...GHS, isActive: true }, create: { ...GHS, isActive: true } });
   for (const [key, description] of permissions) {
     await prisma.permission.upsert({ where: { key }, update: { description }, create: { key, description } });
   }
