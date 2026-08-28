@@ -15,19 +15,14 @@ type Banner = {
 const AUTO_ROTATE_MS = 7000;
 
 /**
- * Multi-campaign sliding placement (item 25 "sliding marketplace banner/carousel"). Renders
- * nothing when zero campaigns are eligible; renders a single static card (no controls) when
- * exactly one is, since prev/next/dot controls for a one-item carousel would be pointless chrome;
- * only shows the full carousel UI for two or more. Auto-rotation is restrained, pauses on
- * hover/focus/touch, and is skipped entirely under `prefers-reduced-motion`, per item 25's
- * accessibility requirements.
- *
- * `variant="hero"` is the Marketplace page's primary promotional slot (`MARKETPLACE_PRIMARY`) —
- * the same rotation/eligibility/tracking logic as the default `"inline"` strip, just sized and
- * typeset to sit beside the hero's headline instead of within the results list. It replaced a
- * static product-mockup image that previously occupied that space.
+ * Secondary, multi-campaign sliding placement (item 25 "sliding marketplace banner/carousel") —
+ * distinct from the single-campaign `MarketplaceBanner` hero. Renders nothing when zero campaigns
+ * are eligible; renders a single static card (no controls) when exactly one is, since prev/next/dot
+ * controls for a one-item carousel would be pointless chrome; only shows the full carousel UI for
+ * two or more. Auto-rotation is restrained, pauses on hover/focus/touch, and is skipped entirely
+ * under `prefers-reduced-motion`, per item 25's accessibility requirements.
  */
-export function MarketplaceCarousel({ placement, countryCode, limit = 6, variant = "inline" }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; variant?: "inline" | "hero" }) {
+export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { placement: "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number }) {
   const [banners, setBanners] = useState<Banner[] | null>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -95,17 +90,11 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, variant
     if (event.key === "ArrowLeft") { event.preventDefault(); goTo(index - 1); }
   }
 
-  const isHero = variant === "hero";
-
   return (
     <div
-      aria-label={isHero ? "Featured marketplace promotions" : "Featured marketplace campaigns"}
+      aria-label="Featured marketplace campaigns"
       aria-roledescription="carousel"
-      className={
-        isHero
-          ? "relative overflow-hidden rounded-3xl border border-white/10 bg-navy shadow-lg shadow-navy/20"
-          : "relative overflow-hidden rounded-2xl border border-slate-200 bg-navy"
-      }
+      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-navy"
       onBlur={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onKeyDown={onKeyDown}
@@ -117,9 +106,9 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, variant
     >
       {active && (
         <a
-          aria-label={`Featured: ${active.headline}`}
+          aria-label={`Promoted: ${active.headline}`}
           aria-roledescription="slide"
-          className={isHero ? "group relative block h-72 sm:h-80 lg:h-[440px]" : "group relative block h-56 sm:h-56"}
+          className="group relative block h-56 sm:h-56"
           href={active.destinationUrl}
           key={active.id}
           onClick={() => void fetch(`/api/public/campaigns/${active.id}/click`, { method: "POST" })}
@@ -127,40 +116,20 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, variant
           role="group"
         >
           {active.desktopMediaUrl && (
-            <div className="absolute inset-0 hidden bg-cover bg-center transition duration-700 ease-out group-hover:scale-105 sm:block" style={{ backgroundImage: `url("${active.desktopMediaUrl}")` }} />
+            <div className="absolute inset-0 hidden bg-cover bg-center sm:block" style={{ backgroundImage: `url("${active.desktopMediaUrl}")` }} />
           )}
           {(active.mobileMediaUrl ?? active.desktopMediaUrl) && (
-            <div className="absolute inset-0 bg-cover bg-center transition duration-700 ease-out group-hover:scale-105 sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
+            <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
           )}
-          {isHero ? (
-            <>
-              <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/60 to-navy/10" />
-              <div className="relative flex h-full flex-col justify-end gap-3 p-6 sm:p-10">
-                <span className="w-fit rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand backdrop-blur">
-                  Featured
-                </span>
-                <h2 className="max-w-2xl text-2xl font-semibold text-white sm:text-4xl">{active.headline}</h2>
-                {active.supportingText && <p className="max-w-xl text-sm text-slate-300 sm:text-base">{active.supportingText}</p>}
-                {active.ctaLabel && (
-                  <span className="mt-2 w-fit rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-navy transition group-hover:bg-brand-hover">
-                    {active.ctaLabel} <span aria-hidden="true">&rarr;</span>
-                  </span>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/70 to-transparent" />
-              <div className={`relative flex h-full max-w-lg flex-col justify-center gap-2 py-6 sm:py-8 ${multi ? "pl-14 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-8"}`}>
-                <span className="w-fit rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200 backdrop-blur">
-                  Promoted
-                </span>
-                <h3 className="text-lg font-semibold text-white sm:text-xl">{active.headline}</h3>
-                {active.supportingText && <p className="line-clamp-1 text-sm text-slate-300">{active.supportingText}</p>}
-                {active.ctaLabel && <span className="mt-1 w-fit rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy">{active.ctaLabel}</span>}
-              </div>
-            </>
-          )}
+          <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/70 to-transparent" />
+          <div className={`relative flex h-full max-w-lg flex-col justify-center gap-2 py-6 sm:py-8 ${multi ? "pl-14 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-8"}`}>
+            <span className="w-fit rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200 backdrop-blur">
+              Promoted
+            </span>
+            <h3 className="text-lg font-semibold text-white sm:text-xl">{active.headline}</h3>
+            {active.supportingText && <p className="line-clamp-1 text-sm text-slate-300">{active.supportingText}</p>}
+            {active.ctaLabel && <span className="mt-1 w-fit rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-navy">{active.ctaLabel}</span>}
+          </div>
         </a>
       )}
 
@@ -182,7 +151,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, variant
           >
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <div className={isHero ? "absolute right-5 top-5 flex gap-1.5 sm:right-6 sm:top-6" : "absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5"}>
+          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
             {banners.map((banner, slideIndex) => (
               <button
                 aria-current={slideIndex === index ? "true" : undefined}
