@@ -8,6 +8,7 @@ import { MARKETPLACE_ENTITLEMENTS } from "@/modules/marketplace-professionals/ca
 import {
   createSelfServiceCampaignSchema,
   createPlatformCampaignSchema,
+  updatePlatformCampaignSchema,
   reviewCampaignSchema,
   scheduleCampaignSchema,
   setCampaignStatusSchema,
@@ -73,8 +74,57 @@ export async function listMarketplaceProfessionalCampaigns(userId: string, marke
 export async function createPlatformCampaign(principal: PlatformPrincipal, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
   const data = createPlatformCampaignSchema.parse(input);
+  if (data.advertiserServiceProviderId) {
+    const provider = await db.serviceProvider.findUnique({ where: { id: data.advertiserServiceProviderId }, select: { id: true } });
+    if (!provider) throw notFound();
+  }
   const status = data.startAt || data.endAt ? "SCHEDULED" : "APPROVED";
   return db.campaign.create({ data: { ...data, isPlatformOwned: true, createdByUserId: principal.userId, reviewedByUserId: principal.userId, reviewedAt: new Date(), status } });
+}
+
+/** Edits a platform-owned campaign's descriptive content (Phase 24 "Edit") — deliberately never
+ * touches `status`/`priority`/`startAt`/`endAt`/media (those have their own dedicated, more
+ * carefully guarded actions below) or a self-service campaign (those belong to their advertiser). */
+export async function updatePlatformCampaign(principal: PlatformPrincipal, campaignId: string, input: unknown) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
+  const data = updatePlatformCampaignSchema.parse(input);
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!campaign) throw notFound();
+  if (!campaign.isPlatformOwned) throw new AppError("FORBIDDEN", 403, "Only platform-owned campaigns may be edited here.");
+  if (data.advertiserServiceProviderId) {
+    const provider = await db.serviceProvider.findUnique({ where: { id: data.advertiserServiceProviderId }, select: { id: true } });
+    if (!provider) throw notFound();
+  }
+  return db.campaign.update({ where: { id: campaignId }, data });
+}
+
+/** Duplicates a campaign as a new DRAFT (Phase 24 "Duplicate") — copies content/placement/targeting
+ * but never status, schedule, or analytics counters, so a duplicate always starts from a clean,
+ * explicitly-reviewed state rather than silently going live or inheriting another campaign's stats. */
+export async function duplicateCampaign(principal: PlatformPrincipal, campaignId: string) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
+  const source = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!source) throw notFound();
+  return db.campaign.create({
+    data: {
+      name: `${source.name} (copy)`,
+      placement: source.placement,
+      type: source.type,
+      headline: source.headline,
+      supportingText: source.supportingText,
+      ctaLabel: source.ctaLabel,
+      destinationUrl: source.destinationUrl,
+      desktopMediaUrl: source.desktopMediaUrl,
+      mobileMediaUrl: source.mobileMediaUrl,
+      countryCode: source.countryCode,
+      region: source.region,
+      isPlatformOwned: source.isPlatformOwned,
+      advertiserMarketplaceProfessionalId: source.advertiserMarketplaceProfessionalId,
+      advertiserServiceProviderId: source.advertiserServiceProviderId,
+      createdByUserId: principal.userId,
+      status: "DRAFT",
+    },
+  });
 }
 
 export async function listCampaignsForPlatform(principal: PlatformPrincipal, query: unknown = {}) {
@@ -83,12 +133,29 @@ export async function listCampaignsForPlatform(principal: PlatformPrincipal, que
   const where = { ...(filters.status ? { status: filters.status } : {}), ...(filters.placement ? { placement: filters.placement } : {}) };
   const [items, total] = await db.$transaction([
     db.campaign.findMany({
-      where, include: { advertiser: { select: { displayName: true, slug: true } } },
+      where,
+      include: {
+        advertiser: { select: { displayName: true, slug: true } },
+        advertiserProvider: { select: { displayName: true, slug: true, verificationStatus: true } },
+      },
       orderBy: [{ createdAt: "desc" }], skip: (filters.page - 1) * filters.pageSize, take: filters.pageSize,
     }),
     db.campaign.count({ where }),
   ]);
   return { items, total, page: filters.page, pageSize: filters.pageSize };
+}
+
+export async function getCampaignForPlatform(principal: PlatformPrincipal, campaignId: string) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
+  const campaign = await db.campaign.findUnique({
+    where: { id: campaignId },
+    include: {
+      advertiser: { select: { displayName: true, slug: true } },
+      advertiserProvider: { select: { displayName: true, slug: true, verificationStatus: true } },
+    },
+  });
+  if (!campaign) throw notFound();
+  return campaign;
 }
 
 /** Platform review of a self-service submission (item 21). Never available for `isPlatformOwned`
@@ -147,6 +214,11 @@ function eligibleCampaignWhere(placement: $Enums.CampaignPlacement, countryCode:
       { OR: [{ startAt: null }, { startAt: { lte: now } }] },
       { OR: [{ endAt: null }, { endAt: { gte: now } }] },
       ...(countryCode ? [{ OR: [{ countryCode: null }, { countryCode }] }] : []),
+      // A campaign promoting a specific Property Service Professional can never make an
+      // unverified provider publicly visible — this is a hard query-level gate, not an
+      // admin-diligence convention, matching how `safeHttpUrl` is enforced at the schema
+      // boundary rather than relying on review discipline alone.
+      { OR: [{ advertiserServiceProviderId: null }, { advertiserProvider: { is: { verificationStatus: "VERIFIED" as const } } }] },
     ],
   };
 }

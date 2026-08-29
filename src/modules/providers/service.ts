@@ -554,6 +554,25 @@ export async function reviewProviderIdentity(platformUser: User, providerId: str
   });
 }
 
+/** Platform-admin provider search (Phase 24) — used by the Campaigns admin to pick a real
+ * Property Service Professional to promote. Deliberately a separate, narrower permission
+ * (`campaignReview`, not `providerIdentityReview`) since a campaign manager needs to find a
+ * provider by name, not review their identity evidence. Returns only what a picker UI needs:
+ * never evidence, consents, or history. */
+export async function searchServiceProvidersForPlatform(platformUser: User, query: string) {
+  await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.campaignReview);
+  const trimmed = query.trim();
+  return db.serviceProvider.findMany({
+    where: {
+      archivedAt: null,
+      ...(trimmed ? { displayName: { contains: trimmed, mode: "insensitive" as const } } : {}),
+    },
+    select: { id: true, displayName: true, type: true, verificationStatus: true },
+    orderBy: { displayName: "asc" },
+    take: 20,
+  });
+}
+
 /** Platform review queue listing — providers awaiting or previously flagged for identity review. */
 export async function listPendingProviderIdentityReviews(platformUser: User) {
   await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);

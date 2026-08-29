@@ -2369,6 +2369,7 @@ model ServiceProvider {
   marketplaceEnquiries  MarketplaceEnquiry[]
   conversations         Conversation[]
   dispatchAttempts      MaintenanceDispatchAttempt[]
+  campaigns             Campaign[]
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
   @@index([identityVerifiedAt])
@@ -4870,7 +4871,18 @@ enum CampaignPlacement {
   /// The one homepage placement (item 18/24): a small dismissible announcement bar,
   /// NesAfric-owned only — never available to `createCampaign` (self-service).
   HOMEPAGE_ANNOUNCEMENT
+  /// Historical naming note (Phase 24): this was originally intended as the Property
+  /// Marketplace's top/primary promotional slot, but that slot shipped and was approved under
+  /// `MARKETPLACE_INLINE` instead (see that value's own comment) — renaming a live, in-use
+  /// placement purely for naming symmetry would break "existing campaign placement
+  /// compatibility," so this value is repurposed for the Property *Services* Marketplace
+  /// (`/marketplace`) carousel instead. The Platform Admin UI's placement labels are the
+  /// source of truth for what each value actually means to an operator, not this identifier.
   MARKETPLACE_PRIMARY
+  /// The Property Marketplace's (`/marketplace/properties`) approved, live promotional
+  /// carousel, positioned above the search panel. Labeled "Marketplace Primary Carousel" in
+  /// the Platform Admin UI — kept as this technical identifier for compatibility with already
+  /// existing campaigns/tracking rather than renamed to match that label.
   MARKETPLACE_INLINE
   DEVELOPMENT_FEATURED
   PROFESSIONAL_FEATURED
@@ -4889,10 +4901,30 @@ enum CampaignStatus {
   ARCHIVED
 }
 
+/// Admin-facing categorization only (Phase 24) — deliberately not a strict relational
+/// constraint. Only PROPERTY_SERVICE_PROFESSIONAL/PROPERTY_SERVICE_COMPANY campaigns are ever
+/// checked against a real backing record (`advertiserServiceProviderId`'s verification status);
+/// the others describe *what a campaign is about* for admin filtering/reporting without
+/// requiring a first-class relation to a Property/Development/etc. record that doesn't exist
+/// yet in this schema.
+enum CampaignType {
+  PROPERTY
+  DEVELOPMENT
+  REAL_ESTATE_PROFESSIONAL
+  REAL_ESTATE_COMPANY
+  PROPERTY_SERVICE_PROFESSIONAL
+  PROPERTY_SERVICE_COMPANY
+  UMOAFRIC_PROMOTION
+  ANNOUNCEMENT
+  GENERAL
+}
+
 model Campaign {
   id                                  String            @id @default(uuid()) @db.Uuid
   name                                String
   placement                           CampaignPlacement
+  /// Nullable: existing campaigns predate this field and are never forced to backfill one.
+  type                                CampaignType?
   status                              CampaignStatus    @default(DRAFT)
   priority                            Int               @default(0)
   headline                            String
@@ -4911,6 +4943,11 @@ model Campaign {
   /// have no advertiser; self-service submissions from a marketplace professional always do.
   isPlatformOwned                     Boolean           @default(false)
   advertiserMarketplaceProfessionalId String?           @db.Uuid
+  /// Set only for PROPERTY_SERVICE_PROFESSIONAL/PROPERTY_SERVICE_COMPANY campaigns promoting a
+  /// real, specific Property Service Professional. Public eligibility (`eligibleCampaignWhere`)
+  /// hard-requires this provider's `verificationStatus` to be VERIFIED whenever this is set —
+  /// a campaign can never make an unverified provider publicly visible.
+  advertiserServiceProviderId         String?           @db.Uuid
   createdByUserId                     String            @db.Uuid
   reviewedByUserId                    String?           @db.Uuid
   reviewedAt                          DateTime?
@@ -4919,12 +4956,14 @@ model Campaign {
   updatedAt                           DateTime          @updatedAt
   archivedAt                          DateTime?
 
-  advertiser MarketplaceProfessional? @relation(fields: [advertiserMarketplaceProfessionalId], references: [id], onDelete: Cascade)
-  createdBy  User                     @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  reviewedBy User?                    @relation("CampaignReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  advertiser         MarketplaceProfessional? @relation(fields: [advertiserMarketplaceProfessionalId], references: [id], onDelete: Cascade)
+  advertiserProvider ServiceProvider?         @relation(fields: [advertiserServiceProviderId], references: [id], onDelete: Cascade)
+  createdBy          User                     @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy         User?                    @relation("CampaignReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   @@index([placement, status, priority])
   @@index([advertiserMarketplaceProfessionalId])
+  @@index([advertiserServiceProviderId])
 }
 
 // ---------------------------------------------------------------------------

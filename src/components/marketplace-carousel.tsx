@@ -22,7 +22,7 @@ const AUTO_ROTATE_MS = 7000;
  * two or more. Auto-rotation is restrained, pauses on hover/focus/touch, and is skipped entirely
  * under `prefers-reduced-motion`, per item 25's accessibility requirements.
  */
-export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { placement: "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number }) {
+export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number }) {
   const [banners, setBanners] = useState<Banner[] | null>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);

@@ -4,6 +4,7 @@ import { PERMISSIONS, requirePermission } from "@/platform/authorization/permiss
 import { membershipHasPermission } from "@/platform/authorization/policy";
 import { AppError, forbidden, notFound } from "@/platform/errors";
 import { ownsProvider } from "@/modules/providers/service";
+import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/platform-admin/permissions";
 import { DOCUMENT_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, getObjectStorageAdapter, buildInternalPublicMediaUrl } from "@/platform/storage";
 import type { z } from "zod";
 import type { uploadDocumentSchema } from "./schemas";
@@ -190,6 +191,28 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
         update: { expiresAt: input.evidenceExpiresAt },
         create: { providerId: targetId, type: input.evidenceType ?? "OTHER", reference: storageObject.storageKey, expiresAt: input.evidenceExpiresAt, submittedByUserId: uploadedByUserId },
       }),
+  },
+
+  /** Campaign promotional creative (Phase 24) — `targetId` is a `Campaign.id`. Platform-admin
+   * only (checked directly against `PlatformPrincipal`, mirroring `PROVIDER_EVIDENCE`'s pattern,
+   * since this framework's `authorize` only has a userId, not the full authenticated `User`).
+   * Always PUBLIC: campaign creative is meant to be shown to every visitor, never signed/private. */
+  CAMPAIGN_CREATIVE: {
+    allowedMimeTypes: IMAGE_MIME_TYPES,
+    allowedClassifications: ["PUBLIC"],
+    authorize: async (tx, { userId, targetId }) => {
+      const campaign = await tx.campaign.findUnique({ where: { id: targetId }, select: { id: true } });
+      if (!campaign) throw notFound();
+      const principal = await tx.platformPrincipal.findUnique({ where: { userId } });
+      if (!principal || principal.status !== "ACTIVE" || !platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.campaignReview)) throw forbidden();
+      return { organisationId: null };
+    },
+    attach: (tx, { targetId, storageObject, input }) => {
+      const adapter = getObjectStorageAdapter();
+      const publicUrl = adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey);
+      const field = input.mediaSlot === "mobile" ? "mobileMediaUrl" : "desktopMediaUrl";
+      return tx.campaign.update({ where: { id: targetId }, data: { [field]: publicUrl } });
+    },
   },
 };
 

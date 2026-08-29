@@ -21,8 +21,15 @@ const safeHttpUrl = (max: number) =>
     }
   }, "Must be an absolute http:// or https:// URL");
 
+export const CAMPAIGN_TYPES = [
+  "PROPERTY", "DEVELOPMENT", "REAL_ESTATE_PROFESSIONAL", "REAL_ESTATE_COMPANY",
+  "PROPERTY_SERVICE_PROFESSIONAL", "PROPERTY_SERVICE_COMPANY", "UMOAFRIC_PROMOTION",
+  "ANNOUNCEMENT", "GENERAL",
+] as const;
+
 const campaignFields = {
   name: text(200),
+  type: z.enum(CAMPAIGN_TYPES).optional(),
   headline: text(200),
   supportingText: z.string().trim().max(500).optional(),
   ctaLabel: text(60).optional(),
@@ -41,10 +48,26 @@ export const createSelfServiceCampaignSchema = z.object({
 export const createPlatformCampaignSchema = z.object({
   placement: z.enum(ALL_PLACEMENTS),
   ...campaignFields,
+  /// Only meaningful for PROPERTY_SERVICE_PROFESSIONAL/PROPERTY_SERVICE_COMPANY campaigns —
+  /// see `Campaign.advertiserServiceProviderId`'s schema comment. Public eligibility hard-checks
+  /// this provider's verification status regardless of what an admin selects here.
+  advertiserServiceProviderId: id.optional(),
   priority: z.coerce.number().int().min(0).max(1000).default(0),
   startAt: z.coerce.date().optional(),
   endAt: z.coerce.date().optional(),
 }).strict();
+
+export const updatePlatformCampaignSchema = z.object({
+  name: text(200).optional(),
+  type: z.enum(CAMPAIGN_TYPES).nullable().optional(),
+  headline: text(200).optional(),
+  supportingText: z.string().trim().max(500).nullable().optional(),
+  ctaLabel: text(60).nullable().optional(),
+  destinationUrl: safeHttpUrl(2000).optional(),
+  countryCode: z.string().length(2).toUpperCase().nullable().optional(),
+  region: text(120).nullable().optional(),
+  advertiserServiceProviderId: id.nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
 export const reviewCampaignSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),

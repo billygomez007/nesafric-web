@@ -162,6 +162,14 @@ export async function uploadProviderEvidenceDocument(userId: string, providerId:
   return performUpload({ userId, organisationId: null, targetType: "PROVIDER_EVIDENCE", input: data });
 }
 
+/** Campaign creative is always PUBLIC regardless of what a caller sends — forced here rather
+ * than trusted from the request, since the target's `allowedClassifications` would otherwise
+ * silently downgrade an omitted/wrong value to PRIVATE (unusable for a public promotional image). */
+export async function uploadCampaignCreative(userId: string, campaignId: string, input: unknown) {
+  const data = uploadDocumentSchema.parse({ ...(input as object), targetType: "CAMPAIGN_CREATIVE", targetId: campaignId, classification: "PUBLIC" });
+  return performUpload({ userId, organisationId: null, targetType: "CAMPAIGN_CREATIVE", input: data });
+}
+
 export async function reorderListingMedia(userId: string, organisationId: string, listingId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.listingManage);
   const data = listingMediaOrderSchema.parse(input);

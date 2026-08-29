@@ -2,11 +2,15 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/platform/database/client";
 import { registerUser } from "@/modules/identity/service";
 import { createMarketplaceProfessional, changeMarketplacePlan } from "@/modules/marketplace-professionals/service";
+import { createServiceProvider, reviewProviderEvidence, reviewProviderIdentity, submitProviderVerification } from "@/modules/providers/service";
+import { uploadCampaignCreative } from "@/modules/documents/service";
 import {
   createCampaign,
   submitCampaignForApproval,
   listMarketplaceProfessionalCampaigns,
   createPlatformCampaign,
+  updatePlatformCampaign,
+  duplicateCampaign,
   listCampaignsForPlatform,
   reviewCampaign,
   scheduleCampaign,
@@ -17,6 +21,11 @@ import {
   recordCampaignClick,
 } from "@/modules/campaigns/service";
 import { requirePlatformPrincipal } from "@/platform/platform-admin/auth";
+
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01]);
+function base64(buffer: Buffer) {
+  return buffer.toString("base64");
+}
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner" CASCADE');
@@ -223,5 +232,66 @@ describe("PostgreSQL Phase 21B campaigns & promotions", () => {
     expect(allBanners[0]).not.toHaveProperty("status");
     expect(allBanners[0]).not.toHaveProperty("advertiserMarketplaceProfessionalId");
     expect(allBanners[0]).not.toHaveProperty("impressionCount");
+  });
+
+  it("Phase 24: never makes an unverified Property Service Professional's campaign publicly eligible, even while ACTIVE", async () => {
+    const principal = await platformAdmin();
+    const providerUser = await registerUser({ displayName: "Campaign Provider", email: "campaign-provider@example.com", password: "secure-password-123" });
+    const provider = await createServiceProvider(providerUser.id, { type: "INDIVIDUAL", displayName: "Campaign Electrician", contactEmail: "campaign-provider@example.com" });
+
+    const unverifiedCampaign = await createPlatformCampaign(principal, {
+      name: "Unverified provider promo", type: "PROPERTY_SERVICE_PROFESSIONAL", placement: "MARKETPLACE_PRIMARY",
+      advertiserServiceProviderId: provider.id, ...requestFields,
+    });
+    await setCampaignStatus(principal, unverifiedCampaign.id, { status: "ACTIVE" });
+
+    // ACTIVE, live schedule, correct placement — everything an eligible campaign needs, except
+    // the one thing that must never be bypassable: the provider itself is not VERIFIED.
+    expect(await getPublicBanner({ placement: "MARKETPLACE_PRIMARY" })).toBeNull();
+    expect(await getPublicBanners({ placement: "MARKETPLACE_PRIMARY" })).toEqual([]);
+
+    // Verify the provider's identity through the real platform-review workflow, not a shortcut.
+    await submitProviderVerification(providerUser.id, provider.id, {
+      evidence: [{ type: "GHANA_CARD_FRONT", reference: "evidence/front" }, { type: "GHANA_CARD_BACK", reference: "evidence/back" }],
+    });
+    const reviewerUser = await registerUser({ displayName: "Identity Reviewer", email: "campaign-identity-reviewer@example.com", password: "secure-password-123" });
+    await db.platformPrincipal.create({ data: { userId: reviewerUser.id, role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "MANUAL" } });
+    const frontEvidence = await db.providerEvidence.findFirstOrThrow({ where: { providerId: provider.id, type: "GHANA_CARD_FRONT" } });
+    const backEvidence = await db.providerEvidence.findFirstOrThrow({ where: { providerId: provider.id, type: "GHANA_CARD_BACK" } });
+    await reviewProviderEvidence(reviewerUser, frontEvidence.id, { status: "APPROVED" });
+    await reviewProviderEvidence(reviewerUser, backEvidence.id, { status: "APPROVED" });
+    await reviewProviderIdentity(reviewerUser, provider.id, { status: "VERIFIED" });
+
+    // The exact same campaign, untouched, is now eligible — verification is the only thing that changed.
+    const nowEligible = await getPublicBanner({ placement: "MARKETPLACE_PRIMARY" });
+    expect(nowEligible?.id).toBe(unverifiedCampaign.id);
+  });
+
+  it("Phase 24: supports edit, duplicate, and platform-admin-only campaign creative upload", async () => {
+    const principal = await platformAdmin();
+    const campaign = await createPlatformCampaign(principal, { name: "Editable", type: "GENERAL", placement: "MARKETPLACE_INLINE", ...requestFields });
+
+    const edited = await updatePlatformCampaign(principal, campaign.id, { headline: "Updated headline", type: "UMOAFRIC_PROMOTION" });
+    expect(edited.headline).toBe("Updated headline");
+    expect(edited.type).toBe("UMOAFRIC_PROMOTION");
+
+    const copy = await duplicateCampaign(principal, campaign.id);
+    expect(copy.id).not.toBe(campaign.id);
+    expect(copy.status).toBe("DRAFT");
+    expect(copy.headline).toBe("Updated headline");
+    expect(copy.impressionCount).toBe(0);
+
+    const upload = await uploadCampaignCreative(principal.userId, campaign.id, {
+      fileName: "hero.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "desktop",
+    });
+    expect(upload.attached).toMatchObject({ id: campaign.id });
+    expect((upload.attached as unknown as { desktopMediaUrl: string | null }).desktopMediaUrl).toBeTruthy();
+    expect(upload.storageObject.classification).toBe("PUBLIC");
+
+    // A normal (non-platform) user cannot edit, duplicate, or upload creative for any campaign.
+    const outsider = await registerUser({ displayName: "Outsider", email: "campaign-outsider@example.com", password: "secure-password-123" });
+    await expect(uploadCampaignCreative(outsider.id, campaign.id, {
+      fileName: "hero.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "desktop",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
