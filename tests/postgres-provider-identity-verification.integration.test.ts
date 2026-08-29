@@ -68,6 +68,10 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
     const backUpload = await uploadProviderEvidenceDocument(artisanUser.id, provider.id, {
       evidenceType: "GHANA_CARD_BACK", fileName: "ghana-card-back.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES),
     });
+    // Ghana Card evidence must always be namespaced under the private provider-evidence prefix —
+    // never mixed with a public media namespace regardless of storage backend.
+    expect(frontUpload.storageObject.storageKey.startsWith("private/provider-evidence/")).toBe(true);
+    expect(frontUpload.storageObject.classification).toBe("PRIVATE");
     await submitProviderVerification(artisanUser.id, provider.id, {
       evidence: [
         { type: "GHANA_CARD_FRONT", reference: frontUpload.attached.reference },

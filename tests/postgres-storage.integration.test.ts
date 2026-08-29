@@ -98,6 +98,9 @@ describe("PostgreSQL Phase 19 provider-neutral object storage", () => {
       fileName: "../../etc/passwd.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES),
     });
     expect(publicUpload.storageObject).toMatchObject({ classification: "PUBLIC", contentType: "image/jpeg", origin: "UPLOADED", malwareScanStatus: "SKIPPED" });
+    // Object keys are namespaced by classification first, then a friendly per-target segment —
+    // a public listing photo and a private one must never land under the same key prefix.
+    expect(publicUpload.storageObject.storageKey.startsWith("public/properties/")).toBe(true);
     expect(publicUpload.storageObject.sha256).toHaveLength(64);
     // Safe filename strips path traversal and forces a truthful extension from sniffed content.
     expect(publicUpload.storageObject.safeFileName).not.toContain("..");
@@ -112,6 +115,7 @@ describe("PostgreSQL Phase 19 provider-neutral object storage", () => {
       fileName: "interior.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES),
     });
     expect(privateUpload.storageObject.classification).toBe("PRIVATE");
+    expect(privateUpload.storageObject.storageKey.startsWith("private/properties/")).toBe(true);
     const signed = await getSignedStorageAccess(owner.id, organisation.id, privateUpload.storageObject.id);
     expect(signed.expiresAt).toBeInstanceOf(Date);
     const signedUrl = new URL(signed.url, "http://localhost");

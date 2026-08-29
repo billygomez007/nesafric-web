@@ -291,6 +291,7 @@ describe("PostgreSQL Phase 21B campaigns & promotions", () => {
     expect(upload.attached).toMatchObject({ id: campaign.id });
     expect((upload.attached as unknown as { desktopMediaUrl: string | null }).desktopMediaUrl).toBeTruthy();
     expect(upload.storageObject.classification).toBe("PUBLIC");
+    expect(upload.storageObject.storageKey.startsWith("public/campaigns/")).toBe(true);
 
     // A normal (non-platform) user cannot edit, duplicate, or upload creative for any campaign.
     const outsider = await registerUser({ displayName: "Outsider", email: "campaign-outsider@example.com", password: "secure-password-123" });

@@ -26,6 +26,17 @@ import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const UPLOAD_TARGET_TYPES = ["LISTING_MEDIA", "MAINTENANCE_ATTACHMENT", "MOVE_IN_INSPECTION_MEDIA", "MOVE_OUT_INSPECTION_MEDIA", "APPLICATION_DOCUMENT", "PROVIDER_EVIDENCE"] as const;
+/** Human-readable object-key namespace segment per upload target — purely cosmetic/organisational
+ * (bucket browsing, lifecycle/CORS rules scoped by prefix); never read back to resolve a target. */
+const UPLOAD_TARGET_NAMESPACES: Record<string, string> = {
+  PROVIDER_EVIDENCE: "provider-evidence",
+  CAMPAIGN_CREATIVE: "campaigns",
+  LISTING_MEDIA: "properties",
+  MAINTENANCE_ATTACHMENT: "maintenance-attachments",
+  MOVE_IN_INSPECTION_MEDIA: "move-in-inspections",
+  MOVE_OUT_INSPECTION_MEDIA: "move-out-inspections",
+  APPLICATION_DOCUMENT: "application-documents",
+};
 const GENERATED_DOCUMENT_TYPES = ["RECEIPT", "TENANT_STATEMENT", "MOVE_OUT_STATEMENT", "LEASE_AGREEMENT"] as const;
 
 async function membership(userId: string, organisationId: string) {
@@ -62,6 +73,10 @@ async function performUpload(params: {
 }) {
   const { userId, targetType, input } = params;
   const descriptor = getUploadDescriptor(targetType);
+  // Resolved up front, before any work (sniffing, malware scan) is wasted on bytes that could
+  // never actually be stored — this throws immediately in a cloud deployment with no durable
+  // storage configured, rather than only failing once we reach the actual write.
+  const adapter = getObjectStorageAdapter();
   const bytes = Buffer.from(input.dataBase64, "base64");
   if (bytes.length === 0) throw new AppError("EMPTY_FILE", 422, "The uploaded file is empty.");
   if (bytes.length > maxUploadBytes()) {
@@ -110,9 +125,12 @@ async function performUpload(params: {
 
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const finalName = safeFileName(input.fileName, sniffed);
-  const storageKey = `${params.organisationId ?? "unowned"}/${targetType}/${input.targetId}/${randomUUID()}-${finalName}`;
+  // Namespaced by classification first (`public/`/`private/`) so a bucket policy, CDN caching
+  // rule, or lifecycle rule can be scoped to one without any risk of it ever matching the other —
+  // Ghana Card evidence and public campaign creative must never be reachable under the same
+  // prefix. Existing rows keep whatever key they already have; this only shapes new uploads.
+  const storageKey = `${classification === "PUBLIC" ? "public" : "private"}/${UPLOAD_TARGET_NAMESPACES[targetType] ?? targetType.toLowerCase()}/${params.organisationId ?? "unowned"}/${input.targetId}/${randomUUID()}-${finalName}`;
 
-  const adapter = getObjectStorageAdapter();
   try {
     await adapter.putObject({ key: storageKey, body: bytes, contentType: sniffed.mimeType, classification });
   } catch (error) {

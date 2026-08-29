@@ -75,13 +75,22 @@ export async function upsertIntegrationConfig(userId: string, organisationId: st
 }
 
 function defaultProviderFor(integrationType: IntegrationType) {
-  return {
-    STORAGE: getObjectStorageAdapter().providerKey,
-    ESIGNATURE: esignatureProviders.get("HTTP_ENVELOPE").isConfigured() ? "HTTP_ENVELOPE" : "INTERNAL",
-    GEOCODING: geocodingProviders.get("http").isConfigured() ? "http" : "deterministic-fallback",
-    CALENDAR: calendarProviders.get("HTTP_CALENDAR").isConfigured() ? "HTTP_CALENDAR" : "INTERNAL",
-    MALWARE_SCAN: getMalwareScanner().providerKey,
-  }[integrationType];
+  // A switch (rather than an object literal) so each branch is only evaluated when actually
+  // selected — `getObjectStorageAdapter()` now throws in a cloud deployment with no durable
+  // storage configured, which must never surface just from configuring an unrelated integration
+  // (e.g. enabling e-signature) that happens to share this lookup helper.
+  switch (integrationType) {
+    case "STORAGE":
+      try {
+        return getObjectStorageAdapter().providerKey;
+      } catch {
+        return "unconfigured";
+      }
+    case "ESIGNATURE": return esignatureProviders.get("HTTP_ENVELOPE").isConfigured() ? "HTTP_ENVELOPE" : "INTERNAL";
+    case "GEOCODING": return geocodingProviders.get("http").isConfigured() ? "http" : "deterministic-fallback";
+    case "CALENDAR": return calendarProviders.get("HTTP_CALENDAR").isConfigured() ? "HTTP_CALENDAR" : "INTERNAL";
+    case "MALWARE_SCAN": return getMalwareScanner().providerKey;
+  }
 }
 
 /**
@@ -118,9 +127,19 @@ export async function getOrganisationIntegrationOverview(userId: string, organis
       : config?.lastFailureAt
         ? "DEGRADED"
         : "NOT_CONFIGURED";
+    const currentProviderKey = (() => {
+      try {
+        return getObjectStorageAdapter().providerKey;
+      } catch {
+        // Cloud deployment, no durable storage configured — this display value must say so
+        // truthfully without crashing the overview page whose entire purpose is showing exactly
+        // that state.
+        return "unconfigured";
+      }
+    })();
     return {
       type: "STORAGE",
-      provider: config?.provider ?? getObjectStorageAdapter().providerKey,
+      provider: config?.provider ?? currentProviderKey,
       displayName: "Object storage",
       enabled: config?.enabled ?? productionReady,
       status,

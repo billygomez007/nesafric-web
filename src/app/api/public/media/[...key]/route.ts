@@ -15,7 +15,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ key
   if (!storageObject || storageObject.archivedAt || storageObject.classification !== "PUBLIC") {
     return new NextResponse("Not found", { status: 404 });
   }
-  const object = await getObjectStorageAdapter().getObject(key);
+  let object;
+  try {
+    object = await getObjectStorageAdapter().getObject(key);
+  } catch {
+    return new NextResponse("Storage temporarily unavailable", { status: 503 });
+  }
   if (!object) return new NextResponse("Not found", { status: 404 });
   return new NextResponse(new Uint8Array(object.body), {
     headers: { "content-type": object.contentType, "cache-control": "public, max-age=3600" },
