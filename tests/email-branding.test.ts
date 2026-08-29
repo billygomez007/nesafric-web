@@ -60,21 +60,49 @@ describe("buildReminderEventEmail", () => {
 });
 
 describe("account email sender-identity mapping", () => {
-  it("sends the welcome email from hello@, matching the brand's relationship-communication identity", () => {
+  it("sends the welcome email from notifications@, the default automated transactional sender", () => {
     const welcome = contentFor("WELCOME", "Ama");
-    expect(welcome.sender).toBe("hello");
-    expect(BRAND.sender[welcome.sender]).toBe("UmoAfric <hello@umoafric.com>");
+    expect(welcome.sender).toBe("notifications");
+    expect(BRAND.sender[welcome.sender]).toBe("UmoAfric <notifications@umoafric.com>");
     expect(welcome.subject).toBe("Welcome to UmoAfric");
   });
 
-  it("sends onboarding-completion emails from hello@ too", () => {
-    expect(contentFor("ONBOARDING_COMPLETE_PROPERTYOS", "Ama", "Golden Coast Properties").sender).toBe("hello");
-    expect(contentFor("ONBOARDING_COMPLETE_MARKETPLACE", "Ama", "Adjoa Realty").sender).toBe("hello");
+  it("sends onboarding-completion emails from notifications@ too", () => {
+    expect(contentFor("ONBOARDING_COMPLETE_PROPERTYOS", "Ama", "Golden Coast Properties").sender).toBe("notifications");
+    expect(contentFor("ONBOARDING_COMPLETE_MARKETPLACE", "Ama", "Adjoa Realty").sender).toBe("notifications");
+    expect(contentFor("ONBOARDING_COMPLETE_SERVICES", "Ama", "Ama's Plumbing").sender).toBe("notifications");
   });
 
   it("personalizes onboarding-completion content with the actual workspace name", () => {
     const { content } = contentFor("ONBOARDING_COMPLETE_PROPERTYOS", "Ama", "Golden Coast Properties");
     expect(content.heading).toContain("Golden Coast Properties");
+  });
+});
+
+describe("service-professional verification emails", () => {
+  it("sends every verification-lifecycle email from notifications@", () => {
+    for (const template of ["PROVIDER_VERIFICATION_SUBMITTED", "PROVIDER_VERIFICATION_MORE_INFO", "PROVIDER_VERIFICATION_APPROVED", "PROVIDER_VERIFICATION_REJECTED"] as const) {
+      expect(contentFor(template, "Kwame", undefined, "provider-1").sender).toBe("notifications");
+    }
+  });
+
+  it("links the CTA to the specific provider's own profile", () => {
+    const { content } = contentFor("PROVIDER_VERIFICATION_APPROVED", "Kwame", undefined, "provider-123");
+    expect(content.cta?.path).toBe("/providers/provider-123");
+  });
+
+  it("surfaces the reviewer's reason on rejection and more-info outcomes, never inventing one", () => {
+    const withReason = contentFor("PROVIDER_VERIFICATION_REJECTED", "Kwame", undefined, "provider-1", "Document image was unreadable.");
+    expect(withReason.content.paragraphs.join(" ")).toContain("Document image was unreadable.");
+    const withoutReason = contentFor("PROVIDER_VERIFICATION_REJECTED", "Kwame", undefined, "provider-1");
+    expect(withoutReason.content.paragraphs.join(" ")).not.toContain("Reason provided:");
+  });
+
+  it("uses respectful, neutral subject lines rather than exposing internal review jargon", () => {
+    expect(contentFor("PROVIDER_VERIFICATION_SUBMITTED", "Kwame").subject).toBe("Verification submitted — UmoAfric");
+    expect(contentFor("PROVIDER_VERIFICATION_MORE_INFO", "Kwame").subject).toBe("More information is required for your UmoAfric verification");
+    expect(contentFor("PROVIDER_VERIFICATION_APPROVED", "Kwame").subject).toBe("Your UmoAfric service professional profile is verified");
+    expect(contentFor("PROVIDER_VERIFICATION_REJECTED", "Kwame").subject).toBe("Update on your UmoAfric verification");
   });
 });
 

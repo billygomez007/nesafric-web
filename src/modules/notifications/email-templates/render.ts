@@ -30,6 +30,9 @@ export type EmailContent = {
   badge?: Badge;
   details?: DetailRow[];
   cta?: CallToAction;
+  /** Short capability/feature words (e.g. "Manage", "Market", "Connect", "Automate"), rendered as
+   * a compact row of turquoise-tinted chips. Keep this short — it's a visual accent, not a list. */
+  features?: string[];
   /** Overrides the default "Need help? Contact support" block. */
   supportNote?: string;
 };
@@ -65,9 +68,19 @@ function renderHtml(content: EmailContent): string {
       </table>`
     : "";
   const cta = content.cta
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 28px;"><tr><td style="border-radius:8px;background:#020617;">
-        <a href="${escapeHtml(absoluteUrl(content.cta.path))}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeHtml(content.cta.label)}</a>
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 28px;"><tr><td style="border-radius:8px;background:#00816e;">
+        <a href="${escapeHtml(absoluteUrl(content.cta.path))}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeHtml(content.cta.label)}</a>
       </td></tr></table>`
+    : "";
+  const features = content.features?.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 28px;"><tr>
+        ${content.features
+          .map(
+            (feature) =>
+              `<td style="padding:0 8px 0 0;"><span style="display:inline-block;padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;background:#e6f7f5;color:#00816e;white-space:nowrap;">${escapeHtml(feature)}</span></td>`,
+          )
+          .join("")}
+      </tr></table>`
     : "";
   const supportNote = content.supportNote ?? `Need help? Reply to this email or contact us at ${BRAND.contact.support}.`;
 
@@ -84,22 +97,23 @@ ${content.preheader ? `<div style="display:none;max-height:0;overflow:hidden;opa
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
-<tr><td style="background:#020617;padding:28px 32px;">
+<tr><td style="background:#0d1117;padding:28px 32px;border-top:3px solid #00b6a3;">
 <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(BRAND.name)}" height="28" style="display:block;height:28px;width:auto;" />
 </td></tr>
 <tr><td style="padding:36px 32px 8px;">
-<h1 style="margin:0 0 20px;font-size:21px;line-height:1.35;color:#020617;font-weight:700;">${escapeHtml(content.heading)}</h1>
+<h1 style="margin:0 0 20px;font-size:21px;line-height:1.35;color:#0d1117;font-weight:700;">${escapeHtml(content.heading)}</h1>
 ${badge ? `<div style="margin:0 0 16px;">${badge}</div>` : ""}
 ${greeting}
 ${paragraphs}
 ${details}
+${features}
 ${cta}
 <p style="margin:0 0 4px;font-size:13px;line-height:1.6;color:#64748b;">${escapeHtml(supportNote)}</p>
 </td></tr>
 <tr><td style="padding:24px 32px 32px;border-top:1px solid #e2e8f0;">
-<p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#0f172a;">${escapeHtml(BRAND.name)}</p>
+<p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#0d1117;">${escapeHtml(BRAND.name)}</p>
 <p style="margin:0 0 2px;font-size:12px;color:#94a3b8;">${escapeHtml(BRAND.contact.address)}</p>
-<p style="margin:0 0 2px;font-size:12px;color:#94a3b8;"><a href="mailto:${escapeHtml(BRAND.contact.support)}" style="color:#94a3b8;">${escapeHtml(BRAND.contact.support)}</a> · <a href="https://${escapeHtml(BRAND.domain)}" style="color:#94a3b8;">${escapeHtml(BRAND.domain)}</a></p>
+<p style="margin:0 0 2px;font-size:12px;color:#94a3b8;"><a href="mailto:${escapeHtml(BRAND.contact.support)}" style="color:#94a3b8;">${escapeHtml(BRAND.contact.support)}</a> · <a href="mailto:${escapeHtml(BRAND.contact.hello)}" style="color:#94a3b8;">${escapeHtml(BRAND.contact.hello)}</a> · <a href="https://${escapeHtml(BRAND.domain)}" style="color:#94a3b8;">${escapeHtml(BRAND.domain)}</a></p>
 <p style="margin:12px 0 0;font-size:11px;color:#cbd5e1;">You received this email because of activity on your ${escapeHtml(BRAND.name)} account. If this wasn't you, please contact ${escapeHtml(BRAND.contact.support)}.</p>
 </td></tr>
 </table>
@@ -118,8 +132,9 @@ function renderText(content: EmailContent): string {
     for (const row of content.details) lines.push(`${row.label}: ${row.value}`);
     lines.push("");
   }
+  if (content.features?.length) lines.push(content.features.join(" · "), "");
   if (content.cta) lines.push(`${content.cta.label}: ${absoluteUrl(content.cta.path)}`, "");
   lines.push(content.supportNote ?? `Need help? Contact us at ${BRAND.contact.support}.`, "");
-  lines.push("—", BRAND.name, BRAND.contact.address, `${BRAND.contact.support} · ${BRAND.domain}`);
+  lines.push("—", BRAND.name, BRAND.contact.address, `${BRAND.contact.support} · ${BRAND.contact.hello} · ${BRAND.domain}`);
   return lines.join("\n");
 }

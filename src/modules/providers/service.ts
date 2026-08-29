@@ -27,6 +27,7 @@ import {
   updateServiceCategorySchema,
   quotationListSchema,
 } from "./schemas";
+import { enqueueOnboardingCompleteEmail, enqueueProviderVerificationEmail } from "@/modules/account-emails/service";
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 140) || "provider";
@@ -211,6 +212,9 @@ export async function createServiceProvider(userId: string, input: unknown) {
       }
       throw error;
     }
+  }).then(async (provider) => {
+    await enqueueOnboardingCompleteEmail(userId, "ONBOARDING_COMPLETE_SERVICES", provider.displayName);
+    return provider;
   });
 }
 
@@ -356,7 +360,8 @@ export async function getProvider(userId: string, organisationId: string | null,
 
 export async function submitProviderVerification(userId: string, providerId: string, input: unknown) {
   const data = submitVerificationSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  let historyId = "";
+  const result = await db.$transaction(async (tx) => {
     const provider = await requireProviderOwner(userId, providerId, tx);
     if (!["UNVERIFIED", "REJECTED", "REQUIRES_MORE_INFORMATION"].includes(provider.verificationStatus)) {
       throw new AppError("INVALID_VERIFICATION_STATE", 409, "Verification cannot be submitted in the current state.");
@@ -389,15 +394,18 @@ export async function submitProviderVerification(userId: string, providerId: str
       where: { id: providerId },
       data: { verificationStatus: "PENDING", evidenceReady: true, acceptingWork: false },
     });
-    await tx.providerVerificationHistory.create({
+    const history = await tx.providerVerificationHistory.create({
       data: { providerId, actorUserId: userId, fromStatus: provider.verificationStatus, toStatus: "PENDING" },
     });
+    historyId = history.id;
     const directories = await tx.providerOrganisation.findMany({ where: { providerId, status: "ACTIVE" } });
     for (const directory of directories) {
       await record(tx, directory.landlordOrganisationId, userId, "provider.verification_submitted", "service_provider", providerId);
     }
-    return updated;
+    return { updated, administratorUserId: provider.administratorUserId };
   });
+  await enqueueProviderVerificationEmail(result.administratorUserId, providerId, "PROVIDER_VERIFICATION_SUBMITTED", historyId);
+  return result.updated;
 }
 
 export async function reviewProviderVerification(
@@ -496,7 +504,7 @@ export async function reviewProviderEvidence(platformUser: User, evidenceId: str
 export async function reviewProviderIdentity(platformUser: User, providerId: string, input: unknown) {
   const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
   const data = reviewProviderIdentitySchema.parse(input);
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const provider = await tx.serviceProvider.findUnique({ where: { id: providerId } });
     if (!provider) throw notFound();
     if (!["PENDING", "REQUIRES_MORE_INFORMATION"].includes(provider.verificationStatus)) {
@@ -540,7 +548,7 @@ export async function reviewProviderIdentity(platformUser: User, providerId: str
         ...(setsVerificationStatus && data.status !== "VERIFIED" ? { acceptingWork: false, availabilityStatus: "UNAVAILABLE" } : {}),
       },
     });
-    await tx.providerVerificationHistory.create({
+    const history = await tx.providerVerificationHistory.create({
       data: {
         providerId,
         actorUserId: principal.userId,
@@ -550,8 +558,23 @@ export async function reviewProviderIdentity(platformUser: User, providerId: str
         metadata: json({ authority: "PLATFORM", identityDecision: data.status, deferredToLandlord: !setsVerificationStatus }),
       },
     });
-    return updated;
+    return { updated, historyId: history.id, administratorUserId: provider.administratorUserId, setsVerificationStatus };
   });
+  // A VERIFIED decision deferred to a landlord's own directory review (see `setsVerificationStatus`
+  // above) leaves `verificationStatus` unchanged for now, so nothing customer-visible has actually
+  // happened yet — sending the "you're verified" email here would be premature and misleading.
+  const emailTemplate =
+    data.status === "REQUIRES_MORE_INFORMATION"
+      ? "PROVIDER_VERIFICATION_MORE_INFO"
+      : data.status === "REJECTED"
+        ? "PROVIDER_VERIFICATION_REJECTED"
+        : result.setsVerificationStatus
+          ? "PROVIDER_VERIFICATION_APPROVED"
+          : null;
+  if (emailTemplate) {
+    await enqueueProviderVerificationEmail(result.administratorUserId, providerId, emailTemplate, result.historyId, data.reason);
+  }
+  return result.updated;
 }
 
 /** Platform-admin provider search (Phase 24) — used by the Campaigns admin to pick a real
