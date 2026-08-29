@@ -123,7 +123,7 @@ describe("PostgreSQL Phase 19 provider-neutral object storage", () => {
     const expires = Number(signedUrl.searchParams.get("expires"));
     expect(verifyLocalObjectToken(privateUpload.storageObject.storageKey, token, expires).verified).toBe(true);
     expect(verifyLocalObjectToken(privateUpload.storageObject.storageKey, "wrong-token", expires).verified).toBe(false);
-    const stored = await getObjectStorageAdapter().getObject(privateUpload.storageObject.storageKey);
+    const stored = await getObjectStorageAdapter().getObject(privateUpload.storageObject.storageKey, "PRIVATE");
     expect(stored?.body.equals(JPEG_BYTES)).toBe(true);
 
     // Cross-organisation members cannot resolve a signed URL for someone else's object.

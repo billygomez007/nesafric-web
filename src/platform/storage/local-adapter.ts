@@ -27,6 +27,14 @@ export class LocalFilesystemStorageAdapter implements ObjectStorageAdapter {
     return true;
   }
 
+  isPrivateConfigured() {
+    return true;
+  }
+
+  isPublicConfigured() {
+    return true;
+  }
+
   private filePath(key: string) {
     const normalized = path.normalize(key).replace(/^([./\\]+)/, "");
     const resolved = path.join(this.rootDir, normalized);
@@ -42,7 +50,9 @@ export class LocalFilesystemStorageAdapter implements ObjectStorageAdapter {
     return { key: input.key };
   }
 
-  async getObject(key: string): Promise<StoredObjectPayload | null> {
+  // `classification` is accepted (for interface compatibility with the dual-bucket S3 adapter)
+  // but unused — a single local root has no separate buckets to route between.
+  async getObject(key: string, _classification?: string): Promise<StoredObjectPayload | null> {
     const filePath = this.filePath(key);
     try {
       const [body, metaRaw] = await Promise.all([readFile(filePath), readFile(`${filePath}.meta.json`, "utf8").catch(() => "{}")]);
@@ -54,7 +64,7 @@ export class LocalFilesystemStorageAdapter implements ObjectStorageAdapter {
     }
   }
 
-  async deleteObject(key: string) {
+  async deleteObject(key: string, _classification?: string) {
     const filePath = this.filePath(key);
     await rm(filePath, { force: true });
     await rm(`${filePath}.meta.json`, { force: true });
@@ -74,7 +84,7 @@ export class LocalFilesystemStorageAdapter implements ObjectStorageAdapter {
     return null;
   }
 
-  async getSignedUrl(key: string, options?: SignedUrlOptions) {
+  async getSignedUrl(key: string, _classification?: string, options?: SignedUrlOptions) {
     return buildLocalSignedUrl(key, options?.expiresInSeconds ?? 300);
   }
 }

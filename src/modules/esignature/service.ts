@@ -36,7 +36,7 @@ export async function dispatchSignatureEnvelope(params: {
   const adapter = esignatureProviders.get(params.providerKey);
   if (!adapter.isConfigured()) throw new AppError("ESIGNATURE_PROVIDER_UNAVAILABLE", 503, `${adapter.displayName} is not configured.`);
   const storageAdapter = getObjectStorageAdapter();
-  const stored = await storageAdapter.getObject(params.documentFileKey).catch(() => null);
+  const stored = await storageAdapter.getObject(params.documentFileKey, "PRIVATE").catch(() => null);
   let result;
   try {
     result = await adapter.createEnvelope({

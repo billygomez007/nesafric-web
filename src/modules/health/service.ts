@@ -60,9 +60,30 @@ function checkBilling(): ProviderHealthEntry {
   return { name: "saasBilling", readiness: providerKey === "http" ? "CONFIGURED" : "TEST_MODE", detail: providerKey === "http" ? "External billing provider configured." : "Deterministic test billing adapter (no external billing credentials configured)." };
 }
 
-function checkStorage(): ProviderHealthEntry {
-  const configured = s3Adapter.isConfigured();
-  return { name: "storage", readiness: configured ? "CONFIGURED" : "UNCONFIGURED", detail: configured ? "S3-compatible object storage configured." : "Falling back to local filesystem storage (not durable across deployments)." };
+/** Private and public object storage are two physically separate buckets (Ghana Card evidence
+ * must never share infrastructure with public campaign/listing media) and are reported
+ * independently — a deployment can have one durably configured and not the other, and that must
+ * be visible rather than collapsed into a single misleading flag. Never exposes bucket
+ * names/endpoints/credentials, only whether each side is usable. */
+function checkStorage(): ProviderHealthEntry[] {
+  const privateConfigured = s3Adapter.isPrivateConfigured();
+  const publicConfigured = s3Adapter.isPublicConfigured();
+  return [
+    {
+      name: "storagePrivate",
+      readiness: privateConfigured ? "CONFIGURED" : "UNCONFIGURED",
+      detail: privateConfigured
+        ? "Private object storage (identity evidence, generated documents) is durably configured."
+        : "Private object storage is not configured — permanent uploads requiring privacy (Ghana Card, business registration, licences) will fail closed rather than use non-durable local storage.",
+    },
+    {
+      name: "storagePublic",
+      readiness: publicConfigured ? "CONFIGURED" : "UNCONFIGURED",
+      detail: publicConfigured
+        ? "Public object storage (campaign creative, listing/property media) is durably configured."
+        : "Public object storage is not configured — permanent public uploads will fail closed rather than use non-durable local storage.",
+    },
+  ];
 }
 
 function checkMalwareScan(): ProviderHealthEntry {
@@ -125,7 +146,7 @@ export async function getPublicHealth() {
     checkAI(),
     checkPayments(),
     checkBilling(),
-    checkStorage(),
+    ...checkStorage(),
     checkMalwareScan(),
     checkESignature(),
     checkGeocoding(),

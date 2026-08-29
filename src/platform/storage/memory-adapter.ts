@@ -14,17 +14,25 @@ export class InMemoryStorageAdapter implements ObjectStorageAdapter {
     return true;
   }
 
+  isPrivateConfigured() {
+    return true;
+  }
+
+  isPublicConfigured() {
+    return true;
+  }
+
   async putObject(input: PutObjectInput) {
     this.objects.set(input.key, { body: Buffer.from(input.body), contentType: input.contentType });
     return { key: input.key };
   }
 
-  async getObject(key: string): Promise<StoredObjectPayload | null> {
+  async getObject(key: string, _classification?: string): Promise<StoredObjectPayload | null> {
     const found = this.objects.get(key);
     return found ? { body: Buffer.from(found.body), contentType: found.contentType } : null;
   }
 
-  async deleteObject(key: string) {
+  async deleteObject(key: string, _classification?: string) {
     this.objects.delete(key);
   }
 
@@ -32,7 +40,7 @@ export class InMemoryStorageAdapter implements ObjectStorageAdapter {
     return null;
   }
 
-  async getSignedUrl(key: string, options?: SignedUrlOptions) {
+  async getSignedUrl(key: string, _classification?: string, options?: SignedUrlOptions) {
     return buildLocalSignedUrl(key, options?.expiresInSeconds ?? 300);
   }
 

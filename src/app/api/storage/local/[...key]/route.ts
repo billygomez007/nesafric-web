@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ key:
   if (!verification.verified) return new NextResponse("Invalid or expired link", { status: 403 });
   const storageObject = await db.storageObject.findUnique({ where: { storageKey: key } });
   if (!storageObject || storageObject.archivedAt) return new NextResponse("Not found", { status: 404 });
-  const object = await getObjectStorageAdapter().getObject(key);
+  const object = await getObjectStorageAdapter().getObject(key, storageObject.classification);
   if (!object) return new NextResponse("Not found", { status: 404 });
   return new NextResponse(new Uint8Array(object.body), {
     headers: {

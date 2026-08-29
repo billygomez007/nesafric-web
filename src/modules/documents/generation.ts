@@ -155,7 +155,7 @@ async function storeGeneratedDocument(params: {
       return tx.generatedDocument.findUniqueOrThrow({ where: { id: created.id }, include: { storageObject: true } });
     });
   } catch (error) {
-    await adapter.deleteObject(storageKey).catch(() => undefined);
+    await adapter.deleteObject(storageKey, "PRIVATE").catch(() => undefined);
     throw error;
   }
 }

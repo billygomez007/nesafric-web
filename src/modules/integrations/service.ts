@@ -121,7 +121,9 @@ export async function getOrganisationIntegrationOverview(userId: string, organis
    * `lastFailureAt` / `lastFailureReason`) for observability, including right after an upload.
    */
   const storageOverviewItem = (config: (typeof configs)[number] | undefined): IntegrationOverviewItem => {
-    const productionReady = s3Adapter.isConfigured();
+    // Both buckets, not just one — a deployment with only the public bucket configured is not
+    // "production ready" for storage as a whole; Ghana Card uploads would still fail closed.
+    const productionReady = s3Adapter.isPrivateConfigured() && s3Adapter.isPublicConfigured();
     const status: IntegrationOverviewItem["status"] = productionReady
       ? (config?.status ?? "CONNECTED")
       : config?.lastFailureAt

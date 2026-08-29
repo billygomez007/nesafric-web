@@ -27,19 +27,28 @@ export type StoredObjectPayload = {
 export interface ObjectStorageAdapter {
   /** Stable identifier for this adapter, surfaced (never with secrets) in integration health. */
   readonly providerKey: string;
-  /** Whether this adapter has everything it needs (credentials/bucket/etc.) to operate for real. */
+  /** Whether this adapter can serve *either* classification right now — used only to decide
+   * whether to route to this adapter at all (vs. local/in-memory). Per-classification readiness
+   * (the thing that actually matters for a real upload) is `isPrivateConfigured`/`isPublicConfigured`. */
   isConfigured(): boolean;
+  /** Whether the PRIVATE-classification bucket/credentials are actually usable. */
+  isPrivateConfigured(): boolean;
+  /** Whether the PUBLIC-classification bucket/credentials are actually usable. */
+  isPublicConfigured(): boolean;
   putObject(input: PutObjectInput): Promise<{ key: string }>;
-  getObject(key: string): Promise<StoredObjectPayload | null>;
-  deleteObject(key: string): Promise<void>;
+  /** `classification` tells a dual-bucket adapter which physical bucket to read from — it is not
+   * re-derived from the key, since bucket identity is never encoded in the key itself. */
+  getObject(key: string, classification: StorageClassificationValue): Promise<StoredObjectPayload | null>;
+  deleteObject(key: string, classification: StorageClassificationValue): Promise<void>;
   /**
    * A durable, directly fetchable URL for a PUBLIC object, or `null` when this adapter has no
    * way to produce one (callers fall back to the internal public-media streaming route, which
-   * always works regardless of adapter).
+   * always works regardless of adapter). Always resolves against the PUBLIC bucket — there is no
+   * such thing as a "public URL" for a PRIVATE object, so no classification parameter is needed.
    */
   getPublicUrl(key: string): string | null;
   /** A time-limited signed URL usable to fetch the object without further authentication. */
-  getSignedUrl(key: string, options?: SignedUrlOptions): Promise<string>;
+  getSignedUrl(key: string, classification: StorageClassificationValue, options?: SignedUrlOptions): Promise<string>;
 }
 
 export class StorageObjectNotFoundError extends Error {

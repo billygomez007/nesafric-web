@@ -17,7 +17,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ key
   }
   let object;
   try {
-    object = await getObjectStorageAdapter().getObject(key);
+    object = await getObjectStorageAdapter().getObject(key, "PUBLIC");
   } catch {
     return new NextResponse("Storage temporarily unavailable", { status: 503 });
   }

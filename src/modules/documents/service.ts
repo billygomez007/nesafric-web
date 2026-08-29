@@ -179,7 +179,7 @@ async function performUpload(params: {
       return { storageObject, attached, dimensionWarning: creativeDimensionWarning };
     });
   } catch (error) {
-    await adapter.deleteObject(storageKey).catch(() => undefined);
+    await adapter.deleteObject(storageKey, classification).catch(() => undefined);
     throw error;
   }
 }
@@ -239,7 +239,7 @@ export async function getSignedStorageAccess(userId: string, organisationId: str
     return { url: adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey), expiresAt: null };
   }
   const expiresInSeconds = 300;
-  const url = await adapter.getSignedUrl(storageObject.storageKey, { expiresInSeconds, fileName: storageObject.originalFileName });
+  const url = await adapter.getSignedUrl(storageObject.storageKey, storageObject.classification, { expiresInSeconds, fileName: storageObject.originalFileName });
   return { url, expiresAt: new Date(Date.now() + expiresInSeconds * 1000) };
 }
 

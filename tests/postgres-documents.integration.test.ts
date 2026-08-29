@@ -156,7 +156,7 @@ describe("PostgreSQL Phase 19 immutable generated documents (receipts/statements
     expect(agreement.generatedDocument.storageObject.contentType).toBe("application/pdf");
     expect(agreement.generatedDocument.storageObject.sizeBytes).toBeGreaterThan(0);
     // The bytes are a genuine, loadable PDF (rendering never silently dropped/mangled the Unicode text).
-    const stored = await getObjectStorageAdapter().getObject(agreement.generatedDocument.storageObject.storageKey);
+    const stored = await getObjectStorageAdapter().getObject(agreement.generatedDocument.storageObject.storageKey, "PRIVATE");
     expect(stored?.body.subarray(0, 5).toString("latin1")).toBe("%PDF-");
   });
 

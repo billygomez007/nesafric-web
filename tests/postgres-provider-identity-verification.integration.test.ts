@@ -72,6 +72,16 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
     // never mixed with a public media namespace regardless of storage backend.
     expect(frontUpload.storageObject.storageKey.startsWith("private/provider-evidence/")).toBe(true);
     expect(frontUpload.storageObject.classification).toBe("PRIVATE");
+
+    // A caller hitting the evidence endpoint directly (bypassing the onboarding UI) could send an
+    // arbitrary `classification` field — it must never be honoured for PROVIDER_EVIDENCE. The
+    // server, not the request, decides which bucket a Ghana Card ends up in.
+    const spoofedUpload = await uploadProviderEvidenceDocument(artisanUser.id, provider.id, {
+      evidenceType: "BUSINESS_REGISTRATION", fileName: "spoofed.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES),
+      classification: "PUBLIC",
+    });
+    expect(spoofedUpload.storageObject.classification).toBe("PRIVATE");
+    expect(spoofedUpload.storageObject.storageKey.startsWith("private/provider-evidence/")).toBe(true);
     await submitProviderVerification(artisanUser.id, provider.id, {
       evidence: [
         { type: "GHANA_CARD_FRONT", reference: frontUpload.attached.reference },
