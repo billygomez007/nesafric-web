@@ -1,4 +1,5 @@
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { ObjectStorageAdapter, PutObjectInput, SignedUrlOptions, StoredObjectPayload } from "./types";
 import { buildLocalSignedUrl } from "./signed-links";
@@ -8,11 +9,19 @@ import { buildLocalSignedUrl } from "./signed-links";
  * credentials are configured. Durable across requests within the same machine/container (unlike
  * the in-memory adapter), but never used in production — `isConfigured()` always returns `true`
  * because it has no external credentials to be missing, it is simply not production-ready.
+ *
+ * Root defaults to the OS temp directory rather than a `process.cwd()`-relative path: on Vercel's
+ * serverless runtime the deployed bundle (`process.cwd()`, e.g. `/var/task`) is a read-only
+ * filesystem — writing there throws `ENOENT` on the very first upload attempt (confirmed against
+ * a real Preview deployment, not a hypothetical). `os.tmpdir()` resolves to `/tmp`, the one
+ * writable directory in that environment; it's ephemeral per-instance, which only sharpens the
+ * existing "not durable across deployments" caveat this adapter already documents — a real
+ * S3-compatible provider is still required for actually durable storage.
  */
 export class LocalFilesystemStorageAdapter implements ObjectStorageAdapter {
   readonly providerKey = "local-filesystem";
 
-  constructor(private readonly rootDir: string = path.join(process.cwd(), "var", "object-storage")) {}
+  constructor(private readonly rootDir: string = path.join(os.tmpdir(), "umoafric-object-storage")) {}
 
   isConfigured() {
     return true;
