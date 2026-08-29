@@ -103,6 +103,20 @@ export async function updatePlatformCampaign(principal: PlatformPrincipal, campa
   return updated;
 }
 
+/** Clears one creative slot (Phase 25 "Remove image") without deleting the campaign or touching
+ * anything else about it — a campaign with its creative removed simply falls back to a plain
+ * navy/gradient slide with no background image, exactly like one that never had creative uploaded. */
+export async function removeCampaignCreative(principal: PlatformPrincipal, campaignId: string, slot: "desktop" | "mobile") {
+  requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!campaign) throw notFound();
+  if (!campaign.isPlatformOwned) throw new AppError("FORBIDDEN", 403, "Only platform-owned campaigns may be edited here.");
+  const field = slot === "mobile" ? "mobileMediaUrl" : "desktopMediaUrl";
+  const updated = await db.campaign.update({ where: { id: campaignId }, data: { [field]: null } });
+  await recordPlatformAudit(principal, "platform_admin.campaign_edited", "campaign", campaignId, undefined, { fields: [field], removed: true });
+  return updated;
+}
+
 /** Duplicates a campaign as a new DRAFT (Phase 24 "Duplicate") — copies content/placement/targeting
  * but never status, schedule, or analytics counters, so a duplicate always starts from a clean,
  * explicitly-reviewed state rather than silently going live or inheriting another campaign's stats. */
@@ -132,6 +146,42 @@ export async function duplicateCampaign(principal: PlatformPrincipal, campaignId
   });
   await recordPlatformAudit(principal, "platform_admin.campaign_duplicated", "campaign", copy.id, undefined, { sourceCampaignId: source.id });
   return copy;
+}
+
+/** Moves a DRAFT platform-owned campaign live (Phase 25 "Publish") — the only path a duplicated
+ * or newly-created-without-going-live DRAFT can ever reach `APPROVED`/`SCHEDULED`, since
+ * `setCampaignStatus`'s transition map has no DRAFT-to-live entry (by design: going live is a
+ * distinct, more deliberate action than the pause/resume/end/archive lifecycle it covers). Mirrors
+ * `createPlatformCampaign`'s own status decision exactly, so a published draft behaves identically
+ * to one that had gone live at creation time. */
+export async function publishCampaign(principal: PlatformPrincipal, campaignId: string) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!campaign) throw notFound();
+  if (campaign.status !== "DRAFT") throw new AppError("INVALID_CAMPAIGN_STATE", 409, "Only a draft campaign may be published.");
+  const status = campaign.startAt || campaign.endAt ? "SCHEDULED" : "APPROVED";
+  const published = await db.campaign.update({
+    where: { id: campaignId },
+    data: { status, reviewedByUserId: principal.userId, reviewedAt: new Date() },
+  });
+  await recordPlatformAudit(principal, "platform_admin.campaign_published", "campaign", campaignId, undefined, { status });
+  return published;
+}
+
+/** Permanently deletes a campaign (Phase 25 "Delete") — deliberately restricted to `DRAFT`, which
+ * by construction can never have accumulated impressions/clicks (a DRAFT is never publicly
+ * eligible — see `LIVE_STATUSES`), so a hard delete here can never destroy real analytics or audit
+ * history. A campaign that has ever gone live must be archived instead (`setCampaignStatus`),
+ * which preserves its counters and history rather than removing the row. */
+export async function deleteCampaign(principal: PlatformPrincipal, campaignId: string) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!campaign) throw notFound();
+  if (campaign.status !== "DRAFT") {
+    throw new AppError("INVALID_CAMPAIGN_STATE", 409, "Only a draft campaign may be permanently deleted — a campaign that has gone live must be archived instead, to preserve its analytics and history.");
+  }
+  await db.campaign.delete({ where: { id: campaignId } });
+  await recordPlatformAudit(principal, "platform_admin.campaign_deleted", "campaign", campaignId, undefined, { name: campaign.name, placement: campaign.placement });
 }
 
 export async function listCampaignsForPlatform(principal: PlatformPrincipal, query: unknown = {}) {
@@ -200,15 +250,28 @@ export async function setCampaignStatus(principal: PlatformPrincipal, campaignId
   const data = setCampaignStatusSchema.parse(input);
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) throw notFound();
+  // `APPROVED` is included as a source for PAUSED/COMPLETED, not just ACTIVE: an APPROVED
+  // campaign with no start/end date is already publicly live the moment it's created or
+  // published (see `LIVE_STATUSES`) — from an admin's perspective it is indistinguishable from
+  // ACTIVE, so pausing or ending it must work directly without an invisible prerequisite
+  // "activate" step first.
   const allowed: Record<string, string[]> = {
-    PAUSED: ["SCHEDULED", "ACTIVE"],
+    PAUSED: ["SCHEDULED", "ACTIVE", "APPROVED"],
     ACTIVE: ["PAUSED", "SCHEDULED", "APPROVED"],
-    COMPLETED: ["ACTIVE", "PAUSED", "SCHEDULED"],
+    COMPLETED: ["ACTIVE", "PAUSED", "SCHEDULED", "APPROVED"],
     ARCHIVED: ["COMPLETED", "REJECTED", "PAUSED", "DRAFT"],
   };
   if (!allowed[data.status]?.includes(campaign.status)) throw new AppError("INVALID_CAMPAIGN_TRANSITION", 409, `A campaign cannot move from ${campaign.status} to ${data.status}.`);
   const updated = await db.campaign.update({ where: { id: campaignId }, data: { status: data.status, archivedAt: data.status === "ARCHIVED" ? new Date() : campaign.archivedAt } });
-  await recordPlatformAudit(principal, "platform_admin.campaign_status_changed", "campaign", campaignId, undefined, { from: campaign.status, to: data.status });
+  // A distinct action name per resulting lifecycle event (rather than one generic
+  // "status_changed") so the audit log reads as a real history — "resumed" and "activated" both
+  // land on ACTIVE but mean different things to an admin reviewing the log later.
+  const action =
+    data.status === "PAUSED" ? "platform_admin.campaign_paused"
+    : data.status === "ACTIVE" ? (campaign.status === "PAUSED" ? "platform_admin.campaign_resumed" : "platform_admin.campaign_activated")
+    : data.status === "COMPLETED" ? "platform_admin.campaign_ended"
+    : "platform_admin.campaign_archived";
+  await recordPlatformAudit(principal, action, "campaign", campaignId, undefined, { from: campaign.status, to: data.status });
   return updated;
 }
 

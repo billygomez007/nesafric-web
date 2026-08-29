@@ -12,9 +12,13 @@ import {
   updatePlatformCampaign,
   duplicateCampaign,
   listCampaignsForPlatform,
+  getCampaignForPlatform,
   reviewCampaign,
   scheduleCampaign,
   setCampaignStatus,
+  publishCampaign,
+  deleteCampaign,
+  removeCampaignCreative,
   getPublicBanner,
   getPublicBanners,
   recordCampaignImpression,
@@ -293,5 +297,72 @@ describe("PostgreSQL Phase 21B campaigns & promotions", () => {
     await expect(uploadCampaignCreative(outsider.id, campaign.id, {
       fileName: "hero.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "desktop",
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("Phase 25: publishes a draft to live/scheduled, and records a distinct audit action per lifecycle event", async () => {
+    const principal = await platformAdmin();
+    const draft = await duplicateCampaign(principal, (await createPlatformCampaign(principal, { name: "Publish source", placement: "MARKETPLACE_INLINE", ...requestFields })).id);
+    expect(draft.status).toBe("DRAFT");
+
+    const published = await publishCampaign(principal, draft.id);
+    expect(published.status).toBe("APPROVED");
+    const publishedEvent = await db.platformAuditEvent.findFirst({ where: { entityId: draft.id, action: "platform_admin.campaign_published" } });
+    expect(publishedEvent).not.toBeNull();
+
+    await expect(publishCampaign(principal, draft.id)).rejects.toMatchObject({ code: "INVALID_CAMPAIGN_STATE" });
+
+    await setCampaignStatus(principal, draft.id, { status: "ACTIVE" });
+    expect(await db.platformAuditEvent.findFirst({ where: { entityId: draft.id, action: "platform_admin.campaign_activated" } })).not.toBeNull();
+
+    await setCampaignStatus(principal, draft.id, { status: "PAUSED" });
+    expect(await db.platformAuditEvent.findFirst({ where: { entityId: draft.id, action: "platform_admin.campaign_paused" } })).not.toBeNull();
+
+    await setCampaignStatus(principal, draft.id, { status: "ACTIVE" });
+    expect(await db.platformAuditEvent.findFirst({ where: { entityId: draft.id, action: "platform_admin.campaign_resumed" } })).not.toBeNull();
+
+    await setCampaignStatus(principal, draft.id, { status: "COMPLETED" });
+    expect(await db.platformAuditEvent.findFirst({ where: { entityId: draft.id, action: "platform_admin.campaign_ended" } })).not.toBeNull();
+
+    await setCampaignStatus(principal, draft.id, { status: "ARCHIVED" });
+    expect(await db.platformAuditEvent.findFirst({ where: { entityId: draft.id, action: "platform_admin.campaign_archived" } })).not.toBeNull();
+  });
+
+  it("Phase 25: permanently deletes a draft with zero analytics, but refuses to delete a campaign that has ever gone live", async () => {
+    const principal = await platformAdmin();
+    const draft = await createPlatformCampaign(principal, { name: "Delete me", placement: "MARKETPLACE_INLINE", ...requestFields, startAt: new Date(Date.now() + 86_400_000).toISOString(), endAt: new Date(Date.now() + 172_800_000).toISOString() });
+    expect(draft.status).toBe("SCHEDULED");
+    // A SCHEDULED campaign (already reviewed/published) is not a DRAFT — deletion must be refused.
+    await expect(deleteCampaign(principal, draft.id)).rejects.toMatchObject({ code: "INVALID_CAMPAIGN_STATE" });
+
+    const trueDraft = await duplicateCampaign(principal, draft.id);
+    expect(trueDraft.status).toBe("DRAFT");
+    await deleteCampaign(principal, trueDraft.id);
+    expect(await db.campaign.findUnique({ where: { id: trueDraft.id } })).toBeNull();
+    const deletedEvent = await db.platformAuditEvent.findFirst({ where: { entityId: trueDraft.id, action: "platform_admin.campaign_deleted" } });
+    expect(deletedEvent).not.toBeNull();
+
+    // A campaign that has gone live and ended must be archived, never hard-deleted.
+    const wentLive = await publishCampaign(principal, await duplicateCampaign(principal, draft.id).then((c) => c.id));
+    await setCampaignStatus(principal, wentLive.id, { status: "ACTIVE" });
+    await recordCampaignImpression(wentLive.id);
+    await setCampaignStatus(principal, wentLive.id, { status: "COMPLETED" });
+    await expect(deleteCampaign(principal, wentLive.id)).rejects.toMatchObject({ code: "INVALID_CAMPAIGN_STATE" });
+    const stillThere = await db.campaign.findUniqueOrThrow({ where: { id: wentLive.id } });
+    expect(stillThere.impressionCount).toBe(1);
+  });
+
+  it("Phase 25: removes one creative slot without affecting the other or the rest of the campaign", async () => {
+    const principal = await platformAdmin();
+    const campaign = await createPlatformCampaign(principal, { name: "Creative removal", placement: "MARKETPLACE_INLINE", ...requestFields });
+    await uploadCampaignCreative(principal.userId, campaign.id, { fileName: "desktop.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "desktop" });
+    await uploadCampaignCreative(principal.userId, campaign.id, { fileName: "mobile.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "mobile" });
+    const beforeRemoval = await getCampaignForPlatform(principal, campaign.id);
+    expect(beforeRemoval.desktopMediaUrl).toBeTruthy();
+    expect(beforeRemoval.mobileMediaUrl).toBeTruthy();
+
+    const afterRemoval = await removeCampaignCreative(principal, campaign.id, "mobile");
+    expect(afterRemoval.mobileMediaUrl).toBeNull();
+    expect(afterRemoval.desktopMediaUrl).toBeTruthy();
+    expect(afterRemoval.headline).toBe(campaign.headline);
   });
 });
