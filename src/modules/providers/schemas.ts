@@ -40,6 +40,62 @@ export const updateServiceCategorySchema = z.object({
   active: z.boolean().optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
+const categoryGroup = z.enum(["REPAIRS_MAINTENANCE", "BUILDING_CONSTRUCTION", "PROPERTY_CARE", "SECURITY_SYSTEMS", "DESIGN_PROPERTY_SERVICES", "OTHER"]);
+
+/** Platform-admin category management (Phase 25) — a separate, richer schema from the org-scoped
+ * `createServiceCategorySchema` above, since categories are a global resource an org-scoped
+ * `provider.verify` permission was never really the right authority for; kept independent rather
+ * than widening the org-scoped schema so that existing API contract is untouched. */
+export const createServiceCategoryForPlatformSchema = z.object({
+  key: z.string().trim().min(2).max(100).regex(/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/, "Use lowercase letters, numbers, hyphens or underscores only."),
+  name: text(200),
+  description: z.string().trim().max(2000).optional(),
+  group: categoryGroup.optional(),
+  sortOrder: z.number().int().min(0).max(10_000).optional(),
+  active: z.boolean().optional(),
+  publiclyVisible: z.boolean().optional(),
+  onboardingSelectable: z.boolean().optional(),
+});
+
+export const updateServiceCategoryForPlatformSchema = z.object({
+  name: text(200).optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  group: categoryGroup.optional(),
+  sortOrder: z.number().int().min(0).max(10_000).optional(),
+  active: z.boolean().optional(),
+  publiclyVisible: z.boolean().optional(),
+  onboardingSelectable: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
+
+const documentRequirementLevel = z.enum(["REQUIRED", "OPTIONAL", "CONDITIONAL"]);
+
+export const createDocumentRequirementSchema = z.object({
+  countryCode: z.string().trim().length(2).transform((value) => value.toUpperCase()).optional(),
+  categoryId: id.optional(),
+  providerType: z.enum(["INDIVIDUAL", "COMPANY"]).optional(),
+  evidenceType: z.enum([
+    "IDENTITY", "GHANA_CARD_FRONT", "GHANA_CARD_BACK", "BUSINESS_REGISTRATION", "PROFESSIONAL_LICENSE",
+    "TRADE_CERTIFICATE", "SAFETY_CERTIFICATION", "INSURANCE", "ADDRESS", "PORTFOLIO_EVIDENCE",
+    "REFERENCE_EVIDENCE", "TRAINING_CERTIFICATE", "OTHER",
+  ]),
+  requirementLevel: documentRequirementLevel,
+  conditionNote: z.string().trim().max(500).optional(),
+  label: text(200),
+  description: z.string().trim().max(2000).optional(),
+}).superRefine((value, context) => {
+  if (value.requirementLevel === "CONDITIONAL" && !value.conditionNote) {
+    context.addIssue({ code: "custom", path: ["conditionNote"], message: "A condition note is required for a CONDITIONAL requirement." });
+  }
+});
+
+export const updateDocumentRequirementSchema = z.object({
+  requirementLevel: documentRequirementLevel.optional(),
+  conditionNote: z.string().trim().max(500).nullable().optional(),
+  label: text(200).optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  active: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
+
 export const createProviderSchema = z.object({
   type: z.enum(["INDIVIDUAL", "COMPANY"]),
   companyOrganisationId: id.optional(),
@@ -125,6 +181,18 @@ export const reviewProviderEvidenceSchema = z.object({
   if (value.status === "REJECTED" && !value.reason) {
     context.addIssue({ code: "custom", path: ["reason"], message: "A reason is required." });
   }
+});
+
+/** Platform-wide suspension (distinct from a landlord's own directory-scoped
+ * `ProviderVerificationStatus = SUSPENDED` decision) — a reason is always required since this
+ * removes an otherwise-eligible provider from every landlord's dispatch pool and the public
+ * marketplace at once. */
+export const suspendProviderSchema = z.object({
+  reason: text(2000),
+});
+
+export const reinstateProviderSchema = z.object({
+  note: text(2000).optional(),
 });
 
 export const submitProviderVerificationConsentSchema = z.object({

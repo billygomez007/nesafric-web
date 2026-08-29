@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { listServiceCategories } from "@/modules/providers/service";
+import { listPubliclyVisibleServiceCategories } from "@/modules/providers/service";
 import { errorResponse } from "@/platform/errors";
 
 export async function GET() {
   try {
-    return NextResponse.json(await listServiceCategories());
+    return NextResponse.json(await listPubliclyVisibleServiceCategories());
   } catch (error) {
     return errorResponse(error);
   }

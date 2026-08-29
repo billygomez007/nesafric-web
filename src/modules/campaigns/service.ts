@@ -293,8 +293,10 @@ function eligibleCampaignWhere(placement: $Enums.CampaignPlacement, countryCode:
       // A campaign promoting a specific Property Service Professional can never make an
       // unverified provider publicly visible — this is a hard query-level gate, not an
       // admin-diligence convention, matching how `safeHttpUrl` is enforced at the schema
-      // boundary rather than relying on review discipline alone.
-      { OR: [{ advertiserServiceProviderId: null }, { advertiserProvider: { is: { verificationStatus: "VERIFIED" as const } } }] },
+      // boundary rather than relying on review discipline alone. Suspension is checked
+      // independently of verification status (a platform-wide suspension can apply to an
+      // otherwise-VERIFIED provider).
+      { OR: [{ advertiserServiceProviderId: null }, { advertiserProvider: { is: { verificationStatus: "VERIFIED" as const, suspendedAt: null } } }] },
     ],
   };
 }

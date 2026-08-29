@@ -3,6 +3,8 @@ import { AppError, notFound } from "@/platform/errors";
 import { requirePermission, PERMISSIONS } from "@/platform/authorization/permissions";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
+import { maintenanceCategorySchema } from "@/modules/maintenance/schemas";
+import { normalizeMaintenanceCategoryToServiceCategoryKey } from "./category-mapping";
 import { proposeDispatchSchema, recordProviderResponseSchema } from "./schemas";
 
 /**
@@ -25,6 +27,16 @@ import { proposeDispatchSchema, recordProviderResponseSchema } from "./schemas";
 
 type Tier = "PRIVATE" | "PREFERRED" | "STANDARD" | "BACKUP" | "MARKETPLACE_FALLBACK";
 
+/** `MaintenanceRequest.category` is a plain string column even though intake validates it against
+ * `maintenanceCategorySchema` — normalize it to the actual `ServiceCategory.key` these queries
+ * match against (see `category-mapping.ts`); a value that somehow isn't one of the known
+ * maintenance categories is passed through unchanged rather than thrown on, so a category match
+ * can never regress to "no providers found due to an unrecognised input" for legacy/malformed data. */
+function toServiceCategoryKey(category: string): string {
+  const parsed = maintenanceCategorySchema.safeParse(category);
+  return parsed.success ? normalizeMaintenanceCategoryToServiceCategoryKey(parsed.data) : category;
+}
+
 function tierForPriority(priority: number, isBackup: boolean): Tier {
   if (isBackup) return "BACKUP";
   if (priority <= 0) return "PRIVATE";
@@ -36,10 +48,11 @@ function tierForPriority(priority: number, isBackup: boolean): Tier {
  * directly by tests/UI wanting to preview the order without creating an attempt. */
 export async function resolveProviderHierarchy(userId: string, organisationId: string, category: string) {
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceRead);
+  const serviceCategoryKey = toServiceCategoryKey(category);
   const directory = await db.providerOrganisation.findMany({
     where: {
       landlordOrganisationId: organisationId, status: "ACTIVE",
-      provider: { archivedAt: null, verificationStatus: "VERIFIED", acceptingWork: true, categories: { some: { category: { key: category } } } },
+      provider: { archivedAt: null, verificationStatus: "VERIFIED", acceptingWork: true, suspendedAt: null, categories: { some: { category: { key: serviceCategoryKey } } } },
     },
     include: { provider: { select: { id: true, displayName: true, availabilityStatus: true } } },
     orderBy: [{ isBackup: "asc" }, { priority: "asc" }],
@@ -52,11 +65,12 @@ export async function resolveProviderHierarchy(userId: string, organisationId: s
 }
 
 async function nextUntriedCandidate(organisationId: string, workOrderId: string, category: string) {
+  const serviceCategoryKey = toServiceCategoryKey(category);
   const [hierarchy, attempted] = await Promise.all([
     db.providerOrganisation.findMany({
       where: {
         landlordOrganisationId: organisationId, status: "ACTIVE",
-        provider: { archivedAt: null, verificationStatus: "VERIFIED", acceptingWork: true, categories: { some: { category: { key: category } } } },
+        provider: { archivedAt: null, verificationStatus: "VERIFIED", acceptingWork: true, suspendedAt: null, categories: { some: { category: { key: serviceCategoryKey } } } },
       },
       include: { provider: { select: { id: true, displayName: true } } },
       orderBy: [{ isBackup: "asc" }, { priority: "asc" }],
@@ -72,10 +86,11 @@ async function nextUntriedCandidate(organisationId: string, workOrderId: string,
  * directory. Deliberately excludes any organisation-private data — only the provider's public
  * identity, category, and service area are ever considered. */
 async function marketplaceFallbackCandidate(organisationId: string, category: string) {
+  const serviceCategoryKey = toServiceCategoryKey(category);
   return db.serviceProvider.findFirst({
     where: {
-      archivedAt: null, verificationStatus: "VERIFIED", acceptingWork: true,
-      categories: { some: { category: { key: category } } },
+      archivedAt: null, verificationStatus: "VERIFIED", acceptingWork: true, suspendedAt: null,
+      categories: { some: { category: { key: serviceCategoryKey } } },
       directories: { none: { landlordOrganisationId: organisationId } },
     },
     select: { id: true, displayName: true },

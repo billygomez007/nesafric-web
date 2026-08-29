@@ -42,8 +42,12 @@ export const updateMarketplaceProfileSchema = z.object({
 }).strict().refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
 export const publicMarketplaceDiscoverySchema = z.object({
-  category: z.string().trim().min(2).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
+  // Underscore is a real, existing part of several seeded category keys (e.g. "pest_control",
+  // "facility_maintenance") — hyphen-only previously rejected a working "?category=" filter for
+  // any of them.
+  category: z.string().trim().min(2).max(100).regex(/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/).optional(),
   categoryId: id.optional(),
+  providerType: z.enum(["INDIVIDUAL", "COMPANY"]).optional(),
   country: country.optional(),
   region: optionalLocation,
   state: optionalLocation,

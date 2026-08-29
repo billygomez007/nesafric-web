@@ -581,6 +581,26 @@ enum ProviderDirectoryStatus {
   ARCHIVED
 }
 
+/// Groups `ServiceCategory` rows for admin/onboarding navigation only — purely a display
+/// grouping, never used in eligibility/matching logic (that's still the category `key`).
+enum ServiceCategoryGroup {
+  REPAIRS_MAINTENANCE
+  BUILDING_CONSTRUCTION
+  PROPERTY_CARE
+  SECURITY_SYSTEMS
+  DESIGN_PROPERTY_SERVICES
+  OTHER
+}
+
+/// Richer replacement for `ProviderDocumentRequirement.required`'s plain boolean — CONDITIONAL
+/// lets the admin describe a requirement that only applies in some circumstance (e.g. "required
+/// only if performing gas-related work") via `conditionNote`, without a schema change per rule.
+enum DocumentRequirementLevel {
+  REQUIRED
+  OPTIONAL
+  CONDITIONAL
+}
+
 enum ProviderEvidenceType {
   IDENTITY
   GHANA_CARD_FRONT
@@ -739,6 +759,7 @@ model User {
   workOrderHistory                   WorkOrderHistory[]                         @relation("WorkOrderHistoryActor")
   individualProvider                 ServiceProvider?                           @relation("IndividualProviderUser")
   administeredProviders              ServiceProvider[]                          @relation("ProviderAdministrator")
+  suspendedProviders                 ServiceProvider[]                          @relation("ProviderSuspendedBy")
   providerEvidence                   ProviderEvidence[]                         @relation("ProviderEvidenceSubmitter")
   providerEvidenceReviewed           ProviderEvidence[]                         @relation("ProviderEvidenceReviewer")
   providerVerificationConsents       ProviderVerificationConsent[]              @relation("ProviderVerificationConsentAcceptor")
@@ -2349,12 +2370,21 @@ model ServiceProvider {
   /// Set once a category-relevant credential (trade certificate, professional licence, etc.) has
   /// been approved. Optional — many categories have no credential requirement.
   skillVerifiedAt       DateTime?
+  /// Platform-wide suspension — distinct from a single landlord's own `ProviderVerificationStatus
+  /// = SUSPENDED` decision (which only reflects that one landlord's trust in the provider). When
+  /// set, the provider is ineligible everywhere: public marketplace discovery, AI dispatch
+  /// candidate selection, and campaign public-eligibility all additionally require this to be
+  /// null. Existing historical work/ratings/audit records are never touched by suspension.
+  suspendedAt           DateTime?
+  suspensionReason      String?
+  suspendedByUserId     String?                       @db.Uuid
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
   archivedAt            DateTime?
   individualUser        User?                         @relation("IndividualProviderUser", fields: [individualUserId], references: [id], onDelete: Restrict)
   companyOrganisation   Organisation?                 @relation("CompanyProviderOrganisation", fields: [companyOrganisationId], references: [id], onDelete: Restrict)
   administrator         User                          @relation("ProviderAdministrator", fields: [administratorUserId], references: [id], onDelete: Restrict)
+  suspendedBy           User?                         @relation("ProviderSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
   categories            ServiceProviderCategory[]
   serviceAreas          ProviderServiceArea[]
   evidence              ProviderEvidence[]
@@ -2380,7 +2410,17 @@ model ServiceCategory {
   key                  String                        @unique
   name                 String
   description          String?
+  /// Display-only grouping for admin/onboarding navigation — never used in eligibility/matching.
+  group                ServiceCategoryGroup          @default(OTHER)
+  /// Admin-controlled ordering within its group; lower sorts first.
+  sortOrder            Int                           @default(0)
   active               Boolean                       @default(true)
+  /// Whether this category may appear in public marketplace filters/listings. Distinct from
+  /// `active` — a category can be active (usable internally, e.g. dispatch matching) without yet
+  /// being ready for public discovery.
+  publiclyVisible      Boolean                       @default(true)
+  /// Whether a provider can select this category during onboarding/profile editing.
+  onboardingSelectable Boolean                       @default(true)
   createdAt            DateTime                      @default(now())
   updatedAt            DateTime                      @updatedAt
   providers            ServiceProviderCategory[]
@@ -2389,6 +2429,7 @@ model ServiceCategory {
   documentRequirements ProviderDocumentRequirement[]
 
   @@index([active, name])
+  @@index([group, sortOrder])
 }
 
 model ServiceProviderCategory {
@@ -2474,7 +2515,16 @@ model ProviderDocumentRequirement {
   /// Null = applies to both INDIVIDUAL and COMPANY providers.
   providerType ServiceProviderType?
   evidenceType ProviderEvidenceType
+  /// Legacy simple flag — kept so every existing reader (`getProviderDocumentRequirements`, the
+  /// onboarding wizard) continues to work unchanged and CONDITIONAL never blocks submission on
+  /// its own. New writes keep this in sync with `requirementLevel` (`REQUIRED` -> true,
+  /// `CONDITIONAL`/`OPTIONAL` -> false); new code should prefer `requirementLevel` for the richer
+  /// three-state distinction.
   required     Boolean                    @default(true)
+  requirementLevel DocumentRequirementLevel @default(REQUIRED)
+  /// Explains a CONDITIONAL requirement's circumstance, e.g. "required only if performing
+  /// gas-related work". Ignored for REQUIRED/OPTIONAL.
+  conditionNote String?
   label        String
   description  String?
   active       Boolean                    @default(true)

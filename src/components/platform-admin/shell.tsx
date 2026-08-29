@@ -25,6 +25,7 @@ const NAV = [
 export function PlatformAdminShell({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<"loading" | "signed-out" | "denied" | "error" | "allowed">("loading");
   const [role, setRole] = useState<string | undefined>(undefined);
+  const [pendingProviders, setPendingProviders] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/platform-admin/whoami")
@@ -34,6 +35,12 @@ export function PlatformAdminShell({ children }: { children: ReactNode }) {
         const body = (await response.json()) as WhoAmI;
         setStatus(body.isPlatformPrincipal ? "allowed" : "denied");
         setRole(body.role);
+        if (body.isPlatformPrincipal) {
+          fetch("/api/platform-admin/service-providers/pending-count")
+            .then((r) => (r.ok ? r.json() : null))
+            .then((body2) => { if (body2) setPendingProviders(body2.count); })
+            .catch(() => undefined);
+        }
       })
       .catch(() => setStatus("error"));
   }, []);
@@ -61,7 +68,14 @@ export function PlatformAdminShell({ children }: { children: ReactNode }) {
       {role && <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">{role.replaceAll("_", " ")}</span>}
     </header>
     <nav className="mt-6 flex flex-wrap gap-2">
-      {NAV.map((item) => <Link className="rounded border px-3 py-1.5 text-sm font-semibold" href={item.href} key={item.href}>{item.label}</Link>)}
+      {NAV.map((item) => (
+        <Link className="flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm font-semibold" href={item.href} key={item.href}>
+          {item.label}
+          {item.href === "/platform-admin/service-providers" && !!pendingProviders && (
+            <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-bold text-white">{pendingProviders}</span>
+          )}
+        </Link>
+      ))}
     </nav>
     <div className="mt-8">{children}</div>
   </main>;

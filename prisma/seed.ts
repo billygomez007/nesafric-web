@@ -366,56 +366,88 @@ async function main() {
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
     await prisma.rolePermission.createMany({ data: allPermissions.filter(({ key }) => definition.keys.includes(key)).map(({ id }) => ({ roleId: role.id, permissionId: id })) });
   }
+  // Phase 25: Ghana-launch property-services taxonomy, grouped for admin/onboarding navigation.
+  // `group`/`sortOrder` are display-only — matching/eligibility logic never reads them, only `key`.
   const categories = [
-    ["plumbing", "Plumbing"],
-    ["electrical", "Electrical"],
-    ["roofing", "Roofing"],
-    ["hvac", "Heating, ventilation and air conditioning"],
-    ["appliance", "Appliance repair"],
-    ["carpentry", "Carpentry"],
-    ["painting", "Painting"],
-    ["structural", "Structural work"],
-    ["security", "Security systems"],
-    ["sanitation", "Sanitation"],
-    ["tiling", "Tiling"],
-    ["welding", "Welding"],
-    ["cleaning", "Cleaning"],
-    ["landscaping", "Landscaping"],
-    ["pest_control", "Pest control"],
-    ["locksmith", "Locksmith"],
-    ["moving", "Moving services"],
-    ["photography", "Property photography"],
-    ["facility_maintenance", "Facility maintenance"],
+    ["plumbing", "Plumbing", "REPAIRS_MAINTENANCE", 10],
+    ["electrical", "Electrical", "REPAIRS_MAINTENANCE", 20],
+    ["hvac", "Air conditioning / HVAC", "REPAIRS_MAINTENANCE", 30],
+    ["appliance", "Appliance repair", "REPAIRS_MAINTENANCE", 40],
+    ["locksmith", "Locksmith", "REPAIRS_MAINTENANCE", 50],
+    ["handyman", "General handyman", "REPAIRS_MAINTENANCE", 60],
+    ["facility_maintenance", "Facility maintenance", "REPAIRS_MAINTENANCE", 70],
+    ["masonry", "Masonry", "BUILDING_CONSTRUCTION", 10],
+    ["carpentry", "Carpentry", "BUILDING_CONSTRUCTION", 20],
+    ["tiling", "Tiling", "BUILDING_CONSTRUCTION", 30],
+    ["roofing", "Roofing", "BUILDING_CONSTRUCTION", 40],
+    ["welding", "Welding / metal work", "BUILDING_CONSTRUCTION", 50],
+    ["glass_aluminium", "Glass / aluminium work", "BUILDING_CONSTRUCTION", 60],
+    ["structural", "Structural work", "BUILDING_CONSTRUCTION", 70],
+    ["general_contractor", "General contractor", "BUILDING_CONSTRUCTION", 80],
+    ["painting", "Painting", "BUILDING_CONSTRUCTION", 90],
+    ["cleaning", "Cleaning", "PROPERTY_CARE", 10],
+    ["deep_cleaning", "Deep cleaning", "PROPERTY_CARE", 20],
+    ["landscaping", "Landscaping / gardening", "PROPERTY_CARE", 30],
+    ["pest_control", "Pest control", "PROPERTY_CARE", 40],
+    ["pool_maintenance", "Pool maintenance", "PROPERTY_CARE", 50],
+    ["sanitation", "Sanitation", "PROPERTY_CARE", 60],
+    ["security", "CCTV / security system installation", "SECURITY_SYSTEMS", 10],
+    ["generator_power_backup", "Generator / power backup services", "SECURITY_SYSTEMS", 20],
+    ["solar", "Solar installation / maintenance", "SECURITY_SYSTEMS", 30],
+    ["water_tank_pump", "Water tank / pump services", "SECURITY_SYSTEMS", 40],
+    ["borehole_water_systems", "Borehole / water system services", "SECURITY_SYSTEMS", 50],
+    ["interior_design", "Interior design", "DESIGN_PROPERTY_SERVICES", 10],
+    ["interior_fitout", "Interior fit-out", "DESIGN_PROPERTY_SERVICES", 20],
+    ["furniture_joinery", "Furniture / joinery", "DESIGN_PROPERTY_SERVICES", 30],
+    ["moving", "Moving / relocation", "DESIGN_PROPERTY_SERVICES", 40],
+    ["photography", "Property photography", "DESIGN_PROPERTY_SERVICES", 50],
+    ["property_inspection", "Property inspection", "DESIGN_PROPERTY_SERVICES", 60],
+    ["other_property_service", "Other property service", "OTHER", 10],
   ] as const;
-  for (const [key, name] of categories) {
-    await prisma.serviceCategory.upsert({ where: { key }, update: { name, active: true }, create: { key, name } });
+  for (const [key, name, group, sortOrder] of categories) {
+    await prisma.serviceCategory.upsert({ where: { key }, update: { name, active: true, group, sortOrder }, create: { key, name, group, sortOrder } });
   }
+  const categoryIdByKey = new Map((await prisma.serviceCategory.findMany({ select: { id: true, key: true } })).map((c) => [c.key, c.id]));
 
   // Phase 23: Ghana-launch mandatory identity/business document requirements for Property Service
   // Professionals. Country/category/provider-type scoped so future countries or trade-specific
   // credential rules never need a code change — only a new row here (or, eventually, a
   // platform-admin-managed equivalent).
   const providerDocumentRequirements = [
-    { countryCode: "GH", providerType: "INDIVIDUAL" as const, evidenceType: "GHANA_CARD_FRONT" as const, label: "Ghana Card (front)", description: "Front of the individual provider's Ghana Card." },
-    { countryCode: "GH", providerType: "INDIVIDUAL" as const, evidenceType: "GHANA_CARD_BACK" as const, label: "Ghana Card (back)", description: "Back of the individual provider's Ghana Card." },
-    { countryCode: "GH", providerType: "COMPANY" as const, evidenceType: "GHANA_CARD_FRONT" as const, label: "Ghana Card (front) of responsible representative", description: "Front of the Ghana Card belonging to the company's owner, director, or authorised representative." },
-    { countryCode: "GH", providerType: "COMPANY" as const, evidenceType: "GHANA_CARD_BACK" as const, label: "Ghana Card (back) of responsible representative", description: "Back of the Ghana Card belonging to the company's owner, director, or authorised representative." },
-    { countryCode: "GH", providerType: "COMPANY" as const, evidenceType: "BUSINESS_REGISTRATION" as const, label: "Business registration certificate", description: "Registrar-General business/company registration evidence." },
+    { countryCode: "GH", categoryKey: null, providerType: "INDIVIDUAL" as const, evidenceType: "GHANA_CARD_FRONT" as const, level: "REQUIRED" as const, label: "Ghana Card (front)", description: "Front of the individual provider's Ghana Card." },
+    { countryCode: "GH", categoryKey: null, providerType: "INDIVIDUAL" as const, evidenceType: "GHANA_CARD_BACK" as const, level: "REQUIRED" as const, label: "Ghana Card (back)", description: "Back of the individual provider's Ghana Card." },
+    { countryCode: "GH", categoryKey: null, providerType: "COMPANY" as const, evidenceType: "GHANA_CARD_FRONT" as const, level: "REQUIRED" as const, label: "Ghana Card (front) of responsible representative", description: "Front of the Ghana Card belonging to the company's owner, director, or authorised representative." },
+    { countryCode: "GH", categoryKey: null, providerType: "COMPANY" as const, evidenceType: "GHANA_CARD_BACK" as const, level: "REQUIRED" as const, label: "Ghana Card (back) of responsible representative", description: "Back of the Ghana Card belonging to the company's owner, director, or authorised representative." },
+    { countryCode: "GH", categoryKey: null, providerType: "COMPANY" as const, evidenceType: "BUSINESS_REGISTRATION" as const, level: "REQUIRED" as const, label: "Business registration certificate", description: "Registrar-General business/company registration evidence." },
+    // Category-specific, conditional credential examples (item: "ELECTRICAL: licence/certificate
+    // may be REQUIRED where applicable"). CONDITIONAL rows are advisory in the onboarding UI —
+    // never block submission by themselves — the admin can promote one to REQUIRED per-market once
+    // a real licensing regime is confirmed.
+    { countryCode: "GH", categoryKey: "electrical", providerType: null, evidenceType: "PROFESSIONAL_LICENSE" as const, level: "CONDITIONAL" as const, label: "Electrical licence/certificate", description: "An electrical trade licence or certification, where applicable.", conditionNote: "Required only where local electrical-work licensing applies." },
+    { countryCode: "GH", categoryKey: "security", providerType: "COMPANY" as const, evidenceType: "PROFESSIONAL_LICENSE" as const, level: "CONDITIONAL" as const, label: "Security services licence", description: "A private security services licence, where applicable.", conditionNote: "Required only where local security-services licensing applies." },
   ];
   for (const requirement of providerDocumentRequirements) {
+    const categoryId = requirement.categoryKey ? (categoryIdByKey.get(requirement.categoryKey) ?? null) : null;
     // A compound unique index with a nullable column (`categoryId`) can't be targeted by Prisma's
     // generated compound-where type when the value is null, so this uses find-then-write instead
     // of `upsert`.
     const existing = await prisma.providerDocumentRequirement.findFirst({
-      where: { countryCode: requirement.countryCode, categoryId: null, providerType: requirement.providerType, evidenceType: requirement.evidenceType },
+      where: { countryCode: requirement.countryCode, categoryId, providerType: requirement.providerType, evidenceType: requirement.evidenceType },
     });
+    // Legacy boolean: only REQUIRED blocks onboarding submission by itself — CONDITIONAL/OPTIONAL
+    // must never block it (see the schema comment on `requirementLevel`), so both map to `false`.
+    const data = {
+      label: requirement.label,
+      description: requirement.description,
+      required: (requirement.level as string) === "REQUIRED",
+      requirementLevel: requirement.level,
+      conditionNote: "conditionNote" in requirement ? requirement.conditionNote : null,
+      active: true,
+    };
     if (existing) {
-      await prisma.providerDocumentRequirement.update({
-        where: { id: existing.id },
-        data: { label: requirement.label, description: requirement.description, required: true, active: true },
-      });
+      await prisma.providerDocumentRequirement.update({ where: { id: existing.id }, data });
     } else {
-      await prisma.providerDocumentRequirement.create({ data: { ...requirement, categoryId: null, required: true } });
+      await prisma.providerDocumentRequirement.create({ data: { countryCode: requirement.countryCode, categoryId, providerType: requirement.providerType, evidenceType: requirement.evidenceType, ...data } });
     }
   }
 

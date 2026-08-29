@@ -215,6 +215,9 @@ export async function updateMarketplaceProfile(userId: string, providerId: strin
         "Identity verification must be approved before this provider can be publicly listed.",
       );
     }
+    if (data.listed && provider.suspendedAt) {
+      throw new AppError("PROVIDER_SUSPENDED", 409, "A suspended provider cannot be publicly listed.");
+    }
     if (data.serviceAreas) {
       const keys = data.serviceAreas.map((area) => [
         area.countryCode,
@@ -378,6 +381,9 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
     // status has moved away from VERIFIED (rejected, suspended, flagged for more information)
     // must disappear from public discovery immediately, not just at the point `listed` was set.
     Prisma.sql`p."verificationStatus" = 'VERIFIED'`,
+    // Platform-wide suspension (`ServiceProvider.suspendedAt`) is independent of
+    // `verificationStatus` — a provider can remain VERIFIED while suspended platform-wide.
+    Prisma.sql`p."suspendedAt" IS NULL`,
   ];
   if (filters.category || filters.categoryId) {
     conditions.push(Prisma.sql`EXISTS (
@@ -400,6 +406,7 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
   }
   if (filters.availability) conditions.push(Prisma.sql`p."availabilityStatus" = ${filters.availability}::"ProviderAvailabilityStatus"`);
   if (filters.verification) conditions.push(Prisma.sql`p."verificationStatus" = ${filters.verification}::"ProviderVerificationStatus"`);
+  if (filters.providerType) conditions.push(Prisma.sql`p."type" = ${filters.providerType}::"ServiceProviderType"`);
   if (filters.minimumRating !== undefined) {
     conditions.push(Prisma.sql`COALESCE((SELECT avg(r."score") FROM "ProviderRating" r WHERE r."providerId" = p."id"), 0) >= ${filters.minimumRating}`);
   }
@@ -724,6 +731,7 @@ export async function requestMarketplaceQuote(
     });
     if (
       provider.verificationStatus !== "VERIFIED"
+      || provider.suspendedAt !== null
       || !provider.contactReady
       || !provider.evidenceReady
       || evidenceCount === 0

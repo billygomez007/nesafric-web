@@ -9,6 +9,10 @@ import {
   addProviderToDirectorySchema,
   assignProviderSchema,
   createServiceCategorySchema,
+  createServiceCategoryForPlatformSchema,
+  updateServiceCategoryForPlatformSchema,
+  createDocumentRequirementSchema,
+  updateDocumentRequirementSchema,
   createProviderSchema,
   createQuotationRequestSchema,
   documentRequirementQuerySchema,
@@ -19,6 +23,8 @@ import {
   reviewProviderIdentitySchema,
   reviewQuotationSchema,
   reviewVerificationSchema,
+  suspendProviderSchema,
+  reinstateProviderSchema,
   submitProviderVerificationConsentSchema,
   submitQuotationSchema,
   submitVerificationSchema,
@@ -28,6 +34,7 @@ import {
   quotationListSchema,
 } from "./schemas";
 import { enqueueOnboardingCompleteEmail, enqueueProviderVerificationEmail } from "@/modules/account-emails/service";
+import { recordPlatformAudit } from "@/modules/platform-admin/service";
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 140) || "provider";
@@ -129,8 +136,53 @@ async function validateCategories(tx: Tx, categoryIds: string[]) {
   }
 }
 
+/** Used by onboarding/profile-editing category pickers — `onboardingSelectable: false` lets an
+ * admin keep a category active (usable for existing providers/dispatch matching) without it being
+ * offered to new selections. */
 export async function listServiceCategories() {
-  return db.serviceCategory.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+  return db.serviceCategory.findMany({ where: { active: true, onboardingSelectable: true }, orderBy: [{ group: "asc" }, { sortOrder: "asc" }, { name: "asc" }] });
+}
+
+/** Used by the public marketplace search filter dropdown — `publiclyVisible: false` lets an admin
+ * keep a category usable internally without offering it as a public search filter. */
+export async function listPubliclyVisibleServiceCategories() {
+  return db.serviceCategory.findMany({ where: { active: true, publiclyVisible: true }, orderBy: [{ group: "asc" }, { sortOrder: "asc" }, { name: "asc" }] });
+}
+
+/** Platform-admin category management (Phase 25) — lists every category, including inactive
+ * ones, so an admin can see and reactivate something they previously deactivated. Ordered for
+ * display, not matching. */
+export async function listServiceCategoriesForPlatform(platformUser: User) {
+  await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  return db.serviceCategory.findMany({ orderBy: [{ group: "asc" }, { sortOrder: "asc" }, { name: "asc" }] });
+}
+
+export async function createServiceCategoryForPlatform(platformUser: User, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = createServiceCategoryForPlatformSchema.parse(input);
+  try {
+    const category = await db.serviceCategory.create({ data });
+    await recordPlatformAudit(principal, "platform_admin.service_category_created", "service_category", category.id, undefined, { key: category.key });
+    return category;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new AppError("SERVICE_CATEGORY_EXISTS", 409, "A service category with this key already exists.");
+    }
+    throw error;
+  }
+}
+
+/** Never hard-deletes — a category already referenced by providers/document-requirements/work
+ * history must only ever be deactivated (`active: false`), matching the same "deactivate instead
+ * of delete" policy used for campaigns and organisations elsewhere in Platform Admin. */
+export async function updateServiceCategoryForPlatform(platformUser: User, categoryId: string, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = updateServiceCategoryForPlatformSchema.parse(input);
+  const category = await db.serviceCategory.findUnique({ where: { id: categoryId } });
+  if (!category) throw notFound();
+  const updated = await db.serviceCategory.update({ where: { id: categoryId }, data });
+  await recordPlatformAudit(principal, "platform_admin.service_category_updated", "service_category", categoryId, undefined, { changedFields: Object.keys(data) });
+  return updated;
 }
 
 export async function createServiceCategory(userId: string, organisationId: string, input: unknown) {
@@ -577,6 +629,43 @@ export async function reviewProviderIdentity(platformUser: User, providerId: str
   return result.updated;
 }
 
+/** Platform-wide suspension (Phase 25) — distinct from a single landlord's own directory-scoped
+ * `reviewProviderVerification(..., "SUSPENDED")`, which only reflects that one landlord's trust.
+ * This removes the provider from every landlord's dispatch pool, the public marketplace, and
+ * campaign public eligibility in one action, without touching `verificationStatus` (a suspended
+ * provider can remain VERIFIED — suspension is a separate, additional gate) or any historical
+ * work/ratings/audit records. */
+export async function suspendProviderForPlatform(platformUser: User, providerId: string, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = suspendProviderSchema.parse(input);
+  const provider = await db.serviceProvider.findUnique({ where: { id: providerId } });
+  if (!provider) throw notFound();
+  if (provider.suspendedAt) throw new AppError("PROVIDER_ALREADY_SUSPENDED", 409, "This provider is already suspended.");
+  const updated = await db.serviceProvider.update({
+    where: { id: providerId },
+    data: { suspendedAt: new Date(), suspensionReason: data.reason, suspendedByUserId: principal.userId, acceptingWork: false, availabilityStatus: "UNAVAILABLE" },
+  });
+  await recordPlatformAudit(principal, "platform_admin.provider_suspended", "service_provider", providerId, undefined, { reason: data.reason });
+  return updated;
+}
+
+export async function reinstateProviderForPlatform(platformUser: User, providerId: string, input: unknown = {}) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = reinstateProviderSchema.parse(input);
+  const provider = await db.serviceProvider.findUnique({ where: { id: providerId } });
+  if (!provider) throw notFound();
+  if (!provider.suspendedAt) throw new AppError("PROVIDER_NOT_SUSPENDED", 409, "This provider is not currently suspended.");
+  // Reinstatement clears the suspension but deliberately does not restore `acceptingWork` — the
+  // provider must explicitly re-enable itself as ready for work, exactly like any other
+  // newly-verified provider, rather than silently reappearing as available.
+  const updated = await db.serviceProvider.update({
+    where: { id: providerId },
+    data: { suspendedAt: null, suspensionReason: null, suspendedByUserId: null },
+  });
+  await recordPlatformAudit(principal, "platform_admin.provider_reinstated", "service_provider", providerId, undefined, { note: data.note });
+  return updated;
+}
+
 /** Platform-admin provider search (Phase 24) — used by the Campaigns admin to pick a real
  * Property Service Professional to promote. Deliberately a separate, narrower permission
  * (`campaignReview`, not `providerIdentityReview`) since a campaign manager needs to find a
@@ -597,6 +686,12 @@ export async function searchServiceProvidersForPlatform(platformUser: User, quer
 }
 
 /** Platform review queue listing — providers awaiting or previously flagged for identity review. */
+/** Lightweight count for the Platform Admin nav badge — never fetches the actual provider rows. */
+export async function countPendingProviderIdentityReviews(platformUser: User) {
+  await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  return db.serviceProvider.count({ where: { archivedAt: null, verificationStatus: { in: ["PENDING", "REQUIRES_MORE_INFORMATION"] } } });
+}
+
 export async function listPendingProviderIdentityReviews(platformUser: User) {
   await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
   return db.serviceProvider.findMany({
@@ -607,6 +702,47 @@ export async function listPendingProviderIdentityReviews(platformUser: User) {
     },
     orderBy: { updatedAt: "asc" },
   });
+}
+
+export const PROVIDER_QUEUE_TABS = ["PENDING_VERIFICATION", "VERIFIED", "REQUIRES_MORE_INFO", "REJECTED", "SUSPENDED", "ALL"] as const;
+export type ProviderQueueTab = (typeof PROVIDER_QUEUE_TABS)[number];
+
+/** Platform-admin "Service Providers" queue (Phase 25) — a general, filterable provider list,
+ * distinct from `listPendingProviderIdentityReviews` (which stays exactly as-is for backward
+ * compatibility with its existing caller). Returns lightweight summary rows only — no evidence
+ * documents/consent detail, which the detail view (`getProviderIdentityReviewDetail`) still owns. */
+export async function listProvidersForPlatform(platformUser: User, tab: ProviderQueueTab = "PENDING_VERIFICATION") {
+  await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const where =
+    tab === "ALL" ? {}
+    : tab === "SUSPENDED" ? { suspendedAt: { not: null } }
+    : tab === "PENDING_VERIFICATION" ? { suspendedAt: null, verificationStatus: "PENDING" as const }
+    : tab === "VERIFIED" ? { suspendedAt: null, verificationStatus: "VERIFIED" as const }
+    : tab === "REQUIRES_MORE_INFO" ? { suspendedAt: null, verificationStatus: "REQUIRES_MORE_INFORMATION" as const }
+    : { suspendedAt: null, verificationStatus: "REJECTED" as const };
+  const providers = await db.serviceProvider.findMany({
+    where: { archivedAt: null, ...where },
+    include: {
+      categories: { include: { category: { select: { name: true } } } },
+      serviceAreas: { select: { areaType: true, name: true } },
+      _count: { select: { evidence: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 200,
+  });
+  return providers.map((provider) => ({
+    id: provider.id,
+    displayName: provider.displayName,
+    type: provider.type,
+    verificationStatus: provider.verificationStatus,
+    suspendedAt: provider.suspendedAt,
+    createdAt: provider.createdAt,
+    categories: provider.categories.map((c) => c.category.name),
+    serviceAreas: provider.serviceAreas.map((a) => `${a.areaType}: ${a.name}`),
+    evidenceCount: provider._count.evidence,
+    identityVerifiedAt: provider.identityVerifiedAt,
+    businessVerifiedAt: provider.businessVerifiedAt,
+  }));
 }
 
 export async function getProviderIdentityReviewDetail(platformUser: User, providerId: string) {
@@ -663,6 +799,52 @@ export async function getProviderDocumentRequirements(input: unknown) {
     where: { active: true, AND: [{ OR: countryOr }, { OR: typeOr }, { OR: categoryOr }] },
     orderBy: [{ required: "desc" }, { createdAt: "asc" }],
   });
+}
+
+/** Platform-admin document-requirement management (Phase 25) — the write path
+ * `ProviderDocumentRequirement` never had before this; everything previously came only from the
+ * seed script. Lists every row (including inactive) so an admin can see and reactivate one. */
+export async function listDocumentRequirementsForPlatform(platformUser: User) {
+  await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  return db.providerDocumentRequirement.findMany({
+    include: { category: { select: { id: true, key: true, name: true } } },
+    orderBy: [{ active: "desc" }, { countryCode: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+export async function createDocumentRequirementForPlatform(platformUser: User, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = createDocumentRequirementSchema.parse(input);
+  if (data.categoryId) {
+    const category = await db.serviceCategory.findUnique({ where: { id: data.categoryId }, select: { id: true } });
+    if (!category) throw notFound();
+  }
+  try {
+    const requirement = await db.providerDocumentRequirement.create({
+      data: { ...data, required: data.requirementLevel === "REQUIRED" },
+    });
+    await recordPlatformAudit(principal, "platform_admin.document_requirement_created", "provider_document_requirement", requirement.id, undefined, { evidenceType: requirement.evidenceType });
+    return requirement;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new AppError("DOCUMENT_REQUIREMENT_EXISTS", 409, "A document requirement with this exact country/category/provider-type/evidence-type combination already exists.");
+    }
+    throw error;
+  }
+}
+
+/** Never hard-deletes — deactivate (`active: false`) instead, matching the category policy above. */
+export async function updateDocumentRequirementForPlatform(platformUser: User, requirementId: string, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.providerIdentityReview);
+  const data = updateDocumentRequirementSchema.parse(input);
+  const requirement = await db.providerDocumentRequirement.findUnique({ where: { id: requirementId } });
+  if (!requirement) throw notFound();
+  const updated = await db.providerDocumentRequirement.update({
+    where: { id: requirementId },
+    data: { ...data, ...(data.requirementLevel ? { required: data.requirementLevel === "REQUIRED" } : {}) },
+  });
+  await recordPlatformAudit(principal, "platform_admin.document_requirement_updated", "provider_document_requirement", requirementId, undefined, { changedFields: Object.keys(data) });
+  return updated;
 }
 
 export async function createProviderQuotationRequest(
@@ -865,6 +1047,7 @@ export async function assignProviderToWorkOrder(
     });
     if (
       provider.verificationStatus !== "VERIFIED"
+      || provider.suspendedAt !== null
       || !provider.contactReady
       || !provider.evidenceReady
       || currentEvidence === 0
@@ -1018,6 +1201,7 @@ export async function respondToProviderAssignment(
       });
       if (
         provider.verificationStatus !== "VERIFIED"
+        || provider.suspendedAt !== null
         || !provider.contactReady
         || !provider.evidenceReady
         || currentEvidence === 0
