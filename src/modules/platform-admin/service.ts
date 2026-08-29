@@ -17,6 +17,8 @@ import {
 } from "@/modules/subscriptions/schemas";
 import { createFeatureFlagSchema, organisationListQuerySchema, platformAuditQuerySchema, setFlagOverrideSchema, updateFeatureFlagSchema } from "./schemas";
 import { getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
+import { runDueJobs } from "@/platform/jobs/runner";
+import { jobHandlers } from "@/platform/jobs/handlers";
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const MAX_ACTIVE_SUPPORT_SESSIONS_PER_PRINCIPAL = 3;
@@ -356,11 +358,19 @@ export async function setOrganisationFeatureFlagOverride(principal: PlatformPrin
 
 export async function getPlatformHealth(principal: PlatformPrincipal) {
   requirePermission(principal, PLATFORM_PERMISSIONS.orgsRead);
-  const [jobsByStatus, failedJobs, notificationFailures, webhookIncidents] = await Promise.all([
+  const [jobsByStatus, failedJobs, notificationFailures, webhookIncidents, recentAccountEmailJobs] = await Promise.all([
     db.backgroundJob.groupBy({ by: ["status"], _count: { _all: true } }),
     db.backgroundJob.findMany({ where: { status: "FAILED" }, select: { id: true, organisationId: true, type: true, attempts: true, maxAttempts: true, lastError: true, runAt: true }, orderBy: { runAt: "desc" }, take: 50 }),
     db.notification.count({ where: { status: "FAILED" } }),
     db.billingWebhookEvent.findMany({ where: { status: { in: ["UNMATCHED", "MISMATCHED", "FAILED"] } }, select: { id: true, providerKey: true, eventType: true, status: true, failureReason: true, receivedAt: true }, orderBy: { receivedAt: "desc" }, take: 50 }),
+    // Every status, not just failures — the payload's `template`/`dedupeKey` are never secrets
+    // (no credentials, no email body), so this is safe to surface for diagnosing exactly which
+    // welcome/onboarding/notification email a given job corresponds to.
+    db.backgroundJob.findMany({
+      where: { type: "account-email" },
+      select: { id: true, type: true, status: true, attempts: true, maxAttempts: true, lastError: true, idempotencyKey: true, createdAt: true, completedAt: true, payload: true },
+      orderBy: { createdAt: "desc" }, take: 20,
+    }),
   ]);
   const emailJobFailures = failedJobs.filter((job) => job.type === "account-email" || job.type === "notification-delivery");
   return {
@@ -368,10 +378,27 @@ export async function getPlatformHealth(principal: PlatformPrincipal) {
     failedJobs,
     notificationFailureCount: notificationFailures,
     billingWebhookIncidents: webhookIncidents,
+    recentAccountEmailJobs,
     // Secret-free — only which transport is active and how many recent email-related job
     // failures exist, never a credential or an email body.
     email: { ...getEmailProviderStatus(), recentFailureCount: emailJobFailures.length },
   };
+}
+
+/**
+ * Manually drains due `BackgroundJob` rows using the exact same `runDueJobs`/`jobHandlers` the
+ * external cron (`POST /api/jobs/run`, secret-gated) and the standalone worker process both
+ * already use — no new job-processing logic, just an additional, platform-admin-authenticated
+ * entry point to the same function. Exists for exactly the situation that motivated it: the
+ * external scheduler being unavailable (rate-limited, billing-locked, not yet deployed) while an
+ * admin still needs the queue to move. Uses the pre-existing, previously-unused `jobsManage`
+ * permission (SUPER_ADMIN only).
+ */
+export async function runDueJobsForPlatform(principal: PlatformPrincipal) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.jobsManage);
+  const result = await runDueJobs(jobHandlers);
+  await recordPlatformAudit(principal, "platform_admin.jobs_drained", "background_job", "*", undefined, result);
+  return result;
 }
 
 export async function getPlatformAuditLog(principal: PlatformPrincipal, input: unknown = {}) {

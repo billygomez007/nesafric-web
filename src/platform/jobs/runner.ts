@@ -23,6 +23,8 @@ export async function runDueJobs(handlers: Record<string, (payload: Record<strin
   const jobsById = new Map((await db.backgroundJob.findMany({ where: { id: { in: eligible.map(({ id }) => id) } } }))
     .map((job) => [job.id, job]));
   const jobs = eligible.flatMap(({ id }) => jobsById.get(id) ?? []);
+  let succeeded = 0;
+  let failed = 0;
   for (const job of jobs) {
     const claimed = await db.backgroundJob.updateMany({ where: { id: job.id, status: { in: ["PENDING", "FAILED"] } }, data: { status: "RUNNING", lockedAt: now, attempts: { increment: 1 } } });
     if (!claimed.count) continue;
@@ -35,10 +37,13 @@ export async function runDueJobs(handlers: Record<string, (payload: Record<strin
       }
       await handler(payload);
       await db.backgroundJob.update({ where: { id: job.id }, data: { status: "SUCCEEDED", completedAt: new Date(), lastError: null } });
+      succeeded += 1;
     } catch (error) {
       await db.backgroundJob.update({ where: { id: job.id }, data: { status: "FAILED", lastError: error instanceof Error ? error.message : "Unknown job failure", runAt: new Date(Date.now() + 60_000) } });
+      failed += 1;
     }
   }
+  return { claimed: jobs.length, succeeded, failed };
 }
 
 export async function retryBackgroundJob(userId: string, organisationId: string, jobId: string) {
