@@ -33,7 +33,7 @@ function requirePermission(principal: PlatformPrincipal, permission: PlatformPer
   if (!platformRoleHasPermission(principal.role, permission)) throw new AppError("FORBIDDEN", 403, "You do not have permission to perform this action.");
 }
 
-async function recordPlatformAudit(principal: PlatformPrincipal | null, action: string, entityType: string, entityId: string, organisationId?: string, metadata?: Record<string, unknown>) {
+export async function recordPlatformAudit(principal: PlatformPrincipal | null, action: string, entityType: string, entityId: string, organisationId?: string, metadata?: Record<string, unknown>) {
   await db.platformAuditEvent.create({ data: { platformPrincipalId: principal?.id, action, entityType, entityId, organisationId, metadata: metadata ? json(metadata) : undefined } });
 }
 

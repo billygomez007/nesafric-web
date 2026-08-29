@@ -2,6 +2,7 @@ import type { PlatformPrincipal, $Enums } from "@/platform/database/generated/cl
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission, type PlatformPermission } from "@/platform/platform-admin/permissions";
+import { recordPlatformAudit } from "@/modules/platform-admin/service";
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { assertMarketplaceOperational } from "@/modules/marketplace-professionals/entitlements";
 import { MARKETPLACE_ENTITLEMENTS } from "@/modules/marketplace-professionals/catalog";
@@ -79,7 +80,9 @@ export async function createPlatformCampaign(principal: PlatformPrincipal, input
     if (!provider) throw notFound();
   }
   const status = data.startAt || data.endAt ? "SCHEDULED" : "APPROVED";
-  return db.campaign.create({ data: { ...data, isPlatformOwned: true, createdByUserId: principal.userId, reviewedByUserId: principal.userId, reviewedAt: new Date(), status } });
+  const campaign = await db.campaign.create({ data: { ...data, isPlatformOwned: true, createdByUserId: principal.userId, reviewedByUserId: principal.userId, reviewedAt: new Date(), status } });
+  await recordPlatformAudit(principal, "platform_admin.campaign_created", "campaign", campaign.id, undefined, { name: campaign.name, placement: campaign.placement, type: campaign.type, status: campaign.status });
+  return campaign;
 }
 
 /** Edits a platform-owned campaign's descriptive content (Phase 24 "Edit") — deliberately never
@@ -95,7 +98,9 @@ export async function updatePlatformCampaign(principal: PlatformPrincipal, campa
     const provider = await db.serviceProvider.findUnique({ where: { id: data.advertiserServiceProviderId }, select: { id: true } });
     if (!provider) throw notFound();
   }
-  return db.campaign.update({ where: { id: campaignId }, data });
+  const updated = await db.campaign.update({ where: { id: campaignId }, data });
+  await recordPlatformAudit(principal, "platform_admin.campaign_edited", "campaign", campaignId, undefined, { fields: Object.keys(data) });
+  return updated;
 }
 
 /** Duplicates a campaign as a new DRAFT (Phase 24 "Duplicate") — copies content/placement/targeting
@@ -105,7 +110,7 @@ export async function duplicateCampaign(principal: PlatformPrincipal, campaignId
   requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
   const source = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!source) throw notFound();
-  return db.campaign.create({
+  const copy = await db.campaign.create({
     data: {
       name: `${source.name} (copy)`,
       placement: source.placement,
@@ -125,6 +130,8 @@ export async function duplicateCampaign(principal: PlatformPrincipal, campaignId
       status: "DRAFT",
     },
   });
+  await recordPlatformAudit(principal, "platform_admin.campaign_duplicated", "campaign", copy.id, undefined, { sourceCampaignId: source.id });
+  return copy;
 }
 
 export async function listCampaignsForPlatform(principal: PlatformPrincipal, query: unknown = {}) {
@@ -167,10 +174,12 @@ export async function reviewCampaign(principal: PlatformPrincipal, campaignId: s
   if (!campaign) throw notFound();
   if (campaign.status !== "PENDING_APPROVAL") throw new AppError("INVALID_CAMPAIGN_STATE", 409, "Only a campaign pending approval may be reviewed.");
   if (data.status === "REJECTED" && !data.reason) throw new AppError("VALIDATION_ERROR", 400, "A reason is required to reject a campaign.");
-  return db.campaign.update({
+  const reviewed = await db.campaign.update({
     where: { id: campaignId },
     data: { status: data.status, reviewedByUserId: principal.userId, reviewedAt: new Date(), rejectionReason: data.status === "REJECTED" ? data.reason : null },
   });
+  await recordPlatformAudit(principal, "platform_admin.campaign_reviewed", "campaign", campaignId, undefined, { status: data.status, reason: data.reason ?? null });
+  return reviewed;
 }
 
 export async function scheduleCampaign(principal: PlatformPrincipal, campaignId: string, input: unknown) {
@@ -179,7 +188,9 @@ export async function scheduleCampaign(principal: PlatformPrincipal, campaignId:
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) throw notFound();
   if (!["APPROVED", "SCHEDULED"].includes(campaign.status)) throw new AppError("INVALID_CAMPAIGN_STATE", 409, "Only an approved campaign may be scheduled.");
-  return db.campaign.update({ where: { id: campaignId }, data: { ...data, status: "SCHEDULED" } });
+  const scheduled = await db.campaign.update({ where: { id: campaignId }, data: { ...data, status: "SCHEDULED" } });
+  await recordPlatformAudit(principal, "platform_admin.campaign_scheduled", "campaign", campaignId, undefined, { startAt: scheduled.startAt, endAt: scheduled.endAt });
+  return scheduled;
 }
 
 /** Pause/resume/complete/archive (item 21's "pause", "change priority", "archive"). Financial or
@@ -196,7 +207,9 @@ export async function setCampaignStatus(principal: PlatformPrincipal, campaignId
     ARCHIVED: ["COMPLETED", "REJECTED", "PAUSED", "DRAFT"],
   };
   if (!allowed[data.status]?.includes(campaign.status)) throw new AppError("INVALID_CAMPAIGN_TRANSITION", 409, `A campaign cannot move from ${campaign.status} to ${data.status}.`);
-  return db.campaign.update({ where: { id: campaignId }, data: { status: data.status, archivedAt: data.status === "ARCHIVED" ? new Date() : campaign.archivedAt } });
+  const updated = await db.campaign.update({ where: { id: campaignId }, data: { status: data.status, archivedAt: data.status === "ARCHIVED" ? new Date() : campaign.archivedAt } });
+  await recordPlatformAudit(principal, "platform_admin.campaign_status_changed", "campaign", campaignId, undefined, { from: campaign.status, to: data.status });
+  return updated;
 }
 
 /** Shared eligibility filter behind both `getPublicBanner` and `getPublicBanners` — a campaign is
