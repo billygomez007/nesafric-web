@@ -74,12 +74,12 @@ export async function listMarketplaceProfessionalCampaigns(userId: string, marke
  * (item 18/19) — created directly by a platform administrator, never through self-service. */
 export async function createPlatformCampaign(principal: PlatformPrincipal, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
-  const data = createPlatformCampaignSchema.parse(input);
+  const { saveAsDraft, ...data } = createPlatformCampaignSchema.parse(input);
   if (data.advertiserServiceProviderId) {
     const provider = await db.serviceProvider.findUnique({ where: { id: data.advertiserServiceProviderId }, select: { id: true } });
     if (!provider) throw notFound();
   }
-  const status = data.startAt || data.endAt ? "SCHEDULED" : "APPROVED";
+  const status = saveAsDraft ? "DRAFT" : data.startAt || data.endAt ? "SCHEDULED" : "APPROVED";
   const campaign = await db.campaign.create({ data: { ...data, isPlatformOwned: true, createdByUserId: principal.userId, reviewedByUserId: principal.userId, reviewedAt: new Date(), status } });
   await recordPlatformAudit(principal, "platform_admin.campaign_created", "campaign", campaign.id, undefined, { name: campaign.name, placement: campaign.placement, type: campaign.type, status: campaign.status });
   return campaign;

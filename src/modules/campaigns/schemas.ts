@@ -55,6 +55,11 @@ export const createPlatformCampaignSchema = z.object({
   priority: z.coerce.number().int().min(0).max(1000).default(0),
   startAt: z.coerce.date().optional(),
   endAt: z.coerce.date().optional(),
+  /// Opt-in only — omitted, every existing caller keeps today's behaviour (immediately
+  /// APPROVED/SCHEDULED). The admin UI passes `true` so it can attach creative before the
+  /// campaign ever becomes publicly eligible, then either leave it a draft or call `publish`
+  /// itself once the upload has actually succeeded.
+  saveAsDraft: z.boolean().optional(),
 }).strict();
 
 export const updatePlatformCampaignSchema = z.object({

@@ -61,6 +61,49 @@ export function sniffFileType(bytes: Buffer): SniffedFile | null {
   return null;
 }
 
+/**
+ * Dependency-free pixel dimension reader for the three image types this platform accepts for
+ * promotional creative (PNG/JPEG/WEBP) — parses just enough of each container format's own header
+ * to recover width/height, without decoding pixel data or pulling in an image library. Returns
+ * `null` for a type it doesn't know how to parse or malformed/truncated bytes, so callers must
+ * treat a `null` result as "dimensions unknown", not "invalid file" (MIME/content validity is
+ * already established by `sniffFileType` before this ever runs).
+ */
+export function readImageDimensions(bytes: Buffer, mimeType: string): { width: number; height: number } | null {
+  try {
+    if (mimeType === "image/png" && bytes.length >= 24) {
+      return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+    }
+    if (mimeType === "image/jpeg") {
+      let offset = 2; // past the SOI marker (0xFFD8)
+      while (offset + 9 < bytes.length) {
+        if (bytes[offset] !== 0xff) { offset += 1; continue; }
+        const marker = bytes[offset + 1];
+        // SOF0–SOF15, excluding DHT (0xC4), JPG (0xC8), and DAC (0xCC), carry the frame dimensions.
+        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+          return { height: bytes.readUInt16BE(offset + 5), width: bytes.readUInt16BE(offset + 7) };
+        }
+        const segmentLength = bytes.readUInt16BE(offset + 2);
+        offset += 2 + segmentLength;
+      }
+      return null;
+    }
+    if (mimeType === "image/webp" && bytes.length >= 30) {
+      const fourCc = bytes.subarray(12, 16).toString("latin1");
+      if (fourCc === "VP8X") return { width: (bytes.readUIntLE(24, 3) + 1), height: (bytes.readUIntLE(27, 3) + 1) };
+      if (fourCc === "VP8 ") return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff };
+      if (fourCc === "VP8L") {
+        const bits = bytes.readUInt32LE(21);
+        return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+      }
+      return null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export const IMAGE_MIME_TYPES = SIGNATURES.filter((s) => s.kind === "IMAGE").map((s) => s.mimeType);
 export const VIDEO_MIME_TYPES = SIGNATURES.filter((s) => s.kind === "VIDEO").map((s) => s.mimeType);
 export const DOCUMENT_MIME_TYPES = ["application/pdf", ...IMAGE_MIME_TYPES];

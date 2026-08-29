@@ -185,19 +185,53 @@ export function CampaignsAdminContent() {
   const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null);
 
+  const [stagedDesktop, setStagedDesktop] = useState<File | null>(null);
+  const [stagedMobile, setStagedMobile] = useState<File | null>(null);
+  const [stagedDesktopPreview, setStagedDesktopPreview] = useState<string | null>(null);
+  const [stagedMobilePreview, setStagedMobilePreview] = useState<string | null>(null);
+
+  /** Selects a file for a campaign that doesn't exist yet — held client-side (with an instant
+   * local object-URL preview) until the campaign is actually created, since the upload endpoint
+   * requires a real campaign id. Superseded object URLs are revoked immediately to avoid leaking
+   * memory across repeated selections. */
+  function stageFile(slot: "desktop" | "mobile", file: File) {
+    const url = URL.createObjectURL(file);
+    if (slot === "desktop") {
+      setStagedDesktop(file);
+      setStagedDesktopPreview((previous) => { if (previous) URL.revokeObjectURL(previous); return url; });
+    } else {
+      setStagedMobile(file);
+      setStagedMobilePreview((previous) => { if (previous) URL.revokeObjectURL(previous); return url; });
+    }
+  }
+
+  function clearStaged(slot: "desktop" | "mobile") {
+    if (slot === "desktop") {
+      setStagedDesktopPreview((previous) => { if (previous) URL.revokeObjectURL(previous); return null; });
+      setStagedDesktop(null);
+    } else {
+      setStagedMobilePreview((previous) => { if (previous) URL.revokeObjectURL(previous); return null; });
+      setStagedMobile(null);
+    }
+  }
+
   async function load() {
-    const response = await fetch("/api/platform-admin/campaigns");
-    const body = await response.json();
-    if (response.ok) setCampaigns(body.items);
-    else setError(body.error?.message ?? "Unable to load campaigns.");
+    try {
+      const response = await fetch("/api/platform-admin/campaigns");
+      const body = await response.json();
+      // On failure the table must not stay stuck on "Loading…" forever alongside the error
+      // banner — settle it to an empty list so the UI reaches a clean, legible state either way.
+      if (response.ok) setCampaigns(body.items);
+      else { setError(body.error?.message ?? "Unable to load campaigns."); setCampaigns([]); }
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setCampaigns([]);
+    }
   }
 
   useEffect(() => {
-    fetch("/api/platform-admin/campaigns").then(async (response) => {
-      const body = await response.json();
-      if (response.ok) setCampaigns(body.items);
-      else setError(body.error?.message ?? "Unable to load campaigns.");
-    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount; `load` is also reused after every mutation below, so it must stay async rather than being restructured just for this one call site.
+    void load();
   }, []);
 
   useEffect(() => {
@@ -227,11 +261,13 @@ export function CampaignsAdminContent() {
   }, {});
 
   function openCreatePanel() {
+    clearStaged("desktop"); clearStaged("mobile");
     setEditingId(null); setDraft(emptyDraft); setSelectedProvider(null); setProviderQuery(""); setDraftDevice("desktop");
     setPanelOpen(true); setError(""); setNotice("");
   }
 
   function openEditPanel(campaign: Campaign) {
+    clearStaged("desktop"); clearStaged("mobile");
     setEditingId(campaign.id);
     setDraft({
       name: campaign.name, type: campaign.type ?? "GENERAL", placement: campaign.placement,
@@ -263,6 +299,8 @@ export function CampaignsAdminContent() {
         if (!response.ok) return setError(body.error?.message ?? "Unable to update that campaign.");
         setNotice("Campaign updated.");
       } else {
+        const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+        const intent = submitter?.value === "publish" ? "publish" : "draft";
         const response = await fetch("/api/platform-admin/campaigns", {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -271,12 +309,40 @@ export function CampaignsAdminContent() {
             destinationUrl: draft.destinationUrl, priority: Number(draft.priority || 0),
             startAt: draft.startAt || undefined, endAt: draft.endAt || undefined,
             advertiserServiceProviderId: selectedProvider?.id || undefined,
+            saveAsDraft: true,
           }),
         });
         const body = await response.json();
         if (!response.ok) return setError(body.error?.message ?? "Unable to create that campaign.");
-        setNotice("Campaign created — it is already live (or scheduled, if you set a future start date). Upload creative below.");
-        setEditingId(body.id);
+        const newId: string = body.id;
+        setEditingId(newId);
+
+        // Attach any creative selected before creation now that a real campaign id exists. Kept
+        // as DRAFT throughout this step deliberately (see `saveAsDraft` above) — a campaign whose
+        // upload fails here must never have already gone live with a missing/broken image.
+        let uploadFailed = false;
+        if (stagedDesktop) uploadFailed = !(await uploadCreative(newId, "desktop", stagedDesktop, { silent: true })) || uploadFailed;
+        if (!uploadFailed && stagedMobile) uploadFailed = !(await uploadCreative(newId, "mobile", stagedMobile, { silent: true })) || uploadFailed;
+        clearStaged("desktop"); clearStaged("mobile");
+
+        if (uploadFailed) {
+          setError("Campaign was saved as a draft, but the creative could not be uploaded. Please retry the image upload.");
+          await load();
+          return;
+        }
+
+        if (intent === "publish") {
+          const publishResponse = await fetch(`/api/platform-admin/campaigns/${newId}/publish`, { method: "POST" });
+          const publishBody = await publishResponse.json();
+          if (!publishResponse.ok) {
+            setError(publishBody.error?.message ?? "Campaign was saved as a draft, but could not be published. Publish it from the campaign list when ready.");
+            await load();
+            return;
+          }
+          setNotice("Campaign created and published — it is now live (or scheduled, if it has a future start date).");
+        } else {
+          setNotice("Campaign saved as a draft.");
+        }
       }
       await load();
     } finally {
@@ -284,8 +350,8 @@ export function CampaignsAdminContent() {
     }
   }
 
-  async function uploadCreative(campaignId: string, slot: "desktop" | "mobile", file: File) {
-    setError(""); setNotice("");
+  async function uploadCreative(campaignId: string, slot: "desktop" | "mobile", file: File, options?: { silent?: boolean }) {
+    if (!options?.silent) { setError(""); setNotice(""); }
     const reader = new FileReader();
     const dataBase64: string = await new Promise((resolve, reject) => {
       reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
@@ -297,9 +363,15 @@ export function CampaignsAdminContent() {
       body: JSON.stringify({ fileName: file.name, contentType: file.type || "image/jpeg", dataBase64, mediaSlot: slot }),
     });
     const body = await response.json();
-    if (!response.ok) return setError(body.error?.message ?? "Unable to upload that image.");
-    setNotice(`${slot === "desktop" ? "Desktop" : "Mobile"} creative uploaded.`);
-    await load();
+    if (!response.ok) {
+      if (!options?.silent) setError(body.error?.message ?? "Unable to upload that image.");
+      return false;
+    }
+    if (!options?.silent) {
+      setNotice(body.dimensionWarning ? `${slot === "desktop" ? "Desktop" : "Mobile"} creative uploaded. ${body.dimensionWarning}` : `${slot === "desktop" ? "Desktop" : "Mobile"} creative uploaded.`);
+      await load();
+    }
+    return true;
   }
 
   async function removeCreative(campaignId: string, slot: "desktop" | "mobile") {
@@ -443,6 +515,8 @@ export function CampaignsAdminContent() {
           <tbody className="divide-y">
             {!campaigns ? (
               <tr><td className="px-4 py-6 text-slate-500" colSpan={11}>Loading…</td></tr>
+            ) : campaigns.length === 0 ? (
+              <tr><td className="px-4 py-6 text-slate-500" colSpan={11}>No campaigns yet. Click + Create Campaign to add one.</td></tr>
             ) : visible.length === 0 ? (
               <tr><td className="px-4 py-6 text-slate-500" colSpan={11}>No campaigns match this filter.</td></tr>
             ) : visible.map(({ campaign, status }) => {
@@ -673,9 +747,20 @@ export function CampaignsAdminContent() {
                 <label className="text-xs text-slate-600">Start (optional)<input className="mt-1 block w-full rounded border p-2 text-sm" onChange={(event) => setDraft({ ...draft, startAt: event.target.value })} type="datetime-local" value={draft.startAt} /></label>
                 <label className="text-xs text-slate-600">End (optional)<input className="mt-1 block w-full rounded border p-2 text-sm" onChange={(event) => setDraft({ ...draft, endAt: event.target.value })} type="datetime-local" value={draft.endAt} /></label>
               </>}
-              <button className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={saving} type="submit">
-                {saving ? "Saving…" : editingId ? "Save changes" : "Create campaign"}
-              </button>
+              {editingId ? (
+                <button className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={saving} type="submit">
+                  {saving ? "Saving…" : "Save changes"}
+                </button>
+              ) : (
+                <div className="flex gap-2 sm:col-span-2">
+                  <button className="flex-1 rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={saving} name="intent" type="submit" value="draft">
+                    {saving ? "Saving…" : "Save Draft"}
+                  </button>
+                  <button className="flex-1 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={saving} name="intent" type="submit" value="publish">
+                    {saving ? "Saving…" : "Create & Publish"}
+                  </button>
+                </div>
+              )}
             </form>
 
             <div className="grid content-start gap-4">
@@ -690,10 +775,10 @@ export function CampaignsAdminContent() {
                 <div className="mt-2">
                   <CampaignPreview
                     ctaLabel={draft.ctaLabel}
-                    desktopMediaUrl={editingCampaign?.desktopMediaUrl ?? null}
+                    desktopMediaUrl={stagedDesktopPreview ?? editingCampaign?.desktopMediaUrl ?? null}
                     device={draftDevice}
                     headline={draft.headline}
-                    mobileMediaUrl={editingCampaign?.mobileMediaUrl ?? null}
+                    mobileMediaUrl={stagedMobilePreview ?? editingCampaign?.mobileMediaUrl ?? null}
                     placement={draft.placement}
                     supportingText={draft.supportingText}
                   />
@@ -710,27 +795,44 @@ export function CampaignsAdminContent() {
                 </div>
               )}
 
-              {editingId ? (
-                <div className="grid gap-3">
-                  <p className="text-xs font-semibold text-slate-700">Promotional creative</p>
-                  <ImageSlot
-                    currentUrl={editingCampaign?.desktopMediaUrl ?? null}
-                    label="Desktop carousel image"
-                    onRemove={() => void removeCreative(editingId, "desktop")}
-                    onUpload={(file) => void uploadCreative(editingId, "desktop", file)}
-                    spec={draftSpec?.desktop ?? { width: 1600, height: 290 }}
-                  />
-                  <ImageSlot
-                    currentUrl={editingCampaign?.mobileMediaUrl ?? null}
-                    label="Mobile carousel image (optional — falls back to desktop image)"
-                    onRemove={() => void removeCreative(editingId, "mobile")}
-                    onUpload={(file) => void uploadCreative(editingId, "mobile", file)}
-                    spec={draftSpec?.mobile ?? { width: 800, height: 500 }}
-                  />
-                </div>
-              ) : (
-                <p className="rounded-lg border border-dashed p-3 text-xs text-slate-500">Create the campaign first, then upload desktop/mobile creative here.</p>
-              )}
+              <div className="grid gap-3">
+                <p className="text-xs font-semibold text-slate-700">Promotional creative</p>
+                {editingId ? (
+                  <>
+                    <ImageSlot
+                      label="Desktop carousel image"
+                      onRemove={() => void removeCreative(editingId, "desktop")}
+                      onSelect={(file) => void uploadCreative(editingId, "desktop", file)}
+                      previewUrl={editingCampaign?.desktopMediaUrl ?? null}
+                      spec={draftSpec?.desktop ?? { width: 1600, height: 290 }}
+                    />
+                    <ImageSlot
+                      label="Mobile carousel image (optional — falls back to desktop image)"
+                      onRemove={() => void removeCreative(editingId, "mobile")}
+                      onSelect={(file) => void uploadCreative(editingId, "mobile", file)}
+                      previewUrl={editingCampaign?.mobileMediaUrl ?? null}
+                      spec={draftSpec?.mobile ?? { width: 800, height: 500 }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <ImageSlot
+                      label="Desktop carousel image"
+                      onRemove={() => clearStaged("desktop")}
+                      onSelect={(file) => stageFile("desktop", file)}
+                      previewUrl={stagedDesktopPreview}
+                      spec={draftSpec?.desktop ?? { width: 1600, height: 290 }}
+                    />
+                    <ImageSlot
+                      label="Mobile carousel image (optional — falls back to desktop image)"
+                      onRemove={() => clearStaged("mobile")}
+                      onSelect={(file) => stageFile("mobile", file)}
+                      previewUrl={stagedMobilePreview}
+                      spec={draftSpec?.mobile ?? { width: 800, height: 500 }}
+                    />
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </section>
@@ -739,9 +841,15 @@ export function CampaignsAdminContent() {
   );
 }
 
+/**
+ * A single desktop/mobile creative slot — used identically whether the campaign already exists
+ * (`onSelect` uploads over the network immediately) or doesn't yet (`onSelect` just stages the
+ * file client-side; see `stageFile` above) — the component itself has no opinion on which, so the
+ * create and edit workflows share one implementation and one visual result.
+ */
 function ImageSlot({
-  label, spec, currentUrl, onUpload, onRemove,
-}: { label: string; spec: { width: number; height: number }; currentUrl: string | null; onUpload: (file: File) => void; onRemove: () => void }) {
+  label, spec, previewUrl, onSelect, onRemove,
+}: { label: string; spec: { width: number; height: number }; previewUrl: string | null; onSelect: (file: File) => void; onRemove: () => void }) {
   const [dragOver, setDragOver] = useState(false);
   const [warning, setWarning] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -756,7 +864,7 @@ function ImageSlot({
         const recommendedRatio = spec.width / spec.height;
         if (Math.abs(ratio - recommendedRatio) / recommendedRatio > 0.15) {
           setWarning(
-            `This image is ${image.width} × ${image.height}px. For this placement, we recommend ${spec.width} × ${spec.height}px (${ratioLabel(spec)}). Upload another image, or continue — the image will be cropped to fit rather than stretched.`,
+            `Actual image: ${image.width} × ${image.height}px. Recommended: ${spec.width} × ${spec.height}px (${ratioLabel(spec)}). Upload another image for a pixel-perfect fit, or continue — it will be cropped to fit rather than stretched.`,
           );
         } else {
           setWarning("");
@@ -770,20 +878,20 @@ function ImageSlot({
 
   async function handleFile(file: File) {
     await checkDimensions(file);
-    onUpload(file);
+    onSelect(file);
   }
 
   return (
     <div className="rounded-lg border p-3">
       <p className="text-xs font-semibold text-slate-700">{label}</p>
       <p className="text-[11px] text-slate-500">Recommended: {spec.width} × {spec.height}px · Aspect ratio {ratioLabel(spec)}</p>
-      {currentUrl && (
+      {previewUrl && (
         <div className="mt-2 flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img alt="" className="h-14 w-24 rounded object-cover" src={currentUrl} />
+          <img alt="" className="h-14 w-24 rounded object-cover" src={previewUrl} />
           <div className="flex flex-col gap-1 text-[11px] font-semibold">
-            <button className="text-left text-slate-700" onClick={() => inputRef.current?.click()} type="button">Replace image</button>
-            <button className="text-left text-red-600" onClick={onRemove} type="button">Remove image</button>
+            <button className="text-left text-slate-700" onClick={() => inputRef.current?.click()} type="button">Replace</button>
+            <button className="text-left text-red-600" onClick={onRemove} type="button">Remove</button>
           </div>
         </div>
       )}
@@ -800,8 +908,10 @@ function ImageSlot({
       >
         <p className="text-slate-600">Drag & drop image here</p>
         <p className="my-1 text-slate-500">or</p>
-        <button className="rounded-lg border px-3 py-1.5 font-semibold text-slate-700" onClick={() => inputRef.current?.click()} type="button">Browse files</button>
-        <p className="mt-2 text-slate-500">PNG • JPG • WEBP · Maximum 5MB</p>
+        <button className="rounded-lg border px-3 py-1.5 font-semibold text-slate-700" onClick={() => inputRef.current?.click()} type="button">
+          Upload {label.toLowerCase().includes("mobile") ? "mobile" : "desktop"} image
+        </button>
+        <p className="mt-2 text-slate-500">PNG • JPG • WEBP · Maximum 25MB</p>
         <input
           accept="image/png,image/jpeg,image/webp"
           className="hidden"

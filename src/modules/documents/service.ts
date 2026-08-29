@@ -12,9 +12,11 @@ import {
   maxUploadBytes,
   safeFileName,
   sniffFileType,
+  readImageDimensions,
   buildInternalPublicMediaUrl,
   type StorageClassificationValue,
 } from "@/platform/storage";
+import { PLACEMENT_CREATIVE_SPECS, aspectRatioLabel, dimensionMismatch } from "@/modules/campaigns/creative-spec";
 import { getUploadDescriptor } from "./targets";
 import { archiveStorageObjectSchema, documentCenterQuerySchema, listingMediaOrderSchema, uploadDocumentSchema } from "./schemas";
 import { recordIntegrationOutcome } from "@/modules/integrations/service";
@@ -79,6 +81,23 @@ async function performUpload(params: {
     if (mediaType === "VIDEO" && sniffed.kind !== "VIDEO") throw new AppError("MEDIA_TYPE_MISMATCH", 422, "A video media type requires a video file.");
     if (mediaType !== "VIDEO" && sniffed.kind === "VIDEO") throw new AppError("MEDIA_TYPE_MISMATCH", 422, "Photo/floor plan media cannot be a video file.");
   }
+  // Dimension check for campaign creative (item: server-side dimension/aspect-ratio validation).
+  // Mirrors the admin UI's own client-side check (same `dimensionMismatch` helper) rather than
+  // duplicating the threshold — a caller that bypasses the UI still gets this recorded, but a
+  // near-miss is never hard-rejected: the public carousel always renders the image via
+  // `background-size: cover`, so an off-ratio image is cropped to fit, never stretched.
+  let creativeDimensionWarning: string | null = null;
+  if (targetType === "CAMPAIGN_CREATIVE") {
+    const dimensions = readImageDimensions(bytes, sniffed.mimeType);
+    if (dimensions) {
+      const campaign = await db.campaign.findUnique({ where: { id: input.targetId }, select: { placement: true } });
+      const spec = campaign ? PLACEMENT_CREATIVE_SPECS[campaign.placement] : undefined;
+      const recommended = spec ? (input.mediaSlot === "mobile" ? spec.mobile : spec.desktop) : undefined;
+      if (recommended && dimensionMismatch(dimensions, recommended)) {
+        creativeDimensionWarning = `Uploaded image is ${dimensions.width} × ${dimensions.height}px (${aspectRatioLabel(dimensions)}); recommended is ${recommended.width} × ${recommended.height}px (${aspectRatioLabel(recommended)}). It will display cropped to fit rather than stretched.`;
+      }
+    }
+  }
   const classification: StorageClassificationValue = descriptor.allowedClassifications.includes(input.classification) ? input.classification : "PRIVATE";
 
   const scanner = getMalwareScanner();
@@ -139,7 +158,7 @@ async function performUpload(params: {
       await record(tx, authorization.organisationId, userId, "document.uploaded", "storage_object", storageObject.id, {
         targetType, targetId: input.targetId, classification, contentType: sniffed.mimeType, sizeBytes: bytes.length,
       });
-      return { storageObject, attached };
+      return { storageObject, attached, dimensionWarning: creativeDimensionWarning };
     });
   } catch (error) {
     await adapter.deleteObject(storageKey).catch(() => undefined);
