@@ -319,4 +319,8 @@ export async function sendAccountEmail(payload: AccountEmailPayload) {
     replyTo: BRAND.contact.support,
   });
   if (result.status === "FAILED") throw new Error(result.failureReason ?? "Account email delivery failed.");
+  // Structured, secret-free operational log — the provider reference is an id, never sensitive,
+  // and its prefix ("resend:" vs "test-email:") is exactly the truthful mode signal this whole
+  // integration is built around; visible via `vercel logs` without needing database access.
+  console.log(JSON.stringify({ event: "account-email.sent", template: payload.template, dedupeKey, providerReference: result.providerReference }));
 }
