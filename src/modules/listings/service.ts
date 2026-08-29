@@ -16,6 +16,7 @@ import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { requireMarketplaceMember, requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { assertMarketplaceOperational } from "@/modules/marketplace-professionals/entitlements";
 import { MARKETPLACE_ENTITLEMENTS } from "@/modules/marketplace-professionals/catalog";
+import { enqueueMarketplaceLeadNotification, enqueueViewingRequestNotification } from "@/modules/account-emails/service";
 import {
   createListingSchema,
   createMarketplaceNativeListingSchema,
@@ -1042,7 +1043,7 @@ const leadInclude = {
 export async function createMarketplaceLead(listingId: string, userId: string | undefined, input: unknown) {
   listingId = listingIdSchema.parse(listingId);
   const data = createMarketplaceLeadSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const listing = await tx.listing.findFirst({
       where: { id: listingId, status: "PUBLISHED", verificationStatus: "VERIFIED", enquiryEnabled: true },
     });
@@ -1072,8 +1073,16 @@ export async function createMarketplaceLead(listingId: string, userId: string | 
         payload: json({ listingId, authenticated: Boolean(userId) }),
       },
     });
-    return { id: lead.id, listingId, status: lead.status, createdAt: lead.createdAt };
+    return { id: lead.id, listingId, status: lead.status, createdAt: lead.createdAt, listingTitle: listing.title, recipientUserId: listing.createdByUserId, leadName: lead.name, leadEmail: lead.email, leadPhone: lead.phone };
   });
+  // A brand-new lead never has an assignee yet (assignment happens later via a status-change
+  // action) — the listing's own creator is the one real, unambiguous, always-present recipient at
+  // this moment, never a guessed or unrelated organisation member.
+  await enqueueMarketplaceLeadNotification(result.recipientUserId, {
+    listingTitle: result.listingTitle, leadId: result.id, prospectName: result.leadName,
+    prospectEmail: result.leadEmail ?? undefined, prospectPhone: result.leadPhone ?? undefined,
+  });
+  return { id: result.id, listingId: result.listingId, status: result.status, createdAt: result.createdAt };
 }
 
 export async function listMarketplaceLeads(userId: string, organisationId: string, query: unknown = {}) {
@@ -1221,7 +1230,7 @@ export async function createViewingRequest(
   if (data.preferredTimes.some(({ startsAt }) => startsAt <= new Date())) {
     throw new AppError("VIEWING_TIME_IN_PAST", 422, "Preferred viewing times must be in the future.");
   }
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const listing = await tx.listing.findFirst({
       where: { id: listingId, status: "PUBLISHED", verificationStatus: "VERIFIED", enquiryEnabled: true },
     });
@@ -1268,6 +1277,14 @@ export async function createViewingRequest(
       leadId: lead.id,
       authenticated: Boolean(userId),
     });
+    // A lead already has an assignee by the time a viewing is requested more often than at initial
+    // enquiry — prefer that real, explicitly-assigned team member's own account; otherwise fall
+    // back to the listing's creator, exactly as for a brand-new lead notification.
+    const assignee = lead.assigneeMemberId
+      ? await tx.organisationMember.findUnique({ where: { id: lead.assigneeMemberId }, select: { userId: true } })
+      : null;
+    const recipientUserId = assignee?.userId ?? listing.createdByUserId;
+    const firstPreferredTime = viewing.preferredTimes[0];
     return {
       id: viewing.id,
       listingId,
@@ -1275,8 +1292,16 @@ export async function createViewingRequest(
       status: viewing.status,
       preferredTimes: viewing.preferredTimes,
       createdAt: viewing.createdAt,
+      listingTitle: listing.title,
+      recipientUserId,
+      leadName: lead.name,
+      requestedTimeLabel: firstPreferredTime ? firstPreferredTime.startsAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : undefined,
     };
   });
+  await enqueueViewingRequestNotification(result.recipientUserId, {
+    listingTitle: result.listingTitle, viewingRequestId: result.id, prospectName: result.leadName, requestedTimeLabel: result.requestedTimeLabel,
+  });
+  return { id: result.id, listingId: result.listingId, leadId: result.leadId, status: result.status, preferredTimes: result.preferredTimes, createdAt: result.createdAt };
 }
 
 export async function listViewingRequests(userId: string, organisationId: string, query: unknown = {}) {

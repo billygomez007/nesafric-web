@@ -16,6 +16,7 @@ import {
   updatePlanSchema,
 } from "@/modules/subscriptions/schemas";
 import { createFeatureFlagSchema, organisationListQuerySchema, platformAuditQuerySchema, setFlagOverrideSchema, updateFeatureFlagSchema } from "./schemas";
+import { getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const MAX_ACTIVE_SUPPORT_SESSIONS_PER_PRINCIPAL = 3;
@@ -361,11 +362,15 @@ export async function getPlatformHealth(principal: PlatformPrincipal) {
     db.notification.count({ where: { status: "FAILED" } }),
     db.billingWebhookEvent.findMany({ where: { status: { in: ["UNMATCHED", "MISMATCHED", "FAILED"] } }, select: { id: true, providerKey: true, eventType: true, status: true, failureReason: true, receivedAt: true }, orderBy: { receivedAt: "desc" }, take: 50 }),
   ]);
+  const emailJobFailures = failedJobs.filter((job) => job.type === "account-email" || job.type === "notification-delivery");
   return {
     jobsByStatus: Object.fromEntries(jobsByStatus.map((entry) => [entry.status, entry._count._all])),
     failedJobs,
     notificationFailureCount: notificationFailures,
     billingWebhookIncidents: webhookIncidents,
+    // Secret-free — only which transport is active and how many recent email-related job
+    // failures exist, never a credential or an email body.
+    email: { ...getEmailProviderStatus(), recentFailureCount: emailJobFailures.length },
   };
 }
 

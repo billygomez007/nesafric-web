@@ -8,6 +8,7 @@ type Health = {
   failedJobs: Array<{ id: string; organisationId: string | null; type: string; attempts: number; maxAttempts: number; lastError: string | null; runAt: string }>;
   notificationFailureCount: number;
   billingWebhookIncidents: Array<{ id: string; providerKey: string; eventType: string; status: string; failureReason: string | null; receivedAt: string }>;
+  email: { provider: "RESEND" | "TEST"; configured: boolean; recentFailureCount: number };
 };
 
 function HealthContent() {
@@ -22,6 +23,14 @@ function HealthContent() {
   if (!health) return <p className="text-slate-600">Loading…</p>;
 
   return <div className="grid gap-6">
+    <section className="rounded-xl border bg-white p-5 shadow-sm">
+      <h2 className="font-semibold">Email</h2>
+      <dl className="mt-3 grid gap-1 text-sm">
+        <div><dt className="inline font-semibold">Provider:</dt> <dd className="inline"> {health.email.provider}</dd></div>
+        <div><dt className="inline font-semibold">Configuration:</dt> <dd className="inline"> {health.email.configured ? "CONFIGURED" : "TEST_MODE (no external send occurs)"}</dd></div>
+        <div><dt className="inline font-semibold">Recent email job failures:</dt> <dd className="inline"> {health.email.recentFailureCount}</dd></div>
+      </dl>
+    </section>
     <section className="rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="font-semibold">Background jobs</h2>
       <dl className="mt-3 grid grid-cols-2 gap-1 text-sm md:grid-cols-4">{Object.entries(health.jobsByStatus).map(([status, count]) => <div key={status}><dt className="inline font-semibold">{status}:</dt> <dd className="inline"> {count}</dd></div>)}</dl>

@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ChannelAdapter, NormalizedInboundMessage, OutboundDeliveryResult, OutboundMessageRequest } from "./types";
 import { BRAND } from "@/platform/brand";
 import { renderEmail } from "@/modules/notifications/email-templates/render";
+import { getEmailProvider, type EmailProvider } from "./email-providers";
 
 function hmacHex(secret: string, body: string) {
   return createHmac("sha256", secret).update(body).digest("hex");
@@ -14,20 +15,21 @@ function safeEqual(expected: string, actual: string) {
 }
 
 /**
- * Provider-neutral email transport boundary. When `EMAIL_PROVIDER_SEND_URL` and
- * `EMAIL_PROVIDER_API_KEY` are configured this posts a generic JSON payload to
- * the configured provider; otherwise it uses an in-memory test transport so
- * outbound email conversations remain fully exercisable without live
- * credentials. No credentials are invented - if unset, the boundary is a no-op
- * "sent" acknowledgement so the rest of the delivery pipeline can be tested.
+ * Email transport boundary — delegates the actual send to a pluggable `EmailProvider`
+ * (`ResendEmailProvider` when `RESEND_API_KEY` is configured, `TestEmailProvider` otherwise; see
+ * `email-providers.ts`), defaulting to whichever one `getEmailProvider()` resolves but accepting
+ * an explicit override so tests never need a real credential or network access. This class itself
+ * stays provider-neutral: it only builds the branded HTML/text envelope and the From/Reply-To
+ * identity, then hands a plain `{from,to,subject,html,text,replyTo,idempotencyKey}` object to
+ * whichever provider is active.
  */
 export class EmailChannelAdapter implements ChannelAdapter {
   readonly channel = "EMAIL" as const;
 
+  constructor(private readonly provider: EmailProvider = getEmailProvider()) {}
+
   async send(request: OutboundMessageRequest): Promise<OutboundDeliveryResult> {
     if (!request.recipientAddress) return { status: "FAILED", failureReason: "No recipient email address is available for this conversation." };
-    const sendUrl = process.env.EMAIL_PROVIDER_SEND_URL;
-    const apiKey = process.env.EMAIL_PROVIDER_API_KEY;
     // Every outbound email gets the UmoAfric branded envelope, whether or not the caller built
     // one explicitly — callers that only ever set `body` (e.g. conversation replies) still get a
     // consistent, professional layout instead of a bare-text message. An explicit `html` from the
@@ -35,30 +37,17 @@ export class EmailChannelAdapter implements ChannelAdapter {
     const html = request.html ?? renderEmail({ heading: request.subject ?? "New message", paragraphs: [request.body] }).html;
     const from = request.fromAddress ?? BRAND.sender.notifications;
     const replyTo = request.replyTo ?? BRAND.contact.support;
-    if (!sendUrl || !apiKey) {
-      return { status: "SENT", providerReference: `test-email:${request.messageId}` };
-    }
-    try {
-      const response = await fetch(sendUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          from,
-          to: request.recipientAddress,
-          subject: request.subject,
-          text: request.body,
-          html,
-          replyTo,
-          headers: request.externalReferenceId ? { "In-Reply-To": request.externalReferenceId } : undefined,
-        }),
-      });
-      if (!response.ok) return { status: "FAILED", failureReason: `Email provider responded with status ${response.status}.` };
-      const payload = await response.json().catch(() => ({}) as Record<string, unknown>);
-      const providerReference = typeof (payload as { id?: unknown }).id === "string" ? (payload as { id: string }).id : undefined;
-      return { status: "SENT", providerReference };
-    } catch (error) {
-      return { status: "FAILED", failureReason: error instanceof Error ? error.message : "Email provider request failed." };
-    }
+    const result = await this.provider.send({
+      from,
+      to: request.recipientAddress,
+      subject: request.subject ?? "New message",
+      html,
+      text: request.body,
+      replyTo,
+      inReplyTo: request.externalReferenceId ?? undefined,
+      idempotencyKey: request.messageId,
+    });
+    return result;
   }
 
   normalizeInbound(rawPayload: unknown): NormalizedInboundMessage[] {

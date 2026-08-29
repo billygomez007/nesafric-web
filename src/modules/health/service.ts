@@ -7,6 +7,7 @@ import { listAvailablePaymentProviders } from "@/modules/payments/service";
 // Side-effect import: registers the Ghana payment gateway adapters before listing them.
 import "@/modules/payments/gateways";
 import { resolveDefaultBillingProviderKey } from "@/modules/billing/service";
+import { getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
 
 /**
  * Public, unauthenticated health surface (item 15). Deliberately reports only
@@ -85,10 +86,15 @@ function checkCalendar(): ProviderHealthEntry {
 }
 
 function checkCommunications(): ProviderHealthEntry[] {
+  const email = getEmailProviderStatus();
   return [
     { name: "sms", readiness: envPresent("SMS_PROVIDER_SEND_URL", "SMS_PROVIDER_API_KEY") ? "CONFIGURED" : "TEST_MODE", detail: "Provider-neutral SMS transport." },
     { name: "whatsapp", readiness: envPresent("WHATSAPP_PROVIDER_SEND_URL", "WHATSAPP_PROVIDER_ACCESS_TOKEN") ? "CONFIGURED" : "TEST_MODE", detail: "Provider-neutral WhatsApp transport." },
-    { name: "email", readiness: envPresent("EMAIL_PROVIDER_SEND_URL", "EMAIL_PROVIDER_API_KEY") ? "CONFIGURED" : "TEST_MODE", detail: "Provider-neutral email transport." },
+    {
+      name: "email",
+      readiness: email.configured ? "CONFIGURED" : "TEST_MODE",
+      detail: email.configured ? "Resend (notifications@umoafric.com)." : "Simulated in-memory email transport (no external send occurs).",
+    },
   ];
 }
 
