@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
+import { trackEvent } from "@/platform/analytics";
 
 type Category = { id: string; key: string; name: string };
 type Organisation = { id: string; name: string };
@@ -220,6 +221,7 @@ export function ServiceProviderOnboardingForm() {
       if (!verificationResponse.ok) throw new Error((await verificationResponse.json()).error?.message ?? "Unable to submit for verification.");
 
       trackCampaignEvent("service_provider_registration_completed");
+      trackEvent("onboarding_completed", { onboarding_type: "offer_property_services" });
       router.push(`/providers/${providerId}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to submit your verification.");

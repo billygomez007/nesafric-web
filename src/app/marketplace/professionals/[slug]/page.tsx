@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublicMarketplaceProfessionalProfile } from "@/modules/marketplace-professionals/service";
 import { BrandLogo } from "@/components/brand-logo";
+import { PageViewTracker } from "@/components/marketing/page-view-tracker";
 
 const TYPE_LABELS: Record<string, string> = {
   INDIVIDUAL_AGENT: "Individual Agent",
@@ -20,6 +21,7 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
 
   return (
     <main className="min-h-screen bg-slate-50">
+      <PageViewTracker event="professional_profile_view" params={{ professional_type: profile.type }} />
       <header className="border-b bg-navy px-4 py-14 text-white sm:px-6">
         <div className="mx-auto max-w-5xl">
           <nav className="flex items-center justify-between text-sm"><Link href="/"><BrandLogo height={22} /></Link><Link href="/marketplace/properties">Browse properties</Link></nav>

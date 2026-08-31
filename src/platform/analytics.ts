@@ -22,8 +22,8 @@ export function isAnalyticsEnabled(): boolean {
  * The complete UmoAfric analytics event taxonomy. Adding a name here only makes it a valid
  * `trackEvent` argument — instrumenting a specific call site is a separate, deliberate change.
  *
- * WIRED today (already called from marketing pages/components via `trackCampaignEvent`, the
- * pre-GA4 alias kept in `@/components/marketing/campaign-tracking` for existing call sites):
+ * WIRED (Phase 1 — marketing pages/components, via `trackCampaignEvent`, the pre-GA4 alias kept in
+ * `@/components/marketing/campaign-tracking` for existing call sites):
  *   ghana_landing_view, for_professionals_view, for_developers_view, for_property_owners_view,
  *   join_free_click, marketplace_visit_click, manage_properties_selected, market_properties_selected,
  *   professional_registration_started, professional_registration_completed,
@@ -31,11 +31,16 @@ export function isAnalyticsEnabled(): boolean {
  *   service_professional_registration_started, service_provider_registration_started,
  *   service_provider_registration_completed
  *
- * PLANNED (reserved names for the next instrumentation phase — not called anywhere yet):
- *   sign_up, login, onboarding_started, onboarding_completed, property_search, property_view,
- *   property_enquiry, professional_profile_view, professional_enquiry, service_provider_view,
- *   service_provider_enquiry, development_view, development_enquiry,
- *   offer_property_services_selected, subscription_started, demo_request
+ * WIRED (Phase 2 — business/conversion instrumentation, fired only at a true success point; see
+ * the Phase 2 audit report for the exact trigger and file per event):
+ *   sign_up, login, onboarding_started, onboarding_completed, offer_property_services_selected,
+ *   property_search, property_view, property_enquiry, professional_profile_view,
+ *   service_provider_view, service_provider_enquiry
+ *
+ * RESERVED (typed and ready, but not called anywhere — the underlying feature either doesn't exist
+ * yet or can't reliably confirm success; see the Phase 2 audit report for why each is withheld):
+ *   professional_enquiry, professional_contact_click, development_view, development_enquiry,
+ *   subscription_started, demo_request
  */
 export type AnalyticsEvent =
   | "ghana_landing_view"
@@ -57,16 +62,17 @@ export type AnalyticsEvent =
   | "login"
   | "onboarding_started"
   | "onboarding_completed"
+  | "offer_property_services_selected"
   | "property_search"
   | "property_view"
   | "property_enquiry"
   | "professional_profile_view"
   | "professional_enquiry"
+  | "professional_contact_click"
   | "service_provider_view"
   | "service_provider_enquiry"
   | "development_view"
   | "development_enquiry"
-  | "offer_property_services_selected"
   | "subscription_started"
   | "demo_request";
 
@@ -81,4 +87,26 @@ export type AnalyticsEventParams = Record<string, string | number | boolean>;
 export function trackEvent(event: AnalyticsEvent, params: AnalyticsEventParams = {}) {
   if (typeof window === "undefined" || !isAnalyticsEnabled()) return;
   sendGAEvent("event", event, params);
+}
+
+/**
+ * Trims and caps a business-authored string (a listing's category, a search field, a location
+ * name) for safe use as an event parameter — returns `undefined` for empty/missing input so it can
+ * be dropped from the params object entirely rather than sent as `""`. Not a PII filter: only ever
+ * pass values that are already known to be non-identifying (see the taxonomy comment above and the
+ * Phase 2 audit report for what each event's parameters are sourced from).
+ */
+export function categorical(value: string | null | undefined, maxLength = 60): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
+/** Drops `undefined` entries so callers can build a params object with optional fields inline. */
+export function compactParams(params: Record<string, string | number | boolean | undefined>): AnalyticsEventParams {
+  const result: AnalyticsEventParams = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
 }

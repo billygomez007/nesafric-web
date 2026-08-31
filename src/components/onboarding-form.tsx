@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
+import { trackEvent } from "@/platform/analytics";
 
 export function OnboardingForm() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export function OnboardingForm() {
     if (!response.ok) return setError((await response.json()).error?.message ?? "Unable to create organisation.");
     localStorage.setItem("propertyos.activeOrganisationId", (await response.json()).id);
     trackCampaignEvent("manage_properties_registration_completed");
+    trackEvent("onboarding_completed", { onboarding_type: "manage_properties" });
     router.push("/dashboard");
   }
   return <form className="mt-8 grid gap-4 rounded-xl border p-6" onSubmit={submit}>

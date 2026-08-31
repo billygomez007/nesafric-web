@@ -5,6 +5,7 @@ import { OnboardingForm } from "@/components/onboarding-form";
 import { MarketplaceProfessionalOnboardingForm } from "@/components/marketplace-professional-onboarding-form";
 import { ServiceProviderOnboardingForm } from "@/components/service-provider-onboarding-form";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
+import { trackEvent } from "@/platform/analytics";
 
 type Choice = "MANAGE" | "MARKET" | "SERVICES" | null;
 
@@ -20,19 +21,19 @@ export default function OnboardingPage() {
           You can add another workspace later without creating another account — one identity, every side of UmoAfric.
         </p>
         <div className="mt-8 grid gap-4">
-          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackCampaignEvent("manage_properties_selected"); setChoice("MANAGE"); }} type="button">
+          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackCampaignEvent("manage_properties_selected"); trackEvent("onboarding_started", { onboarding_type: "manage_properties" }); setChoice("MANAGE"); }} type="button">
             <p className="font-semibold">Manage Properties</p>
             <p className="mt-2 text-sm text-slate-600">
               For property owners, landlords, property managers and developers operating properties. Enters UmoAfric management (paid).
             </p>
           </button>
-          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackCampaignEvent("market_properties_selected"); trackCampaignEvent("professional_registration_started"); setChoice("MARKET"); }} type="button">
+          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackCampaignEvent("market_properties_selected"); trackCampaignEvent("professional_registration_started"); trackEvent("onboarding_started", { onboarding_type: "market_properties" }); setChoice("MARKET"); }} type="button">
             <p className="font-semibold">Market Properties</p>
             <p className="mt-2 text-sm text-slate-600">
               For agents, brokers, brokerages, real-estate companies and developers marketing property. Enters the UmoAfric Real Estate Marketplace — free at launch.
             </p>
           </button>
-          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackCampaignEvent("service_professional_registration_started"); setChoice("SERVICES"); }} type="button">
+          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackEvent("offer_property_services_selected"); trackCampaignEvent("service_professional_registration_started"); trackEvent("onboarding_started", { onboarding_type: "offer_property_services" }); setChoice("SERVICES"); }} type="button">
             <p className="font-semibold">Offer Property Services</p>
             <p className="mt-2 text-sm text-slate-600">
               For artisans, contractors and property-service businesses that want to receive property-related work through UmoAfric. Free at launch — mandatory identity verification applies before you can be publicly discovered or assigned work.

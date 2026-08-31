@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
+import { trackEvent } from "@/platform/analytics";
 
 const TYPES = [
   ["INDIVIDUAL_AGENT", "Individual agent"],
@@ -30,6 +31,7 @@ export function MarketplaceProfessionalOnboardingForm() {
     if (!response.ok) return setError(body.error?.message ?? "Unable to create your marketplace profile.");
     localStorage.setItem("nesafric.activeMarketplaceProfessionalId", body.id);
     trackCampaignEvent(form.get("type") === "DEVELOPER" ? "developer_registration_completed" : "professional_registration_completed");
+    trackEvent("onboarding_completed", { onboarding_type: "market_properties" });
     router.push(`/pro/${body.id}`);
   }
 
