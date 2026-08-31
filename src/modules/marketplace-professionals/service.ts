@@ -320,6 +320,20 @@ export async function searchMarketplaceDirectory(input: unknown) {
   return { items, total, page: filters.page, pageSize: filters.pageSize };
 }
 
+/// Sitemap generation (SEO). Cap kept comfortably under Google's 50,000-URL-per-sitemap limit —
+/// once this category alone approaches it, switch `app/sitemap.ts` to `generateSitemaps` and shard
+/// by this same eligibility query instead of raising the cap.
+const SITEMAP_PROFESSIONAL_LIMIT = 15_000;
+
+export async function listPublicMarketplaceProfessionalsForSitemap(): Promise<Array<{ slug: string; updatedAt: Date }>> {
+  return db.marketplaceProfessional.findMany({
+    where: { status: "ACTIVE", archivedAt: null },
+    select: { slug: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
+    take: SITEMAP_PROFESSIONAL_LIMIT,
+  });
+}
+
 /** Item 2 — real dashboard data for both a one-person agent and a large company. */
 export async function getMarketplaceDashboardMetrics(userId: string, marketplaceProfessionalId: string) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);

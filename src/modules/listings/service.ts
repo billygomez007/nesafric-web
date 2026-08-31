@@ -211,7 +211,7 @@ async function validateMarketplaceAttribution(
   }
 }
 
-async function isAssetAvailable(
+export async function isAssetAvailable(
   tx: Tx | typeof db,
   listing: { propertyId: string | null; unitId: string | null; marketplaceAssetId: string | null },
   at = new Date(),
@@ -1022,6 +1022,30 @@ export async function getPublicListing(listingId: string) {
   });
   if (!listing || !await isAssetAvailable(db, listing)) throw notFound();
   return { listing: publicProjection(listing), meta: { rateLimit: PUBLIC_LISTING_RATE_LIMIT } };
+}
+
+/// Sitemap generation (SEO). Cap kept comfortably under Google's 50,000-URL-per-sitemap limit —
+/// once this category alone approaches it, switch `app/sitemap.ts` to `generateSitemaps` and shard
+/// by this same eligibility query instead of raising the cap.
+const SITEMAP_LISTING_LIMIT = 15_000;
+
+export async function listPublicListingsForSitemap(): Promise<Array<{ id: string; updatedAt: Date }>> {
+  const candidates = await db.listing.findMany({
+    where: { status: "PUBLISHED", verificationStatus: "VERIFIED" },
+    select: { id: true, updatedAt: true, propertyId: true, unitId: true, marketplaceAssetId: true },
+    orderBy: { updatedAt: "desc" },
+    take: SITEMAP_LISTING_LIMIT,
+  });
+  const eligible: Array<{ id: string; updatedAt: Date }> = [];
+  const BATCH_SIZE = 25;
+  for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+    const batch = candidates.slice(i, i + BATCH_SIZE);
+    const availability = await Promise.all(batch.map((listing) => isAssetAvailable(db, listing)));
+    batch.forEach((listing, index) => {
+      if (availability[index]) eligible.push({ id: listing.id, updatedAt: listing.updatedAt });
+    });
+  }
+  return eligible;
 }
 
 const leadInclude = {

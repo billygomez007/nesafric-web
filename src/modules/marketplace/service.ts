@@ -502,6 +502,27 @@ export async function discoverMarketplaceProviders(query: unknown = {}) {
   };
 }
 
+/// Sitemap generation (SEO). Same eligibility gates as `getPublicMarketplaceProvider`'s ranking
+/// query (verified, not platform-suspended, not archived, opted into public listing) minus the
+/// scoring itself — this only needs which providers are eligible and when they last changed.
+/// Cap kept comfortably under Google's 50,000-URL-per-sitemap limit — once this category alone
+/// approaches it, switch `app/sitemap.ts` to `generateSitemaps` and shard by this same query.
+const SITEMAP_PROVIDER_LIMIT = 15_000;
+
+export async function listPublicServiceProvidersForSitemap(): Promise<Array<{ id: string; slug: string | null; updatedAt: Date }>> {
+  return db.serviceProvider.findMany({
+    where: {
+      verificationStatus: "VERIFIED",
+      archivedAt: null,
+      suspendedAt: null,
+      marketplaceProfile: { listed: true },
+    },
+    select: { id: true, slug: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
+    take: SITEMAP_PROVIDER_LIMIT,
+  });
+}
+
 export async function getPublicMarketplaceProviderBySlug(slug: string) {
   const provider = await db.serviceProvider.findFirst({
     where: { slug, verificationStatus: "VERIFIED", archivedAt: null },
