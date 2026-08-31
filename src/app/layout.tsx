@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist_Mono, Montserrat } from "next/font/google";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { BRAND } from "@/platform/brand";
+import { GA_MEASUREMENT_ID } from "@/platform/analytics";
 import "./globals.css";
 
 const montserrat = Montserrat({
@@ -52,6 +54,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${montserrat.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
+      {/* Only rendered when NEXT_PUBLIC_GA_MEASUREMENT_ID is set (production only, see
+          @/platform/analytics) — local dev and Preview never load the tag. Loaded once here for
+          every route; @next/third-parties' GoogleAnalytics already tracks client-side Next.js
+          navigations as pageviews on its own, so this must never be duplicated elsewhere. */}
+      {GA_MEASUREMENT_ID && <GoogleAnalytics gaId={GA_MEASUREMENT_ID} />}
     </html>
   );
 }

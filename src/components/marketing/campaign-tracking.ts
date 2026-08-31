@@ -1,34 +1,7 @@
 /**
- * Conversion-tracking readiness for the Ghana launch campaign. No analytics provider is wired up
- * yet, so this only pushes onto the standard `window.dataLayer` array (the GTM/GA4 convention) —
- * a no-op until a real container is installed, and safe to call from anywhere without pulling in
- * a vendor SDK. Swap the implementation, not every call site, once a provider is chosen.
+ * Backward-compatible alias for the existing marketing call sites (`PageViewTracker`, onboarding
+ * forms, hero CTAs) — the real implementation, event taxonomy, and GA4 wiring now live in
+ * `@/platform/analytics`. Import from there directly in new code; this file exists only so the
+ * pre-GA4 call sites didn't need to change.
  */
-declare global {
-  interface Window {
-    dataLayer?: Array<Record<string, unknown>>;
-  }
-}
-
-export type CampaignEventName =
-  | "ghana_landing_view"
-  | "for_professionals_view"
-  | "for_developers_view"
-  | "for_property_owners_view"
-  | "join_free_click"
-  | "marketplace_visit_click"
-  | "manage_properties_selected"
-  | "market_properties_selected"
-  | "professional_registration_started"
-  | "professional_registration_completed"
-  | "developer_registration_completed"
-  | "manage_properties_registration_completed"
-  | "service_professional_registration_started"
-  | "service_provider_registration_started"
-  | "service_provider_registration_completed";
-
-export function trackCampaignEvent(event: CampaignEventName, params: Record<string, unknown> = {}) {
-  if (typeof window === "undefined") return;
-  window.dataLayer ??= [];
-  window.dataLayer.push({ event, ...params });
-}
+export { trackEvent as trackCampaignEvent, type AnalyticsEvent as CampaignEventName } from "@/platform/analytics";
