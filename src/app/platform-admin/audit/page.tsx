@@ -14,12 +14,12 @@ function AuditContent() {
   }, []);
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
-  if (!entries) return <p className="text-slate-600">Loading…</p>;
+  if (!entries) return <p className="text-muted">Loading…</p>;
 
-  return <section className="rounded-xl border bg-white p-5 shadow-sm">
+  return <section className="rounded-xl border bg-white p-5 shadow-card">
     <h2 className="font-semibold">Platform audit log</h2>
-    <p className="mt-1 text-sm text-slate-600">Every platform-principal action — organisation views, plan/entitlement/flag changes, support sessions — fully separate from any organisation&apos;s own audit history.</p>
-    {entries.length ? <ul className="mt-3 divide-y text-sm">{entries.map((entry) => <li className="py-2" key={entry.id}>{new Date(entry.createdAt).toLocaleString()} — <span className="font-semibold">{entry.action}</span> ({entry.entityType}:{entry.entityId}){entry.organisationId ? ` — org ${entry.organisationId}` : ""}</li>)}</ul> : <p className="mt-2 text-sm text-slate-600">No platform audit events yet.</p>}
+    <p className="mt-1 text-sm text-muted">Every platform-principal action — organisation views, plan/entitlement/flag changes, support sessions — fully separate from any organisation&apos;s own audit history.</p>
+    {entries.length ? <ul className="mt-3 divide-y text-sm">{entries.map((entry) => <li className="py-2" key={entry.id}>{new Date(entry.createdAt).toLocaleString()} — <span className="font-semibold">{entry.action}</span> ({entry.entityType}:{entry.entityId}){entry.organisationId ? ` — org ${entry.organisationId}` : ""}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No platform audit events yet.</p>}
   </section>;
 }
 

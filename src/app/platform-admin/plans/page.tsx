@@ -22,16 +22,16 @@ function PlansContent() {
   }, []);
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
-  if (!plans) return <p className="text-slate-600">Loading…</p>;
+  if (!plans) return <p className="text-muted">Loading…</p>;
 
   return <div className="grid gap-4">
-    <p className="text-sm text-slate-600">Configurable plans, prices, and entitlements (item 1 + item 2). Editing a plan here changes what every subscribed organisation is entitled to going forward; existing usage/records are never deleted.</p>
-    {plans.map((plan) => <section className="rounded-xl border bg-white p-5 shadow-sm" key={plan.id}>
+    <p className="text-sm text-muted">Configurable plans, prices, and entitlements (item 1 + item 2). Editing a plan here changes what every subscribed organisation is entitled to going forward; existing usage/records are never deleted.</p>
+    {plans.map((plan) => <section className="rounded-xl border bg-white p-5 shadow-card" key={plan.id}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">{plan.name} <span className="text-xs font-normal text-slate-500">({plan.key})</span></h2>
-        <span className="text-xs text-slate-500">{plan.isActive ? "active" : "inactive"} · {plan.isPublic ? "public" : "internal"}</span>
+        <h2 className="font-semibold">{plan.name} <span className="text-xs font-normal text-muted">({plan.key})</span></h2>
+        <span className="text-xs text-muted">{plan.isActive ? "active" : "inactive"} · {plan.isPublic ? "public" : "internal"}</span>
       </div>
-      <p className="mt-1 text-sm text-slate-600">{plan.description}</p>
+      <p className="mt-1 text-sm text-muted">{plan.description}</p>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div>
           <h3 className="text-sm font-semibold">Prices</h3>

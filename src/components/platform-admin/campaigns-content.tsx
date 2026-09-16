@@ -30,7 +30,7 @@ const TYPE_LABELS: Record<string, string> = {
   REAL_ESTATE_COMPANY: "Real Estate Company",
   PROPERTY_SERVICE_PROFESSIONAL: "Property Service Professional",
   PROPERTY_SERVICE_COMPANY: "Property Service Company",
-  UMOAFRIC_PROMOTION: "UmoAfric Promotion",
+  UMOAFRIC_PROMOTION: "NesAfric Promotion",
   ANNOUNCEMENT: "Announcement",
   GENERAL: "General / Sponsored",
 };
@@ -58,14 +58,14 @@ function ratioLabel(dim: { width: number; height: number }) {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-700",
-  PENDING_APPROVAL: "bg-amber-50 text-amber-800",
-  LIVE: "bg-emerald-50 text-emerald-800",
-  SCHEDULED: "bg-sky-50 text-sky-800",
-  PAUSED: "bg-amber-50 text-amber-800",
-  ENDED: "bg-slate-100 text-slate-600",
+  DRAFT: "bg-surface text-ink",
+  PENDING_APPROVAL: "bg-gold/10 text-ink",
+  LIVE: "bg-teal/10 text-teal",
+  SCHEDULED: "bg-teal/10 text-teal",
+  PAUSED: "bg-gold/10 text-ink",
+  ENDED: "bg-surface text-muted",
   REJECTED: "bg-red-50 text-red-800",
-  ARCHIVED: "bg-slate-100 text-slate-500",
+  ARCHIVED: "bg-surface text-muted",
 };
 
 const STATUS_TABS = [
@@ -121,15 +121,15 @@ function CampaignPreview({
   const dim = device === "mobile" ? (spec?.mobile ?? { width: 800, height: 500 }) : (spec?.desktop ?? { width: 1600, height: 290 });
   const mediaUrl = device === "mobile" ? (mobileMediaUrl ?? desktopMediaUrl) : desktopMediaUrl;
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-navy" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
+    <div className="overflow-hidden rounded-2xl border border-hairline bg-forest" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
       <div className="relative h-full w-full">
         {mediaUrl && <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${mediaUrl}")` }} />}
         <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/70 to-transparent" />
         <div className={`relative flex h-full flex-col justify-center gap-1.5 px-5 ${device === "mobile" ? "max-w-[85%]" : "max-w-md"}`}>
-          <span className="w-fit rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-200">Promoted</span>
+          <span className="w-fit rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/75">Promoted</span>
           <h3 className="text-sm font-semibold text-white sm:text-base">{headline || "Headline preview"}</h3>
-          {supportingText && <p className="line-clamp-2 text-xs text-slate-200">{supportingText}</p>}
-          {ctaLabel && <span className="mt-1 w-fit rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-navy">{ctaLabel}</span>}
+          {supportingText && <p className="line-clamp-2 text-xs text-white/75">{supportingText}</p>}
+          {ctaLabel && <span className="mt-1 w-fit rounded-lg bg-gold px-2.5 py-1 text-xs font-semibold text-forest">{ctaLabel}</span>}
         </div>
       </div>
     </div>
@@ -143,14 +143,14 @@ function ConfirmDialog({
   title, description, confirmLabel, destructive, onConfirm, onCancel,
 }: { title: string; description: string; confirmLabel: string; destructive?: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-        <h3 className="font-semibold text-slate-950">{title}</h3>
-        <p className="mt-2 whitespace-pre-line text-sm text-slate-600">{description}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/50 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-card">
+        <h3 className="font-semibold text-forest">{title}</h3>
+        <p className="mt-2 whitespace-pre-line text-sm text-muted">{description}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <button className="rounded-lg border px-3.5 py-2 text-sm font-semibold text-slate-700" onClick={onCancel} type="button">Cancel</button>
+          <button className="rounded-lg border px-3.5 py-2 text-sm font-semibold text-ink" onClick={onCancel} type="button">Cancel</button>
           <button
-            className={`rounded-lg px-3.5 py-2 text-sm font-semibold text-white ${destructive ? "bg-red-600" : "bg-navy"}`}
+            className={`rounded-lg px-3.5 py-2 text-sm font-semibold text-white ${destructive ? "bg-red-600" : "bg-forest"}`}
             onClick={onConfirm}
             type="button"
           >
@@ -450,29 +450,29 @@ export function CampaignsAdminContent() {
   return (
     <div className="grid gap-6">
       {error && <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>}
-      {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+      {notice && <p className="rounded-lg bg-teal/10 p-3 text-sm text-teal">{notice}</p>}
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-950">Campaigns</h1>
-          <p className="text-sm text-slate-600">Manage promotional content across UmoAfric.</p>
+          <h1 className="text-xl font-semibold text-forest">Campaigns</h1>
+          <p className="text-sm text-muted">Manage promotional content across NesAfric.</p>
         </div>
-        <button className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover" onClick={openCreatePanel} type="button">
+        <button className="rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-forest transition-colors hover:bg-gold-hover" onClick={openCreatePanel} type="button">
           + Create Campaign
         </button>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Currently live</p>
-        <p className="mt-1 text-2xl font-semibold text-slate-950">{liveCampaigns.length} campaign{liveCampaigns.length === 1 ? "" : "s"}</p>
+      <section className="rounded-2xl border border-hairline bg-white p-5 shadow-card">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Currently live</p>
+        <p className="mt-1 text-2xl font-semibold text-forest">{liveCampaigns.length} campaign{liveCampaigns.length === 1 ? "" : "s"}</p>
         {liveCampaigns.length > 0 ? (
-          <ul className="mt-3 grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
+          <ul className="mt-3 grid gap-1 text-sm text-muted sm:grid-cols-2">
             {Object.entries(liveByPlacement).map(([placement, count]) => (
-              <li key={placement}>{PLACEMENT_LABELS[placement] ?? placement}: <span className="font-semibold text-slate-950">{count}</span></li>
+              <li key={placement}>{PLACEMENT_LABELS[placement] ?? placement}: <span className="font-semibold text-forest">{count}</span></li>
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">Nothing is currently promoted publicly.</p>
+          <p className="mt-2 text-sm text-muted">Nothing is currently promoted publicly.</p>
         )}
       </section>
 
@@ -480,7 +480,7 @@ export function CampaignsAdminContent() {
         <div className="flex flex-wrap gap-2">
           {STATUS_TABS.map((tab) => (
             <button
-              className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${statusFilter === tab.value ? "border-navy bg-navy text-white" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+              className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${statusFilter === tab.value ? "border-forest bg-forest text-white" : "border-hairline text-muted hover:border-hairline"}`}
               key={tab.value}
               onClick={() => setStatusFilter(tab.value)}
               type="button"
@@ -495,9 +495,9 @@ export function CampaignsAdminContent() {
         </select>
       </div>
 
-      <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-        <table className="w-full min-w-[1000px] text-left text-sm">
-          <thead className="border-b bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <section className="overflow-x-auto rounded-xl border bg-white shadow-card">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b bg-warm-white text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-3"></th>
               <th className="px-4 py-3">Campaign</th>
@@ -514,11 +514,11 @@ export function CampaignsAdminContent() {
           </thead>
           <tbody className="divide-y">
             {!campaigns ? (
-              <tr><td className="px-4 py-6 text-slate-500" colSpan={11}>Loading…</td></tr>
+              <tr><td className="px-4 py-6 text-muted" colSpan={11}>Loading…</td></tr>
             ) : campaigns.length === 0 ? (
-              <tr><td className="px-4 py-6 text-slate-500" colSpan={11}>No campaigns yet. Click + Create Campaign to add one.</td></tr>
+              <tr><td className="px-4 py-6 text-muted" colSpan={11}>No campaigns yet. Click + Create Campaign to add one.</td></tr>
             ) : visible.length === 0 ? (
-              <tr><td className="px-4 py-6 text-slate-500" colSpan={11}>No campaigns match this filter.</td></tr>
+              <tr><td className="px-4 py-6 text-muted" colSpan={11}>No campaigns match this filter.</td></tr>
             ) : visible.map(({ campaign, status }) => {
               const rate = ctr(campaign);
               const thumb = campaign.desktopMediaUrl ?? campaign.mobileMediaUrl;
@@ -527,49 +527,49 @@ export function CampaignsAdminContent() {
                   <td className="px-4 py-3">
                     {thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img alt="" className="h-12 w-20 rounded-lg border border-slate-200 object-cover" src={thumb} />
+                      <img alt="" className="h-12 w-20 rounded-lg border border-hairline object-cover" src={thumb} />
                     ) : (
-                      <div className="flex h-12 w-20 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-[9px] text-slate-500">No image</div>
+                      <div className="flex h-12 w-20 items-center justify-center rounded-lg border border-dashed border-hairline bg-warm-white text-[9px] text-muted">No image</div>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-950">{campaign.name}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{campaign.isPlatformOwned ? "UmoAfric" : campaign.advertiser?.displayName ?? campaign.advertiserProvider?.displayName ?? "Advertiser"}</p>
+                    <p className="font-medium text-forest">{campaign.name}</p>
+                    <p className="mt-0.5 text-xs text-muted">{campaign.isPlatformOwned ? "NesAfric" : campaign.advertiser?.displayName ?? campaign.advertiserProvider?.displayName ?? "Advertiser"}</p>
                     {campaign.rejectionReason && <p className="mt-1 text-xs text-red-600">Rejected: {campaign.rejectionReason}</p>}
                     {campaign.advertiserProvider && campaign.advertiserProvider.verificationStatus !== "VERIFIED" && (
-                      <p className="mt-1 text-xs font-semibold text-amber-700">Provider not verified — will not appear publicly</p>
+                      <p className="mt-1 text-xs font-semibold text-ink">Provider not verified — will not appear publicly</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{PLACEMENT_LABELS[campaign.placement] ?? campaign.placement}</td>
-                  <td className="px-4 py-3 text-slate-600">{campaign.type ? TYPE_LABELS[campaign.type] ?? campaign.type : "—"}</td>
+                  <td className="px-4 py-3 text-muted">{PLACEMENT_LABELS[campaign.placement] ?? campaign.placement}</td>
+                  <td className="px-4 py-3 text-muted">{campaign.type ? TYPE_LABELS[campaign.type] ?? campaign.type : "—"}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[status] ?? "bg-slate-100 text-slate-600"}`}>{status.replaceAll("_", " ")}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[status] ?? "bg-surface text-muted"}`}>{status.replaceAll("_", " ")}</span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
+                  <td className="px-4 py-3 text-xs text-muted">
                     {campaign.startAt ? new Date(campaign.startAt).toLocaleDateString() : "—"} → {campaign.endAt ? new Date(campaign.endAt).toLocaleDateString() : "—"}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{campaign.priority}</td>
-                  <td className="px-4 py-3 text-slate-600">{campaign.impressionCount.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-slate-600">{campaign.clickCount.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-slate-600">{rate === null ? "—" : `${rate.toFixed(1)}%`}</td>
+                  <td className="px-4 py-3 text-muted">{campaign.priority}</td>
+                  <td className="px-4 py-3 text-muted">{campaign.impressionCount.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-muted">{campaign.clickCount.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-muted">{rate === null ? "—" : `${rate.toFixed(1)}%`}</td>
                   <td className="relative px-4 py-3">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold">
                       {(status === "PENDING_APPROVAL") && <>
-                        <button className="text-emerald-700" onClick={() => void review(campaign.id, "APPROVED")} type="button">Approve</button>
+                        <button className="text-teal" onClick={() => void review(campaign.id, "APPROVED")} type="button">Approve</button>
                         <button className="text-red-600" onClick={() => void review(campaign.id, "REJECTED")} type="button">Reject</button>
                       </>}
                       {status !== "PENDING_APPROVAL" && status !== "REJECTED" && (
-                        <button className="text-slate-700" onClick={() => { setPreviewCampaign(campaign); setPreviewDevice("desktop"); }} type="button">Preview</button>
+                        <button className="text-ink" onClick={() => { setPreviewCampaign(campaign); setPreviewDevice("desktop"); }} type="button">Preview</button>
                       )}
                       {(status === "LIVE" || status === "SCHEDULED" || status === "PAUSED" || status === "DRAFT") && campaign.isPlatformOwned && (
-                        <button className="text-slate-700" onClick={() => openEditPanel(campaign)} type="button">Edit</button>
+                        <button className="text-ink" onClick={() => openEditPanel(campaign)} type="button">Edit</button>
                       )}
                       {status === "DRAFT" && (
-                        <button className="text-emerald-700" onClick={() => void publish(campaign.id)} type="button">Publish</button>
+                        <button className="text-teal" onClick={() => void publish(campaign.id)} type="button">Publish</button>
                       )}
                       {(status === "LIVE" || status === "SCHEDULED") && (
                         <button
-                          className="text-amber-700"
+                          className="text-ink"
                           onClick={() => setConfirm({
                             title: "Pause this campaign?",
                             description: "It will immediately stop appearing in its public promotional placement. Campaign data and analytics will be preserved.",
@@ -582,11 +582,11 @@ export function CampaignsAdminContent() {
                         </button>
                       )}
                       {status === "PAUSED" && (
-                        <button className="text-emerald-700" onClick={() => void setStatus(campaign.id, "ACTIVE")} type="button">Resume</button>
+                        <button className="text-teal" onClick={() => void setStatus(campaign.id, "ACTIVE")} type="button">Resume</button>
                       )}
                       {(status === "LIVE" || status === "SCHEDULED" || status === "PAUSED") && (
                         <button
-                          className="text-slate-600"
+                          className="text-muted"
                           onClick={() => setConfirm({
                             title: "End this campaign?",
                             description: "Ending a campaign removes it from public placements while preserving its performance history.",
@@ -599,9 +599,9 @@ export function CampaignsAdminContent() {
                         </button>
                       )}
                       {status === "ENDED" && <>
-                        <button className="text-slate-500" onClick={() => void duplicate(campaign.id)} type="button">Duplicate</button>
+                        <button className="text-muted" onClick={() => void duplicate(campaign.id)} type="button">Duplicate</button>
                         <button
-                          className="text-slate-500"
+                          className="text-muted"
                           onClick={() => setConfirm({
                             title: "Archive this campaign?",
                             description: "Archiving hides it from the normal Campaigns view. Its analytics and audit history are preserved and it will still appear under the Archived filter.",
@@ -630,19 +630,19 @@ export function CampaignsAdminContent() {
                       )}
                       {(status === "LIVE" || status === "SCHEDULED" || status === "PAUSED") && (
                         <div className="relative">
-                          <button className="text-slate-500" onClick={() => setOpenMenuId(openMenuId === campaign.id ? null : campaign.id)} type="button">•••</button>
+                          <button className="text-muted" onClick={() => setOpenMenuId(openMenuId === campaign.id ? null : campaign.id)} type="button">•••</button>
                           {openMenuId === campaign.id && (
                             <div className="absolute right-0 top-6 z-10 w-36 rounded-lg border bg-white py-1 shadow-lg">
-                              <button className="block w-full px-3 py-2 text-left font-normal text-slate-700 hover:bg-slate-50" onClick={() => void duplicate(campaign.id)} type="button">Duplicate</button>
+                              <button className="block w-full px-3 py-2 text-left font-normal text-ink hover:bg-warm-white" onClick={() => void duplicate(campaign.id)} type="button">Duplicate</button>
                             </div>
                           )}
                         </div>
                       )}
                     </div>
                     {["APPROVED", "SCHEDULED"].includes(campaign.status) && (
-                      <form className="mt-2 flex flex-wrap items-end gap-1.5 rounded-lg bg-slate-50 p-2" onSubmit={(event) => void schedule(event, campaign.id)}>
-                        <label className="text-[11px] text-slate-600">Start<input className="mt-0.5 block rounded border p-1 text-[11px]" defaultValue={campaign.startAt?.slice(0, 16)} name="startAt" required type="datetime-local" /></label>
-                        <label className="text-[11px] text-slate-600">End<input className="mt-0.5 block rounded border p-1 text-[11px]" defaultValue={campaign.endAt?.slice(0, 16)} name="endAt" required type="datetime-local" /></label>
+                      <form className="mt-2 flex flex-wrap items-end gap-1.5 rounded-lg bg-warm-white p-2" onSubmit={(event) => void schedule(event, campaign.id)}>
+                        <label className="text-[11px] text-muted">Start<input className="mt-0.5 block rounded-xl border border-hairline p-1 text-[11px]" defaultValue={campaign.startAt?.slice(0, 16)} name="startAt" required type="datetime-local" /></label>
+                        <label className="text-[11px] text-muted">End<input className="mt-0.5 block rounded-xl border border-hairline p-1 text-[11px]" defaultValue={campaign.endAt?.slice(0, 16)} name="endAt" required type="datetime-local" /></label>
                         <button className="rounded bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white" type="submit">Reschedule</button>
                       </form>
                     )}
@@ -666,15 +666,15 @@ export function CampaignsAdminContent() {
       )}
 
       {previewCampaign && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/50 p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-card">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-950">{previewCampaign.name}</h3>
-              <button className="text-sm font-semibold text-slate-500" onClick={() => setPreviewCampaign(null)} type="button">Close</button>
+              <h3 className="font-semibold text-forest">{previewCampaign.name}</h3>
+              <button className="text-sm font-semibold text-muted" onClick={() => setPreviewCampaign(null)} type="button">Close</button>
             </div>
             <div className="mt-3 flex gap-2">
-              <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${previewDevice === "desktop" ? "border-navy bg-navy text-white" : "border-slate-200 text-slate-600"}`} onClick={() => setPreviewDevice("desktop")} type="button">Desktop</button>
-              <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${previewDevice === "mobile" ? "border-navy bg-navy text-white" : "border-slate-200 text-slate-600"}`} onClick={() => setPreviewDevice("mobile")} type="button">Mobile</button>
+              <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${previewDevice === "desktop" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setPreviewDevice("desktop")} type="button">Desktop</button>
+              <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${previewDevice === "mobile" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setPreviewDevice("mobile")} type="button">Mobile</button>
             </div>
             <div className="mt-3">
               <CampaignPreview
@@ -687,76 +687,76 @@ export function CampaignsAdminContent() {
                 supportingText={previewCampaign.supportingText ?? ""}
               />
             </div>
-            <p className="mt-2 text-xs text-slate-500">Approximate rendering in {PLACEMENT_LABELS[previewCampaign.placement] ?? previewCampaign.placement}.</p>
+            <p className="mt-2 text-xs text-muted">Approximate rendering in {PLACEMENT_LABELS[previewCampaign.placement] ?? previewCampaign.placement}.</p>
           </div>
         </div>
       )}
 
       {panelOpen && (
-        <section className="rounded-xl border bg-white p-5 shadow-sm">
+        <section className="rounded-xl border bg-white p-5 shadow-card">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">{editingId ? "Edit campaign" : "Create a UmoAfric-owned campaign"}</h2>
-            <button className="text-sm font-semibold text-slate-500" onClick={() => setPanelOpen(false)} type="button">Close</button>
+            <h2 className="font-semibold">{editingId ? "Edit campaign" : "Create a NesAfric-owned campaign"}</h2>
+            <button className="text-sm font-semibold text-muted" onClick={() => setPanelOpen(false)} type="button">Close</button>
           </div>
-          <p className="mt-1 text-sm text-slate-600">Homepage announcements and platform-curated marketplace placements — never a self-service submission.</p>
+          <p className="mt-1 text-sm text-muted">Homepage announcements and platform-curated marketplace placements — never a self-service submission.</p>
 
           <div className="mt-4 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
             <form className="grid gap-3 sm:grid-cols-2" onSubmit={submitPanel}>
-              <input className="rounded border p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Internal campaign name" required value={draft.name} />
-              <select className="rounded border p-2 text-sm" onChange={(event) => setDraft({ ...draft, type: event.target.value })} value={draft.type}>
+              <input className="rounded-xl border border-hairline p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Internal campaign name" required value={draft.name} />
+              <select className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, type: event.target.value })} value={draft.type}>
                 {CAMPAIGN_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
               </select>
-              <select className="rounded border p-2 text-sm disabled:bg-slate-100" disabled={!!editingId} onChange={(event) => setDraft({ ...draft, placement: event.target.value })} value={draft.placement}>
+              <select className="rounded-xl border border-hairline p-2 text-sm disabled:bg-surface" disabled={!!editingId} onChange={(event) => setDraft({ ...draft, placement: event.target.value })} value={draft.placement}>
                 {PLACEMENTS.map((placement) => <option key={placement} value={placement}>{PLACEMENT_LABELS[placement]}</option>)}
               </select>
 
               {SERVICE_PROVIDER_TYPES.has(draft.type) && (
                 <div className="grid gap-1.5 sm:col-span-2 rounded-lg border border-dashed p-3">
-                  <p className="text-xs font-semibold text-slate-600">Property Service Professional / Company</p>
+                  <p className="text-xs font-semibold text-muted">Property Service Professional / Company</p>
                   {selectedProvider ? (
                     <div className="flex items-center justify-between text-sm">
-                      <span>{selectedProvider.displayName} {selectedProvider.verificationStatus !== "VERIFIED" && <span className="font-semibold text-amber-700">(not verified — will not appear publicly)</span>}</span>
-                      <button className="text-xs font-semibold text-slate-500" onClick={() => setSelectedProvider(null)} type="button">Change</button>
+                      <span>{selectedProvider.displayName} {selectedProvider.verificationStatus !== "VERIFIED" && <span className="font-semibold text-ink">(not verified — will not appear publicly)</span>}</span>
+                      <button className="text-xs font-semibold text-muted" onClick={() => setSelectedProvider(null)} type="button">Change</button>
                     </div>
                   ) : (
                     <>
-                      <input className="rounded border p-2 text-sm" onChange={(event) => setProviderQuery(event.target.value)} placeholder="Search providers by name…" value={providerQuery} />
+                      <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setProviderQuery(event.target.value)} placeholder="Search providers by name…" value={providerQuery} />
                       {providerOptions.length > 0 && (
                         <div className="grid gap-1">
                           {providerOptions.map((option) => (
-                            <button className="flex items-center justify-between rounded border p-2 text-left text-sm hover:border-brand" key={option.id} onClick={() => { setSelectedProvider(option); setProviderOptions([]); }} type="button">
+                            <button className="flex items-center justify-between rounded-xl border border-hairline p-2 text-left text-sm hover:border-brand" key={option.id} onClick={() => { setSelectedProvider(option); setProviderOptions([]); }} type="button">
                               <span>{option.displayName}</span>
-                              <span className={option.verificationStatus === "VERIFIED" ? "text-xs font-semibold text-emerald-700" : "text-xs text-slate-500"}>{option.verificationStatus}</span>
+                              <span className={option.verificationStatus === "VERIFIED" ? "text-xs font-semibold text-teal" : "text-xs text-muted"}>{option.verificationStatus}</span>
                             </button>
                           ))}
                         </div>
                       )}
                     </>
                   )}
-                  <p className="text-[11px] text-slate-500">Only VERIFIED providers are ever shown publicly — this is enforced automatically regardless of what is selected here.</p>
+                  <p className="text-[11px] text-muted">Only VERIFIED providers are ever shown publicly — this is enforced automatically regardless of what is selected here.</p>
                 </div>
               )}
 
-              <input className="rounded border p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" required value={draft.headline} />
-              <input className="rounded border p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, supportingText: event.target.value })} placeholder="Supporting text (optional)" value={draft.supportingText} />
-              <input className="rounded border p-2 text-sm" onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA label (optional)" value={draft.ctaLabel} />
-              <input className="rounded border p-2 text-sm" onChange={(event) => setDraft({ ...draft, destinationUrl: event.target.value })} placeholder="https://…" required type="url" value={draft.destinationUrl} />
+              <input className="rounded-xl border border-hairline p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" required value={draft.headline} />
+              <input className="rounded-xl border border-hairline p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, supportingText: event.target.value })} placeholder="Supporting text (optional)" value={draft.supportingText} />
+              <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA label (optional)" value={draft.ctaLabel} />
+              <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, destinationUrl: event.target.value })} placeholder="https://…" required type="url" value={draft.destinationUrl} />
               {!editingId && <>
-                <input className="rounded border p-2 text-sm" min={0} onChange={(event) => setDraft({ ...draft, priority: event.target.value })} placeholder="Priority" type="number" value={draft.priority} />
+                <input className="rounded-xl border border-hairline p-2 text-sm" min={0} onChange={(event) => setDraft({ ...draft, priority: event.target.value })} placeholder="Priority" type="number" value={draft.priority} />
                 <div />
-                <label className="text-xs text-slate-600">Start (optional)<input className="mt-1 block w-full rounded border p-2 text-sm" onChange={(event) => setDraft({ ...draft, startAt: event.target.value })} type="datetime-local" value={draft.startAt} /></label>
-                <label className="text-xs text-slate-600">End (optional)<input className="mt-1 block w-full rounded border p-2 text-sm" onChange={(event) => setDraft({ ...draft, endAt: event.target.value })} type="datetime-local" value={draft.endAt} /></label>
+                <label className="text-xs text-muted">Start (optional)<input className="mt-1 block w-full rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, startAt: event.target.value })} type="datetime-local" value={draft.startAt} /></label>
+                <label className="text-xs text-muted">End (optional)<input className="mt-1 block w-full rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, endAt: event.target.value })} type="datetime-local" value={draft.endAt} /></label>
               </>}
               {editingId ? (
-                <button className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={saving} type="submit">
+                <button className="rounded bg-forest px-4 py-2 text-sm font-semibold text-white sm:col-span-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted" disabled={saving} type="submit">
                   {saving ? "Saving…" : "Save changes"}
                 </button>
               ) : (
                 <div className="flex gap-2 sm:col-span-2">
-                  <button className="flex-1 rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={saving} name="intent" type="submit" value="draft">
+                  <button className="flex-1 rounded-xl border border-hairline border-hairline px-4 py-2 text-sm font-semibold text-ink disabled:cursor-not-allowed disabled:border-hairline disabled:text-muted" disabled={saving} name="intent" type="submit" value="draft">
                     {saving ? "Saving…" : "Save Draft"}
                   </button>
-                  <button className="flex-1 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={saving} name="intent" type="submit" value="publish">
+                  <button className="flex-1 rounded bg-forest px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted" disabled={saving} name="intent" type="submit" value="publish">
                     {saving ? "Saving…" : "Create & Publish"}
                   </button>
                 </div>
@@ -766,10 +766,10 @@ export function CampaignsAdminContent() {
             <div className="grid content-start gap-4">
               <div>
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-slate-600">Live preview</p>
+                  <p className="text-xs font-semibold text-muted">Live preview</p>
                   <div className="flex gap-1.5">
-                    <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "desktop" ? "border-navy bg-navy text-white" : "border-slate-200 text-slate-600"}`} onClick={() => setDraftDevice("desktop")} type="button">Desktop</button>
-                    <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "mobile" ? "border-navy bg-navy text-white" : "border-slate-200 text-slate-600"}`} onClick={() => setDraftDevice("mobile")} type="button">Mobile</button>
+                    <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "desktop" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setDraftDevice("desktop")} type="button">Desktop</button>
+                    <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "mobile" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setDraftDevice("mobile")} type="button">Mobile</button>
                   </div>
                 </div>
                 <div className="mt-2">
@@ -783,20 +783,20 @@ export function CampaignsAdminContent() {
                     supportingText={draft.supportingText}
                   />
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500">Approximate rendering in {PLACEMENT_LABELS[draft.placement]}.</p>
+                <p className="mt-1 text-[11px] text-muted">Approximate rendering in {PLACEMENT_LABELS[draft.placement]}.</p>
               </div>
 
               {draftSpec && (
                 <div className="rounded-lg border border-dashed p-3">
-                  <p className="text-xs font-semibold text-slate-700">Creative specification</p>
-                  <p className="mt-1 text-xs text-slate-600">Desktop: <span className="font-semibold text-slate-950">{draftSpec.desktop.width} × {draftSpec.desktop.height}px</span> ({ratioLabel(draftSpec.desktop)})</p>
-                  <p className="text-xs text-slate-600">Mobile: <span className="font-semibold text-slate-950">{draftSpec.mobile.width} × {draftSpec.mobile.height}px</span> ({ratioLabel(draftSpec.mobile)})</p>
-                  {!draftSpec.measured && <p className="mt-1 text-[11px] text-amber-700">This placement has no live public page yet — this spec is a provisional default.</p>}
+                  <p className="text-xs font-semibold text-ink">Creative specification</p>
+                  <p className="mt-1 text-xs text-muted">Desktop: <span className="font-semibold text-forest">{draftSpec.desktop.width} × {draftSpec.desktop.height}px</span> ({ratioLabel(draftSpec.desktop)})</p>
+                  <p className="text-xs text-muted">Mobile: <span className="font-semibold text-forest">{draftSpec.mobile.width} × {draftSpec.mobile.height}px</span> ({ratioLabel(draftSpec.mobile)})</p>
+                  {!draftSpec.measured && <p className="mt-1 text-[11px] text-ink">This placement has no live public page yet — this spec is a provisional default.</p>}
                 </div>
               )}
 
               <div className="grid gap-3">
-                <p className="text-xs font-semibold text-slate-700">Promotional creative</p>
+                <p className="text-xs font-semibold text-ink">Promotional creative</p>
                 {editingId ? (
                   <>
                     <ImageSlot
@@ -883,20 +883,20 @@ function ImageSlot({
 
   return (
     <div className="rounded-lg border p-3">
-      <p className="text-xs font-semibold text-slate-700">{label}</p>
-      <p className="text-[11px] text-slate-500">Recommended: {spec.width} × {spec.height}px · Aspect ratio {ratioLabel(spec)}</p>
+      <p className="text-xs font-semibold text-ink">{label}</p>
+      <p className="text-[11px] text-muted">Recommended: {spec.width} × {spec.height}px · Aspect ratio {ratioLabel(spec)}</p>
       {previewUrl && (
         <div className="mt-2 flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img alt="" className="h-14 w-24 rounded object-cover" src={previewUrl} />
           <div className="flex flex-col gap-1 text-[11px] font-semibold">
-            <button className="text-left text-slate-700" onClick={() => inputRef.current?.click()} type="button">Replace</button>
+            <button className="text-left text-ink" onClick={() => inputRef.current?.click()} type="button">Replace</button>
             <button className="text-left text-red-600" onClick={onRemove} type="button">Remove</button>
           </div>
         </div>
       )}
       <div
-        className={`mt-2 grid place-items-center rounded-lg border-2 border-dashed p-4 text-center text-xs ${dragOver ? "border-brand bg-brand/5" : "border-slate-300"}`}
+        className={`mt-2 grid place-items-center rounded-lg border-2 border-dashed p-4 text-center text-xs ${dragOver ? "border-brand bg-gold/5" : "border-hairline"}`}
         onDragLeave={() => setDragOver(false)}
         onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
         onDrop={(event) => {
@@ -906,12 +906,12 @@ function ImageSlot({
           if (file) void handleFile(file);
         }}
       >
-        <p className="text-slate-600">Drag & drop image here</p>
-        <p className="my-1 text-slate-500">or</p>
-        <button className="rounded-lg border px-3 py-1.5 font-semibold text-slate-700" onClick={() => inputRef.current?.click()} type="button">
+        <p className="text-muted">Drag & drop image here</p>
+        <p className="my-1 text-muted">or</p>
+        <button className="rounded-lg border px-3 py-1.5 font-semibold text-ink" onClick={() => inputRef.current?.click()} type="button">
           Upload {label.toLowerCase().includes("mobile") ? "mobile" : "desktop"} image
         </button>
-        <p className="mt-2 text-slate-500">PNG • JPG • WEBP · Maximum 25MB</p>
+        <p className="mt-2 text-muted">PNG • JPG • WEBP · Maximum 25MB</p>
         <input
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
@@ -920,7 +920,7 @@ function ImageSlot({
           type="file"
         />
       </div>
-      {warning && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800">{warning}</p>}
+      {warning && <p className="mt-2 rounded-lg bg-gold/10 p-2 text-[11px] text-ink">{warning}</p>}
     </div>
   );
 }

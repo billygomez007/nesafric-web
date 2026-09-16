@@ -32,39 +32,39 @@ function OverviewContent() {
   }, []);
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
-  if (!analytics) return <p className="text-slate-600">Loading commercial analytics…</p>;
+  if (!analytics) return <p className="text-muted">Loading commercial analytics…</p>;
 
   const currencies = [...new Set([...Object.keys(analytics.mrrByCurrency), ...Object.keys(analytics.arrByCurrency)])];
 
   return <div className="grid gap-6">
     <section className="grid gap-4 md:grid-cols-4">
-      <div className="rounded-xl border bg-white p-5 shadow-sm"><p className="text-sm text-slate-600">Organisations</p><p className="mt-2 text-3xl font-semibold">{analytics.totalOrganisations}</p></div>
-      <div className="rounded-xl border bg-white p-5 shadow-sm"><p className="text-sm text-slate-600">New (30d)</p><p className="mt-2 text-3xl font-semibold">{analytics.recentSignups30d}</p></div>
-      <div className="rounded-xl border bg-white p-5 shadow-sm"><p className="text-sm text-slate-600">Trial → active</p><p className="mt-2 text-3xl font-semibold">{analytics.trialsConverted} / {analytics.trialsStarted}</p></div>
-      <div className="rounded-xl border bg-white p-5 shadow-sm"><p className="text-sm text-slate-600">Cancellations (30d)</p><p className="mt-2 text-3xl font-semibold">{analytics.cancellations30d}</p></div>
+      <div className="rounded-xl border bg-white p-5 shadow-card"><p className="text-sm text-muted">Organisations</p><p className="mt-2 text-3xl font-semibold">{analytics.totalOrganisations}</p></div>
+      <div className="rounded-xl border bg-white p-5 shadow-card"><p className="text-sm text-muted">New (30d)</p><p className="mt-2 text-3xl font-semibold">{analytics.recentSignups30d}</p></div>
+      <div className="rounded-xl border bg-white p-5 shadow-card"><p className="text-sm text-muted">Trial → active</p><p className="mt-2 text-3xl font-semibold">{analytics.trialsConverted} / {analytics.trialsStarted}</p></div>
+      <div className="rounded-xl border bg-white p-5 shadow-card"><p className="text-sm text-muted">Cancellations (30d)</p><p className="mt-2 text-3xl font-semibold">{analytics.cancellations30d}</p></div>
     </section>
     <section className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
+      <div className="rounded-xl border bg-white p-5 shadow-card">
         <h2 className="font-semibold">Recurring revenue</h2>
-        {currencies.length ? <dl className="mt-3 grid gap-1 text-sm">{currencies.map((currency) => <div key={currency}><dt className="inline font-semibold">{currency}:</dt> <dd className="inline">MRR {money(analytics.mrrByCurrency[currency] ?? "0", currency)} · ARR {money(analytics.arrByCurrency[currency] ?? "0", currency)}</dd></div>)}</dl> : <p className="mt-2 text-sm text-slate-600">No paying subscriptions yet.</p>}
+        {currencies.length ? <dl className="mt-3 grid gap-1 text-sm">{currencies.map((currency) => <div key={currency}><dt className="inline font-semibold">{currency}:</dt> <dd className="inline">MRR {money(analytics.mrrByCurrency[currency] ?? "0", currency)} · ARR {money(analytics.arrByCurrency[currency] ?? "0", currency)}</dd></div>)}</dl> : <p className="mt-2 text-sm text-muted">No paying subscriptions yet.</p>}
       </div>
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
+      <div className="rounded-xl border bg-white p-5 shadow-card">
         <h2 className="font-semibold">Subscriptions by status</h2>
         <dl className="mt-3 grid grid-cols-2 gap-1 text-sm">{Object.entries(analytics.statusCounts).map(([status, count]) => <div key={status}><dt className="inline font-semibold">{status}:</dt> <dd className="inline"> {count}</dd></div>)}</dl>
       </div>
     </section>
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Plan distribution</h2>
       <dl className="mt-3 grid gap-1 text-sm md:grid-cols-3">{analytics.planCounts.map((entry) => <div key={entry.planKey}><dt className="inline font-semibold">{entry.planName}:</dt> <dd className="inline"> {entry.count}</dd></div>)}</dl>
     </section>
-    {health && <section className="rounded-xl border bg-white p-5 shadow-sm">
+    {health && <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Platform health</h2>
       <dl className="mt-3 grid gap-1 text-sm md:grid-cols-3">
         {Object.entries(health.jobsByStatus).map(([status, count]) => <div key={status}><dt className="inline font-semibold">Jobs {status}:</dt> <dd className="inline"> {count}</dd></div>)}
         <div><dt className="inline font-semibold">Notification failures:</dt> <dd className="inline"> {health.notificationFailureCount}</dd></div>
         <div><dt className="inline font-semibold">Billing webhook incidents:</dt> <dd className="inline"> {health.billingWebhookIncidents.length}</dd></div>
       </dl>
-      <Link className="mt-3 inline-block text-sm font-semibold text-emerald-700" href="/platform-admin/health">View details →</Link>
+      <Link className="mt-3 inline-block text-sm font-semibold text-teal" href="/platform-admin/health">View details →</Link>
     </section>}
   </div>;
 }

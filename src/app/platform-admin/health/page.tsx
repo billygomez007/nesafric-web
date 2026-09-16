@@ -38,21 +38,21 @@ function HealthContent() {
   }
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
-  if (!health) return <p className="text-slate-600">Loading…</p>;
+  if (!health) return <p className="text-muted">Loading…</p>;
 
   return <div className="grid gap-6">
-    {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    {notice && <p className="rounded-lg bg-teal/10 p-3 text-sm text-teal">{notice}</p>}
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Background jobs</h2>
-        <button className="rounded-lg bg-navy px-3.5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={draining} onClick={() => void drainNow()} type="button">
+        <button className="rounded-lg bg-forest px-3.5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted" disabled={draining} onClick={() => void drainNow()} type="button">
           {draining ? "Running…" : "Run due jobs now"}
         </button>
       </div>
-      <p className="mt-1 text-xs text-slate-500">Normally an external scheduler drains this queue automatically. Use this if that scheduler is unavailable.</p>
+      <p className="mt-1 text-xs text-muted">Normally an external scheduler drains this queue automatically. Use this if that scheduler is unavailable.</p>
       <dl className="mt-3 grid grid-cols-2 gap-1 text-sm md:grid-cols-4">{Object.entries(health.jobsByStatus).map(([status, count]) => <div key={status}><dt className="inline font-semibold">{status}:</dt> <dd className="inline"> {count}</dd></div>)}</dl>
     </section>
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Email</h2>
       <dl className="mt-3 grid gap-1 text-sm">
         <div><dt className="inline font-semibold">Provider:</dt> <dd className="inline"> {health.email.provider}</dd></div>
@@ -60,26 +60,26 @@ function HealthContent() {
         <div><dt className="inline font-semibold">Recent email job failures:</dt> <dd className="inline"> {health.email.recentFailureCount}</dd></div>
       </dl>
     </section>
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Recent account emails (welcome, onboarding, verification, notifications)</h2>
       {health.recentAccountEmailJobs.length ? <ul className="mt-3 grid gap-1 text-sm">{health.recentAccountEmailJobs.map((job) => (
         <li key={job.id}>
           <span className="font-semibold">{job.payload.template ?? job.type}</span> — {job.status} ({job.attempts}/{job.maxAttempts} attempts){job.lastError ? ` — ${job.lastError}` : ""}
-          <span className="ml-1 text-xs text-slate-500">id={job.id} · key={job.idempotencyKey}</span>
+          <span className="ml-1 text-xs text-muted">id={job.id} · key={job.idempotencyKey}</span>
         </li>
-      ))}</ul> : <p className="mt-2 text-sm text-slate-600">No account emails yet.</p>}
+      ))}</ul> : <p className="mt-2 text-sm text-muted">No account emails yet.</p>}
     </section>
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Recent failed jobs</h2>
-      {health.failedJobs.length ? <ul className="mt-3 grid gap-1 text-sm">{health.failedJobs.map((job) => <li key={job.id}>{job.type} ({job.attempts}/{job.maxAttempts} attempts) — {job.lastError ?? "no error recorded"}</li>)}</ul> : <p className="mt-2 text-sm text-slate-600">No failed jobs.</p>}
+      {health.failedJobs.length ? <ul className="mt-3 grid gap-1 text-sm">{health.failedJobs.map((job) => <li key={job.id}>{job.type} ({job.attempts}/{job.maxAttempts} attempts) — {job.lastError ?? "no error recorded"}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No failed jobs.</p>}
     </section>
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Notifications</h2>
       <p className="mt-2 text-sm">{health.notificationFailureCount} failed deliveries.</p>
     </section>
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Billing webhook incidents</h2>
-      {health.billingWebhookIncidents.length ? <ul className="mt-3 grid gap-1 text-sm">{health.billingWebhookIncidents.map((incident) => <li key={incident.id}>{incident.providerKey} — {incident.eventType} — {incident.status}{incident.failureReason ? `: ${incident.failureReason}` : ""}</li>)}</ul> : <p className="mt-2 text-sm text-slate-600">No incidents.</p>}
+      {health.billingWebhookIncidents.length ? <ul className="mt-3 grid gap-1 text-sm">{health.billingWebhookIncidents.map((incident) => <li key={incident.id}>{incident.providerKey} — {incident.eventType} — {incident.status}{incident.failureReason ? `: ${incident.failureReason}` : ""}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No incidents.</p>}
     </section>
   </div>;
 }

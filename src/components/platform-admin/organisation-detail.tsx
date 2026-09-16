@@ -57,21 +57,21 @@ export function PlatformAdminOrganisationDetail({ organisationId }: { organisati
   }
 
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
-  if (needsSupportSession) return <div className="rounded-xl border bg-white p-5 shadow-sm">
+  if (needsSupportSession) return <div className="rounded-xl border bg-white p-5 shadow-card">
     <h2 className="font-semibold">Support session required</h2>
-    <p className="mt-1 text-sm text-slate-600">Viewing this organisation&apos;s details requires an active, reasoned, time-bound support session. The organisation can see this access in its own billing settings.</p>
-    <textarea className="mt-3 w-full rounded border p-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="Reason for accessing this organisation's data" value={reason} />
-    <button className="mt-2 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white" disabled={!reason.trim()} onClick={() => void startSupportSession()}>Start 60-minute support session</button>
+    <p className="mt-1 text-sm text-muted">Viewing this organisation&apos;s details requires an active, reasoned, time-bound support session. The organisation can see this access in its own billing settings.</p>
+    <textarea className="mt-3 w-full rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="Reason for accessing this organisation's data" value={reason} />
+    <button className="mt-2 rounded bg-forest px-4 py-2 text-sm font-semibold text-white" disabled={!reason.trim()} onClick={() => void startSupportSession()}>Start 60-minute support session</button>
   </div>;
-  if (!detail) return <p className="text-slate-600">Loading…</p>;
+  if (!detail) return <p className="text-muted">Loading…</p>;
 
   const subscription = detail.organisation.subscription;
 
   return <div className="grid gap-6">
-    {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    {notice && <p className="rounded-lg bg-teal/10 p-3 text-sm text-teal">{notice}</p>}
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h1 className="text-xl font-semibold">{detail.organisation.name}</h1>
-      <p className="text-sm text-slate-500">{detail.organisation.countryCode} · {detail.organisation.type} · {detail.organisation._count.members} members · {detail.organisation._count.properties} properties</p>
+      <p className="text-sm text-muted">{detail.organisation.countryCode} · {detail.organisation.type} · {detail.organisation._count.members} members · {detail.organisation._count.properties} properties</p>
       {subscription && <dl className="mt-3 grid gap-1 text-sm md:grid-cols-2">
         <div><dt className="inline font-semibold">Plan:</dt> <dd className="inline"> {subscription.plan.name} ({subscription.billingCycle})</dd></div>
         <div><dt className="inline font-semibold">Status:</dt> <dd className="inline"> {subscription.status}</dd></div>
@@ -79,40 +79,40 @@ export function PlatformAdminOrganisationDetail({ organisationId }: { organisati
         <div><dt className="inline font-semibold">Current period ends:</dt> <dd className="inline"> {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</dd></div>
       </dl>}
       {subscription && <div className="mt-4 flex flex-wrap gap-2">
-        <button className="rounded border px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/suspend", { reason: "Suspended by platform operator" })}>Suspend</button>
-        <button className="rounded border px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/resume", { reason: "Resumed by platform operator" })}>Resume</button>
-        <button className="rounded border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-700" onClick={() => void action("/cancel", { reason: "Cancelled by platform operator" })}>Cancel</button>
+        <button className="rounded-xl border border-hairline px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/suspend", { reason: "Suspended by platform operator" })}>Suspend</button>
+        <button className="rounded-xl border border-hairline px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/resume", { reason: "Resumed by platform operator" })}>Resume</button>
+        <button className="rounded-xl border border-hairline border-red-300 px-3 py-1.5 text-sm font-semibold text-red-700" onClick={() => void action("/cancel", { reason: "Cancelled by platform operator" })}>Cancel</button>
       </div>}
     </section>
 
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Entitlements &amp; usage</h2>
       {detail.entitlements ? <div className="mt-3 grid gap-2 md:grid-cols-2">
-        {detail.entitlements.features.map((feature) => <div className="rounded border p-3 text-sm" key={feature.featureKey}>
-          <p className="font-semibold">{feature.label} <span className="ml-1 text-xs font-normal text-slate-500">({feature.source})</span></p>
+        {detail.entitlements.features.map((feature) => <div className="rounded-xl border border-hairline p-3 text-sm" key={feature.featureKey}>
+          <p className="font-semibold">{feature.label} <span className="ml-1 text-xs font-normal text-muted">({feature.source})</span></p>
           {feature.kind === "BOOLEAN" ? <p>{feature.booleanValue ? "Enabled" : "Disabled"}</p> : <p>{feature.current ?? 0} / {feature.isUnlimited ? "Unlimited" : feature.limit}{feature.reached ? " — reached" : ""}</p>}
         </div>)}
-      </div> : <p className="mt-2 text-sm text-slate-600">This organisation has no UmoAfric subscription yet.</p>}
+      </div> : <p className="mt-2 text-sm text-muted">This organisation has no NesAfric subscription yet.</p>}
     </section>
 
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Entitlement overrides</h2>
-      {detail.overrides.length ? <ul className="mt-3 grid gap-2 text-sm">{detail.overrides.map((override) => <li className="rounded border p-2" key={override.id}>
+      {detail.overrides.length ? <ul className="mt-3 grid gap-2 text-sm">{detail.overrides.map((override) => <li className="rounded-xl border border-hairline p-2" key={override.id}>
         <span className="font-semibold">{override.featureKey}</span> — {override.isUnlimited ? "unlimited" : override.kind === "BOOLEAN" ? String(override.booleanValue) : override.limitValue} ({override.reason}){override.revokedAt && " — revoked"}
-      </li>)}</ul> : <p className="mt-2 text-sm text-slate-600">No overrides.</p>}
+      </li>)}</ul> : <p className="mt-2 text-sm text-muted">No overrides.</p>}
     </section>
 
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Invoices</h2>
-      {detail.invoices.length ? <ul className="mt-3 divide-y text-sm">{detail.invoices.map((invoice) => <li className="flex justify-between py-2" key={invoice.id}><span>{new Date(invoice.periodStart).toLocaleDateString()} – {new Date(invoice.periodEnd).toLocaleDateString()}</span><span>{invoice.currencyCode} {(Number(invoice.amountMinor) / 100).toFixed(2)} — {invoice.status}</span></li>)}</ul> : <p className="mt-2 text-sm text-slate-600">No invoices yet.</p>}
+      {detail.invoices.length ? <ul className="mt-3 divide-y text-sm">{detail.invoices.map((invoice) => <li className="flex justify-between py-2" key={invoice.id}><span>{new Date(invoice.periodStart).toLocaleDateString()} – {new Date(invoice.periodEnd).toLocaleDateString()}</span><span>{invoice.currencyCode} {(Number(invoice.amountMinor) / 100).toFixed(2)} — {invoice.status}</span></li>)}</ul> : <p className="mt-2 text-sm text-muted">No invoices yet.</p>}
     </section>
 
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Status history</h2>
       <ul className="mt-3 grid gap-1 text-sm">{detail.statusHistory.map((entry) => <li key={entry.id}>{new Date(entry.createdAt).toLocaleString()} — {entry.fromStatus ?? "—"} → {entry.toStatus}: {entry.reason}</li>)}</ul>
     </section>
 
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Support sessions (visible to the organisation)</h2>
       <ul className="mt-3 grid gap-1 text-sm">{detail.supportSessions.map((session) => <li key={session.id}>{new Date(session.startedAt).toLocaleString()} — {session.reason} (expires {new Date(session.expiresAt).toLocaleString()}{session.endedAt ? ", ended" : ""})</li>)}</ul>
     </section>
