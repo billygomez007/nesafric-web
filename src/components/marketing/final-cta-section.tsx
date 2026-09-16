@@ -6,7 +6,7 @@ export function FinalCtaSection() {
     <section className="marketing-grid relative overflow-hidden bg-navy py-24 sm:py-32">
       <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
         <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-          Run your real estate business on UmoAfric.
+          Run your real estate business on NesAfric.
         </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-400">
           Owners, managers, agents, brokers, brokerages and developers can operate, market and grow — from

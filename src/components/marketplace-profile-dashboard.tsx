@@ -142,7 +142,7 @@ export function MarketplaceProfileDashboard({ professionalId }: { professionalId
       {entitlements && (
         <section className="rounded-2xl border border-forest bg-forest p-6 text-white shadow-card">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-soft">Marketplace workspace</p><h2 className="mt-2 text-xl font-semibold">{entitlements.planName}</h2><p className="mt-1 text-sm text-white/65">This subscription is separate from PropertyOS billing.</p></div>
+            <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-soft">Marketplace workspace</p><h2 className="mt-2 text-xl font-semibold">{entitlements.planName}</h2><p className="mt-1 text-sm text-white/65">This subscription is separate from NesAfric management billing.</p></div>
             <span className="rounded-full bg-teal/20 px-3 py-1 text-xs font-semibold text-white">{entitlements.status.replaceAll("_", " ")}</span>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">

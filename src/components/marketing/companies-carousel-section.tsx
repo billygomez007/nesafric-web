@@ -27,7 +27,7 @@ export function CompaniesCarouselSection() {
   if (!items || items.length === 0) return null;
 
   return (
-    <section aria-label="Companies and professionals on UmoAfric" className="border-b border-slate-200 bg-white py-7 sm:py-9">
+    <section aria-label="Companies and professionals on NesAfric" className="border-b border-slate-200 bg-white py-7 sm:py-9">
       <div className="mx-auto max-w-7xl px-6 text-center sm:px-8">
         <p className="text-xs font-semibold tracking-[0.22em] text-slate-500">PROFESSIONALS ON UMOAFRIC</p>
       </div>

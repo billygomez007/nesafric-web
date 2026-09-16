@@ -229,12 +229,12 @@ export function BillingSettings() {
           <div className="p-5"><p className="text-xs text-white/55">{snapshot.trialEndsAt ? "Trial ends" : snapshot.cancelAtPeriodEnd ? "Ends on" : "Subscription"}</p><p className="mt-2 text-sm font-semibold">{snapshot.trialEndsAt ? formatDate(snapshot.trialEndsAt) : snapshot.cancelAtPeriodEnd ? formatDate(snapshot.currentPeriodEnd) : "No scheduled change"}</p><p className="mt-1 text-xs text-white/55">{snapshot.cancelAtPeriodEnd ? "Cancellation scheduled" : "Billing state is current"}</p></div>
         </div>
         <div className="flex flex-wrap gap-3 border-t border-white/10 p-5 sm:p-6">
-          {snapshot.cancelAtPeriodEnd ? <button className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-forest transition hover:bg-cream disabled:opacity-60" disabled={busy} onClick={() => void reactivate()} type="button">Reverse scheduled cancellation</button> : snapshot.status !== "CANCELLED" && <><button className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60" disabled={busy} onClick={() => void cancel(false)} type="button">Cancel at period end</button><button className="rounded-xl border border-red-200/40 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500/20 disabled:opacity-60" disabled={busy} onClick={() => void cancel(true)} type="button">Cancel immediately</button></>}
+          {snapshot.cancelAtPeriodEnd ? <button className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-forest transition hover:bg-cream disabled:bg-surface disabled:text-muted" disabled={busy} onClick={() => void reactivate()} type="button">Reverse scheduled cancellation</button> : snapshot.status !== "CANCELLED" && <><button className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:bg-surface disabled:text-muted" disabled={busy} onClick={() => void cancel(false)} type="button">Cancel at period end</button><button className="rounded-xl border border-red-200/40 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500/20 disabled:bg-surface disabled:text-muted" disabled={busy} onClick={() => void cancel(true)} type="button">Cancel immediately</button></>}
         </div>
       </section>
 
       <section>
-        <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Plans</p><h2 className="mt-2 text-2xl font-semibold text-forest">Change your plan</h2><p className="mt-1 text-sm text-muted">Plans and prices are configured for this PropertyOS organisation.</p></div>
+        <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Plans</p><h2 className="mt-2 text-2xl font-semibold text-forest">Change your plan</h2><p className="mt-1 text-sm text-muted">Plans and prices are configured for this NesAfric management workspace.</p></div>
         <div className="grid gap-4 lg:grid-cols-3">
           {snapshot.availablePlans.map((plan) => {
             const price = plan.prices.find((entry) => entry.currencyCode === snapshot.currencyCode && entry.billingCycle === snapshot.billingCycle);
@@ -243,7 +243,7 @@ export function BillingSettings() {
               <div className="flex items-start justify-between gap-3"><h3 className="text-lg font-semibold text-forest">{plan.name}</h3>{current && <span className="rounded-full bg-teal/10 px-2.5 py-1 text-xs font-semibold text-teal">Current</span>}</div>
               <p className="mt-2 min-h-10 text-sm leading-6 text-muted">{plan.description || "Plan details are configured by NesAfric."}</p>
               <p className="mt-5 text-2xl font-semibold text-forest">{price ? money(price.amountMinor, price.currencyCode) : "Not configured"}{price && <span className="ml-1 text-xs font-normal text-muted">/ {intervalLabel(snapshot.billingCycle)}</span>}</p>
-              {!current && <button className="mt-5 w-full rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald disabled:cursor-not-allowed disabled:opacity-60" disabled={busy || !price || snapshot.status === "CANCELLED"} onClick={() => void changePlan(plan)} type="button">Switch to {plan.name}</button>}
+              {!current && <button className="mt-5 w-full rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={busy || !price || snapshot.status === "CANCELLED"} onClick={() => void changePlan(plan)} type="button">Switch to {plan.name}</button>}
             </article>;
           })}
         </div>

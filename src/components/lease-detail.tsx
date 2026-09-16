@@ -300,7 +300,7 @@ export function LeaseDetail({ leaseId }: { leaseId: string }) {
           <div className="flex flex-wrap gap-2">
             {renewalActions[lease.renewalWorkflowStatus].map((action) => (
               <button
-                className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
                 disabled={renewing}
                 key={action.status}
                 onClick={() => transitionRenewal(action.status)}

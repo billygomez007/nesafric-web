@@ -405,7 +405,7 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
 
             <div className="sm:col-span-2">
               <button
-                className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
                 disabled={savingPreferences}
                 type="submit"
               >
@@ -469,7 +469,7 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
       >
         {notifications.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-hairline text-[10px] font-semibold uppercase tracking-wide text-muted">
                   <th className="pb-3">Event</th>

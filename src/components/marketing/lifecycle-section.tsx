@@ -22,7 +22,7 @@ export function LifecycleSection() {
             From first listing to every renewal — one continuous system.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-400">
-            UmoAfric doesn&apos;t hand off between tools at each stage. The same platform carries a unit through
+            NesAfric doesn&apos;t hand off between tools at each stage. The same platform carries a unit through
             its entire life, and back around again.
           </p>
         </div>

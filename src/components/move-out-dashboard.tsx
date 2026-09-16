@@ -821,7 +821,7 @@ function MoveOutContent({
                   <div className="grid gap-2">
                     {readyActions.map((status) => (
                       <button
-                        className="rounded-xl border border-hairline bg-white px-3 py-2.5 text-sm font-semibold text-forest transition hover:border-teal/25 hover:bg-warm-white disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-xl border border-hairline bg-white px-3 py-2.5 text-sm font-semibold text-forest transition hover:border-teal/25 hover:bg-warm-white disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
                         disabled={busy}
                         key={status}
                         onClick={() =>
@@ -1948,7 +1948,7 @@ function FinalStatementCard({
         </a>
       ) : (
         <button
-          className="rounded-xl border border-hairline bg-white px-3 py-2.5 text-sm font-semibold text-forest transition hover:border-teal/25 hover:bg-warm-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl border border-hairline bg-white px-3 py-2.5 text-sm font-semibold text-forest transition hover:border-teal/25 hover:bg-warm-white disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
           disabled={busy}
           onClick={() => void downloadPdf()}
         >

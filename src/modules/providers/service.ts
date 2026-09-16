@@ -488,7 +488,7 @@ export async function reviewProviderVerification(
       throw new AppError(
         "PLATFORM_IDENTITY_VERIFICATION_REQUIRED",
         409,
-        "UmoAfric identity verification (Ghana Card review) must be completed before this provider can be marked verified.",
+        "NesAfric identity verification (Ghana Card review) must be completed before this provider can be marked verified.",
       );
     }
     const updated = await tx.serviceProvider.update({

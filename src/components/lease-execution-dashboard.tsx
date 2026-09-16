@@ -321,26 +321,26 @@ export function LeaseExecutionDashboard({
                 }}
               >
                 <select
-                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
                   name="source"
                 >
                   <option value="GENERATED">Generated metadata</option>
                   <option value="UPLOADED">Uploaded metadata</option>
                 </select>
                 <input
-                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
                   name="fileKey"
                   placeholder="Secure storage key"
                   required
                 />
                 <input
-                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
                   name="fileName"
                   placeholder="File name"
                   required
                 />
                 <input
-                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
                   defaultValue="application/pdf"
                   name="contentType"
                 />
@@ -389,7 +389,7 @@ export function LeaseExecutionDashboard({
                 }}
               >
                 <select
-                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+                  className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
                   name="memberId"
                   required
                 >
@@ -422,7 +422,7 @@ export function LeaseExecutionDashboard({
                   : "Complete the outstanding readiness conditions."}
               </p>
               <button
-                className="mt-3 w-full rounded-xl bg-forest p-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 w-full rounded-xl bg-forest p-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
                 disabled={!readiness.ready}
                 onClick={() =>
                   void mutate(
@@ -496,13 +496,13 @@ function MoveInPanel({
             }}
           >
             <input
-              className="rounded-xl border border-hairline bg-white p-2.5 text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+              className="rounded-xl border border-hairline bg-white p-2.5 text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
               name="scheduledDate"
               required
               type="date"
             />
             <select
-              className="rounded-xl border border-hairline bg-white p-2.5 text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+              className="rounded-xl border border-hairline bg-white p-2.5 text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
               name="responsibleMemberId"
             >
               <option value="">Responsible staff</option>
@@ -513,7 +513,7 @@ function MoveInPanel({
               ))}
             </select>
             <textarea
-              className="rounded-xl border border-hairline bg-white p-2.5 text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+              className="rounded-xl border border-hairline bg-white p-2.5 text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
               name="notes"
               placeholder="Move-in notes"
             />
@@ -674,7 +674,7 @@ function MoveInForms({
       >
         <h3 className="font-semibold">Inspection</h3>
         <select
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="inspectorMemberId"
           required
         >
@@ -686,81 +686,81 @@ function MoveInForms({
           ))}
         </select>
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="inspectedAt"
           required
           type="datetime-local"
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="overallCondition"
           placeholder="Overall condition"
           required
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="areaName"
           placeholder="Room or area"
           required
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="areaCondition"
           placeholder="Area condition"
           required
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="areaNotes"
           placeholder="Condition notes/defects"
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="mediaFile"
           placeholder="Photo file name metadata"
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="meterType"
           placeholder="Meter type"
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="meterIdentifier"
           placeholder="Meter identifier"
         />
         <div className="grid grid-cols-2 gap-2">
           <input
-            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
             name="meterValue"
             placeholder="Reading"
           />
           <input
-            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
             name="meterUnit"
             placeholder="Unit"
           />
         </div>
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="inventoryCategory"
           placeholder="Inventory category"
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="inventoryItem"
           placeholder="Inventory item"
         />
         <div className="grid grid-cols-2 gap-2">
           <input
-            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
             defaultValue="1"
             min={1}
             name="inventoryQuantity"
             type="number"
           />
           <input
-            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+            className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
             name="inventoryCondition"
             placeholder="Condition"
           />
@@ -793,7 +793,7 @@ function MoveInForms({
       >
         <h3 className="font-semibold">Keys and access</h3>
         <select
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="tenantOrganisationId"
           required
         >
@@ -804,13 +804,13 @@ function MoveInForms({
           ))}
         </select>
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="type"
           placeholder="Key/access type"
           required
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           defaultValue="1"
           min={1}
           name="quantity"
@@ -818,12 +818,12 @@ function MoveInForms({
           type="number"
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="identifier"
           placeholder="Identifier"
         />
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="issuedAt"
           required
           type="datetime-local"
@@ -851,13 +851,13 @@ function MoveInForms({
       >
         <h3 className="font-semibold">Complete move-in</h3>
         <input
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="actualDate"
           required
           type="date"
         />
         <textarea
-          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="rounded-xl border border-hairline bg-white p-2.5 text-sm text-ink transition focus:border-teal focus:ring-2 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           name="note"
           placeholder="Completion note"
         />

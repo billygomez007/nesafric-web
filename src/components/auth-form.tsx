@@ -14,10 +14,8 @@ export function AuthForm({ mode }: { mode: "register" | "login" }) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  async function resolveWorkspace() {
-    const response = await fetch("/api/workspaces", { cache: "no-store" });
-    if (!response.ok) throw new Error("Your account is signed in, but we could not load its workspaces. Refresh to continue.");
-    const workspaces = (await response.json()) as Workspaces;
+  function resolveWorkspace(workspaces: Partial<Workspaces> | undefined) {
+    if (!workspaces || !Array.isArray(workspaces.propertyOsOrganisations) || !Array.isArray(workspaces.marketplaceProfessionals)) return "/dashboard";
     const organisation = workspaces.propertyOsOrganisations[0];
     if (organisation) {
       localStorage.setItem("propertyos.activeOrganisationId", organisation.id);
@@ -39,9 +37,10 @@ export function AuthForm({ mode }: { mode: "register" | "login" }) {
     try {
       const data = Object.fromEntries(new FormData(event.currentTarget));
       const response = await fetch(`/api/auth/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
-      if (!response.ok) throw new Error((await response.json()).error?.message ?? "Unable to continue.");
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? "Unable to continue.");
       trackEvent(mode === "register" ? "sign_up" : "login", { method: "email" });
-      const destination = mode === "register" ? "/onboarding" : await resolveWorkspace();
+      const destination = mode === "register" ? "/onboarding" : resolveWorkspace(body.workspaces);
       router.push(destination);
       router.refresh();
     } catch (cause) {

@@ -10,7 +10,7 @@ export function GhanaMarketplaceSection() {
             Not a wall of anonymous ads — a professional marketplace.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-600">
-            Every listing on UmoAfric is published under a professional profile, not posted anonymously.
+            Every listing on NesAfric is published under a professional profile, not posted anonymously.
             Buyers and renters can see who they&apos;re dealing with — and whether that professional&apos;s
             identity has been verified.
           </p>

@@ -11,7 +11,7 @@ type Workspace = {
 
 /**
  * Dual-workspace switcher (item 10) — a single identity acting across two clearly separate
- * business sides: PropertyOS Management organisations and Marketplace Professional profiles.
+ * business sides: NesAfric management organisations and Marketplace Professional profiles.
  * Never merges the two lists; switching only ever changes which workspace's shell is shown,
  * never the signed-in identity itself.
  */
@@ -24,7 +24,7 @@ export function WorkspaceSwitcher({ current }: { current: { kind: "propertyos" |
   function selectOrganisation(organisationId: string) {
     localStorage.setItem("propertyos.activeOrganisationId", organisationId);
     setOpen(false);
-    // A full reload guarantees every PropertyOS page (each reads the active organisation from
+    // A full reload guarantees every NesAfric management page (each reads the active organisation from
     // localStorage independently on mount) picks up the newly selected organisation, including
     // when the switch happens while already sitting on /dashboard.
     if (window.location.pathname === "/dashboard") window.location.reload();
@@ -59,12 +59,12 @@ export function WorkspaceSwitcher({ current }: { current: { kind: "propertyos" |
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-hairline bg-white p-2 shadow-xl">
-          <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-teal">PropertyOS organisations</p>
+          <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-teal">NesAfric management organisations</p>
           {!workspaces ? (
             <p className="px-2 py-2 text-sm text-muted">Loading…</p>
           ) : workspaces.propertyOsOrganisations.length === 0 ? (
             <div className="px-2 py-2">
-              <p className="text-sm text-muted">No PropertyOS organisations yet.</p>
+              <p className="text-sm text-muted">No NesAfric management organisations yet.</p>
               <Link className="mt-1 inline-block text-sm font-semibold text-teal" href="/onboarding" onClick={() => setOpen(false)}>Create one →</Link>
             </div>
           ) : (
