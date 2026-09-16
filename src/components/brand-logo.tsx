@@ -12,7 +12,7 @@ export function BrandLogo({ variant = "dark", height = 28, className = "" }: { v
   return (
     <Image
       alt={BRAND.name}
-      className={className}
+      className={`${variant === "dark" ? "brightness-0 invert" : ""} ${className}`}
       height={height}
       priority
       src={variant === "dark" ? BRAND.logo.onDark : BRAND.logo.onLight}

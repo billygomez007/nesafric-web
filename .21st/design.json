@@ -1,0 +1,180 @@
+{
+  "version": 1,
+  "project": {
+    "name": "propertyos-ai",
+    "productType": null,
+    "stack": [
+      "nextjs",
+      "react",
+      "tailwind-v4"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/app/globals.css"
+    ],
+    "components": [
+      "src/components/ui"
+    ],
+    "assets": [
+      "public/brand"
+    ],
+    "instructions": [
+      "AGENTS.md",
+      "CLAUDE.md"
+    ]
+  },
+  "design": {
+    "colorMode": "light",
+    "colors": {
+      "--background": {
+        "value": "#ffffff",
+        "source": "src/app/globals.css"
+      },
+      "--foreground": {
+        "value": "#171717",
+        "source": "src/app/globals.css"
+      },
+      "--color-brand": {
+        "value": "var(--color-brand)",
+        "source": "src/app/globals.css"
+      },
+      "--color-brand-hover": {
+        "value": "var(--color-brand-hover)",
+        "source": "src/app/globals.css"
+      },
+      "--color-brand-active": {
+        "value": "var(--color-brand-active)",
+        "source": "src/app/globals.css"
+      },
+      "--color-brand-strong": {
+        "value": "var(--color-brand-strong)",
+        "source": "src/app/globals.css"
+      },
+      "--color-navy": {
+        "value": "var(--color-navy)",
+        "source": "src/app/globals.css"
+      },
+      "--color-charcoal": {
+        "value": "var(--color-charcoal)",
+        "source": "src/app/globals.css"
+      },
+      "--color-surface": {
+        "value": "var(--color-surface)",
+        "source": "src/app/globals.css"
+      },
+      "--color-surface-elevated": {
+        "value": "var(--color-surface-elevated)",
+        "source": "src/app/globals.css"
+      },
+      "--color-ink": {
+        "value": "var(--color-ink)",
+        "source": "src/app/globals.css"
+      },
+      "--color-muted": {
+        "value": "var(--color-muted)",
+        "source": "src/app/globals.css"
+      },
+      "--color-hairline": {
+        "value": "var(--color-hairline)",
+        "source": "src/app/globals.css"
+      },
+      "--color-premium": {
+        "value": "var(--color-premium)",
+        "source": "src/app/globals.css"
+      },
+      "--color-success": {
+        "value": "var(--color-success)",
+        "source": "src/app/globals.css"
+      },
+      "--color-warning": {
+        "value": "var(--color-warning)",
+        "source": "src/app/globals.css"
+      },
+      "--color-danger": {
+        "value": "var(--color-danger)",
+        "source": "src/app/globals.css"
+      },
+      "--color-info": {
+        "value": "var(--color-info)",
+        "source": "src/app/globals.css"
+      },
+      "--color-background": {
+        "value": "var(--background)",
+        "source": "src/app/globals.css"
+      },
+      "--color-foreground": {
+        "value": "var(--foreground)",
+        "source": "src/app/globals.css"
+      }
+    },
+    "typography": {
+      "--font-sans": {
+        "value": "var(--font-montserrat)",
+        "source": "src/app/globals.css"
+      },
+      "--font-mono": {
+        "value": "var(--font-geist-mono)",
+        "source": "src/app/globals.css"
+      }
+    },
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [
+      "button",
+      "button-styles"
+    ],
+    "preferredPrimitives": [],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [
+    {
+      "decision": "Use the approved NesAfric reference as one light editorial system: warm ivory marketing surfaces with forest typography, teal interaction states and restrained gold; authenticated pages use the same tokens with a permanent forest sidebar.",
+      "source": "approved local reference image"
+    }
+  ],
+  "evidence": [
+    {
+      "fact": "components.installed",
+      "source": "src/components/ui"
+    },
+    {
+      "fact": "design.colorMode:light",
+      "source": "src/app/globals.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/app/globals.css"
+    },
+    {
+      "fact": "project.instructions",
+      "source": "AGENTS.md"
+    },
+    {
+      "fact": "project.instructions",
+      "source": "CLAUDE.md"
+    },
+    {
+      "fact": "project.stack:nextjs",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v4",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-16T15:22:58.492Z"
+}

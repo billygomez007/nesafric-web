@@ -46,7 +46,7 @@ export function SiteFooter() {
           <div>
             <BrandLogo height={26} />
             <p className="mt-4 max-w-xs text-sm leading-6 text-slate-400">
-              The intelligent operating and marketplace platform for real estate.
+              Real Estate OS for Africa. Properties, people and opportunities in one connected platform.
             </p>
             <dl className="mt-6 space-y-3 text-sm text-slate-400">
               <div>
@@ -83,7 +83,7 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="mt-16 flex flex-col gap-4 border-t border-slate-800 pt-8 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} {BRAND.name}. All rights reserved. · <a className="hover:text-brand" href={`https://${BRAND.domain}`}>{BRAND.domain}</a></p>
+          <p>© {new Date().getFullYear()} {BRAND.name}. All rights reserved. <a className="hover:text-brand" href={`https://${BRAND.domain}`}>{BRAND.domain}</a></p>
           <p>Built for owners, operators, agents, brokers, brokerages and developers.</p>
         </div>
       </div>

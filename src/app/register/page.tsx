@@ -7,7 +7,7 @@ export default function RegisterPage() {
     <main className="mx-auto max-w-md px-6 py-20">
       <Link href="/"><BrandLogo height={26} variant="light" /></Link>
       <h1 className="mt-3 text-3xl font-semibold">Create your account</h1>
-      <p className="mt-2 text-slate-600">Your account can belong to more than one organisation.</p>
+      <p className="mt-2 text-slate-600">One identity for your properties, marketplace work and service profile.</p>
       <AuthForm mode="register" />
       <p className="mt-6 text-sm text-slate-600">Already registered? <Link className="font-semibold text-navy transition-colors hover:text-brand-strong" href="/login">Sign in</Link></p>
     </main>

@@ -1,27 +1,29 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Geist_Mono, Montserrat } from "next/font/google";
+import localFont from "next/font/local";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import { BRAND } from "@/platform/brand";
 import { GA_MEASUREMENT_ID } from "@/platform/analytics";
 import "./globals.css";
 
-const montserrat = Montserrat({
+const montserrat = localFont({
+  src: [
+    { path: "../modules/documents/assets/fonts/NotoSans-Regular.ttf", weight: "400" },
+    { path: "../modules/documents/assets/fonts/NotoSans-Bold.ttf", weight: "700" },
+  ],
   variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../modules/documents/assets/fonts/NotoSans-Regular.ttf",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
 });
 
-const TITLE = `${BRAND.name} — The Real Estate Operating & Marketplace Platform`;
+const TITLE = `${BRAND.name} | Real Estate OS for Africa`;
 const DESCRIPTION =
-  "UmoAfric is the intelligent real estate operating and marketplace platform: owners, property managers and developers operate their portfolios; agents, brokers, brokerages and real estate companies market listings and grow their business; buyers and renters discover properties — with AI employees built in.";
+  "NesAfric is the intelligent real estate operating and marketplace platform for Africa: properties, people, payments, maintenance and opportunities in one connected workspace.";
 const SOCIAL_DESCRIPTION =
-  "The intelligent real estate operating and marketplace platform — for owners, managers, agents, brokers, brokerages and developers.";
+  "Real Estate OS for Africa for owners, managers, agents, brokers, developers and service professionals.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(BRAND.siteUrl),

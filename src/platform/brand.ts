@@ -4,12 +4,12 @@
  * one file instead of scattering literals across every page/component/email template.
  */
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://umoafric.com").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://nesafric.com").replace(/\/$/, "");
 
 export const BRAND = {
   name: "NesAfric",
   tagline: "Real Estate OS for Africa",
-  domain: "umoafric.com",
+  domain: "nesafric.com",
   siteUrl: SITE_URL,
 
   logo: {
@@ -28,7 +28,7 @@ export const BRAND = {
     onDark: "/brand/nesafric-wordmark.png",
     /** Square white-rounded mark, source for favicon/apple-touch-icon/social. */
     square: "/brand/umo-afric-mark-square.png",
-    og: "/brand/umo-afric-og.png",
+    og: "/brand/nesafric-wordmark.png",
     width: 2172,
     height: 724,
   },
@@ -49,10 +49,10 @@ export const BRAND = {
 
   /** RFC 5322 "display name <address>" sender identities, mapped to their intended purpose. */
   sender: {
-    hello: "UmoAfric <hello@umoafric.com>",
-    notifications: "UmoAfric <notifications@umoafric.com>",
-    support: "UmoAfric <support@umoafric.com>",
-    info: "UmoAfric <info@umoafric.com>",
+    hello: "NesAfric <hello@nesafric.com>",
+    notifications: "NesAfric <notifications@nesafric.com>",
+    support: "NesAfric <support@nesafric.com>",
+    info: "NesAfric <info@nesafric.com>",
   },
 } as const;
 
