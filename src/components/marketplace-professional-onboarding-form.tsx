@@ -36,22 +36,22 @@ export function MarketplaceProfessionalOnboardingForm() {
   }
 
   return (
-    <form className="mt-8 grid gap-4 rounded-xl border border-hairline p-6" onSubmit={submit}>
+    <form className="mt-8 grid gap-4 rounded-2xl border border-hairline bg-white p-6 shadow-card" onSubmit={submit}>
       <label className="text-sm font-medium">
         Business / display name
-        <input className="mt-1 w-full rounded border p-3" name="displayName" placeholder="e.g. Golden Coast Brokerage" required />
+        <input className="mt-1 w-full rounded-xl border border-hairline bg-white p-3" name="displayName" placeholder="e.g. Golden Coast Brokerage" required />
       </label>
       <label className="text-sm font-medium">
         Professional type
-        <select className="mt-1 w-full rounded border p-3" name="type">
+        <select className="mt-1 w-full rounded-xl border border-hairline bg-white p-3" name="type">
           {TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
       <div className="grid grid-cols-2 gap-4">
-        <label className="text-sm font-medium">Country<input className="mt-1 w-full rounded border bg-surface p-3" readOnly value="Ghana (GH)" /></label>
-        <label className="text-sm font-medium">Marketplace plan<input className="mt-1 w-full rounded border bg-surface p-3" readOnly value="Free" /></label>
+        <label className="text-sm font-medium">Country<input className="mt-1 w-full rounded-xl border border-hairline bg-surface p-3" readOnly value="Ghana (GH)" /></label>
+        <label className="text-sm font-medium">Marketplace plan<input className="mt-1 w-full rounded-xl border border-hairline bg-surface p-3" readOnly value="Free" /></label>
       </div>
-      {error && <p className="text-sm text-red-700">{error}</p>}
+      {error && <p className="text-sm text-red-800">{error}</p>}
       <button className="rounded bg-forest p-3 font-semibold text-ink transition-colors hover:bg-forest-hover">Create marketplace profile</button>
       <p className="text-xs text-muted">Free at launch. This is completely separate from NesAfric management — no property-management subscription is created.</p>
     </form>

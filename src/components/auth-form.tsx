@@ -4,31 +4,57 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { trackEvent } from "@/platform/analytics";
 
+type Workspaces = {
+  propertyOsOrganisations: Array<{ id: string; name: string }>;
+  marketplaceProfessionals: Array<{ id: string; displayName: string }>;
+};
+
 export function AuthForm({ mode }: { mode: "register" | "login" }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  async function resolveWorkspace() {
+    const response = await fetch("/api/workspaces", { cache: "no-store" });
+    if (!response.ok) throw new Error("Your account is signed in, but we could not load its workspaces. Refresh to continue.");
+    const workspaces = (await response.json()) as Workspaces;
+    const organisation = workspaces.propertyOsOrganisations[0];
+    if (organisation) {
+      localStorage.setItem("propertyos.activeOrganisationId", organisation.id);
+      return "/dashboard";
+    }
+    const professional = workspaces.marketplaceProfessionals[0];
+    if (professional) {
+      localStorage.setItem("nesafric.activeMarketplaceProfessionalId", professional.id);
+      return `/pro/${professional.id}`;
+    }
+    return "/onboarding";
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // A login (unlike registration) has no server-side uniqueness guard against a second
-    // concurrent request also succeeding — guard here so a double-click can't double-fire sign_up/login.
     if (submitting) return;
+    setError("");
     setSubmitting(true);
-    const data = Object.fromEntries(new FormData(event.currentTarget));
-    const response = await fetch(`/api/auth/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
-    if (!response.ok) {
+    try {
+      const data = Object.fromEntries(new FormData(event.currentTarget));
+      const response = await fetch(`/api/auth/${mode}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
+      if (!response.ok) throw new Error((await response.json()).error?.message ?? "Unable to continue.");
+      trackEvent(mode === "register" ? "sign_up" : "login", { method: "email" });
+      const destination = mode === "register" ? "/onboarding" : await resolveWorkspace();
+      router.push(destination);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to continue.");
       setSubmitting(false);
-      return setError((await response.json()).error?.message ?? "Unable to continue.");
     }
-    trackEvent(mode === "register" ? "sign_up" : "login", { method: "email" });
-    router.push(mode === "register" ? "/onboarding" : "/dashboard");
-    router.refresh();
   }
-  return <form className="mt-8 space-y-4" onSubmit={submit}>
-    {mode === "register" && <label className="block text-sm font-medium">Name<input className="mt-1 w-full rounded border p-3" name="displayName" required /></label>}
-    <label className="block text-sm font-medium">Email<input className="mt-1 w-full rounded border p-3" name="email" type="email" required /></label>
-    <label className="block text-sm font-medium">Password<input className="mt-1 w-full rounded border p-3" name="password" type="password" minLength={mode === "register" ? 12 : undefined} required /></label>
-    {error && <p className="text-sm text-red-700">{error}</p>}
-    <button className="w-full rounded bg-brand p-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting}>{mode === "register" ? "Create account" : "Sign in"}</button>
+
+  return <form className="mt-8 space-y-5" onSubmit={submit}>
+    {mode === "register" && <label className="block text-sm font-semibold text-forest">Name<input autoComplete="name" className="mt-2 w-full rounded-xl border border-hairline bg-white px-4 py-3 text-forest transition placeholder:text-muted focus:border-teal focus:ring-4 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal" name="displayName" required /></label>}
+    <label className="block text-sm font-semibold text-forest">Email<input autoComplete="email" className="mt-2 w-full rounded-xl border border-hairline bg-white px-4 py-3 text-forest transition placeholder:text-muted focus:border-teal focus:ring-4 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal" name="email" type="email" required /></label>
+    <label className="block text-sm font-semibold text-forest">Password<input autoComplete={mode === "register" ? "new-password" : "current-password"} className="mt-2 w-full rounded-xl border border-hairline bg-white px-4 py-3 text-forest transition placeholder:text-muted focus:border-teal focus:ring-4 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal" name="password" type="password" minLength={mode === "register" ? 12 : undefined} required /></label>
+    {error && <p aria-live="polite" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-5 text-red-900" role="alert">{error}</p>}
+    <button className="w-full rounded-xl bg-forest px-4 py-3.5 font-semibold text-white transition-colors hover:bg-emerald disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} type="submit">{submitting ? "Working…" : mode === "register" ? "Create account" : "Sign in"}</button>
   </form>;
 }
