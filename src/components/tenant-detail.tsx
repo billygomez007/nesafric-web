@@ -16,7 +16,10 @@ type TenantDetailData = {
   communicationSmsAllowed: boolean;
   communicationWhatsappAllowed: boolean;
   communicationInAppAllowed: boolean;
-  tenant: { legalName: string; preferredName: string | null };
+  tenant: {
+    legalName: string;
+    preferredName: string | null;
+  };
   leaseParties: Array<{
     id: string;
     role: string;
@@ -40,11 +43,81 @@ type Notification = {
   status: string;
   createdAt: string;
   readAt: string | null;
-  lease: { id: string; referenceNumber: string } | null;
+  lease: {
+    id: string;
+    referenceNumber: string;
+  } | null;
+};
+
+const DEVELOPMENT_PREVIEW_TENANT: TenantDetailData = {
+  id: "preview-ama",
+  email: "ama@example.com",
+  phone: "+233 24 000 0001",
+  addressLine1: "14 Ridge Road",
+  city: "Accra",
+  notes: "Primary tenant for The Ridge Apartments.",
+  communicationEmailAllowed: true,
+  communicationSmsAllowed: true,
+  communicationWhatsappAllowed: true,
+  communicationInAppAllowed: true,
+  tenant: {
+    legalName: "Ama Mensah",
+    preferredName: "Ama",
+  },
+  leaseParties: [
+    {
+      id: "preview-party-1",
+      role: "TENANT",
+      lease: {
+        id: "preview-lease-1",
+        referenceNumber: "LEASE-001",
+        status: "ACTIVE",
+        startDate: "2026-01-01T00:00:00.000Z",
+        endDate: "2026-12-31T00:00:00.000Z",
+        property: { name: "The Ridge Apartments" },
+        unit: { name: "A2" },
+      },
+    },
+  ],
 };
 
 function date(value: string | null) {
-  return value ? new Intl.DateTimeFormat("en-GH", { dateStyle: "medium" }).format(new Date(value)) : "Ongoing";
+  return value
+    ? new Intl.DateTimeFormat("en-GH", { dateStyle: "medium" }).format(
+        new Date(value),
+      )
+    : "Ongoing";
+}
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-hairline bg-white shadow-[0_8px_28px_rgba(16,45,42,0.035)]">
+      <div className="border-b border-hairline px-5 py-4 sm:px-6">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        {description && (
+          <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
+        )}
+      </div>
+      <div className="p-5 sm:p-6">{children}</div>
+    </section>
+  );
 }
 
 export function TenantDetail({ tenantId }: { tenantId: string }) {
@@ -55,27 +128,137 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
   const [savingPreferences, setSavingPreferences] = useState(false);
 
   useEffect(() => {
-    const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
+    const organisationId = localStorage.getItem(
+      "propertyos.activeOrganisationId",
+    );
+
     if (!organisationId) {
-      const timer = setTimeout(() => setError("Choose an organisation to view this tenant."), 0);
+      if (process.env.NODE_ENV !== "production") {
+        const timer = setTimeout(() => {
+          setTenant(DEVELOPMENT_PREVIEW_TENANT);
+          setNotifications([]);
+        }, 0);
+
+        return () => clearTimeout(timer);
+      }
+
+      const timer = setTimeout(
+        () => setError("Choose an organisation to view this tenant."),
+        0,
+      );
+
       return () => clearTimeout(timer);
     }
+
     Promise.all([
-      fetch(`/api/tenants/${tenantId}`, { headers: { "x-organisation-id": organisationId } }),
-      fetch("/api/notifications", { headers: { "x-organisation-id": organisationId } }),
-    ]).then(async ([tenantResponse, notificationResponse]) => {
-      if (!tenantResponse.ok) throw new Error((await tenantResponse.json()).error?.message ?? "Unable to load tenant.");
-      const detail = await tenantResponse.json();
-      setTenant(detail);
-      if (notificationResponse.ok) {
-        const history: Notification[] = await notificationResponse.json();
-        setNotifications(history.filter((notification) => notification.tenantOrganisationId === detail.id));
-      }
-    }).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load tenant."));
+      fetch(`/api/tenants/${tenantId}`, {
+        headers: { "x-organisation-id": organisationId },
+      }),
+      fetch("/api/notifications", {
+        headers: { "x-organisation-id": organisationId },
+      }),
+    ])
+      .then(async ([tenantResponse, notificationResponse]) => {
+        if (!tenantResponse.ok) {
+          throw new Error(
+            (await tenantResponse.json()).error?.message ??
+              "Unable to load tenant.",
+          );
+        }
+
+        const detail = await tenantResponse.json();
+        setTenant(detail);
+
+        if (notificationResponse.ok) {
+          const history: Notification[] = await notificationResponse.json();
+
+          setNotifications(
+            history.filter(
+              (notification) => notification.tenantOrganisationId === detail.id,
+            ),
+          );
+        }
+      })
+      .catch((cause) =>
+        setError(
+          cause instanceof Error ? cause.message : "Unable to load tenant.",
+        ),
+      );
   }, [tenantId]);
 
-  if (error) return <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-800">{error}</div>;
-  if (!tenant) return <div className="rounded-xl border bg-white p-6 text-slate-600">Loading tenant details...</div>;
+  async function updatePreferences(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!tenant) return;
+
+    const organisationId = localStorage.getItem(
+      "propertyos.activeOrganisationId",
+    );
+
+    if (!organisationId) {
+      if (process.env.NODE_ENV !== "production") {
+        setPreferenceSuccess(
+          "Preview only — communication preferences are not persisted locally.",
+        );
+        return;
+      }
+
+      setError("Choose an organisation to update communication preferences.");
+      return;
+    }
+
+    const form = new FormData(event.currentTarget);
+
+    const preferences = {
+      communicationInAppAllowed: form.get("communicationInAppAllowed") === "on",
+      communicationEmailAllowed: form.get("communicationEmailAllowed") === "on",
+      communicationSmsAllowed: form.get("communicationSmsAllowed") === "on",
+      communicationWhatsappAllowed:
+        form.get("communicationWhatsappAllowed") === "on",
+    };
+
+    setSavingPreferences(true);
+    setPreferenceSuccess("");
+
+    const response = await fetch(
+      `/api/tenants/${tenant.id}/communication-preferences`,
+      {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          "x-organisation-id": organisationId,
+        },
+        body: JSON.stringify(preferences),
+      },
+    );
+
+    if (!response.ok) {
+      setError(
+        (await response.json()).error?.message ??
+          "Unable to update communication preferences.",
+      );
+    } else {
+      setTenant({ ...tenant, ...(await response.json()) });
+      setError("");
+      setPreferenceSuccess("Communication preferences updated.");
+    }
+
+    setSavingPreferences(false);
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900">
+        {error}
+      </div>
+    );
+  }
+
+  if (!tenant) {
+    return (
+      <div className="h-64 animate-pulse rounded-2xl border border-hairline bg-white" />
+    );
+  }
 
   const channels = [
     ["In-app", tenant.communicationInAppAllowed],
@@ -84,82 +267,264 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
     ["WhatsApp", tenant.communicationWhatsappAllowed],
   ] as const;
 
-  async function updatePreferences(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!tenant) return;
-    const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
-    if (!organisationId) return setError("Choose an organisation to update communication preferences.");
-    const form = new FormData(event.currentTarget);
-    const preferences = {
-      communicationInAppAllowed: form.get("communicationInAppAllowed") === "on",
-      communicationEmailAllowed: form.get("communicationEmailAllowed") === "on",
-      communicationSmsAllowed: form.get("communicationSmsAllowed") === "on",
-      communicationWhatsappAllowed: form.get("communicationWhatsappAllowed") === "on",
-    };
-    setSavingPreferences(true);
-    setPreferenceSuccess("");
-    const response = await fetch(`/api/tenants/${tenant.id}/communication-preferences`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", "x-organisation-id": organisationId },
-      body: JSON.stringify(preferences),
-    });
-    if (!response.ok) setError((await response.json()).error?.message ?? "Unable to update communication preferences.");
-    else {
-      setTenant({ ...tenant, ...await response.json() });
-      setError("");
-      setPreferenceSuccess("Communication preferences updated.");
-    }
-    setSavingPreferences(false);
-  }
+  const displayName = tenant.tenant.preferredName || tenant.tenant.legalName;
 
-  return <div className="grid gap-6">
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row">
-        <div><p className="text-sm font-semibold text-emerald-700">TENANT PROFILE</p><h1 className="mt-1 text-3xl font-semibold">{tenant.tenant.preferredName || tenant.tenant.legalName}</h1>{tenant.tenant.preferredName && <p className="mt-1 text-slate-500">{tenant.tenant.legalName}</p>}</div>
-        <Link className="self-start rounded-lg border px-4 py-2 text-sm font-semibold" href="/tenants">Back to tenants</Link>
+  return (
+    <div className="grid gap-6">
+      <section className="rounded-2xl border border-hairline bg-white p-5 shadow-[0_8px_28px_rgba(16,45,42,0.035)] sm:p-6">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-teal/10 text-base font-semibold text-teal">
+              {initials(tenant.tenant.legalName)}
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-teal">
+                Tenant profile
+              </p>
+
+              <h2 className="mt-1 text-2xl font-semibold tracking-[-0.025em] text-ink">
+                {displayName}
+              </h2>
+
+              {tenant.tenant.preferredName && (
+                <p className="mt-1 text-sm text-muted">
+                  {tenant.tenant.legalName}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <Link
+            className="self-start rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-surface hover:text-ink"
+            href="/tenants"
+          >
+            Back to tenants
+          </Link>
+        </div>
+
+        <dl className="mt-6 grid gap-5 border-t border-hairline pt-5 text-sm sm:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-muted">
+              Email
+            </dt>
+            <dd className="mt-1.5 font-medium text-ink">
+              {tenant.email || "Not provided"}
+            </dd>
+          </div>
+
+          <div>
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-muted">
+              Phone
+            </dt>
+            <dd className="mt-1.5 font-medium text-ink">
+              {tenant.phone || "Not provided"}
+            </dd>
+          </div>
+
+          <div>
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-muted">
+              Address
+            </dt>
+            <dd className="mt-1.5 font-medium text-ink">
+              {[tenant.addressLine1, tenant.city].filter(Boolean).join(", ") ||
+                "Not provided"}
+            </dd>
+          </div>
+
+          <div>
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-muted">
+              Active channels
+            </dt>
+            <dd className="mt-1.5 flex flex-wrap gap-1.5">
+              {channels.map(([label, enabled]) => (
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                    enabled ? "bg-teal/10 text-teal" : "bg-surface text-muted"
+                  }`}
+                  key={label}
+                >
+                  {label}
+                </span>
+              ))}
+            </dd>
+          </div>
+        </dl>
+
+        {tenant.notes && (
+          <div className="mt-5 rounded-xl bg-surface p-4 text-sm leading-6 text-muted">
+            {tenant.notes}
+          </div>
+        )}
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Section
+          description="Choose how this tenant can receive future communication."
+          title="Communication preferences"
+        >
+          <form
+            className="grid gap-3 sm:grid-cols-2"
+            onSubmit={updatePreferences}
+          >
+            {[
+              [
+                "communicationInAppAllowed",
+                "In-app",
+                tenant.communicationInAppAllowed,
+              ],
+              [
+                "communicationEmailAllowed",
+                "Email",
+                tenant.communicationEmailAllowed,
+              ],
+              [
+                "communicationSmsAllowed",
+                "SMS",
+                tenant.communicationSmsAllowed,
+              ],
+              [
+                "communicationWhatsappAllowed",
+                "WhatsApp",
+                tenant.communicationWhatsappAllowed,
+              ],
+            ].map(([name, label, enabled]) => (
+              <label
+                className="flex items-center gap-3 rounded-xl border border-hairline bg-warm-white p-4 text-sm font-medium text-ink"
+                key={String(name)}
+              >
+                <input
+                  className="h-4 w-4 accent-teal"
+                  defaultChecked={Boolean(enabled)}
+                  name={String(name)}
+                  type="checkbox"
+                />
+                {label}
+              </label>
+            ))}
+
+            <div className="sm:col-span-2">
+              <button
+                className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={savingPreferences}
+                type="submit"
+              >
+                {savingPreferences ? "Saving..." : "Save preferences"}
+              </button>
+            </div>
+          </form>
+
+          {preferenceSuccess && (
+            <p className="mt-4 rounded-xl bg-teal/10 p-3 text-sm text-forest">
+              {preferenceSuccess}
+            </p>
+          )}
+        </Section>
+
+        <Section
+          description="Current and historical leases linked to this tenant."
+          title="Lease history"
+        >
+          {tenant.leaseParties.length ? (
+            <div className="grid gap-3">
+              {tenant.leaseParties.map(({ id, role, lease }) => (
+                <Link
+                  className="grid gap-3 rounded-xl border border-hairline bg-warm-white p-4 transition hover:border-teal/25 sm:grid-cols-[1fr_auto]"
+                  href={`/leases/${lease.id}`}
+                  key={id}
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      {lease.referenceNumber}
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted">
+                      {lease.property.name}
+                      {lease.unit ? ` · ${lease.unit.name}` : ""} ·{" "}
+                      {role.toLowerCase()}
+                    </p>
+
+                    <p className="mt-2 text-xs text-muted">
+                      {date(lease.startDate)} – {date(lease.endDate)}
+                    </p>
+                  </div>
+
+                  <span className="self-start rounded-full bg-teal/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-teal">
+                    {lease.status}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-hairline p-6 text-center text-sm text-muted">
+              No leases are linked to this tenant.
+            </div>
+          )}
+        </Section>
       </div>
-      <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-        <div><dt className="text-slate-500">Email</dt><dd className="mt-1 font-medium">{tenant.email || "Not provided"}</dd></div>
-        <div><dt className="text-slate-500">Phone</dt><dd className="mt-1 font-medium">{tenant.phone || "Not provided"}</dd></div>
-        <div><dt className="text-slate-500">Address</dt><dd className="mt-1 font-medium">{[tenant.addressLine1, tenant.city].filter(Boolean).join(", ") || "Not provided"}</dd></div>
-        <div><dt className="text-slate-500">Active channels</dt><dd className="mt-1 flex flex-wrap gap-1">{channels.map(([label, enabled]) => <span className={`rounded-full px-2 py-1 text-xs ${enabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"}`} key={label}>{label}</span>)}</dd></div>
-      </dl>
-      {tenant.notes && <p className="mt-6 rounded-lg bg-slate-50 p-4 text-sm text-slate-700">{tenant.notes}</p>}
-    </section>
 
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold">Communication preferences</h2>
-      <p className="mt-1 text-sm text-slate-600">Disabled channels are skipped by future reminder delivery.</p>
-      <form className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={updatePreferences}>
-        {[
-          ["communicationInAppAllowed", "In-app", tenant.communicationInAppAllowed],
-          ["communicationEmailAllowed", "Email", tenant.communicationEmailAllowed],
-          ["communicationSmsAllowed", "SMS", tenant.communicationSmsAllowed],
-          ["communicationWhatsappAllowed", "WhatsApp", tenant.communicationWhatsappAllowed],
-        ].map(([name, label, enabled]) => <label className="flex items-center gap-3 rounded-xl border p-4 text-sm font-medium" key={String(name)}><input defaultChecked={Boolean(enabled)} name={String(name)} type="checkbox" />{label}</label>)}
-        <div className="sm:col-span-2 lg:col-span-4"><button className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={savingPreferences}>{savingPreferences ? "Saving..." : "Save preferences"}</button></div>
-      </form>
-      {preferenceSuccess && <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{preferenceSuccess}</p>}
-      {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    </section>
+      <Section
+        description="Reminder and communication activity for this tenant."
+        title="Notification history"
+      >
+        {notifications.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-hairline text-[10px] font-semibold uppercase tracking-wide text-muted">
+                  <th className="pb-3">Event</th>
+                  <th className="pb-3">Lease</th>
+                  <th className="pb-3">Channel</th>
+                  <th className="pb-3">Status</th>
+                  <th className="pb-3">Created</th>
+                  <th className="pb-3">Read</th>
+                </tr>
+              </thead>
 
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold">Lease history</h2>
-      {tenant.leaseParties.length ? <div className="mt-4 grid gap-3">{tenant.leaseParties.map(({ id, role, lease }) => <Link className="grid gap-2 rounded-xl border p-4 transition hover:border-emerald-500 sm:grid-cols-[1fr_auto]" href={`/leases/${lease.id}`} key={id}><div><p className="font-semibold">{lease.referenceNumber}</p><p className="text-sm text-slate-600">{lease.property.name}{lease.unit ? ` · ${lease.unit.name}` : ""} · {role.toLowerCase()}</p><p className="mt-1 text-sm text-slate-500">{date(lease.startDate)} – {date(lease.endDate)}</p></div><span className="self-start rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{lease.status}</span></Link>)}</div> : <p className="mt-4 rounded-xl border border-dashed p-6 text-center text-slate-500">No leases are linked to this tenant.</p>}
-    </section>
+              <tbody className="divide-y divide-hairline">
+                {notifications.map((notification) => (
+                  <tr key={notification.id}>
+                    <td className="py-3 font-medium text-ink">
+                      {notification.eventType.replaceAll("_", " ")}
+                    </td>
+                    <td className="py-3 text-muted">
+                      {notification.lease?.referenceNumber || "—"}
+                    </td>
+                    <td className="py-3 text-muted">{notification.channel}</td>
+                    <td className="py-3 text-muted">{notification.status}</td>
+                    <td className="py-3 text-muted">
+                      {date(notification.createdAt)}
+                    </td>
+                    <td className="py-3 text-muted">
+                      {notification.readAt
+                        ? date(notification.readAt)
+                        : "Unread"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-hairline p-6 text-center text-sm text-muted">
+            No reminders or notifications for this tenant.
+          </div>
+        )}
+      </Section>
 
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold">Reminder and notification history</h2>
-      {notifications.length ? <div className="mt-4 overflow-x-auto"><table className="w-full min-w-xl text-left text-sm"><thead className="border-b text-slate-500"><tr><th className="py-3">Event</th><th>Lease</th><th>Channel</th><th>Status</th><th>Created</th><th>Read</th></tr></thead><tbody className="divide-y">{notifications.map((notification) => <tr key={notification.id}><td className="py-3 font-medium">{notification.eventType.replaceAll("_", " ")}</td><td>{notification.lease?.referenceNumber || "—"}</td><td>{notification.channel}</td><td>{notification.status}</td><td>{date(notification.createdAt)}</td><td>{notification.readAt ? date(notification.readAt) : "Unread"}</td></tr>)}</tbody></table></div> : <p className="mt-4 rounded-xl border border-dashed p-6 text-center text-slate-500">No reminders or notifications for this tenant.</p>}
-    </section>
+      <Section
+        description="Rent and other payments associated with this tenant."
+        title="Payment history"
+      >
+        <ScopedPaymentHistory scope="tenants" id={tenant.id} />
+      </Section>
 
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold">Payment history</h2>
-      <ScopedPaymentHistory scope="tenants" id={tenant.id} />
-    </section>
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold">Maintenance history</h2>
-      <ScopedMaintenanceHistory scope="tenants" id={tenant.id} />
-    </section>
-  </div>;
+      <Section
+        description="Maintenance requests associated with this tenant."
+        title="Maintenance history"
+      >
+        <ScopedMaintenanceHistory scope="tenants" id={tenant.id} />
+      </Section>
+    </div>
+  );
 }
