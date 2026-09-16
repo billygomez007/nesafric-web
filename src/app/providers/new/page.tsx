@@ -6,7 +6,7 @@ export default function NewProviderPage() {
   return (
     <AppShell
       actions={
-        <Link className="rounded-lg border px-4 py-2 text-sm font-semibold" href="/providers">
+        <Link className="rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface" href="/providers">
           Provider directory
         </Link>
       }

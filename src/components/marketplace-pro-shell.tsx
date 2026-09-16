@@ -40,24 +40,24 @@ export function MarketplaceProShell({ professionalId, children }: { professional
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-hairline bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <Link className="flex items-center" href="/pro"><BrandLogo height={20} variant="light" /></Link>
-            <span className="hidden text-[11px] font-medium tracking-[0.12em] text-slate-500 sm:inline">MARKETPLACE</span>
+            <span className="hidden text-[11px] font-medium tracking-[0.12em] text-muted sm:inline">MARKETPLACE</span>
           </div>
           <div className="flex items-center gap-2">
             <WorkspaceSwitcher current={{ kind: "marketplace", label: "Marketplace Professional" }} />
-            <button className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-slate-300" onClick={() => void signOut()} type="button">
+            <button className="rounded-md border border-hairline px-3 py-1.5 text-sm font-semibold text-ink hover:border-slate-300" onClick={() => void signOut()} type="button">
               Sign out
             </button>
           </div>
         </div>
-        <nav className="border-t border-slate-100 bg-slate-50/60">
+        <nav className="border-t border-hairline bg-surface/60">
           <div className="mx-auto flex max-w-6xl flex-wrap gap-1 px-4 py-2 sm:px-6">
             {links.map((link) => (
               <Link
-                className={`rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${pathname === link.href ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200" : "text-slate-600 hover:text-slate-950"}`}
+                className={`rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${pathname === link.href ? "bg-white text-ink shadow-sm ring-1 ring-slate-200" : "text-muted hover:text-ink"}`}
                 href={link.href}
                 key={link.href}
               >

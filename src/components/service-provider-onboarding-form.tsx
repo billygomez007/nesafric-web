@@ -232,9 +232,9 @@ export function ServiceProviderOnboardingForm() {
 
   return (
     <div className="mt-8 grid gap-6">
-      <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-500">
+      <div className="flex flex-wrap gap-2 text-xs font-medium text-muted">
         {STEP_LABELS.map((label, index) => (
-          <span className={`rounded-full px-3 py-1 ${index + 1 === step ? "bg-brand text-navy" : index + 1 < step ? "bg-slate-200" : "bg-slate-100"}`} key={label}>
+          <span className={`rounded-full px-3 py-1 ${index + 1 === step ? "bg-forest text-ink" : index + 1 < step ? "bg-surface" : "bg-surface"}`} key={label}>
             {index + 1}. {label}
           </span>
         ))}
@@ -243,16 +243,16 @@ export function ServiceProviderOnboardingForm() {
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
 
       {step === 1 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Are you registering as an individual or a company?</p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <button className={`rounded-xl border p-4 text-left ${accountType === "INDIVIDUAL" ? "border-brand bg-brand/5" : ""}`} onClick={() => setAccountType("INDIVIDUAL")} type="button">
+            <button className={`rounded-xl border border-hairline p-4 text-left ${accountType === "INDIVIDUAL" ? "border-brand bg-forest/5" : ""}`} onClick={() => setAccountType("INDIVIDUAL")} type="button">
               <p className="font-semibold">Individual / artisan</p>
-              <p className="mt-1 text-sm text-slate-600">You work independently — plumber, electrician, agent, etc.</p>
+              <p className="mt-1 text-sm text-muted">You work independently — plumber, electrician, agent, etc.</p>
             </button>
-            <button className={`rounded-xl border p-4 text-left ${accountType === "COMPANY" ? "border-brand bg-brand/5" : ""}`} onClick={() => setAccountType("COMPANY")} type="button">
+            <button className={`rounded-xl border border-hairline p-4 text-left ${accountType === "COMPANY" ? "border-brand bg-forest/5" : ""}`} onClick={() => setAccountType("COMPANY")} type="button">
               <p className="font-semibold">Company / business</p>
-              <p className="mt-1 text-sm text-slate-600">A registered business with a team — contractor, facilities company, etc.</p>
+              <p className="mt-1 text-sm text-muted">A registered business with a team — contractor, facilities company, etc.</p>
             </button>
           </div>
           {accountType === "COMPANY" && (
@@ -262,34 +262,34 @@ export function ServiceProviderOnboardingForm() {
                 <option value="">Select an organisation</option>
                 {organisations.map((organisation) => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}
               </select>
-              {organisations.length === 0 && <span className="mt-1 block text-xs text-slate-500">No organisations found — create one first, then return to this page.</span>}
+              {organisations.length === 0 && <span className="mt-1 block text-xs text-muted">No organisations found — create one first, then return to this page.</span>}
             </label>
           )}
-          <button className="rounded bg-brand p-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={accountType === "COMPANY" && !companyOrganisationId} onClick={() => setStep(2)} type="button">
+          <button className="rounded bg-forest p-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={accountType === "COMPANY" && !companyOrganisationId} onClick={() => setStep(2)} type="button">
             Continue
           </button>
         </div>
       )}
 
       {step === 2 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <label className="text-sm font-medium">Business / display name<input className="mt-1 w-full rounded border p-3" onChange={(event) => setDisplayName(event.target.value)} placeholder="e.g. Kofi Mensah Electrical" required value={displayName} /></label>
-          <label className="text-sm font-medium">Legal name <span className="font-normal text-slate-500">(optional)</span><input className="mt-1 w-full rounded border p-3" onChange={(event) => setLegalName(event.target.value)} value={legalName} /></label>
+          <label className="text-sm font-medium">Legal name <span className="font-normal text-muted">(optional)</span><input className="mt-1 w-full rounded border p-3" onChange={(event) => setLegalName(event.target.value)} value={legalName} /></label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium">Contact email<input className="mt-1 w-full rounded border p-3" onChange={(event) => setContactEmail(event.target.value)} type="email" value={contactEmail} /></label>
             <label className="text-sm font-medium">Contact phone<input className="mt-1 w-full rounded border p-3" onChange={(event) => setContactPhone(event.target.value)} value={contactPhone} /></label>
           </div>
-          <label className="text-sm font-medium">Description <span className="font-normal text-slate-500">(optional)</span><textarea className="mt-1 w-full rounded border p-3" onChange={(event) => setBiography(event.target.value)} rows={4} value={biography} /></label>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(1)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={!displayName || (!contactEmail && !contactPhone)} onClick={() => setStep(3)} type="button">Continue</button></div>
+          <label className="text-sm font-medium">Description <span className="font-normal text-muted">(optional)</span><textarea className="mt-1 w-full rounded border p-3" onChange={(event) => setBiography(event.target.value)} rows={4} value={biography} /></label>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(1)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={!displayName || (!contactEmail && !contactPhone)} onClick={() => setStep(3)} type="button">Continue</button></div>
         </div>
       )}
 
       {step === 3 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Which services do you offer?</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {categories.map((category) => (
-              <label className="flex items-center gap-2 rounded-lg border p-3 text-sm" key={category.id}>
+              <label className="flex items-center gap-2 rounded-xl border border-hairline p-3 text-sm" key={category.id}>
                 <input
                   checked={categoryIds.includes(category.id)}
                   onChange={(event) => setCategoryIds((current) => event.target.checked ? [...current, category.id] : current.filter((id) => id !== category.id))}
@@ -299,67 +299,67 @@ export function ServiceProviderOnboardingForm() {
               </label>
             ))}
           </div>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(2)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={!categoryIds.length} onClick={() => setStep(4)} type="button">Continue</button></div>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(2)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={!categoryIds.length} onClick={() => setStep(4)} type="button">Continue</button></div>
         </div>
       )}
 
       {step === 4 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Where do you offer these services?</p>
           {serviceAreas.map((area, index) => (
             <div className="grid gap-3 sm:grid-cols-3" key={index}>
-              <input className="rounded border bg-slate-50 p-3 uppercase" readOnly value={area.countryCode} />
+              <input className="rounded border bg-surface p-3 uppercase" readOnly value={area.countryCode} />
               <input className="rounded border p-3" onChange={(event) => updateServiceArea(index, { region: event.target.value })} placeholder="Region" value={area.region} />
               <input className="rounded border p-3" onChange={(event) => updateServiceArea(index, { city: event.target.value })} placeholder="City" value={area.city} />
             </div>
           ))}
-          <button className="text-left text-sm font-semibold text-navy" onClick={() => setServiceAreas((current) => [...current, { countryCode: "GH", region: "", city: "" }])} type="button">+ Add another area</button>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(3)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting || !serviceAreas.some((area) => area.city || area.region)} onClick={createProviderAndFetchRequirements} type="button">{submitting ? "Creating profile…" : "Create profile & continue"}</button></div>
+          <button className="text-left text-sm font-semibold text-ink" onClick={() => setServiceAreas((current) => [...current, { countryCode: "GH", region: "", city: "" }])} type="button">+ Add another area</button>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(3)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting || !serviceAreas.some((area) => area.city || area.region)} onClick={createProviderAndFetchRequirements} type="button">{submitting ? "Creating profile…" : "Create profile & continue"}</button></div>
         </div>
       )}
 
       {step === 5 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Mandatory identity verification</p>
-          <p className="text-sm text-slate-600">UmoAfric requires a Ghana Card to keep the marketplace safe and trustworthy. This is private and reviewed only by authorised UmoAfric staff — it is never shown publicly.</p>
+          <p className="text-sm text-muted">NesAfric requires a Ghana Card to keep the marketplace safe and trustworthy. This is private and reviewed only by authorised NesAfric staff — it is never shown publicly.</p>
           {identityRequirements.map((requirement) => (
             <label className="text-sm font-medium" key={requirement.evidenceType}>
               {requirement.label}{requirement.required && <span className="text-red-600"> *</span>}
               <input accept="image/*" capture="environment" className="mt-1 w-full rounded border p-3" onChange={(event) => setIdentityFiles((current) => ({ ...current, [requirement.evidenceType]: event.target.files?.[0] ?? null }))} type="file" />
             </label>
           ))}
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(4)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting} onClick={submitIdentityDocuments} type="button">{submitting ? "Uploading…" : "Continue"}</button></div>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(4)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={submitIdentityDocuments} type="button">{submitting ? "Uploading…" : "Continue"}</button></div>
         </div>
       )}
 
       {step === 6 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Business & credential documents</p>
           {businessRequirements.length === 0 ? (
-            <p className="text-sm text-slate-600">No additional documents are required for your account type and services.</p>
+            <p className="text-sm text-muted">No additional documents are required for your account type and services.</p>
           ) : businessRequirements.map((requirement) => (
             <label className="text-sm font-medium" key={requirement.evidenceType}>
               {requirement.label}{requirement.required && <span className="text-red-600"> *</span>}
               <input accept="image/*,application/pdf" className="mt-1 w-full rounded border p-3" onChange={(event) => setBusinessFiles((current) => ({ ...current, [requirement.evidenceType]: event.target.files?.[0] ?? null }))} type="file" />
             </label>
           ))}
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(5)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting} onClick={submitBusinessDocuments} type="button">{submitting ? "Uploading…" : "Continue"}</button></div>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(5)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={submitBusinessDocuments} type="button">{submitting ? "Uploading…" : "Continue"}</button></div>
         </div>
       )}
 
       {step === 7 && (
-        <div className="grid gap-4 rounded-xl border p-6">
-          <p className="text-sm font-medium">Portfolio <span className="font-normal text-slate-500">(optional)</span></p>
-          <p className="text-sm text-slate-600">Show examples of your past work. You can add more later from your dashboard.</p>
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
+          <p className="text-sm font-medium">Portfolio <span className="font-normal text-muted">(optional)</span></p>
+          <p className="text-sm text-muted">Show examples of your past work. You can add more later from your dashboard.</p>
           <input accept="image/*" className="rounded border p-3" onChange={(event) => setPortfolioFile(event.target.files?.[0] ?? null)} type="file" />
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(6)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting} onClick={submitPortfolio} type="button">{submitting ? "Saving…" : "Continue"}</button></div>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(6)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={submitPortfolio} type="button">{submitting ? "Saving…" : "Continue"}</button></div>
         </div>
       )}
 
       {step === 8 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Review & consent</p>
-          <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
+          <div className="rounded-lg bg-surface p-4 text-sm text-ink">
             <p><strong>{displayName}</strong> · {accountType === "INDIVIDUAL" ? "Individual" : "Company"}</p>
             <p className="mt-1">{categoryIds.length} service{categoryIds.length === 1 ? "" : "s"} · {serviceAreas.filter((area) => area.city || area.region).length} service area{serviceAreas.length === 1 ? "" : "s"}</p>
             <p className="mt-1">{submittedEvidence.length} document{submittedEvidence.length === 1 ? "" : "s"} uploaded</p>
@@ -367,23 +367,23 @@ export function ServiceProviderOnboardingForm() {
           {[
             ["accurate", "I confirm the information I have provided is accurate."],
             ["authorized", "I confirm the uploaded documents belong to me, or to a person I am authorised to represent."],
-            ["reviewConsented", "I consent to UmoAfric reviewing my verification evidence."],
-            ["termsAccepted", "I agree to the UmoAfric service-provider terms and privacy requirements."],
+            ["reviewConsented", "I consent to NesAfric reviewing my verification evidence."],
+            ["termsAccepted", "I agree to the NesAfric service-provider terms and privacy requirements."],
           ].map(([key, label]) => (
             <label className="flex items-start gap-2 text-sm" key={key}>
               <input checked={consent[key as keyof typeof consent]} className="mt-1" onChange={(event) => setConsent((current) => ({ ...current, [key]: event.target.checked }))} type="checkbox" />
               {label}
             </label>
           ))}
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(7)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting} onClick={() => setStep(9)} type="button">Continue</button></div>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(7)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={() => setStep(9)} type="button">Continue</button></div>
         </div>
       )}
 
       {step === 9 && (
-        <div className="grid gap-4 rounded-xl border p-6">
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Submit for verification</p>
-          <p className="text-sm text-slate-600">Your profile will be saved and access to your dashboard unlocks immediately. You will not appear publicly or receive UmoAfric work assignments until UmoAfric has reviewed and approved your identity verification.</p>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-slate-600" onClick={() => setStep(8)} type="button">← Back</button><button className="rounded bg-brand px-6 py-3 font-semibold text-navy transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting} onClick={finalSubmit} type="button">{submitting ? "Submitting…" : "Submit for verification"}</button></div>
+          <p className="text-sm text-muted">Your profile will be saved and access to your dashboard unlocks immediately. You will not appear publicly or receive NesAfric work assignments until NesAfric has reviewed and approved your identity verification.</p>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(8)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={finalSubmit} type="button">{submitting ? "Submitting…" : "Submit for verification"}</button></div>
         </div>
       )}
     </div>
