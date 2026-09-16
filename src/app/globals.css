@@ -1,58 +1,59 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-
   /*
-   * UmoAfric design tokens (approved palette). Semantic names so a future palette change
-   * touches this block, not every component. The brand accent is turquoise — sampled directly
-   * from the approved logo artwork (public/brand/umo-afric-logo-navy.png; dominant opaque
-   * non-navy pixel cluster averages to #00b6a3) rather than invented — used sparingly (buttons,
-   * active states, small highlights); Deep Navy is the platform's actual visual foundation.
-   * Orange/amber is no longer a brand color — see --color-warning below for its one legitimate
-   * remaining use.
+   * NesAfric Design System
+   * Reference: design/reference/nesafric-approved-reference.png
    *
-   * --color-brand fails badly as small text on a light background (2.55:1) — it's meant for
-   * backgrounds (with navy text), borders, and text on dark surfaces only (7.41:1 there).
-   * --color-brand-hover/-active step down the same hue for button hover/pressed backgrounds,
-   * chosen so navy text on top stays comfortably above 4.5:1 at every step.
-   * --color-brand-strong is a separate, deliberately darker step on the same hue — the darkest
-   * point that still clears 4.5:1 as TEXT on white (4.81:1) — for the one legitimate light-surface
-   * text use (e.g. a navy link's hover color). Never substitute --color-brand-active for this: it
-   * only satisfies contrast against navy backgrounds, not white ones.
+   * Deep forest + emerald/teal form the primary identity.
+   * Gold is a restrained premium accent.
+   * Ivory and warm white create the real-estate editorial surfaces.
    */
-  --color-brand: #00b6a3;
-  --color-brand-hover: #00a392;
-  --color-brand-active: #009989;
-  --color-brand-strong: #00816e;
 
-  --color-navy: #0d1117; /* primary dark foundation: header, footer, dark hero sections */
-  --color-charcoal: #1f2937; /* secondary dark surface */
+  --background: #fcfbf8;
+  --foreground: #102d2a;
 
-  --color-surface: #f7f7f5; /* main light page background */
-  --color-surface-elevated: #ffffff; /* cards, forms, filters, dropdowns, modals */
+  /* Primary NesAfric brand */
+  --color-brand: #009b8c;
+  --color-brand-hover: #008f80;
+  --color-brand-active: #006b5f;
+  --color-brand-strong: #005248;
 
-  --color-ink: #111827; /* primary text */
-  --color-muted: #6b7280; /* secondary/supporting text */
-  --color-hairline: #e5e7eb; /* subtle borders */
+  /* Forest foundation */
+  --color-navy: #003f3a;
+  --color-charcoal: #002f2b;
 
-  --color-premium: #ffc107; /* verified/premium/featured accents only — never a second brand color */
+  /* Additional NesAfric palette */
+  --color-forest-deep: #002f2b;
+  --color-forest: #003f3a;
+  --color-forest-light: #005248;
+  --color-emerald: #006b5f;
+  --color-teal: #009b8c;
+  --color-teal-light: #35bdaa;
 
-  /* Semantic state colors — unchanged by the rebrand, kept distinct from --color-brand so
-     validation/status UI never gets confused with brand emphasis. */
+  /* Premium accent */
+  --color-premium: #c99a45;
+  --color-gold: #c99a45;
+  --color-gold-soft: #d9b76c;
+  --color-gold-light: #e6ce9b;
+
+  /* Surfaces */
+  --color-surface: #f8f5ef;
+  --color-surface-elevated: #ffffff;
+  --color-cream: #f2ece2;
+  --color-warm-white: #fcfbf8;
+
+  /* Typography / borders */
+  --color-ink: #102d2a;
+  --color-muted: #61706d;
+  --color-hairline: #e5e6e1;
+
+  /* Semantic states */
   --color-success: #047857;
-  --color-warning: #f59e0b;
+  --color-warning: #d97706;
   --color-danger: #dc2626;
   --color-info: #2563eb;
-  /*
-   * Without this, browsers render native form chrome (select/option lists, checkboxes, radios,
-   * date pickers, scrollbars) in dark UA styling whenever the visitor's OS is in dark mode —
-   * independent of any author CSS. That produced dark-on-dark comboboxes (an open <select>'s
-   * options, and sometimes the closed box itself, painted with a dark native background) with no
-   * class in this codebase able to override it. Declaring the page as light-only keeps every
-   * native control on the light UA theme regardless of OS/browser preference.
-   */
+
   color-scheme: light;
 }
 
@@ -74,6 +75,17 @@
   --color-muted: var(--color-muted);
   --color-hairline: var(--color-hairline);
   --color-premium: var(--color-premium);
+  --color-forest-deep: var(--color-forest-deep);
+  --color-forest: var(--color-forest);
+  --color-forest-light: var(--color-forest-light);
+  --color-emerald: var(--color-emerald);
+  --color-teal: var(--color-teal);
+  --color-teal-light: var(--color-teal-light);
+  --color-gold: var(--color-gold);
+  --color-gold-soft: var(--color-gold-soft);
+  --color-gold-light: var(--color-gold-light);
+  --color-cream: var(--color-cream);
+  --color-warm-white: var(--color-warm-white);
   --color-success: var(--color-success);
   --color-warning: var(--color-warning);
   --color-danger: var(--color-danger);

@@ -7,8 +7,8 @@
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://umoafric.com").replace(/\/$/, "");
 
 export const BRAND = {
-  name: "UmoAfric",
-  tagline: "Everything Property.",
+  name: "NesAfric",
+  tagline: "Real Estate OS for Africa",
   domain: "umoafric.com",
   siteUrl: SITE_URL,
 
@@ -23,14 +23,14 @@ export const BRAND = {
      * dark surfaces. Both share identical dimensions.
      */
     /** For light surfaces (marketing pages, auth, light app shells): navy symbol + turquoise "o". */
-    onLight: "/brand/umo-afric-logo-navy.png",
+    onLight: "/brand/nesafric-wordmark.png",
     /** For dark surfaces (navy header/footer, dark hero sections): white symbol + turquoise "o". */
-    onDark: "/brand/umo-afric-logo-white.png",
+    onDark: "/brand/nesafric-wordmark.png",
     /** Square white-rounded mark, source for favicon/apple-touch-icon/social. */
     square: "/brand/umo-afric-mark-square.png",
     og: "/brand/umo-afric-og.png",
-    width: 2010,
-    height: 648,
+    width: 2172,
+    height: 724,
   },
 
   contact: {
