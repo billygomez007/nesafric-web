@@ -56,60 +56,61 @@ export function MarketplaceDirectory() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="border-b bg-slate-950 px-4 py-14 text-white sm:px-6">
+    <main className="min-h-screen bg-warm-white text-ink">
+      <header className="border-b border-white/10 bg-forest-deep px-4 py-10 text-white sm:px-6 sm:py-14">
         <div className="mx-auto max-w-6xl">
-          <nav className="flex items-center justify-between text-sm text-slate-300"><Link href="/"><BrandLogo height={22} /></Link><Link href="/marketplace/properties">Browse properties</Link></nav>
-          <h1 className="mt-8 text-3xl font-semibold sm:text-4xl">Professional Directory</h1>
-          <p className="mt-3 max-w-2xl text-slate-300">Agents, brokerages, real estate companies, and developers verified and active on UmoAfric.</p>
+          <nav className="flex items-center justify-between text-sm text-white/70"><Link href="/"><BrandLogo height={22} /></Link><Link className="transition hover:text-white" href="/marketplace/properties">Browse properties</Link></nav>
+          <p className="mt-12 text-xs font-semibold uppercase tracking-[0.22em] text-gold-soft">TRUSTED REAL ESTATE NETWORK</p>
+          <h1 className="mt-3 text-4xl font-semibold sm:text-5xl">Meet the professionals behind the opportunity.</h1>
+          <p className="mt-4 max-w-2xl text-white/70">Agents, brokerages, real estate companies, and developers verified and active on NesAfric.</p>
         </div>
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="mb-6"><MarketplaceBanner placement="PROFESSIONAL_FEATURED" /></div>
-        <div className="grid gap-3 rounded-2xl border bg-white p-4 shadow-sm sm:grid-cols-[2fr_1fr_auto] sm:items-center">
+        <div className="grid gap-3 rounded-3xl border border-hairline bg-white p-4 shadow-sm sm:grid-cols-[2fr_1fr_auto] sm:items-center">
           <input
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-xl border border-hairline bg-warm-white px-3 py-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal transition focus:border-teal focus:ring-2 focus:ring-teal/20"
             onChange={(event) => { setQuery(event.target.value); setPage(1); }}
             placeholder="Search by name…"
             value={query}
           />
-          <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onChange={(event) => { setType(event.target.value); setPage(1); }} value={type}>
+          <select className="rounded-xl border border-hairline bg-warm-white px-3 py-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal transition focus:border-teal focus:ring-2 focus:ring-teal/20" onChange={(event) => { setType(event.target.value); setPage(1); }} value={type}>
             <option value="">All professional types</option>
             {Object.entries(TYPE_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select>
-          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <label className="flex items-center gap-2 text-sm font-medium text-forest">
             <input checked={verifiedOnly} onChange={(event) => { setVerifiedOnly(event.target.checked); setPage(1); }} type="checkbox" />
             Verified only
           </label>
         </div>
 
         {!items ? (
-          <p className="mt-8 text-sm text-slate-500">Loading…</p>
+          <p className="mt-8 text-sm text-muted">Loading…</p>
         ) : items.length === 0 ? (
-          <div className="mt-8 rounded-2xl border bg-white p-10 text-center shadow-sm">
-            <p className="font-medium text-slate-700">No professionals match those filters</p>
-            <p className="mt-1 text-sm text-slate-500">Try clearing the search or type filter.</p>
+          <div className="mt-8 rounded-3xl border border-dashed border-hairline bg-white p-10 text-center shadow-sm">
+            <p className="font-medium text-forest">No professionals match those filters</p>
+            <p className="mt-1 text-sm text-muted">Try clearing the search or type filter.</p>
           </div>
         ) : (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
-              <Link className="grid gap-3 rounded-2xl border bg-white p-5 shadow-sm transition hover:border-brand hover:shadow-md" href={`/marketplace/professionals/${item.slug}`} key={item.slug}>
+              <Link className="group grid gap-3 rounded-3xl border border-hairline bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-teal hover:shadow-md" href={`/marketplace/professionals/${item.slug}`} key={item.slug}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-base font-semibold text-slate-700">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cream text-base font-semibold text-forest">
                     {item.displayName.slice(0, 1)}
                   </div>
-                  {item.verificationStatus === "VERIFIED" && <span className="rounded-full bg-premium/15 px-2.5 py-0.5 text-xs font-semibold text-navy">Verified</span>}
+                  {item.verificationStatus === "VERIFIED" && <span className="rounded-full bg-gold/10 px-2.5 py-0.5 text-xs font-semibold text-forest">Verified</span>}
                 </div>
                 <div>
-                  <p className="font-semibold text-slate-950">{item.displayName}</p>
-                  <p className="mt-0.5 text-sm text-slate-500">{TYPE_LABELS[item.type] ?? item.type} · {item.countryCode}</p>
+                  <p className="font-semibold text-forest group-hover:text-teal">{item.displayName}</p>
+                  <p className="mt-0.5 text-sm text-muted">{TYPE_LABELS[item.type] ?? item.type} · {item.countryCode}</p>
                 </div>
-                {item.description && <p className="line-clamp-2 text-sm text-slate-600">{item.description}</p>}
+                {item.description && <p className="line-clamp-2 text-sm text-muted">{item.description}</p>}
                 <div className="flex flex-wrap gap-1.5">
-                  {item.serviceAreas.slice(0, 3).map((area) => <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600" key={area}>{area}</span>)}
+                  {item.serviceAreas.slice(0, 3).map((area) => <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-muted" key={area}>{area}</span>)}
                 </div>
-                <p className="text-xs text-slate-500">{item._count.listings} active listing{item._count.listings === 1 ? "" : "s"}{item._count.developments > 0 ? ` · ${item._count.developments} development${item._count.developments === 1 ? "" : "s"}` : ""}</p>
+                <p className="text-xs text-muted">{item._count.listings} active listing{item._count.listings === 1 ? "" : "s"}{item._count.developments > 0 ? ` · ${item._count.developments} development${item._count.developments === 1 ? "" : "s"}` : ""}</p>
               </Link>
             ))}
           </div>

@@ -20,11 +20,11 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
   if (!profile) notFound();
 
   return (
-    <main className="min-h-screen bg-surface">
+    <main className="min-h-screen bg-warm-white text-ink">
       <PageViewTracker event="professional_profile_view" params={{ professional_type: profile.type }} />
       <header className="border-b bg-forest-deep px-4 py-14 text-white sm:px-6">
         <div className="mx-auto max-w-5xl">
-          <nav className="flex items-center justify-between text-sm"><Link href="/"><BrandLogo height={22} /></Link><Link href="/marketplace/properties">Browse properties</Link></nav>
+          <nav className="flex items-center justify-between text-sm text-white/70"><Link href="/"><BrandLogo height={22} /></Link><Link className="transition hover:text-white" href="/marketplace/properties">Browse properties</Link></nav>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/10 text-xl font-semibold">
               {profile.displayName.slice(0, 1)}
@@ -33,39 +33,39 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-semibold sm:text-4xl">{profile.displayName}</h1>
                 {profile.verificationStatus === "VERIFIED" && (
-                  <span className="rounded-full bg-gold px-3 py-1 text-xs font-semibold text-ink">Verified</span>
+                    <span className="rounded-full bg-gold/15 px-3 py-1 text-xs font-semibold text-gold-soft">Verified</span>
                 )}
               </div>
-              <p className="mt-1 text-sm text-slate-300">{TYPE_LABELS[profile.type] ?? profile.type}</p>
+              <p className="mt-1 text-sm text-white/65">{TYPE_LABELS[profile.type] ?? profile.type}</p>
             </div>
           </div>
-          {profile.description && <p className="mt-6 max-w-2xl text-slate-300">{profile.description}</p>}
+          {profile.description && <p className="mt-6 max-w-2xl leading-7 text-white/70">{profile.description}</p>}
         </div>
       </header>
 
       <div className="mx-auto grid max-w-5xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[2fr_1fr]">
         <div className="grid gap-6">
           {profile.developments.length > 0 && (
-            <section className="rounded-2xl border border-hairline bg-white p-6 shadow-sm">
+            <section className="rounded-3xl border border-hairline bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Developments</h2>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {profile.developments.map((development) => (
-                  <div className="rounded-xl border border-hairline p-4" key={development.id}>
+                  <div className="rounded-2xl border border-hairline bg-warm-white p-4" key={development.id}>
                     <p className="font-semibold">{development.name}</p>
                     <p className="mt-1 text-sm text-muted">{[development.city, development.region].filter(Boolean).join(", ") || development.countryCode}</p>
-                    <span className="mt-2 inline-block rounded-full bg-surface px-2 py-1 text-xs font-semibold">{development.status.replaceAll("_", " ")}</span>
+                    <span className="mt-2 inline-block rounded-full bg-cream px-2 py-1 text-xs font-semibold text-forest">{development.status.replaceAll("_", " ")}</span>
                   </div>
                 ))}
               </div>
             </section>
           )}
 
-          <section className="rounded-2xl border border-hairline bg-white p-6 shadow-sm">
+          <section className="rounded-3xl border border-hairline bg-white p-6 shadow-sm">
             <h2 className="text-xl font-semibold">Active listings</h2>
             {profile.listings.length === 0 ? <p className="mt-3 text-sm text-muted">No published listings yet.</p> : (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {profile.listings.map((listing) => (
-                  <Link className="rounded-xl border border-hairline p-4 transition hover:border-teal" href={`/marketplace/properties/${listing.id}`} key={listing.id}>
+                  <Link className="rounded-2xl border border-hairline bg-warm-white p-4 transition hover:border-teal" href={`/marketplace/properties/${listing.id}`} key={listing.id}>
                     <p className="font-semibold">{listing.title}</p>
                     <p className="mt-1 text-sm text-muted">{listing.city ?? ""} · {listing.listingType}</p>
                   </Link>
