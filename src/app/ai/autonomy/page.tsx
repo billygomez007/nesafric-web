@@ -5,7 +5,7 @@ export default function AIAutonomyPage() {
   return (
     <AppShell
       description="Configure bounded operational autonomy and review every deterministic decision."
-      eyebrow="PROPERTYOS AI"
+      eyebrow="AI WORKFORCE"
       subTabs="ai"
       title="Autonomy and activity"
     >

@@ -5,9 +5,9 @@ export default function AIEmployeesPage() {
   return (
     <AppShell
       description="Create bounded AI receptionists and property managers for your organisation."
-      eyebrow="PROPERTYOS AI"
+      eyebrow="AI WORKFORCE"
       subTabs="ai"
-      title="AI Employees"
+      title="Employees"
     >
       <AIEmployeeDirectory />
     </AppShell>

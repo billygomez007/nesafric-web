@@ -4,10 +4,10 @@ import { AIPropertyManager } from "@/components/ai-property-manager";
 export default function AIWorkspacePage() {
   return (
     <AppShell
-      description="Review organisation-scoped operational signals, ask for deterministic summaries, and approve proposed actions."
-      eyebrow="PROPERTYOS AI"
+      description="Deploy bounded AI employees across your real-estate operations, with clear controls and human oversight."
+      eyebrow="AI WORKFORCE"
       subTabs="ai"
-      title="AI property manager"
+      title="Your AI workforce"
     >
       <AIPropertyManager />
     </AppShell>
