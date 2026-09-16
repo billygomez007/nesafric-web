@@ -6,7 +6,7 @@ export default function NewMaintenancePage() {
   return (
     <AppShell
       actions={
-        <Link className="rounded-lg border px-4 py-2 text-sm font-semibold" href="/maintenance">
+        <Link className="rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface" href="/maintenance">
           Maintenance dashboard
         </Link>
       }
