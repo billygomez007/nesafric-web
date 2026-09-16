@@ -140,25 +140,19 @@ export function MarketplaceProfileDashboard({ professionalId }: { professionalId
       )}
 
       {entitlements && (
-        <section className="rounded-xl border border-hairline border-hairline bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Plan &amp; entitlements</h2>
-            <span className="rounded-full bg-teal/10 px-3 py-1 text-xs font-semibold text-teal">{entitlements.planName} · {entitlements.status}</span>
+        <section className="rounded-2xl border border-forest bg-forest p-6 text-white shadow-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-soft">Marketplace workspace</p><h2 className="mt-2 text-xl font-semibold">{entitlements.planName}</h2><p className="mt-1 text-sm text-white/65">This subscription is separate from PropertyOS billing.</p></div>
+            <span className="rounded-full bg-teal/20 px-3 py-1 text-xs font-semibold text-white">{entitlements.status.replaceAll("_", " ")}</span>
           </div>
-          <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {entitlements.features.map((feature) => (
-              <div className="flex justify-between rounded-xl border border-hairline px-3 py-2" key={feature.featureKey}>
-                <dt className="text-muted">{feature.label}</dt>
-                <dd className={`font-medium ${feature.reached ? "text-red-700" : !feature.isUnlimited && (feature.limit === 0 || (feature.kind === "BOOLEAN" && !feature.booleanValue)) ? "text-muted" : "text-ink"}`}>
-                  {feature.kind === "BOOLEAN"
-                    ? (feature.booleanValue ? "Enabled" : "Not included on this plan")
-                    : !feature.isUnlimited && feature.limit === 0
-                      ? "Not included on this plan"
-                      : `${feature.current ?? 0} / ${feature.isUnlimited ? "Unlimited" : feature.limit}`}
-                </dd>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4" key={feature.featureKey}>
+                <div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold">{feature.label}</p>{feature.reached && <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-semibold text-gold-soft">At limit</span>}</div>
+                <p className="mt-2 text-sm text-white/70">{feature.kind === "BOOLEAN" ? (feature.booleanValue ? "Included" : "Not included on this plan") : !feature.isUnlimited && feature.limit === 0 ? "Not included on this plan" : feature.isUnlimited ? `${feature.current ?? 0} used · No configured limit` : `${feature.current ?? 0} / ${feature.limit}`}</p>
               </div>
             ))}
-          </dl>
+          </div>
         </section>
       )}
     </div>
