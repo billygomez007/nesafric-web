@@ -5,7 +5,7 @@ import { requirePermission, PERMISSIONS } from "@/platform/authorization/permiss
 import { recordAudit } from "@/modules/audit/service";
 import { assertOperational, assertWithinLimit } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
-import { createPortfolioSchema, createPropertySchema, updatePropertySchema } from "./schemas";
+import { createPortfolioSchema, createPropertySchema, createUnitSchema, updatePropertySchema } from "./schemas";
 import { activePropertyScope } from "./repository";
 
 export async function createPortfolio(userId: string, organisationId: string, input: unknown) {
@@ -72,9 +72,126 @@ export async function createProperty(userId: string, organisationId: string, inp
   });
 }
 
+export async function createUnit(userId: string, organisationId: string, propertyId: string, input: unknown) {
+  await requirePermission(userId, organisationId, PERMISSIONS.propertyUpdate);
+  const data = createUnitSchema.parse(input);
+
+  await assertOperational(organisationId, ENTITLEMENTS.unitsMax.key);
+  await assertWithinLimit(organisationId, ENTITLEMENTS.unitsMax.key, 1);
+
+  return db.$transaction(async (tx) => {
+    const property = await tx.property.findFirst({
+      where: activePropertyScope(organisationId, propertyId),
+      select: { id: true },
+    });
+    if (!property) throw notFound();
+
+    if (data.buildingId) {
+      const building = await tx.building.findFirst({
+        where: {
+          id: data.buildingId,
+          propertyId: property.id,
+          archivedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!building) {
+        throw new AppError(
+          "INVALID_BUILDING",
+          422,
+          "The selected building does not belong to this property.",
+        );
+      }
+    }
+
+    const unit = await tx.unit.create({
+      data: {
+        propertyId: property.id,
+        buildingId: data.buildingId,
+        name: data.name,
+        unitType: data.unitType,
+        floor: data.floor,
+        bedrooms: data.bedrooms,
+        bathrooms: data.bathrooms,
+        status: data.status,
+      },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        organisationId,
+        actorUserId: userId,
+        action: "unit.created",
+        entityType: "unit",
+        entityId: unit.id,
+        metadata: { propertyId: property.id },
+      },
+    });
+    await tx.domainEvent.create({
+      data: {
+        organisationId,
+        name: "unit.created",
+        aggregateType: "unit",
+        aggregateId: unit.id,
+        payload: { propertyId: property.id, buildingId: data.buildingId ?? null },
+      },
+    });
+
+    return unit;
+  });
+}
+
 export async function getProperty(userId: string, organisationId: string, propertyId: string) {
   await requirePermission(userId, organisationId, PERMISSIONS.propertyRead);
-  const property = await db.property.findFirst({ where: activePropertyScope(organisationId, propertyId), include: { portfolio: { select: { id: true, name: true } }, buildings: { where: { archivedAt: null }, include: { units: { where: { archivedAt: null } } } }, units: { where: { archivedAt: null, buildingId: null } } } });
+  const property = await db.property.findFirst({
+    where: activePropertyScope(organisationId, propertyId),
+    include: {
+      portfolio: { select: { id: true, name: true } },
+      buildings: {
+        where: { archivedAt: null },
+        include: { units: { where: { archivedAt: null }, orderBy: { name: "asc" } } },
+        orderBy: { name: "asc" },
+      },
+      units: {
+        where: { archivedAt: null, buildingId: null },
+        orderBy: { name: "asc" },
+      },
+      leases: {
+        where: {
+          archivedAt: null,
+          status: { in: ["ACTIVE", "EXPIRING"] },
+        },
+        select: {
+          id: true,
+          referenceNumber: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+          unitId: true,
+          parties: {
+            where: { role: "TENANT" },
+            select: {
+              isPrimary: true,
+              tenantOrganisation: {
+                select: {
+                  id: true,
+                  email: true,
+                  phone: true,
+                  tenant: {
+                    select: {
+                      legalName: true,
+                      preferredName: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { startDate: "desc" },
+      },
+    },
+  });
   if (!property) throw notFound();
   return property;
 }
