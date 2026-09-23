@@ -19,7 +19,7 @@ export function isAnalyticsEnabled(): boolean {
 }
 
 /**
- * The complete UmoAfric analytics event taxonomy. Adding a name here only makes it a valid
+ * The complete NesAfric analytics event taxonomy. Adding a name here only makes it a valid
  * `trackEvent` argument — instrumenting a specific call site is a separate, deliberate change.
  *
  * WIRED (Phase 1 — marketing pages/components, via `trackCampaignEvent`, the pre-GA4 alias kept in
