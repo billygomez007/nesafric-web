@@ -1,5 +1,5 @@
 /**
- * UmoAfric shared button system (Phase 2 visual refresh; recolored orange -> turquoise in the
+ * NesAfric shared button system (Phase 2 visual refresh; recolored orange -> turquoise in the
  * brand color correction). Exported as className strings — rather than a component that renders
  * its own element — because the majority of "buttons" in this codebase are Next.js `<Link>`s
  * (navigation) sitting alongside real `<button>`s (form submission), and both need the identical
