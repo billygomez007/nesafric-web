@@ -238,10 +238,10 @@ function AppSidebar({
 
             return (
               <Link
-                className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium transition-colors ${
+                className={`relative flex min-h-10 items-center gap-3 rounded-[8px] px-3 text-[13px] font-medium transition-colors ${
                   active
-                    ? "bg-teal/20 text-white ring-1 ring-inset ring-teal/25"
-                    : "text-white/72 hover:bg-white/[0.07] hover:text-white"
+                    ? "bg-white/[0.08] text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-gold"
+                    : "text-white/68 hover:bg-white/[0.05] hover:text-white"
                 }`}
                 href={link.href}
                 key={link.href}
@@ -262,10 +262,10 @@ function AppSidebar({
           </p>
 
           <Link
-            className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium transition-colors ${
+            className={`relative flex min-h-10 items-center gap-3 rounded-[8px] px-3 text-[13px] font-medium transition-colors ${
               inSettings
-                ? "bg-teal/20 text-white ring-1 ring-inset ring-teal/25"
-                : "text-white/72 hover:bg-white/[0.07] hover:text-white"
+                ? "bg-white/[0.08] text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-gold"
+                : "text-white/68 hover:bg-white/[0.05] hover:text-white"
             }`}
             href="/settings"
             onClick={onNavigate}
@@ -297,7 +297,7 @@ function MobileTopbar({ onMenu }: { onMenu: () => void }) {
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-hairline bg-warm-white/95 px-4 backdrop-blur lg:hidden">
       <button
         aria-label="Open navigation"
-        className="flex h-10 w-10 items-center justify-center rounded-lg border border-hairline bg-white text-forest"
+        className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-hairline bg-white text-forest"
         onClick={onMenu}
         type="button"
       >
@@ -346,7 +346,7 @@ function DesktopTopbar() {
 
         <input
           aria-label="Search workspace"
-          className="h-10 w-full rounded-xl border border-hairline bg-white pl-10 pr-4 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
+          className="h-10 w-full rounded-[9px] border border-hairline bg-white pl-10 pr-4 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
           placeholder="Search your workspace..."
           type="search"
         />
@@ -355,7 +355,7 @@ function DesktopTopbar() {
       <div className="ml-6 flex items-center gap-3">
         <button
           aria-label="Notifications"
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-hairline bg-white text-muted transition hover:text-forest"
+          className="relative flex h-10 w-10 items-center justify-center rounded-[9px] border border-hairline bg-white text-muted transition hover:border-teal/30 hover:text-forest"
           type="button"
         >
           <svg
@@ -374,7 +374,7 @@ function DesktopTopbar() {
         </button>
 
         <div className="flex items-center gap-3 border-l border-hairline pl-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-forest text-xs font-bold text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-forest text-xs font-bold text-white">
             N
           </div>
           <div className="hidden xl:block">
@@ -391,13 +391,13 @@ function SubTabs({ links }: { links: Array<{ href: string; label: string }> }) {
   const pathname = usePathname();
 
   return (
-    <div className="mb-8 flex flex-wrap gap-2 border-b border-hairline pb-3">
+    <div className="mb-8 flex flex-wrap gap-6 border-b border-hairline">
       {links.map((link) => (
         <Link
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`border-b-2 px-1 pb-2 pt-1 text-sm font-medium transition-colors ${
             pathname === link.href
-              ? "bg-forest text-white"
-              : "text-muted hover:bg-cream hover:text-forest"
+              ? "border-forest text-forest"
+              : "border-transparent text-muted hover:border-hairline hover:text-forest"
           }`}
           href={link.href}
           key={link.href}
@@ -463,7 +463,7 @@ export function AppShell({
         <MobileTopbar onMenu={() => setMobileOpen(true)} />
         <DesktopTopbar />
 
-        <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10">
+        <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-9 xl:px-12">
           <div className={`mx-auto w-full ${SIZE_CLASSES[size]}`}>
             <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
               <div>
