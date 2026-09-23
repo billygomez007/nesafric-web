@@ -126,7 +126,7 @@ function checkCommunications(): ProviderHealthEntry[] {
     {
       name: "email",
       readiness: email.configured ? "CONFIGURED" : "TEST_MODE",
-      detail: email.configured ? "Resend (notifications@umoafric.com)." : "Simulated in-memory email transport (no external send occurs).",
+      detail: email.configured ? "Resend (hello@nesafric.com)." : "Simulated in-memory email transport (no external send occurs).",
     },
   ];
 }

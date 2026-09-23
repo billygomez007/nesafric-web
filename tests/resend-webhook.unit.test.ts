@@ -9,7 +9,7 @@ function signedRequest(body: object, secret = TEST_SECRET) {
   const id = "msg_test_1";
   const timestamp = new Date();
   const signature = new Webhook(secret).sign(id, timestamp, payload);
-  return new Request("https://umoafric.com/api/webhooks/resend", {
+  return new Request("https://nesafric.com/api/webhooks/resend", {
     method: "POST",
     body: payload,
     headers: {

@@ -8,7 +8,10 @@ import { createTrialSubscription } from "@/modules/subscriptions/lifecycle";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { createOrganisationSchema, inviteMemberSchema } from "./schemas";
-import { enqueueOnboardingCompleteEmail } from "@/modules/account-emails/service";
+import {
+  enqueueOnboardingCompleteEmail,
+  enqueueTeamInvitationEmail,
+} from "@/modules/account-emails/service";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -66,6 +69,20 @@ export async function inviteMember(actorUserId: string, organisationId: string, 
   const data = inviteMemberSchema.parse(input);
   const role = await db.role.findUnique({ where: { key: data.roleKey } });
   if (!role) throw notFound();
+
+  const [organisation, inviter] = await Promise.all([
+    db.organisation.findUnique({
+      where: { id: organisationId },
+      select: { name: true },
+    }),
+    db.user.findUnique({
+      where: { id: actorUserId },
+      select: { displayName: true },
+    }),
+  ]);
+
+  if (!organisation) throw notFound();
+
   const rawToken = randomBytes(32).toString("base64url");
   const invitation = await db.organisationInvitation.create({
     data: { organisationId, email: data.email.toLowerCase(), roleId: role.id, invitedById: actorUserId, tokenHash: tokenHash(rawToken), expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7) },
@@ -74,5 +91,22 @@ export async function inviteMember(actorUserId: string, organisationId: string, 
     recordAudit({ organisationId, actorUserId, action: "member.invited", entityType: "organisation_invitation", entityId: invitation.id }),
     publishDomainEvent({ organisationId, name: "member.invited", aggregateType: "organisation_invitation", aggregateId: invitation.id, payload: { roleKey: role.key } }),
   ]);
+  await enqueueTeamInvitationEmail({
+    invitationId: invitation.id,
+    recipientEmail: invitation.email,
+    organisationName: organisation.name,
+    inviterName: inviter?.displayName ?? "A NesAfric workspace administrator",
+    roleLabel: role.name ?? role.key,
+    invitationExpiresAt: invitation.expiresAt,
+    invitationToken: rawToken,
+  }).catch((error) => {
+    // Invitation creation is authoritative; email transport failures are retried by the
+    // background-job system and must never roll back the invitation itself.
+    console.error("Failed to enqueue team invitation email", {
+      invitationId: invitation.id,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  });
+
   return { invitation, token: rawToken };
 }

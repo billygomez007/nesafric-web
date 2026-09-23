@@ -23,7 +23,7 @@ describe("renderEmail escaping", () => {
     expect(html).not.toContain("<script>bad()</script>");
   });
 
-  it("resolves a CTA path to an absolute UmoAfric application URL, never an external origin", () => {
+  it("resolves a CTA path to an absolute NesAfric application URL, never an external origin", () => {
     const { html } = renderEmail({ heading: "Test", paragraphs: [], cta: { label: "Go", path: "/dashboard" } });
     expect(html).toContain(`href="${BRAND.siteUrl}/dashboard"`);
   });
@@ -36,11 +36,16 @@ describe("renderEmail escaping", () => {
     expect(text).toContain(`${BRAND.siteUrl}/payments`);
   });
 
-  it("never mentions the old NesAfric brand", () => {
-    const { html, text } = renderEmail({ heading: "Test", paragraphs: ["Body"] });
-    expect(html.toLowerCase()).not.toContain("nesafric");
-    expect(text.toLowerCase()).not.toContain("nesafric");
+  it("renders NesAfric branding and never mentions the retired UmoAfric brand", () => {
+    const { html, text } = renderEmail({
+      heading: "Test",
+      paragraphs: ["Body"],
+    });
+
     expect(html).toContain(BRAND.name);
+    expect(text).toContain(BRAND.name);
+    expect(html.toLowerCase()).not.toContain("umoafric");
+    expect(text.toLowerCase()).not.toContain("umoafric");
   });
 });
 
@@ -60,22 +65,38 @@ describe("buildReminderEventEmail", () => {
 });
 
 describe("account email sender-identity mapping", () => {
-  it("sends the welcome email from notifications@, the default automated transactional sender", () => {
+  it("sends the welcome email from hello@, the branded onboarding sender", () => {
     const welcome = contentFor("WELCOME", "Ama");
-    expect(welcome.sender).toBe("notifications");
-    expect(BRAND.sender[welcome.sender]).toBe("UmoAfric <notifications@umoafric.com>");
-    expect(welcome.subject).toBe("Welcome to UmoAfric");
+    expect(welcome.sender).toBe("hello");
+    expect(BRAND.sender[welcome.sender]).toBe("NesAfric <hello@nesafric.com>");
+    expect(welcome.subject).toBe("Welcome to NesAfric");
   });
 
-  it("sends onboarding-completion emails from notifications@ too", () => {
-    expect(contentFor("ONBOARDING_COMPLETE_PROPERTYOS", "Ama", "Golden Coast Properties").sender).toBe("notifications");
+  it("uses hello@ for PropertyOS onboarding while preserving notification senders for the other tracks", () => {
+    expect(contentFor("ONBOARDING_COMPLETE_PROPERTYOS", "Ama", "Golden Coast Properties").sender).toBe("hello");
     expect(contentFor("ONBOARDING_COMPLETE_MARKETPLACE", "Ama", "Adjoa Realty").sender).toBe("notifications");
     expect(contentFor("ONBOARDING_COMPLETE_SERVICES", "Ama", "Ama's Plumbing").sender).toBe("notifications");
   });
 
   it("personalizes onboarding-completion content with the actual workspace name", () => {
-    const { content } = contentFor("ONBOARDING_COMPLETE_PROPERTYOS", "Ama", "Golden Coast Properties");
-    expect(content.heading).toContain("Golden Coast Properties");
+    const email = contentFor(
+      "ONBOARDING_COMPLETE_PROPERTYOS",
+      "Ama",
+      "Golden Coast Properties",
+    );
+
+    const rendered = renderEmail(email.content);
+
+    expect(email.subject).toBe(
+      "Welcome to NesAfric — your property workspace is ready",
+    );
+    expect(email.content.heading).toBe("Welcome to NesAfric");
+    expect(rendered.text).toContain("Golden Coast Properties");
+    expect(rendered.html).toContain("Golden Coast Properties");
+    expect(email.content.cta).toEqual({
+      label: "Open your workspace",
+      path: "/dashboard",
+    });
   });
 });
 
@@ -99,18 +120,18 @@ describe("service-professional verification emails", () => {
   });
 
   it("uses respectful, neutral subject lines rather than exposing internal review jargon", () => {
-    expect(contentFor("PROVIDER_VERIFICATION_SUBMITTED", "Kwame").subject).toBe("Verification submitted — UmoAfric");
-    expect(contentFor("PROVIDER_VERIFICATION_MORE_INFO", "Kwame").subject).toBe("More information is required for your UmoAfric verification");
-    expect(contentFor("PROVIDER_VERIFICATION_APPROVED", "Kwame").subject).toBe("Your UmoAfric service professional profile is verified");
-    expect(contentFor("PROVIDER_VERIFICATION_REJECTED", "Kwame").subject).toBe("Update on your UmoAfric verification");
+    expect(contentFor("PROVIDER_VERIFICATION_SUBMITTED", "Kwame").subject).toBe("Verification submitted — NesAfric");
+    expect(contentFor("PROVIDER_VERIFICATION_MORE_INFO", "Kwame").subject).toBe("More information is required for your NesAfric verification");
+    expect(contentFor("PROVIDER_VERIFICATION_APPROVED", "Kwame").subject).toBe("Your NesAfric service professional profile is verified");
+    expect(contentFor("PROVIDER_VERIFICATION_REJECTED", "Kwame").subject).toBe("Update on your NesAfric verification");
   });
 });
 
 describe("brand sender identities", () => {
-  it("maps every sender to the correct official UmoAfric address", () => {
-    expect(BRAND.sender.hello).toBe("UmoAfric <hello@umoafric.com>");
-    expect(BRAND.sender.notifications).toBe("UmoAfric <notifications@umoafric.com>");
-    expect(BRAND.sender.support).toBe("UmoAfric <support@umoafric.com>");
-    expect(BRAND.sender.info).toBe("UmoAfric <info@umoafric.com>");
+  it("maps every sender to the correct official NesAfric address", () => {
+    expect(BRAND.sender.hello).toBe("NesAfric <hello@nesafric.com>");
+    expect(BRAND.sender.notifications).toBe("NesAfric <notifications@nesafric.com>");
+    expect(BRAND.sender.support).toBe("NesAfric <support@nesafric.com>");
+    expect(BRAND.sender.info).toBe("NesAfric <info@nesafric.com>");
   });
 });

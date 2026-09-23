@@ -35,13 +35,13 @@ export const BRAND = {
 
   contact: {
     /** Formal corporate contact — company information, administrative enquiries. */
-    info: "info@umoafric.com",
+    info: "info@nesafric.com",
     /** General relationship/customer communication, welcome messages, enquiries. */
-    hello: "hello@umoafric.com",
+    hello: "hello@nesafric.com",
     /** Primary automated transactional sender — the default for platform-generated notifications. */
-    notifications: "notifications@umoafric.com",
+    notifications: "notifications@nesafric.com",
     /** Customer support, help, escalation — the reply destination for automated notifications. */
-    support: "support@umoafric.com",
+    support: "support@nesafric.com",
     phoneDisplay: "+233 (0) 50 282 0005",
     phoneTel: "+233502820005",
     address: "Plot 16, Atlantic Towers, Accra",
