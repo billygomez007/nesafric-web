@@ -2,6 +2,11 @@ import { db } from "@/platform/database/client";
 import { enqueueJob } from "@/platform/jobs/runner";
 import { EmailChannelAdapter } from "@/modules/conversations/channels/registry";
 import { BRAND } from "@/platform/brand";
+import {
+  decryptInvitationToken,
+  encryptInvitationToken,
+  type EncryptedInvitationToken,
+} from "@/platform/security/invitation-token-crypto";
 import { renderEmail, type EmailContent } from "@/modules/notifications/email-templates/render";
 
 /**
@@ -24,7 +29,8 @@ export type AccountEmailTemplate =
   | "PROVIDER_VERIFICATION_APPROVED"
   | "PROVIDER_VERIFICATION_REJECTED"
   | "MARKETPLACE_LEAD_CREATED"
-  | "VIEWING_REQUEST_CREATED";
+  | "VIEWING_REQUEST_CREATED"
+  | "TEAM_INVITATION";
 
 export type AccountEmailPayload = {
   userId: string;
@@ -44,6 +50,18 @@ export type AccountEmailPayload = {
   leadId?: string;
   viewingRequestId?: string;
   requestedTimeLabel?: string;
+
+  /** Team-invitation fields. Invitation recipients may not have a NesAfric user account yet,
+   * therefore invitation delivery can target a verified invitation email directly instead of
+   * requiring a User row. */
+  recipientEmail?: string;
+  recipientDisplayName?: string;
+  inviterName?: string;
+  roleLabel?: string;
+  invitationExpiresAt?: string;
+  invitationId?: string;
+  invitationTokenEncrypted?: EncryptedInvitationToken;
+
   /** The exact idempotency identity for this send — reused as both the job's BackgroundJob key
    * (set by the caller at enqueue time) and the message id handed to the email provider, so a
    * single logical event (e.g. one specific lead) can never produce two external sends even if
@@ -133,19 +151,69 @@ export async function enqueueViewingRequestNotification(recipientUserId: string,
   });
 }
 
+export async function enqueueTeamInvitationEmail(input: {
+  invitationId: string;
+  recipientEmail: string;
+  organisationName: string;
+  inviterName: string;
+  roleLabel: string;
+  invitationExpiresAt: Date;
+  invitationToken: string;
+}) {
+  const dedupeKey = `account-email:TEAM_INVITATION:${input.invitationId}`;
+
+  const invitationTokenEncrypted =
+    encryptInvitationToken(
+      input.invitationToken,
+      input.invitationId,
+    );
+
+  return enqueueJob({
+    type: "account-email",
+    idempotencyKey: dedupeKey,
+    payload: {
+      userId: "",
+      template: "TEAM_INVITATION",
+      dedupeKey,
+      recipientEmail: input.recipientEmail.toLowerCase(),
+      workspaceName: input.organisationName,
+      inviterName: input.inviterName,
+      roleLabel: input.roleLabel,
+      invitationExpiresAt:
+        input.invitationExpiresAt.toISOString(),
+      invitationId: input.invitationId,
+      invitationTokenEncrypted,
+    } satisfies AccountEmailPayload,
+  });
+}
+
 export function contentFor(
   template: AccountEmailTemplate,
   displayName: string,
   workspaceName?: string,
   providerId?: string,
   reason?: string,
-  lead?: Pick<AccountEmailPayload, "listingTitle" | "prospectName" | "prospectEmail" | "prospectPhone" | "leadId" | "viewingRequestId" | "requestedTimeLabel">,
+  lead?: Pick<
+    AccountEmailPayload,
+    | "listingTitle"
+    | "prospectName"
+    | "prospectEmail"
+    | "prospectPhone"
+    | "leadId"
+    | "viewingRequestId"
+    | "requestedTimeLabel"
+    | "inviterName"
+    | "roleLabel"
+    | "invitationExpiresAt"
+  > & {
+    invitationToken?: string;
+  },
 ): { subject: string; sender: keyof typeof BRAND.sender; content: EmailContent } {
   switch (template) {
     case "WELCOME":
       return {
         subject: `Welcome to ${BRAND.name}`,
-        sender: "notifications",
+        sender: "hello",
         content: {
           preheader: `Your ${BRAND.name} account is ready — continue setting up your workspace.`,
           heading: `Welcome to ${BRAND.name}.`,
@@ -161,16 +229,26 @@ export function contentFor(
       };
     case "ONBOARDING_COMPLETE_PROPERTYOS":
       return {
-        subject: `Your ${BRAND.name} organisation is ready`,
-        sender: "notifications",
+        subject: `Welcome to ${BRAND.name} — your property workspace is ready`,
+        sender: "hello",
         content: {
-          heading: `${workspaceName ?? "Your organisation"} is ready`,
+          preheader: `${workspaceName ?? "Your property workspace"} is ready on ${BRAND.name}.`,
+          heading: `Welcome to ${BRAND.name}`,
           greeting: `Hi ${displayName},`,
           paragraphs: [
-            `Your ${BRAND.name} organisation, ${workspaceName ?? "your new organisation"}, has been created.`,
-            "Start managing your properties, tenants, rent, maintenance and operations from one place.",
+            `Your property workspace, ${workspaceName ?? "your organisation"}, is now ready.`,
+            `${BRAND.name} gives you one place to manage properties, tenants, leases, rent, recurring charges, maintenance and your team.`,
+            "You can start by adding your first property or continue setting up the rest of your workspace.",
           ],
-          cta: { label: "Go to your dashboard", path: "/dashboard" },
+          features: [
+            "Add and manage properties",
+            "Add tenants and leases",
+            "Track rent and recurring charges",
+            "Manage maintenance",
+            "Invite your team",
+          ],
+          cta: { label: "Open your workspace", path: "/dashboard" },
+          supportNote: `Need help? Reply to this email or contact ${BRAND.contact.hello}`,
         },
       };
     case "ONBOARDING_COMPLETE_MARKETPLACE":
@@ -279,6 +357,43 @@ export function contentFor(
           cta: lead?.leadId ? { label: "Open the lead", path: `/leasing/leads/${lead.leadId}` } : undefined,
         },
       };
+    case "TEAM_INVITATION": {
+      const expiry = lead?.invitationExpiresAt
+        ? new Date(lead.invitationExpiresAt).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })
+        : "7 days";
+
+      return {
+        subject: `You've been invited to join ${workspaceName ?? "a workspace"} on ${BRAND.name}`,
+        sender: "hello",
+        content: {
+          preheader: `${lead?.inviterName ?? "A workspace administrator"} invited you to join ${workspaceName ?? "their workspace"} on ${BRAND.name}.`,
+          heading: `You're invited to ${workspaceName ?? BRAND.name}`,
+          greeting: `Hello${displayName && displayName !== "there" ? ` ${displayName}` : ""},`,
+          paragraphs: [
+            `${lead?.inviterName ?? "A workspace administrator"} has invited you to join ${workspaceName ?? "their property workspace"} on ${BRAND.name}.`,
+            `Your assigned role is ${lead?.roleLabel ?? "Team member"}.`,
+            `This invitation expires ${lead?.invitationExpiresAt ? `on ${expiry}` : "in 7 days"}.`,
+            "Use the same email address this invitation was sent to when signing in or creating your account.",
+          ],
+          details: [
+            { label: "Workspace", value: workspaceName ?? "NesAfric workspace" },
+            { label: "Role", value: lead?.roleLabel ?? "Team member" },
+            { label: "Invited by", value: lead?.inviterName ?? "Workspace administrator" },
+          ],
+          cta: lead?.invitationToken
+            ? {
+                label: "Accept invitation",
+                path: `/invitations/accept#token=${encodeURIComponent(lead.invitationToken)}`,
+              }
+            : { label: "Open NesAfric", path: "/login" },
+          supportNote: `If you were not expecting this invitation, you can safely ignore this email. Need help? Contact ${BRAND.contact.hello}`,
+        },
+      };
+    }
     case "VIEWING_REQUEST_CREATED":
       return {
         subject: `New viewing request on ${BRAND.name}`,
@@ -300,9 +415,63 @@ export function contentFor(
 }
 
 export async function sendAccountEmail(payload: AccountEmailPayload) {
-  const user = await db.user.findUnique({ where: { id: payload.userId }, select: { email: true, displayName: true } });
-  if (!user) return; // Account no longer exists between enqueue and processing — nothing to send.
-  const { subject, sender, content } = contentFor(payload.template, user.displayName, payload.workspaceName, payload.providerId, payload.reason, payload);
+  const invitationDelivery = payload.template === "TEAM_INVITATION";
+
+  const user = invitationDelivery || !payload.userId
+    ? null
+    : await db.user.findUnique({
+        where: { id: payload.userId },
+        select: { email: true, displayName: true },
+      });
+
+  if (!invitationDelivery && !user) {
+    return; // Account no longer exists between enqueue and processing — nothing to send.
+  }
+
+  const recipientEmail = invitationDelivery ? payload.recipientEmail : user?.email;
+  const displayName = invitationDelivery
+    ? payload.recipientDisplayName ?? "there"
+    : user?.displayName ?? "there";
+
+  if (!recipientEmail) {
+    throw new Error("Account email has no recipient email address.");
+  }
+
+  let transientInvitationToken:
+    | string
+    | undefined;
+
+  if (invitationDelivery) {
+    if (
+      !payload.invitationId ||
+      !payload.invitationTokenEncrypted
+    ) {
+      throw new Error(
+        "Team invitation email payload is missing its encrypted delivery token.",
+      );
+    }
+
+    transientInvitationToken =
+      decryptInvitationToken(
+        payload.invitationTokenEncrypted,
+        payload.invitationId,
+      );
+  }
+
+  const { subject, sender, content } = contentFor(
+    payload.template,
+    displayName,
+    payload.workspaceName,
+    payload.providerId,
+    payload.reason,
+    invitationDelivery
+      ? {
+          ...payload,
+          invitationToken:
+            transientInvitationToken,
+        }
+      : payload,
+  );
   const rendered = renderEmail(content);
   const adapter = new EmailChannelAdapter();
   const dedupeKey = payload.dedupeKey ?? `account-email:${payload.template}:${payload.userId}`;
@@ -311,7 +480,7 @@ export async function sendAccountEmail(payload: AccountEmailPayload) {
     conversationId: dedupeKey,
     messageId: dedupeKey,
     channel: "EMAIL",
-    recipientAddress: user.email,
+    recipientAddress: recipientEmail,
     fromAddress: BRAND.sender[sender],
     subject,
     html: rendered.html,

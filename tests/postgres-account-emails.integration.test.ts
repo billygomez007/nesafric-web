@@ -10,6 +10,11 @@ import { runDueJobs } from "@/platform/jobs/runner";
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation" CASCADE');
 }
+import {
+  decryptInvitationToken,
+  type EncryptedInvitationToken,
+} from "@/platform/security/invitation-token-crypto";
+
 
 describe("PostgreSQL account emails (welcome + onboarding completion)", () => {
   beforeEach(cleanDatabase);
@@ -67,5 +72,85 @@ describe("PostgreSQL account emails (welcome + onboarding completion)", () => {
     const user = await registerUser({ displayName: "Efua Danso", email: "efua@account-email.test", password: "secure-password-123" });
     const job = await db.backgroundJob.findFirstOrThrow({ where: { idempotencyKey: `account-email:welcome:${user.id}` } });
     expect(job.organisationId).toBeNull();
+  });
+});
+
+describe("PostgreSQL team invitation emails", () => {
+  beforeEach(cleanDatabase);
+  afterAll(cleanDatabase);
+
+  it("queues exactly one team-invitation email job after an invitation is created", async () => {
+    const owner = await registerUser({
+      displayName: "Ama Boateng",
+      email: "owner-team-email@test.example",
+      password: "secure-password-123",
+    });
+
+    const organisation = await createOrganisation(owner.id, {
+      name: "Golden Coast Properties",
+      type: "PROPERTY_MANAGEMENT",
+      countryCode: "GH",
+    });
+
+    const result = await import("@/modules/organisations/service").then(
+      ({ inviteMember }) =>
+        inviteMember(owner.id, organisation.id, {
+          email: "manager-team-email@test.example",
+          roleKey: "property_manager",
+        }),
+    );
+
+    const job = await db.backgroundJob.findFirst({
+      where: {
+        idempotencyKey: `account-email:TEAM_INVITATION:${result.invitation.id}`,
+      },
+    });
+
+    expect(job).not.toBeNull();
+
+    const payload = job?.payload as {
+      recipientEmail?: string;
+      workspaceName?: string;
+      inviterName?: string;
+      invitationId?: string;
+      invitationToken?: string;
+      invitationTokenEncrypted?:
+        EncryptedInvitationToken;
+    };
+
+    expect(payload.recipientEmail).toBe(
+      "manager-team-email@test.example",
+    );
+
+    expect(payload.workspaceName).toBe(
+      "Golden Coast Properties",
+    );
+
+    expect(payload.inviterName).toBe(
+      "Ama Boateng",
+    );
+
+    expect(
+      payload.invitationId,
+    ).toBe(result.invitation.id);
+
+    expect(
+      payload.invitationToken,
+    ).toBeUndefined();
+
+    expect(
+      payload.invitationTokenEncrypted,
+    ).toBeTruthy();
+
+    expect(
+      JSON.stringify(job?.payload),
+    ).not.toContain(result.token);
+
+    expect(
+      decryptInvitationToken(
+        payload.invitationTokenEncrypted!,
+        result.invitation.id,
+      ),
+    ).toBe(result.token);
   });
 });

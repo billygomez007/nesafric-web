@@ -4,12 +4,12 @@
  * one file instead of scattering literals across every page/component/email template.
  */
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://umoafric.com").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://nesafric.com").replace(/\/$/, "");
 
 export const BRAND = {
-  name: "UmoAfric",
-  tagline: "Everything Property.",
-  domain: "umoafric.com",
+  name: "NesAfric",
+  tagline: "Real Estate OS for Africa",
+  domain: "nesafric.com",
   siteUrl: SITE_URL,
 
   logo: {
@@ -23,25 +23,25 @@ export const BRAND = {
      * dark surfaces. Both share identical dimensions.
      */
     /** For light surfaces (marketing pages, auth, light app shells): navy symbol + turquoise "o". */
-    onLight: "/brand/umo-afric-logo-navy.png",
+    onLight: "/brand/nesafric-wordmark.png",
     /** For dark surfaces (navy header/footer, dark hero sections): white symbol + turquoise "o". */
-    onDark: "/brand/umo-afric-logo-white.png",
+    onDark: "/brand/nesafric-wordmark.png",
     /** Square white-rounded mark, source for favicon/apple-touch-icon/social. */
     square: "/brand/umo-afric-mark-square.png",
-    og: "/brand/umo-afric-og.png",
-    width: 2010,
-    height: 648,
+    og: "/brand/nesafric-wordmark.png",
+    width: 2172,
+    height: 724,
   },
 
   contact: {
     /** Formal corporate contact — company information, administrative enquiries. */
-    info: "info@umoafric.com",
+    info: "info@nesafric.com",
     /** General relationship/customer communication, welcome messages, enquiries. */
-    hello: "hello@umoafric.com",
+    hello: "hello@nesafric.com",
     /** Primary automated transactional sender — the default for platform-generated notifications. */
-    notifications: "notifications@umoafric.com",
+    notifications: "notifications@nesafric.com",
     /** Customer support, help, escalation — the reply destination for automated notifications. */
-    support: "support@umoafric.com",
+    support: "support@nesafric.com",
     phoneDisplay: "+233 (0) 50 282 0005",
     phoneTel: "+233502820005",
     address: "Plot 16, Atlantic Towers, Accra",
@@ -49,10 +49,10 @@ export const BRAND = {
 
   /** RFC 5322 "display name <address>" sender identities, mapped to their intended purpose. */
   sender: {
-    hello: "UmoAfric <hello@umoafric.com>",
-    notifications: "UmoAfric <notifications@umoafric.com>",
-    support: "UmoAfric <support@umoafric.com>",
-    info: "UmoAfric <info@umoafric.com>",
+    hello: "NesAfric <hello@nesafric.com>",
+    notifications: "NesAfric <notifications@nesafric.com>",
+    support: "NesAfric <support@nesafric.com>",
+    info: "NesAfric <info@nesafric.com>",
   },
 } as const;
 

@@ -1,5 +1,6 @@
+import { getObjectStorageAdapter } from "@/platform/storage/registry";
 import { db } from "@/platform/database/client";
-import { getMalwareScanner, s3Adapter } from "@/platform/storage";
+import { getMalwareScanner } from "@/platform/storage";
 import { esignatureProviders } from "@/modules/esignature/provider";
 import { geocodingProviders } from "@/modules/geocoding/provider";
 import { calendarProviders } from "@/modules/calendar/provider";
@@ -66,8 +67,19 @@ function checkBilling(): ProviderHealthEntry {
  * be visible rather than collapsed into a single misleading flag. Never exposes bucket
  * names/endpoints/credentials, only whether each side is usable. */
 function checkStorage(): ProviderHealthEntry[] {
-  const privateConfigured = s3Adapter.isPrivateConfigured();
-  const publicConfigured = s3Adapter.isPublicConfigured();
+  let privateConfigured = false;
+  let publicConfigured = false;
+
+  try {
+    const storage = getObjectStorageAdapter();
+    privateConfigured = storage.isPrivateConfigured();
+    publicConfigured = storage.isPublicConfigured();
+  } catch {
+    // A cloud deployment with no durable storage configured deliberately
+    // fails closed in the registry. Health must report UNCONFIGURED rather
+    // than turning the entire public health endpoint into a 500 response.
+  }
+
   return [
     {
       name: "storagePrivate",
@@ -114,7 +126,7 @@ function checkCommunications(): ProviderHealthEntry[] {
     {
       name: "email",
       readiness: email.configured ? "CONFIGURED" : "TEST_MODE",
-      detail: email.configured ? "Resend (notifications@umoafric.com)." : "Simulated in-memory email transport (no external send occurs).",
+      detail: email.configured ? "Resend (hello@nesafric.com)." : "Simulated in-memory email transport (no external send occurs).",
     },
   ];
 }

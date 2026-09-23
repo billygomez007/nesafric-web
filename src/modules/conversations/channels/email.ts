@@ -30,7 +30,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
 
   async send(request: OutboundMessageRequest): Promise<OutboundDeliveryResult> {
     if (!request.recipientAddress) return { status: "FAILED", failureReason: "No recipient email address is available for this conversation." };
-    // Every outbound email gets the UmoAfric branded envelope, whether or not the caller built
+    // Every outbound email gets the NesAfric branded envelope, whether or not the caller built
     // one explicitly — callers that only ever set `body` (e.g. conversation replies) still get a
     // consistent, professional layout instead of a bare-text message. An explicit `html` from the
     // caller is preserved untouched.

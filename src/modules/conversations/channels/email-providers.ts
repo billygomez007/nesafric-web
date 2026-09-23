@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
 /**
- * The two real email transports UmoAfric can be in: a genuinely-connected Resend account, or the
+ * The two real email transports NesAfric can be in: a genuinely-connected Resend account, or the
  * deterministic in-memory test transport used whenever `RESEND_API_KEY` is unset (local dev, CI,
  * any environment nobody has wired a real provider into yet). Every `providerReference` this
  * module produces is prefixed by which one actually ran (`resend:` vs `test-email:`), so nothing
