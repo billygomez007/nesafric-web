@@ -98,11 +98,7 @@ export function LeaseForm({
   }, []);
 
   useEffect(() => {
-    if (!propertyId) {
-      setUnits([]);
-      setUnitId("");
-      return;
-    }
+    if (!propertyId) return;
 
     const organisationId = localStorage.getItem(
       "propertyos.activeOrganisationId",
