@@ -130,9 +130,11 @@ export function LeaseForm({
         ] as UnitOption[];
 
         setUnits(nextUnits);
-        if (unitId && !nextUnits.some((unit) => unit.id === unitId)) {
-          setUnitId("");
-        }
+        setUnitId((current) =>
+          current && !nextUnits.some((unit) => unit.id === current)
+            ? ""
+            : current,
+        );
       })
       .catch((cause) =>
         setError(
@@ -140,7 +142,7 @@ export function LeaseForm({
         ),
       )
       .finally(() => setLoadingUnits(false));
-  }, [propertyId, unitId]);
+  }, [propertyId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
