@@ -36,10 +36,10 @@ export async function PATCH(request: Request) {
         email,
         ...(emailChanged ? { emailVerifiedAt: null } : {}),
       },
-      select: { id: true, email: true, displayName: true },
+      select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json({\n      id: updated.id,\n      email: updated.email,\n      displayName: updated.displayName,\n      emailVerified: Boolean(updated.emailVerifiedAt),\n    });
   } catch (error) {
     return errorResponse(error);
   }
