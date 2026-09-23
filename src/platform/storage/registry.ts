@@ -1,12 +1,18 @@
 import { AppError } from "@/platform/errors";
 import type { ObjectStorageAdapter } from "./types";
 import { S3CompatibleStorageAdapter } from "./s3-adapter";
+import { GoogleCloudStorageAdapter } from "./gcs-adapter";
 import { LocalFilesystemStorageAdapter } from "./local-adapter";
 import { InMemoryStorageAdapter } from "./memory-adapter";
-import { HttpMalwareScanner, NullMalwareScanner, type MalwareScanner } from "./malware-scanner";
+import {
+  HttpMalwareScanner,
+  NullMalwareScanner,
+  type MalwareScanner,
+} from "./malware-scanner";
 import { isCloudRuntime } from "./environment";
 
 const s3Adapter = new S3CompatibleStorageAdapter();
+const gcsAdapter = new GoogleCloudStorageAdapter();
 const localAdapter = new LocalFilesystemStorageAdapter();
 const memoryAdapter = new InMemoryStorageAdapter();
 const httpMalwareScanner = new HttpMalwareScanner();
@@ -15,7 +21,7 @@ const nullMalwareScanner = new NullMalwareScanner();
 /**
  * Resolves the active object storage adapter for this process. Selection is re-evaluated on
  * every call (env reads are cheap) so tests can flip `STORAGE_PROVIDER` between assertions:
- *  - `STORAGE_PROVIDER=memory|local|s3` forces that adapter explicitly — an operator opting into
+ *  - `STORAGE_PROVIDER=memory|local|gcs|s3` forces that adapter explicitly — an operator opting into
  *    the local adapter on Vercel on purpose is a deliberate choice, not a silent fallback, so it's
  *    still honoured.
  *  - Otherwise, S3-compatible credentials for *either* bucket being present selects the durable
@@ -33,7 +39,10 @@ export function getObjectStorageAdapter(): ObjectStorageAdapter {
   const explicit = process.env.STORAGE_PROVIDER?.trim().toLowerCase();
   if (explicit === "memory") return memoryAdapter;
   if (explicit === "local") return localAdapter;
-  if (explicit === "s3" || s3Adapter.isConfigured()) return s3Adapter;
+  if (explicit === "gcs") return gcsAdapter;
+  if (explicit === "s3") return s3Adapter;
+  if (gcsAdapter.isConfigured()) return gcsAdapter;
+  if (s3Adapter.isConfigured()) return s3Adapter;
   if (isCloudRuntime()) {
     throw new AppError(
       "STORAGE_NOT_CONFIGURED",
@@ -45,7 +54,9 @@ export function getObjectStorageAdapter(): ObjectStorageAdapter {
 }
 
 export function getMalwareScanner(): MalwareScanner {
-  return httpMalwareScanner.isConfigured() ? httpMalwareScanner : nullMalwareScanner;
+  return httpMalwareScanner.isConfigured()
+    ? httpMalwareScanner
+    : nullMalwareScanner;
 }
 
 /** Test-only: clears the in-memory adapter's contents between test files. */
@@ -53,7 +64,7 @@ export function resetInMemoryStorageForTests() {
   memoryAdapter.clear();
 }
 
-export { s3Adapter, localAdapter, memoryAdapter };
+export { gcsAdapter, s3Adapter, localAdapter, memoryAdapter };
 export * from "./types";
 export * from "./mime";
 export * from "./malware-scanner";
