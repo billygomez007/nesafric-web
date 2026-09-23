@@ -6,16 +6,24 @@ export default function DashboardPage() {
   return (
     <AppShell
       actions={
-        <Link
-          className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-forest-light"
-          href="/properties/new"
-        >
-          Add property
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            className="rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-forest transition hover:border-teal/30 hover:text-teal"
+            href="/tenants/new"
+          >
+            Add tenant
+          </Link>
+          <Link
+            className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-light"
+            href="/properties/new"
+          >
+            + Add property
+          </Link>
+        </div>
       }
-      eyebrow="NESAFRIC"
-      title="Good morning"
-      description="Here’s what’s happening with your properties today."
+      description="Monitor your portfolio, rent performance, tenants and operations from one place."
+      eyebrow="PROPERTY MANAGEMENT"
+      title="Portfolio command centre"
     >
       <DashboardContent />
     </AppShell>
