@@ -16,16 +16,28 @@ export async function PATCH(request: Request) {
     const user = await requireUser();
     const data = changeEmailSchema.parse(await request.json());
 
-    const passwordValid = await verifyPassword(user.passwordHash, data.currentPassword);
+    const passwordValid = await verifyPassword(
+      user.passwordHash,
+      data.currentPassword,
+    );
+
     if (!passwordValid) {
-      throw new AppError("INVALID_CURRENT_PASSWORD", 401, "Your current password is incorrect.");
+      throw new AppError(
+        "INVALID_CURRENT_PASSWORD",
+        401,
+        "Your current password is incorrect.",
+      );
     }
 
     const email = data.email.toLowerCase();
 
     const existing = await db.user.findUnique({ where: { email } });
     if (existing && existing.id !== user.id) {
-      throw new AppError("EMAIL_EXISTS", 409, "An account with this email already exists.");
+      throw new AppError(
+        "EMAIL_EXISTS",
+        409,
+        "An account with this email already exists.",
+      );
     }
 
     const emailChanged = email !== user.email.toLowerCase();
@@ -36,10 +48,20 @@ export async function PATCH(request: Request) {
         email,
         ...(emailChanged ? { emailVerifiedAt: null } : {}),
       },
-      select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        emailVerifiedAt: true,
+      },
     });
 
-    return NextResponse.json({\n      id: updated.id,\n      email: updated.email,\n      displayName: updated.displayName,\n      emailVerified: Boolean(updated.emailVerifiedAt),\n    });
+    return NextResponse.json({
+      id: updated.id,
+      email: updated.email,
+      displayName: updated.displayName,
+      emailVerified: Boolean(updated.emailVerifiedAt),
+    });
   } catch (error) {
     return errorResponse(error);
   }
