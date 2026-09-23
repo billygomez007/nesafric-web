@@ -39,7 +39,7 @@ export function MarketplaceSection() {
           </div>
 
           <div className="lg:order-1">
-            <p className="text-xs font-semibold tracking-[0.22em] text-navy">UMOAFRIC MARKETPLACE</p>
+            <p className="text-xs font-semibold tracking-[0.22em] text-navy">NESAFRIC MARKETPLACE</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
               Every serious source of real estate, in one place.
             </h2>
