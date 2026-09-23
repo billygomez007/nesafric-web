@@ -20,7 +20,7 @@ export function SiteNav() {
   return (
     <header className="sticky top-0 z-50 border-b border-gold/20 bg-forest-deep/95 text-white shadow-[0_10px_30px_rgba(0,47,43,0.10)] backdrop-blur-xl">
       <div className="border-b border-white/8 bg-[#052724]">
-        <div className="mx-auto flex min-h-8 max-w-[1400px] items-center justify-end gap-4 px-5 py-1.5 text-[11px] text-white/62 sm:px-8">
+        <div className="mx-auto flex min-h-7 max-w-[1400px] items-center justify-end gap-4 px-5 py-1 text-[11px] text-white/62 sm:px-8">
           <a
             className="hidden transition-colors hover:text-gold-soft sm:inline"
             href={`mailto:${BRAND.contact.support}`}

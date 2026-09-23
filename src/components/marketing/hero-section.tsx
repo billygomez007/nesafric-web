@@ -4,7 +4,7 @@ import Link from "next/link";
 export function HeroSection() {
   return (
     <section className="relative overflow-hidden bg-warm-white">
-      <div className="mx-auto grid max-w-[1400px] items-center gap-9 px-5 py-10 sm:px-8 lg:min-h-[calc(100svh-72px-88px)] lg:grid-cols-[0.86fr_1.14fr] lg:py-8">
+      <div className="mx-auto grid max-w-[1400px] items-center gap-9 px-5 py-8 sm:px-8 lg:min-h-[calc(100svh-72px-64px)] lg:grid-cols-[0.86fr_1.14fr] lg:py-6">
         <div className="relative z-10 max-w-[620px]">
           <div className="inline-flex items-center gap-2 rounded-full border border-gold/35 bg-white/80 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-forest shadow-sm backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-gold" />
