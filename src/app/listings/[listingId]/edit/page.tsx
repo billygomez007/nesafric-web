@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { AppShell } from "@/components/app-shell";
 import { ListingEditor } from "@/components/listing-editor";
 
 export default async function EditListingPage({ params }: { params: Promise<{ listingId: string }> }) {
   const { listingId } = await params;
-  return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12"><header className="mb-8"><h1 className="text-3xl font-semibold">Edit listing</h1><Link className="mt-3 inline-block text-sm font-semibold text-emerald-700" href={`/listings/${listingId}`}>← Listing detail</Link></header><ListingEditor listingId={listingId} /></main>;
+  return <AppShell actions={<Link className="rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface" href={`/listings/${listingId}`}>Back to listing</Link>} description="Update listing details while preserving its publication and verification rules." eyebrow="LISTING EDITOR" title="Edit listing"><ListingEditor listingId={listingId} /></AppShell>;
 }

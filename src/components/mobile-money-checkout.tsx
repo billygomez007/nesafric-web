@@ -106,29 +106,29 @@ export function MobileMoneyCheckout({
       FAILED: "The payment could not be completed. You can try again.",
       CANCELLED: "The payment was cancelled before it completed.",
     }[intent.status];
-    return <div className="grid gap-4 rounded-2xl border bg-white p-6 text-center shadow-sm">
-      <p className="text-sm text-slate-500">{money(intent.amountMinor, intent.currencyCode)}</p>
-      <p className={`text-lg font-semibold ${intent.status === "SUCCEEDED" ? "text-emerald-700" : intent.status === "FAILED" || intent.status === "CANCELLED" ? "text-red-700" : "text-slate-800"}`}>{label}</p>
-      {(intent.status === "FAILED" || intent.status === "CANCELLED") && <button className="rounded-lg border px-4 py-2 text-sm font-semibold" onClick={() => setIntent(null)}>Try again</button>}
+    return <div className="grid gap-4 rounded-2xl border border-hairline bg-white p-6 text-center shadow-sm">
+      <p className="text-sm text-muted">{money(intent.amountMinor, intent.currencyCode)}</p>
+      <p className={`text-lg font-semibold ${intent.status === "SUCCEEDED" ? "text-teal" : intent.status === "FAILED" || intent.status === "CANCELLED" ? "text-red-700" : "text-ink"}`}>{label}</p>
+      {(intent.status === "FAILED" || intent.status === "CANCELLED") && <button className="rounded-xl border border-hairline px-4 py-2 text-sm font-semibold" onClick={() => setIntent(null)}>Try again</button>}
     </div>;
   }
 
-  return <form className="grid gap-4 rounded-2xl border bg-white p-6 shadow-sm" onSubmit={submit}>
+  return <form className="grid gap-4 rounded-2xl border border-hairline bg-white p-6 shadow-sm" onSubmit={submit}>
     <h2 className="text-lg font-semibold">Pay with Mobile Money</h2>
     <label className="text-sm font-medium">Network
-      <select className="mt-1 w-full rounded-lg border p-3" disabled={!providers} onChange={(event) => setProviderKey(event.target.value)} required value={providerKey}>
+      <select className="mt-1 w-full rounded-xl border border-hairline p-3" disabled={!providers} onChange={(event) => setProviderKey(event.target.value)} required value={providerKey}>
         {!providers && <option value="">Loading networks...</option>}
         {providers?.map((provider) => <option disabled={!provider.available} key={provider.key} value={provider.key}>{provider.displayName}{!provider.available ? " (temporarily unavailable)" : ""}</option>)}
       </select>
     </label>
     <label className="text-sm font-medium">Mobile money number
-      <input className="mt-1 w-full rounded-lg border p-3" inputMode="tel" onChange={(event) => setMsisdn(event.target.value)} placeholder="0244000000" required value={msisdn} />
+      <input className="mt-1 w-full rounded-xl border border-hairline p-3" inputMode="tel" onChange={(event) => setMsisdn(event.target.value)} placeholder="0244000000" required value={msisdn} />
     </label>
     <label className="text-sm font-medium">Amount ({currencyCode})
-      <input className="mt-1 w-full rounded-lg border p-3" inputMode="numeric" min="1" onChange={(event) => setAmountMinor(event.target.value)} required value={amountMinor} />
+      <input className="mt-1 w-full rounded-xl border border-hairline p-3" inputMode="numeric" min="1" onChange={(event) => setAmountMinor(event.target.value)} required value={amountMinor} />
     </label>
     {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    <button className="rounded-lg bg-emerald-700 p-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600" disabled={submitting || !providerKey}>{submitting ? "Sending prompt..." : "Pay now"}</button>
-    <p className="text-xs text-slate-500">We will only mark this as paid once your network confirms the transaction. This can take a moment after you approve the prompt on your phone.</p>
+    <button className="rounded-xl bg-forest p-3 font-semibold text-white transition-colors hover:bg-forest-light disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting || !providerKey}>{submitting ? "Sending prompt..." : "Pay now"}</button>
+    <p className="text-xs text-muted">We will only mark this as paid once your network confirms the transaction. This can take a moment after you approve the prompt on your phone.</p>
   </form>;
 }

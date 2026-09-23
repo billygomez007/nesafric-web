@@ -4,10 +4,10 @@ import { PropertyOsVoiceWorkspace } from "@/components/propertyos-voice-workspac
 export default function AIVoicePage() {
   return (
     <AppShell
-      description="Inbound/outbound AI voice calls, transcripts, provider settings, and analytics."
-      eyebrow="PROPERTYOS AI"
+      description="Voice calling is deferred while the communication foundation remains available for configured call records."
+      eyebrow="AI WORKFORCE"
       subTabs="ai"
-      title="Voice"
+      title="Voice · Deferred"
     >
       <PropertyOsVoiceWorkspace />
     </AppShell>

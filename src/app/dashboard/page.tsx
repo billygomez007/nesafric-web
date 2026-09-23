@@ -6,12 +6,16 @@ export default function DashboardPage() {
   return (
     <AppShell
       actions={
-        <Link className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white" href="/properties/new">
+        <Link
+          className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-forest-light"
+          href="/properties/new"
+        >
           Add property
         </Link>
       }
-      eyebrow="PROPERTYOS"
-      title="Organisation dashboard"
+      eyebrow="NESAFRIC"
+      title="Good morning"
+      description="Here’s what’s happening with your properties today."
     >
       <DashboardContent />
     </AppShell>

@@ -905,6 +905,8 @@ model Organisation {
   notifySms                   Boolean                           @default(false)
   notifyWhatsapp              Boolean                           @default(false)
   rentObligations             RentObligation[]
+  recurringChargeDefinitions RecurringChargeDefinition[]
+  chargeObligations          ChargeObligation[]
   paymentIntents              PaymentIntent[]
   payments                    Payment[]
   receipts                    Receipt[]
@@ -1121,6 +1123,8 @@ model Property {
   units                Unit[]
   leases               Lease[]
   rentObligations      RentObligation[]
+  recurringChargeDefinitions RecurringChargeDefinition[]
+  chargeObligations          ChargeObligation[]
   paymentIntents       PaymentIntent[]
   payments             Payment[]
   receipts             Receipt[]
@@ -1175,6 +1179,8 @@ model Unit {
   building            Building?              @relation(fields: [buildingId], references: [id], onDelete: Restrict)
   leases              Lease[]
   rentObligations     RentObligation[]
+  recurringChargeDefinitions RecurringChargeDefinition[]
+  chargeObligations          ChargeObligation[]
   paymentIntents      PaymentIntent[]
   payments            Payment[]
   receipts            Receipt[]
@@ -1225,6 +1231,7 @@ model TenantOrganisation {
   notifications                Notification[]
   paymentIntents               PaymentIntent[]
   payments                     Payment[]
+  chargeObligations             ChargeObligation[]
   receipts                     Receipt[]
   securityDeposits             SecurityDeposit[]
   maintenanceRequests          MaintenanceRequest[]
@@ -1273,6 +1280,8 @@ model Lease {
   history                LeaseHistory[]
   amendments             LeaseAmendment[]
   obligations            RentObligation[]
+  recurringChargeDefinitions RecurringChargeDefinition[]
+  chargeObligations          ChargeObligation[]
   notifications          Notification[]
   paymentIntents         PaymentIntent[]
   payments               Payment[]
@@ -1339,6 +1348,176 @@ model RentObligation {
 
   @@unique([leaseId, periodStart, periodEnd])
   @@index([organisationId, status, dueDate])
+}
+
+
+enum RecurringChargeType {
+  SERVICE_CHARGE
+  WASTE_COLLECTION
+  ELECTRICITY
+  WATER
+  GAS
+  SECURITY
+  CLEANING
+  PARKING
+  INTERNET
+  GENERATOR_FUEL
+  MAINTENANCE_LEVY
+  COMMON_AREA
+  ASSOCIATION_FEE
+  OTHER
+}
+
+enum RecurringChargeCalculationType {
+  FIXED
+  VARIABLE
+}
+
+enum RecurringChargeFrequency {
+  ONE_TIME
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUALLY
+  ANNUALLY
+  CUSTOM
+}
+
+enum RecurringChargeBillingMode {
+  SEPARATE
+  INCLUDED_IN_RENT
+}
+
+enum RecurringChargeStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum ChargeObligationStatus {
+  DRAFT
+  UPCOMING
+  DUE
+  OVERDUE
+  SATISFIED
+  WAIVED
+  CANCELLED
+}
+
+enum ChargeCollectionState {
+  UNPAID
+  PARTIALLY_PAID
+  FULLY_PAID
+}
+
+model RecurringChargeDefinition {
+  id                    String                         @id @default(uuid()) @db.Uuid
+  organisationId        String                         @db.Uuid
+  leaseId               String                         @db.Uuid
+  propertyId            String                         @db.Uuid
+  unitId                String?                        @db.Uuid
+
+  type                  RecurringChargeType
+  name                  String
+  description           String?
+
+  calculationType       RecurringChargeCalculationType @default(FIXED)
+  amountMinor           Decimal?                       @db.Decimal(19, 0)
+  currencyCode          String                         @db.Char(3)
+
+  frequency             RecurringChargeFrequency
+  customFrequency       String?
+
+  billingMode           RecurringChargeBillingMode     @default(SEPARATE)
+
+  startDate             DateTime                       @db.Date
+  endDate               DateTime?                      @db.Date
+  dueDay                Int?
+
+  notifyTenant          Boolean                        @default(true)
+  reminderDaysBefore    Int?
+
+  status                RecurringChargeStatus          @default(ACTIVE)
+
+  createdByUserId       String?                        @db.Uuid
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+  archivedAt            DateTime?
+
+  organisation          Organisation                   @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  lease                 Lease                          @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property              Property                       @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                  Unit?                          @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  obligations           ChargeObligation[]
+
+  @@index([organisationId, status, archivedAt])
+  @@index([leaseId, status])
+  @@index([propertyId, unitId])
+}
+
+model ChargeObligation {
+  id                           String                     @id @default(uuid()) @db.Uuid
+  organisationId               String                     @db.Uuid
+  recurringChargeDefinitionId  String                     @db.Uuid
+  tenantOrganisationId         String                     @db.Uuid
+  leaseId                      String                     @db.Uuid
+  propertyId                   String                     @db.Uuid
+  unitId                       String?                    @db.Uuid
+
+  dueDate                      DateTime                   @db.Date
+  periodStart                  DateTime                   @db.Date
+  periodEnd                    DateTime                   @db.Date
+
+  amountMinor                  Decimal?                   @db.Decimal(19, 0)
+  currencyCode                 String                     @db.Char(3)
+
+  typeSnapshot                 RecurringChargeType
+  nameSnapshot                 String
+  descriptionSnapshot          String?
+  billingModeSnapshot          RecurringChargeBillingMode
+
+  status                       ChargeObligationStatus     @default(UPCOMING)
+  collectionState              ChargeCollectionState      @default(UNPAID)
+
+  collectedAmountMinor         Decimal                    @default(0) @db.Decimal(19, 0)
+  waivedAmountMinor            Decimal                    @default(0) @db.Decimal(19, 0)
+
+  finalisedAt                  DateTime?
+  createdAt                    DateTime                   @default(now())
+  updatedAt                    DateTime                   @updatedAt
+
+  organisation                 Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  recurringChargeDefinition    RecurringChargeDefinition  @relation(fields: [recurringChargeDefinitionId], references: [id], onDelete: Restrict)
+  tenantOrganisation           TenantOrganisation         @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  lease                        Lease                      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property                     Property                   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                         Unit?                      @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  allocations                  ChargePaymentAllocation[]
+
+  @@unique([recurringChargeDefinitionId, tenantOrganisationId, periodStart, periodEnd])
+  @@index([organisationId, status, dueDate])
+  @@index([leaseId, dueDate])
+  @@index([tenantOrganisationId, status, dueDate])
+  @@index([propertyId, unitId])
+}
+
+model ChargePaymentAllocation {
+  id                 String           @id @default(uuid()) @db.Uuid
+  paymentId          String           @db.Uuid
+  chargeObligationId String           @db.Uuid
+
+  amountMinor        Decimal          @db.Decimal(19, 0)
+
+  allocatedAt        DateTime         @default(now())
+  reversedAt         DateTime?
+
+  payment            Payment          @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  chargeObligation   ChargeObligation @relation(fields: [chargeObligationId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, chargeObligationId])
+  @@index([chargeObligationId, reversedAt])
 }
 
 model PaymentIntent {
@@ -1417,6 +1596,7 @@ model Payment {
   property               Property                     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   unit                   Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
   allocations            PaymentAllocation[]
+  chargeAllocations      ChargePaymentAllocation[]
   receipt                Receipt?
   ledgerEntries          FinancialLedgerEntry[]
   reconciliationEvents   PaymentReconciliationEvent[]

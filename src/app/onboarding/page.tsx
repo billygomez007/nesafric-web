@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { MarketplaceProfessionalOnboardingForm } from "@/components/marketplace-professional-onboarding-form";
 import { ServiceProviderOnboardingForm } from "@/components/service-provider-onboarding-form";
@@ -8,73 +10,20 @@ import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
 import { trackEvent } from "@/platform/analytics";
 
 type Choice = "MANAGE" | "MARKET" | "SERVICES" | null;
+type CampaignEvent = "manage_properties_selected" | "market_properties_selected" | "offer_property_services_selected";
+
+const choices: Array<{ key: Exclude<Choice, null>; title: string; description: string; event: CampaignEvent }> = [
+  { key: "MANAGE" as const, title: "Manage properties", description: "For owners, landlords, property managers and developers operating properties.", event: "manage_properties_selected" },
+  { key: "MARKET" as const, title: "Market properties", description: "For agents, brokers, brokerages and developers marketing property through the NesAfric Marketplace.", event: "market_properties_selected" },
+  { key: "SERVICES" as const, title: "Offer property services", description: "For artisans, contractors and service businesses receiving property-related work through NesAfric.", event: "offer_property_services_selected" },
+];
 
 export default function OnboardingPage() {
   const [choice, setChoice] = useState<Choice>(null);
+  const select = (next: Exclude<Choice, null>, event: CampaignEvent) => { trackCampaignEvent(event); trackEvent("onboarding_started", { onboarding_type: next === "MANAGE" ? "manage_properties" : next === "MARKET" ? "market_properties" : "offer_property_services" }); setChoice(next); };
+  const heading = choice === "MARKET" ? "Set up your marketplace profile" : choice === "SERVICES" ? "Set up your service-professional profile" : "Set up your organisation";
 
-  if (!choice) {
-    return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
-        <p className="text-sm font-semibold text-navy">STEP 1 OF 2</p>
-        <h1 className="mt-3 text-3xl font-semibold">What would you like to do on UmoAfric?</h1>
-        <p className="mt-2 text-slate-600">
-          You can add another workspace later without creating another account — one identity, every side of UmoAfric.
-        </p>
-        <div className="mt-8 grid gap-4">
-          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackCampaignEvent("manage_properties_selected"); trackEvent("onboarding_started", { onboarding_type: "manage_properties" }); setChoice("MANAGE"); }} type="button">
-            <p className="font-semibold">Manage Properties</p>
-            <p className="mt-2 text-sm text-slate-600">
-              For property owners, landlords, property managers and developers operating properties. Enters UmoAfric management (paid).
-            </p>
-          </button>
-          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackCampaignEvent("market_properties_selected"); trackCampaignEvent("professional_registration_started"); trackEvent("onboarding_started", { onboarding_type: "market_properties" }); setChoice("MARKET"); }} type="button">
-            <p className="font-semibold">Market Properties</p>
-            <p className="mt-2 text-sm text-slate-600">
-              For agents, brokers, brokerages, real-estate companies and developers marketing property. Enters the UmoAfric Real Estate Marketplace — free at launch.
-            </p>
-          </button>
-          <button className="rounded-xl border p-6 text-left transition hover:border-brand" onClick={() => { trackEvent("offer_property_services_selected"); trackCampaignEvent("service_professional_registration_started"); trackEvent("onboarding_started", { onboarding_type: "offer_property_services" }); setChoice("SERVICES"); }} type="button">
-            <p className="font-semibold">Offer Property Services</p>
-            <p className="mt-2 text-sm text-slate-600">
-              For artisans, contractors and property-service businesses that want to receive property-related work through UmoAfric. Free at launch — mandatory identity verification applies before you can be publicly discovered or assigned work.
-            </p>
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (choice === "MARKET") {
-    return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
-        <p className="text-sm font-semibold text-navy">STEP 2 OF 2 — MARKET PROPERTIES</p>
-        <h1 className="mt-3 text-3xl font-semibold">Set up your marketplace profile</h1>
-        <p className="mt-2 text-slate-600">Free at launch. You can also set up UmoAfric management later.</p>
-        <MarketplaceProfessionalOnboardingForm />
-        <button className="mt-4 text-sm font-semibold text-slate-600" onClick={() => setChoice(null)} type="button">← Back</button>
-      </main>
-    );
-  }
-
-  if (choice === "SERVICES") {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <p className="text-sm font-semibold text-navy">STEP 2 OF 2 — OFFER PROPERTY SERVICES</p>
-        <h1 className="mt-3 text-3xl font-semibold">Set up your service-professional profile</h1>
-        <p className="mt-2 text-slate-600">Free at launch. Mandatory identity verification is required before your profile can be discovered publicly or receive UmoAfric work assignments.</p>
-        <ServiceProviderOnboardingForm />
-        <button className="mt-4 text-sm font-semibold text-slate-600" onClick={() => setChoice(null)} type="button">← Back</button>
-      </main>
-    );
-  }
-
-  return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <p className="text-sm font-semibold text-navy">STEP 2 OF 2 — MANAGE PROPERTIES</p>
-      <h1 className="mt-3 text-3xl font-semibold">Set up your organisation</h1>
-      <p className="mt-2 text-slate-600">Ghana is available now. Its default operating currency is GHS.</p>
-      <OnboardingForm />
-      <button className="mt-4 text-sm font-semibold text-slate-600" onClick={() => setChoice(null)} type="button">← Back</button>
-    </main>
-  );
+  return <main className="min-h-screen bg-warm-white px-5 py-8 sm:px-8 sm:py-12"><div className="mx-auto max-w-3xl"><Link href="/"><BrandLogo height={28} variant="light" /></Link><div className="mt-10"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">{choice ? "STEP 2 OF 2" : "WELCOME TO NESAFRIC"}</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-forest sm:text-4xl">{choice ? heading : "Choose your starting workspace"}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-muted">{choice ? "Your account can add another workspace later. Complete this setup to enter the right NesAfric experience." : "One secure identity can support property operations, marketplace work and service profiles."}</p></div>
+    {!choice ? <div className="mt-8 grid gap-4">{choices.map((item) => <button className="group rounded-2xl border border-hairline bg-white p-6 text-left shadow-card transition hover:border-teal hover:shadow-lg" key={item.key} onClick={() => select(item.key, item.event)} type="button"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-semibold text-forest">{item.title}</h2><p className="mt-2 text-sm leading-6 text-muted">{item.description}</p></div><span className="text-xl text-gold transition group-hover:translate-x-1">→</span></div></button>)}</div> : <div className="mt-8 rounded-3xl border border-hairline bg-white p-6 shadow-card sm:p-8">{choice === "MARKET" ? <MarketplaceProfessionalOnboardingForm /> : choice === "SERVICES" ? <ServiceProviderOnboardingForm /> : <OnboardingForm />}<button className="mt-5 text-sm font-semibold text-muted transition hover:text-teal" onClick={() => setChoice(null)} type="button">← Choose a different workspace</button></div>}
+  </div></main>;
 }

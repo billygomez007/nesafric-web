@@ -3,7 +3,7 @@ import { BillingSettings } from "@/components/billing-settings";
 
 export default function BillingSettingsPage() {
   return (
-    <AppShell eyebrow="ORGANISATION SETTINGS" size="medium" subTabs="settings" title="Billing">
+    <AppShell eyebrow="BILLING" size="medium" subTabs="settings" title="Billing & subscription">
       <BillingSettings />
     </AppShell>
   );

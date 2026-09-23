@@ -6,11 +6,15 @@ export default function LeasesPage() {
   return (
     <AppShell
       actions={
-        <Link className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white" href="/leases/new">
-          Create lease
+        <Link
+          className="rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light"
+          href="/leases/new"
+        >
+          + Create lease
         </Link>
       }
-      eyebrow="LEASING"
+      description="Manage active agreements, renewals, rent schedules and tenant occupancy."
+      eyebrow="PROPERTY MANAGEMENT"
       title="Leases"
     >
       <LeaseList />

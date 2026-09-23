@@ -13,12 +13,12 @@ import { FinalCtaSection } from "@/components/marketing/final-cta-section";
 export const metadata: Metadata = {
   title: "For Property Developers in Ghana",
   description:
-    "UmoAfric gives property developers in Ghana a development profile, unit-level inventory, marketplace listings, leads and viewings, a sales team and AI sales support — with optional property management for delivered units.",
+    "NesAfric gives property developers in Ghana a development profile, unit-level inventory, marketplace listings, leads and viewings, a sales team and AI sales support — with optional property management for delivered units.",
   alternates: { canonical: "/for-developers" },
   openGraph: {
-    title: "From development to deal — run it on UmoAfric.",
+    title: "From development to deal — run it on NesAfric.",
     description:
-      "Showcase developments, manage unit inventory, and sell through the UmoAfric Marketplace — with property management available when you need it.",
+      "Showcase developments, manage unit inventory, and sell through the NesAfric Marketplace — with property management available when you need it.",
     url: "/for-developers",
   },
 };
@@ -32,7 +32,7 @@ export default function ForDevelopersPage() {
         <DevelopersHero />
         <section className="bg-slate-950 px-6 pb-24 sm:px-8 sm:pb-32">
           <ProductMockup
-            alt="UmoAfric development sales command center showing unit inventory, sell-through rate and sales pipeline for a live development"
+            alt="NesAfric development sales command center showing unit inventory, sell-through rate and sales pipeline for a live development"
             src="/marketing/mockups/developers-sales-command-center.png"
           />
         </section>

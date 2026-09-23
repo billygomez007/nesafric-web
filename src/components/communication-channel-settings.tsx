@@ -43,13 +43,13 @@ export function CommunicationChannelSettings() {
     await load(organisationId);
   }
 
-  if (!configs) return <p className="rounded-xl border bg-white p-6">{error || "Loading communication settings..."}</p>;
+  if (!configs) return <p className="rounded-2xl border border-hairline border-hairline bg-white p-6">{error || "Loading communication settings..."}</p>;
   return <div className="grid gap-6">
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
+    <section className="rounded-3xl border border-hairline bg-white p-6 shadow-sm">
       <h1 className="text-2xl font-semibold">Communication channels</h1>
-      <p className="mt-1 text-sm text-slate-600">Enable or disable each channel for outbound conversation delivery. Disabled channels never send messages, even if the AI receptionist drafts a reply.</p>
+      <p className="mt-1 text-sm text-muted">Enable or disable each channel for outbound conversation delivery. Disabled channels never send messages, even if the AI receptionist drafts a reply.</p>
     </section>
-    {(error || notice) && <p className={`rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{error || notice}</p>}
+    {(error || notice) && <p className={`rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-800" : "bg-teal/10 text-teal"}`}>{error || notice}</p>}
     <section className="grid gap-4 md:grid-cols-2">
       {configs.map((config) => <ChannelCard config={config} key={config.channel} onSave={save} />)}
     </section>
@@ -59,7 +59,7 @@ export function CommunicationChannelSettings() {
 function ChannelCard({ config, onSave }: { config: ChannelConfig; onSave: (config: ChannelConfig, fromAddress: string, enabled: boolean) => void }) {
   const [fromAddress, setFromAddress] = useState(config.fromAddress ?? "");
   const [enabled, setEnabled] = useState(config.enabled);
-  return <div className="rounded-2xl border bg-white p-5 shadow-sm">
+  return <div className="rounded-3xl border border-hairline bg-white p-5 shadow-sm">
     <div className="flex items-center justify-between"><h2 className="font-semibold">{config.channel.replaceAll("_", " ")}</h2><label className="flex items-center gap-2 text-sm"><input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />Enabled</label></div>
     <input className="mt-3 w-full rounded-lg border p-3 text-sm" onChange={(event) => setFromAddress(event.target.value)} placeholder="From address / number" value={fromAddress} />
     <button className="mt-3 rounded-lg border px-4 py-2 text-sm font-semibold" onClick={() => onSave(config, fromAddress, enabled)}>Save</button>

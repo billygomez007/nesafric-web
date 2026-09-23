@@ -4,7 +4,7 @@ const CAPABILITIES = [
   "Receive enquiries and manage leads in one pipeline",
   "Schedule and track viewings",
   "Review applications and qualify buyers or tenants",
-  "Convert an enquiry into a signed lease — without leaving UmoAfric",
+  "Convert an enquiry into a signed lease — without leaving NesAfric",
 ];
 
 export function MarketplaceSection() {

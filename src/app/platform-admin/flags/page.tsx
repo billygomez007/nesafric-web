@@ -47,23 +47,23 @@ function FlagsContent() {
   if (error) return <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>;
 
   return <div className="grid gap-4">
-    <p className="text-sm text-slate-600">Feature flags (item 10): global on/off, percentage-cohort rollout, per-organisation override, and an emergency kill switch — entirely separate from organisation RBAC/entitlements.</p>
-    {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-    <form className="grid gap-2 rounded-xl border bg-white p-5 shadow-sm md:grid-cols-4" onSubmit={createFlag}>
-      <input className="rounded border p-2 text-sm" onChange={(event) => setForm({ ...form, key: event.target.value })} placeholder="flag.key" required value={form.key} />
-      <input className="rounded border p-2 text-sm md:col-span-2" onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Description" required value={form.description} />
-      <button className="rounded bg-slate-950 px-3 py-2 text-sm font-semibold text-white" type="submit">Create flag</button>
+    <p className="text-sm text-muted">Feature flags (item 10): global on/off, percentage-cohort rollout, per-organisation override, and an emergency kill switch — entirely separate from organisation RBAC/entitlements.</p>
+    {notice && <p className="rounded-lg bg-teal/10 p-3 text-sm text-teal">{notice}</p>}
+    <form className="grid gap-2 rounded-xl border bg-white p-5 shadow-card md:grid-cols-4" onSubmit={createFlag}>
+      <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setForm({ ...form, key: event.target.value })} placeholder="flag.key" required value={form.key} />
+      <input className="rounded-xl border border-hairline p-2 text-sm md:col-span-2" onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Description" required value={form.description} />
+      <button className="rounded bg-forest px-3 py-2 text-sm font-semibold text-white" type="submit">Create flag</button>
     </form>
-    {!flags ? <p className="text-slate-600">Loading…</p> : <div className="grid gap-3">
-      {flags.map((flag) => <div className="rounded-xl border bg-white p-4 shadow-sm" key={flag.id}>
+    {!flags ? <p className="text-muted">Loading…</p> : <div className="grid gap-3">
+      {flags.map((flag) => <div className="rounded-xl border bg-white p-4 shadow-card" key={flag.id}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><p className="font-semibold">{flag.key}</p><p className="text-sm text-slate-600">{flag.description}</p></div>
+          <div><p className="font-semibold">{flag.key}</p><p className="text-sm text-muted">{flag.description}</p></div>
           <div className="flex gap-2">
-            <button className={`rounded border px-3 py-1.5 text-xs font-semibold ${flag.isEnabled ? "bg-emerald-50 text-emerald-800" : ""}`} onClick={() => void toggle(flag, "isEnabled")}>{flag.isEnabled ? "Enabled" : "Disabled"}</button>
-            <button className={`rounded border px-3 py-1.5 text-xs font-semibold ${flag.emergencyDisabled ? "bg-red-50 text-red-800" : ""}`} onClick={() => void toggle(flag, "emergencyDisabled")}>{flag.emergencyDisabled ? "Emergency-disabled" : "Kill switch off"}</button>
+            <button className={`rounded-xl border border-hairline px-3 py-1.5 text-xs font-semibold ${flag.isEnabled ? "bg-teal/10 text-teal" : ""}`} onClick={() => void toggle(flag, "isEnabled")}>{flag.isEnabled ? "Enabled" : "Disabled"}</button>
+            <button className={`rounded-xl border border-hairline px-3 py-1.5 text-xs font-semibold ${flag.emergencyDisabled ? "bg-red-50 text-red-800" : ""}`} onClick={() => void toggle(flag, "emergencyDisabled")}>{flag.emergencyDisabled ? "Emergency-disabled" : "Kill switch off"}</button>
           </div>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Rollout: {flag.rolloutPercentage}% · {flag.organisationOverrides.length} organisation override(s)</p>
+        <p className="mt-2 text-xs text-muted">Rollout: {flag.rolloutPercentage}% · {flag.organisationOverrides.length} organisation override(s)</p>
       </div>)}
     </div>}
   </div>;

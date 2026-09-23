@@ -1,5 +1,20 @@
+import { AppShell } from "@/components/app-shell";
 import { TenantDetail } from "@/components/tenant-detail";
 
-export default async function TenantDetailPage({ params }: { params: Promise<{ tenantId: string }> }) {
-  return <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12"><TenantDetail tenantId={(await params).tenantId} /></main>;
+export default async function TenantDetailPage({
+  params,
+}: {
+  params: Promise<{ tenantId: string }>;
+}) {
+  const { tenantId } = await params;
+
+  return (
+    <AppShell
+      description="Tenant profile, lease history, communication preferences, payments and maintenance."
+      eyebrow="TENANT"
+      title="Tenant details"
+    >
+      <TenantDetail tenantId={tenantId} />
+    </AppShell>
+  );
 }

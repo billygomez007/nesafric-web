@@ -11,11 +11,11 @@ type Listing = {
 type Page = { items: Listing[]; total: number; page: number; pageSize: number };
 
 const STATUS_STYLES: Record<string, string> = {
-  PUBLISHED: "bg-emerald-50 text-emerald-800",
-  DRAFT: "bg-slate-100 text-slate-600",
-  PENDING_REVIEW: "bg-amber-50 text-amber-800",
-  PAUSED: "bg-slate-100 text-slate-600",
-  ARCHIVED: "bg-slate-100 text-slate-500",
+  PUBLISHED: "bg-teal/10 text-teal",
+  DRAFT: "bg-surface text-muted",
+  PENDING_REVIEW: "bg-gold/10 text-ink",
+  PAUSED: "bg-surface text-muted",
+  ARCHIVED: "bg-surface text-muted",
   REJECTED: "bg-red-50 text-red-800",
 };
 
@@ -62,10 +62,10 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-950">Listings</h1>
-          <p className="mt-1 text-sm text-slate-600">Standalone and development inventory marketed through this professional profile.</p>
+          <h1 className="text-2xl font-semibold text-ink">Listings</h1>
+          <p className="mt-1 text-sm text-muted">Standalone and development inventory marketed through this professional profile.</p>
         </div>
-        <Link className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white" href={`/pro/${professionalId}/listings/new`}>
+        <Link className="rounded-lg bg-forest px-4 py-2.5 text-sm font-semibold text-white" href={`/pro/${professionalId}/listings/new`}>
           New standalone listing
         </Link>
       </div>
@@ -73,7 +73,7 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
       <div className="flex flex-wrap items-center gap-2">
         {["", "DRAFT", "PENDING_REVIEW", "PUBLISHED", "PAUSED", "ARCHIVED"].map((status) => (
           <button
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${statusFilter === status ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${statusFilter === status ? "border-slate-950 bg-forest text-white" : "border-hairline text-muted hover:border-hairline"}`}
             key={status || "all"}
             onClick={() => { setStatusFilter(status); setPage(1); }}
             type="button"
@@ -83,23 +83,23 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
         ))}
       </div>
 
-      {error && <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>}
-      {!data ? <p className="text-slate-600">Loading…</p> : data.items.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-10 text-center text-slate-600">No marketplace listings match this filter.</p>
+      {error && <p className="rounded-xl border border-hairline border-red-200 bg-red-50 p-4 text-sm text-red-900">{error}</p>}
+      {!data ? <p className="text-muted">Loading…</p> : data.items.length === 0 ? (
+        <p className="rounded-xl border border-hairline border-dashed p-10 text-center text-muted">No marketplace listings match this filter.</p>
       ) : (
         <div className="grid gap-3">
           {data.items.map((item) => (
-            <article className="rounded-xl border bg-white p-5 shadow-sm" key={item.id}>
+            <article className="rounded-xl border border-hairline border-hairline bg-white p-5 shadow-sm" key={item.id}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-slate-950">{item.title}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {item.listingType} · {item.city ?? "Location not set"} · {item.marketplaceAssetId ? "Marketplace native" : "UmoAfric backed"} · verification {item.verificationStatus.toLowerCase()}
+                  <p className="font-semibold text-ink">{item.title}</p>
+                  <p className="mt-1 text-sm text-muted">
+                    {item.listingType} · {item.city ?? "Location not set"} · {item.marketplaceAssetId ? "Marketplace native" : "NesAfric backed"} · verification {item.verificationStatus.toLowerCase()}
                     {item.listingRepresentativeUserId && " · has a representative"}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[item.status] ?? "bg-slate-100 text-slate-600"}`}>{item.status.replaceAll("_", " ")}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[item.status] ?? "bg-surface text-muted"}`}>{item.status.replaceAll("_", " ")}</span>
                   {item.verificationStatus === "UNVERIFIED" && <button className="rounded-md border px-3 py-1.5 text-sm font-medium" onClick={() => void submitVerification(item.id)} type="button">Submit verification</button>}
                   {item.status === "DRAFT" && <button className="rounded-md border px-3 py-1.5 text-sm font-medium" onClick={() => void transition(item.id, "PENDING_REVIEW")} type="button">Submit for review</button>}
                   {item.status === "PUBLISHED" && <button className="rounded-md border px-3 py-1.5 text-sm font-medium" onClick={() => void transition(item.id, "PAUSED")} type="button">Pause</button>}
@@ -112,11 +112,11 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
       )}
 
       {data && data.total > data.pageSize && (
-        <div className="flex items-center justify-between text-sm text-slate-600">
+        <div className="flex items-center justify-between text-sm text-muted">
           <p>Page {data.page} of {totalPages} · {data.total} listings</p>
           <div className="flex gap-2">
-            <button className="rounded-md border px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
-            <button className="rounded-md border px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">Next</button>
+            <button className="rounded-md border px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:border-hairline disabled:text-muted" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
+            <button className="rounded-md border px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:border-hairline disabled:text-muted" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">Next</button>
           </div>
         </div>
       )}

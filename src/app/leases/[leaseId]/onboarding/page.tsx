@@ -1,7 +1,20 @@
-import Link from "next/link";
+import { AppShell } from "@/components/app-shell";
 import { LeaseExecutionDashboard } from "@/components/lease-execution-dashboard";
 
-export default async function TenantOnboardingPage({ params }: { params: Promise<{ leaseId: string }> }) {
+export default async function TenantOnboardingPage({
+  params,
+}: {
+  params: Promise<{ leaseId: string }>;
+}) {
   const { leaseId } = await params;
-  return <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12"><Link className="mb-6 inline-block text-sm font-semibold text-emerald-700" href={`/leases/${leaseId}`}>← Lease detail</Link><LeaseExecutionDashboard leaseId={leaseId} onboarding /></main>;
+
+  return (
+    <AppShell
+      description="Track tenant readiness, documents, signatures, inspections and move-in."
+      eyebrow="TENANT JOURNEY"
+      title="Tenant onboarding"
+    >
+      <LeaseExecutionDashboard leaseId={leaseId} onboarding />
+    </AppShell>
+  );
 }

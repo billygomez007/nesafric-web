@@ -1,7 +1,20 @@
-import Link from "next/link";
+import { AppShell } from "@/components/app-shell";
 import { LeaseExecutionDashboard } from "@/components/lease-execution-dashboard";
 
-export default async function LeaseExecutionPage({ params }: { params: Promise<{ leaseId: string }> }) {
+export default async function LeaseExecutionPage({
+  params,
+}: {
+  params: Promise<{ leaseId: string }>;
+}) {
   const { leaseId } = await params;
-  return <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12"><Link className="mb-6 inline-block text-sm font-semibold text-emerald-700" href={`/leases/${leaseId}`}>← Lease detail</Link><LeaseExecutionDashboard leaseId={leaseId} /></main>;
+
+  return (
+    <AppShell
+      description="Prepare documents, signatures, move-in requirements and lease activation."
+      eyebrow="LEASE WORKFLOW"
+      title="Execution & move-in"
+    >
+      <LeaseExecutionDashboard leaseId={leaseId} />
+    </AppShell>
+  );
 }

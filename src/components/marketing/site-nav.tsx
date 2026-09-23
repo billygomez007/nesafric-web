@@ -5,97 +5,31 @@ import { useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 
 const NAV_LINKS = [
-  { href: "/#manage", label: "Platform" },
+  { href: "/", label: "Home" },
+  { href: "/#product", label: "Product" },
+  { href: "/for-property-owners", label: "Solutions" },
   { href: "/marketplace/properties", label: "Marketplace" },
-  { href: "/for-professionals", label: "For Professionals" },
-  { href: "/for-developers", label: "For Developers" },
   { href: "/pricing", label: "Pricing" },
+  { href: "/#resources", label: "Resources" },
 ];
 
 export function SiteNav() {
   const [open, setOpen] = useState(false);
-
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-navy/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 sm:px-8">
-        <Link className="flex items-center" href="/">
-          <BrandLogo height={30} />
-        </Link>
-
-        <nav className="hidden items-center gap-6 lg:flex">
-          {NAV_LINKS.map((link) => (
-            <Link className="text-sm font-medium text-slate-300 transition-colors hover:text-white" href={link.href} key={link.label}>
-              {link.label}
-            </Link>
-          ))}
-          <Link
-            className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand transition-colors hover:border-brand/50"
-            href="/ghana"
-          >
-            GHANA LAUNCH
-          </Link>
+    <header className="sticky top-0 z-50 border-b border-hairline/80 bg-warm-white/90 backdrop-blur-xl">
+      <div className="mx-auto flex h-[72px] max-w-[1400px] items-center justify-between px-5 sm:px-8">
+        <Link href="/"><BrandLogo height={34} variant="light" /></Link>
+        <nav className="hidden items-center gap-7 lg:flex">
+          {NAV_LINKS.map((link, index) => <Link className={`text-[13px] font-medium transition-colors hover:text-forest ${index === 0 ? "text-forest" : "text-muted"}`} href={link.href} key={link.label}>{link.label}</Link>)}
         </nav>
-
         <div className="hidden items-center gap-3 lg:flex">
-          <Link className="text-sm font-medium text-slate-300 transition-colors hover:text-white" href="/login">
-            Sign In
-          </Link>
-          <Link
-            className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
-            href="/register"
-          >
-            Get Started
-          </Link>
+          <Link aria-label="Search" className="flex h-10 w-10 items-center justify-center rounded-full text-forest hover:bg-cream" href="/marketplace/properties"><span aria-hidden="true" className="text-lg">⌕</span></Link>
+          <Link className="rounded-xl px-4 py-2.5 text-[13px] font-semibold text-forest hover:bg-cream" href="/login">Sign In</Link>
+          <Link className="rounded-xl bg-forest px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition hover:bg-emerald" href="/register">Get Started <span aria-hidden="true">→</span></Link>
         </div>
-
-        <button
-          aria-expanded={open}
-          aria-label="Toggle navigation menu"
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 text-white lg:hidden"
-          onClick={() => setOpen((value) => !value)}
-          type="button"
-        >
-          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} viewBox="0 0 24 24">
-            {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-          </svg>
-        </button>
+        <button aria-expanded={open} aria-label="Toggle navigation" className="flex h-10 w-10 items-center justify-center rounded-xl border border-hairline text-forest lg:hidden" onClick={() => setOpen(value => !value)} type="button"><span aria-hidden="true" className="text-xl">{open ? "×" : "☰"}</span></button>
       </div>
-
-      {open && (
-        <div className="border-t border-white/10 bg-navy px-6 py-6 lg:hidden">
-          <nav className="flex flex-col gap-4">
-            {NAV_LINKS.map((link) => (
-              <Link
-                className="text-base font-medium text-slate-200"
-                href={link.href}
-                key={link.label}
-                onClick={() => setOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
-            <Link
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand"
-              href="/ghana"
-              onClick={() => setOpen(false)}
-            >
-              GHANA LAUNCH
-            </Link>
-          </nav>
-          <div className="mt-6 flex flex-col gap-3 border-t border-white/10 pt-6">
-            <Link className="text-center text-sm font-semibold text-slate-200" href="/login" onClick={() => setOpen(false)}>
-              Sign In
-            </Link>
-            <Link
-              className="rounded-full bg-brand px-4 py-3 text-center text-sm font-semibold text-navy"
-              href="/register"
-              onClick={() => setOpen(false)}
-            >
-              Get Started
-            </Link>
-          </div>
-        </div>
-      )}
+      {open && <div className="border-t border-hairline bg-warm-white px-5 py-5 lg:hidden"><nav className="grid gap-1">{NAV_LINKS.map(link => <Link className="rounded-lg px-3 py-3 text-sm font-medium text-forest hover:bg-cream" href={link.href} key={link.label} onClick={() => setOpen(false)}>{link.label}</Link>)}</nav><div className="mt-4 grid gap-2 border-t border-hairline pt-4"><Link className="rounded-lg px-3 py-3 text-center text-sm font-semibold text-forest" href="/login">Sign In</Link><Link className="rounded-xl bg-forest px-4 py-3 text-center text-sm font-semibold text-white" href="/register">Get Started</Link></div></div>}
     </header>
   );
 }

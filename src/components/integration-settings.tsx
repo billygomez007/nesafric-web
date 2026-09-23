@@ -14,10 +14,10 @@ type IntegrationEntry = {
 };
 
 const STATUS_STYLES: Record<IntegrationEntry["status"], string> = {
-  CONNECTED: "bg-emerald-100 text-emerald-800",
-  NOT_CONFIGURED: "bg-slate-100 text-slate-600",
-  DEGRADED: "bg-amber-100 text-amber-800",
-  ERROR: "bg-red-100 text-red-800",
+  CONNECTED: "bg-teal/10 text-teal",
+  NOT_CONFIGURED: "bg-surface text-muted",
+  DEGRADED: "bg-cream text-forest",
+  ERROR: "bg-red-50 text-red-800",
 };
 
 const PHASE19_TYPES = new Set(["STORAGE", "ESIGNATURE", "GEOCODING", "CALENDAR", "MALWARE_SCAN"]);
@@ -60,23 +60,23 @@ export function IntegrationSettings() {
     await load(organisationId);
   }
 
-  if (!entries) return <p className="rounded-xl border bg-white p-6">{error || "Loading integration status..."}</p>;
+  if (!entries) return <p className="rounded-2xl border border-hairline border-hairline bg-white p-6">{error || "Loading integration status..."}</p>;
   return <div className="grid gap-6">
-    <section className="rounded-2xl border bg-white p-6 shadow-sm">
+    <section className="rounded-3xl border border-hairline bg-white p-6 shadow-sm">
       <h1 className="text-2xl font-semibold">Integrations</h1>
-      <p className="mt-1 text-sm text-slate-600">Storage, e-signature, geocoding, calendar sync, malware scanning, communication channels, and payment providers — connection health without ever exposing a secret or credential.</p>
+      <p className="mt-1 text-sm text-muted">Storage, e-signature, geocoding, calendar sync, malware scanning, communication channels, and payment providers — connection health without ever exposing a secret or credential.</p>
     </section>
-    {(error || notice) && <p className={`rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{error || notice}</p>}
+    {(error || notice) && <p className={`rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-800" : "bg-teal/10 text-teal"}`}>{error || notice}</p>}
     <section className="grid gap-4 md:grid-cols-2">
-      {entries.map((entry) => <div className="rounded-2xl border bg-white p-5 shadow-sm" key={entry.type}>
+      {entries.map((entry) => <div className="rounded-3xl border border-hairline bg-white p-5 shadow-sm" key={entry.type}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="font-semibold">{entry.displayName}</h2>
-            <p className="text-xs text-slate-500">{entry.provider}</p>
+            <p className="text-xs text-muted">{entry.provider}</p>
           </div>
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[entry.status]}`}>{entry.status.replaceAll("_", " ")}</span>
         </div>
-        <dl className="mt-3 grid gap-1 text-xs text-slate-500">
+        <dl className="mt-3 grid gap-1 text-xs text-muted">
           {entry.lastSuccessAt && <div><dt className="inline font-semibold">Last success:</dt> <dd className="inline">{new Date(entry.lastSuccessAt).toLocaleString()}</dd></div>}
           {entry.lastFailureAt && <div><dt className="inline font-semibold">Last failure:</dt> <dd className="inline">{new Date(entry.lastFailureAt).toLocaleString()}{entry.lastFailureReason ? ` — ${entry.lastFailureReason}` : ""}</dd></div>}
         </dl>
