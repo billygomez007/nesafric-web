@@ -39,20 +39,6 @@ export function HeroSection() {
             </Link>
           </div>
 
-          <div className="mt-8 grid max-w-[560px] grid-cols-3 gap-4 border-t border-hairline pt-5">
-            <div>
-              <p className="text-sm font-semibold text-forest-deep">Property operations</p>
-              <p className="mt-1 text-xs leading-5 text-muted">One connected workspace</p>
-            </div>
-            <div className="border-l border-hairline pl-4">
-              <p className="text-sm font-semibold text-forest-deep">Money movement</p>
-              <p className="mt-1 text-xs leading-5 text-muted">Rent, payments and receipts</p>
-            </div>
-            <div className="border-l border-hairline pl-4">
-              <p className="text-sm font-semibold text-forest-deep">Marketplace</p>
-              <p className="mt-1 text-xs leading-5 text-muted">Properties and professionals</p>
-            </div>
-          </div>
         </div>
 
         <div className="relative">
