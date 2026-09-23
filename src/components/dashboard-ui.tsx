@@ -17,16 +17,16 @@ export function DashboardStat({
   tone?: "teal" | "gold" | "forest" | "red";
 }) {
   const toneClasses = {
-    teal: "bg-teal/10 text-teal",
-    gold: "bg-gold/15 text-amber-700",
-    forest: "bg-forest/10 text-forest",
+    teal: "bg-teal/8 text-teal",
+    gold: "bg-gold/10 text-amber-700",
+    forest: "bg-forest/8 text-forest",
     red: "bg-red-50 text-red-700",
   };
 
   const body = (
-    <div className="group h-full rounded-[22px] border border-hairline bg-white p-5 shadow-[0_12px_36px_rgba(16,45,42,0.045)] transition duration-200 hover:-translate-y-0.5 hover:border-teal/20 hover:shadow-[0_18px_44px_rgba(16,45,42,0.08)]">
+    <div className="group h-full border-t border-hairline bg-transparent px-0 py-5 transition-colors duration-200 hover:border-teal/40">
       <div className="flex items-start justify-between gap-4">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${toneClasses[tone]}`}>
+        <div className={`flex h-9 w-9 items-center justify-center rounded-[10px] ${toneClasses[tone]}`}>
           {icon}
         </div>
         {href && (
@@ -70,7 +70,7 @@ export function DashboardPanel({
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-[24px] border border-hairline bg-white shadow-[0_12px_36px_rgba(16,45,42,0.045)] ${className}`}
+      className={`overflow-hidden rounded-[14px] border border-hairline bg-white ${className}`}
     >
       <div className="flex items-start justify-between gap-4 border-b border-hairline px-5 py-5 sm:px-6">
         <div>
@@ -101,7 +101,7 @@ export function ProgressBar({
   const safe = Math.max(0, Math.min(100, value));
 
   return (
-    <div className={`h-2 overflow-hidden rounded-full bg-cream ${className}`}>
+    <div className={`h-1.5 overflow-hidden rounded-full bg-cream ${className}`}>
       <div
         className="h-full rounded-full bg-teal transition-all duration-500"
         style={{ width: `${safe}%` }}
