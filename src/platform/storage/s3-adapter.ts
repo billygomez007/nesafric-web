@@ -32,7 +32,7 @@ type BucketCredentials = {
  * Production-ready object storage adapter for any S3-compatible provider (AWS S3, MinIO,
  * DigitalOcean Spaces, Cloudflare R2, Backblaze B2, ...).
  *
- * Two physically separate buckets, not a shared bucket with a prefix or an ACL: UmoAfric stores
+ * Two physically separate buckets, not a shared bucket with a prefix or an ACL: NesAfric stores
  * highly sensitive identity documents (Ghana Card, business registration, licences) alongside
  * public marketing media, and providers like Cloudflare R2 do not reliably enforce per-object
  * ACLs — a bucket's public-access setting is the only access-control boundary that actually
