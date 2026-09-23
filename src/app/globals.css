@@ -135,3 +135,23 @@ body {
     transform: translateY(0);
   }
 }
+
+
+@keyframes nesafric-logo-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nesafric-logo-marquee {
+    animation: nesafric-logo-marquee 28s linear infinite;
+  }
+
+  .nesafric-logo-marquee:hover {
+    animation-play-state: paused;
+  }
+}
