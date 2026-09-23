@@ -32,7 +32,7 @@ export function TenantForm({
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [propertyId, setPropertyId] = useState(initialPropertyId);
   const [unitId, setUnitId] = useState(initialUnitId);
-  const [loadingUnits, setLoadingUnits] = useState(false);
+  const [loadingUnits, setLoadingUnits] = useState(Boolean(initialPropertyId));
 
   useEffect(() => {
     const organisationId = localStorage.getItem(
@@ -67,7 +67,6 @@ export function TenantForm({
     );
     if (!organisationId) return;
 
-    setLoadingUnits(true);
     fetch(`/api/properties?id=${encodeURIComponent(propertyId)}`, {
       headers: { "x-organisation-id": organisationId },
     })
@@ -221,8 +220,11 @@ export function TenantForm({
               <select
                 className={INPUT}
                 onChange={(event) => {
-                  setPropertyId(event.target.value);
+                  const nextPropertyId = event.target.value;
+                  setUnits([]);
                   setUnitId("");
+                  setLoadingUnits(Boolean(nextPropertyId));
+                  setPropertyId(nextPropertyId);
                 }}
                 value={propertyId}
               >
