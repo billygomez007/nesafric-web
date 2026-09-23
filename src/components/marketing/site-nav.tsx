@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { BRAND } from "@/platform/brand";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -18,6 +19,24 @@ export function SiteNav() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-gold/20 bg-forest-deep/95 text-white shadow-[0_10px_30px_rgba(0,47,43,0.10)] backdrop-blur-xl">
+      <div className="border-b border-white/8 bg-[#052724]">
+        <div className="mx-auto flex min-h-8 max-w-[1400px] items-center justify-end gap-4 px-5 py-1.5 text-[11px] text-white/62 sm:px-8">
+          <a
+            className="hidden transition-colors hover:text-gold-soft sm:inline"
+            href={`mailto:${BRAND.contact.support}`}
+          >
+            {BRAND.contact.support}
+          </a>
+          <span aria-hidden="true" className="hidden h-3 w-px bg-white/15 sm:block" />
+          <a
+            className="font-medium tracking-[0.01em] text-white/76 transition-colors hover:text-gold-soft"
+            href={`tel:${BRAND.contact.phoneTel}`}
+          >
+            {BRAND.contact.phoneDisplay}
+          </a>
+        </div>
+      </div>
+
       <div className="mx-auto flex h-[72px] max-w-[1400px] items-center justify-between px-5 sm:px-8">
         <Link className="shrink-0" href="/">
           <BrandLogo height={34} variant="dark" />
@@ -74,6 +93,14 @@ export function SiteNav() {
 
       {open && (
         <div className="border-t border-white/10 bg-forest-deep px-5 py-5 lg:hidden">
+          <div className="mb-4 grid gap-2 border-b border-white/10 pb-4 text-xs text-white/60">
+            <a className="transition hover:text-gold-soft" href={`mailto:${BRAND.contact.support}`}>
+              {BRAND.contact.support}
+            </a>
+            <a className="transition hover:text-gold-soft" href={`tel:${BRAND.contact.phoneTel}`}>
+              {BRAND.contact.phoneDisplay}
+            </a>
+          </div>
           <nav className="grid gap-1">
             {NAV_LINKS.map((link) => (
               <Link
