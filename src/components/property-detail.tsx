@@ -136,11 +136,15 @@ export function PropertyDetail({ propertyId }: { propertyId: string }) {
   }, [propertyId]);
 
   useEffect(() => {
-    loadProperty().catch((cause) =>
-      setError(
-        cause instanceof Error ? cause.message : "Unable to load property.",
-      ),
-    );
+    const timer = setTimeout(() => {
+      loadProperty().catch((cause) =>
+        setError(
+          cause instanceof Error ? cause.message : "Unable to load property.",
+        ),
+      );
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [loadProperty]);
 
   const allUnits = useMemo(
