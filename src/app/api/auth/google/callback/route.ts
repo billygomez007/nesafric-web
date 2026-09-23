@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 import { createSession } from "@/platform/auth/session";
+import {
+  AUTH_RETURN_TO_COOKIE,
+  safeReturnTo,
+} from "@/platform/auth/return-to";
 import { hashPassword } from "@/platform/auth/passwords";
 import { db } from "@/platform/database/client";
 
@@ -17,9 +21,16 @@ function clearGoogleOAuthCookies(store: Awaited<ReturnType<typeof cookies>>) {
   store.delete("nesafric_google_oauth_code_verifier");
 }
 
-function errorRedirect(origin: string, message: string) {
+function errorRedirect(
+  origin: string,
+  message: string,
+) {
   const url = new URL("/login", origin);
-  url.searchParams.set("google_error", message);
+  url.searchParams.set(
+    "google_error",
+    message,
+  );
+
   return NextResponse.redirect(url);
 }
 
@@ -68,8 +79,6 @@ export async function GET(request: Request) {
     !codeVerifier ||
     state !== expectedState
   ) {
-    clearGoogleOAuthCookies(store);
-
     return errorRedirect(
       origin,
       "Google sign-in session expired. Please try again.",
@@ -95,9 +104,7 @@ export async function GET(request: Request) {
     });
 
     if (!tokenResponse.ok) {
-      clearGoogleOAuthCookies(store);
-
-      return errorRedirect(origin, "Google sign-in could not be completed.");
+        return errorRedirect(origin, "Google sign-in could not be completed.");
     }
 
     const tokenBody = (await tokenResponse.json()) as {
@@ -105,9 +112,7 @@ export async function GET(request: Request) {
     };
 
     if (!tokenBody.id_token) {
-      clearGoogleOAuthCookies(store);
-
-      return errorRedirect(origin, "Google did not return an identity token.");
+        return errorRedirect(origin, "Google did not return an identity token.");
     }
 
     const { payload } = await jwtVerify(tokenBody.id_token, GOOGLE_JWKS, {
@@ -116,15 +121,11 @@ export async function GET(request: Request) {
     });
 
     if (payload.nonce !== nonce) {
-      clearGoogleOAuthCookies(store);
-
-      return errorRedirect(origin, "Google sign-in verification failed.");
+        return errorRedirect(origin, "Google sign-in verification failed.");
     }
 
     if (payload.email_verified !== true || typeof payload.email !== "string") {
-      clearGoogleOAuthCookies(store);
-
-      return errorRedirect(
+        return errorRedirect(
         origin,
         "A verified Google email address is required.",
       );
@@ -156,11 +157,30 @@ export async function GET(request: Request) {
       });
     }
 
+    const returnTo = safeReturnTo(
+      store.get(AUTH_RETURN_TO_COOKIE)?.value,
+    );
+
     clearGoogleOAuthCookies(store);
 
     await createSession(user.id);
 
-    return NextResponse.redirect(new URL("/auth/google/complete", origin));
+    if (returnTo) {
+      store.delete(
+        AUTH_RETURN_TO_COOKIE,
+      );
+
+      return NextResponse.redirect(
+        new URL(returnTo, origin),
+      );
+    }
+
+    return NextResponse.redirect(
+      new URL(
+        "/auth/google/complete",
+        origin,
+      ),
+    );
   } catch {
     clearGoogleOAuthCookies(store);
 

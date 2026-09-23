@@ -10,6 +10,11 @@ import { runDueJobs } from "@/platform/jobs/runner";
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation" CASCADE');
 }
+import {
+  decryptInvitationToken,
+  type EncryptedInvitationToken,
+} from "@/platform/security/invitation-token-crypto";
+
 
 describe("PostgreSQL account emails (welcome + onboarding completion)", () => {
   beforeEach(cleanDatabase);
@@ -107,12 +112,45 @@ describe("PostgreSQL team invitation emails", () => {
       recipientEmail?: string;
       workspaceName?: string;
       inviterName?: string;
+      invitationId?: string;
       invitationToken?: string;
+      invitationTokenEncrypted?:
+        EncryptedInvitationToken;
     };
 
-    expect(payload.recipientEmail).toBe("manager-team-email@test.example");
-    expect(payload.workspaceName).toBe("Golden Coast Properties");
-    expect(payload.inviterName).toBe("Ama Boateng");
-    expect(payload.invitationToken).toBeTruthy();
+    expect(payload.recipientEmail).toBe(
+      "manager-team-email@test.example",
+    );
+
+    expect(payload.workspaceName).toBe(
+      "Golden Coast Properties",
+    );
+
+    expect(payload.inviterName).toBe(
+      "Ama Boateng",
+    );
+
+    expect(
+      payload.invitationId,
+    ).toBe(result.invitation.id);
+
+    expect(
+      payload.invitationToken,
+    ).toBeUndefined();
+
+    expect(
+      payload.invitationTokenEncrypted,
+    ).toBeTruthy();
+
+    expect(
+      JSON.stringify(job?.payload),
+    ).not.toContain(result.token);
+
+    expect(
+      decryptInvitationToken(
+        payload.invitationTokenEncrypted!,
+        result.invitation.id,
+      ),
+    ).toBe(result.token);
   });
 });

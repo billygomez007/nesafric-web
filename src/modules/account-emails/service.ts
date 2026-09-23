@@ -2,6 +2,11 @@ import { db } from "@/platform/database/client";
 import { enqueueJob } from "@/platform/jobs/runner";
 import { EmailChannelAdapter } from "@/modules/conversations/channels/registry";
 import { BRAND } from "@/platform/brand";
+import {
+  decryptInvitationToken,
+  encryptInvitationToken,
+  type EncryptedInvitationToken,
+} from "@/platform/security/invitation-token-crypto";
 import { renderEmail, type EmailContent } from "@/modules/notifications/email-templates/render";
 
 /**
@@ -54,7 +59,8 @@ export type AccountEmailPayload = {
   inviterName?: string;
   roleLabel?: string;
   invitationExpiresAt?: string;
-  invitationToken?: string;
+  invitationId?: string;
+  invitationTokenEncrypted?: EncryptedInvitationToken;
 
   /** The exact idempotency identity for this send — reused as both the job's BackgroundJob key
    * (set by the caller at enqueue time) and the message id handed to the email provider, so a
@@ -156,6 +162,12 @@ export async function enqueueTeamInvitationEmail(input: {
 }) {
   const dedupeKey = `account-email:TEAM_INVITATION:${input.invitationId}`;
 
+  const invitationTokenEncrypted =
+    encryptInvitationToken(
+      input.invitationToken,
+      input.invitationId,
+    );
+
   return enqueueJob({
     type: "account-email",
     idempotencyKey: dedupeKey,
@@ -167,8 +179,10 @@ export async function enqueueTeamInvitationEmail(input: {
       workspaceName: input.organisationName,
       inviterName: input.inviterName,
       roleLabel: input.roleLabel,
-      invitationExpiresAt: input.invitationExpiresAt.toISOString(),
-      invitationToken: input.invitationToken,
+      invitationExpiresAt:
+        input.invitationExpiresAt.toISOString(),
+      invitationId: input.invitationId,
+      invitationTokenEncrypted,
     } satisfies AccountEmailPayload,
   });
 }
@@ -191,8 +205,9 @@ export function contentFor(
     | "inviterName"
     | "roleLabel"
     | "invitationExpiresAt"
-    | "invitationToken"
-  >,
+  > & {
+    invitationToken?: string;
+  },
 ): { subject: string; sender: keyof typeof BRAND.sender; content: EmailContent } {
   switch (template) {
     case "WELCOME":
@@ -369,7 +384,12 @@ export function contentFor(
             { label: "Role", value: lead?.roleLabel ?? "Team member" },
             { label: "Invited by", value: lead?.inviterName ?? "Workspace administrator" },
           ],
-          cta: { label: "Open NesAfric", path: "/login" },
+          cta: lead?.invitationToken
+            ? {
+                label: "Accept invitation",
+                path: `/invitations/accept#token=${encodeURIComponent(lead.invitationToken)}`,
+              }
+            : { label: "Open NesAfric", path: "/login" },
           supportNote: `If you were not expecting this invitation, you can safely ignore this email. Need help? Contact ${BRAND.contact.hello}`,
         },
       };
@@ -417,13 +437,40 @@ export async function sendAccountEmail(payload: AccountEmailPayload) {
     throw new Error("Account email has no recipient email address.");
   }
 
+  let transientInvitationToken:
+    | string
+    | undefined;
+
+  if (invitationDelivery) {
+    if (
+      !payload.invitationId ||
+      !payload.invitationTokenEncrypted
+    ) {
+      throw new Error(
+        "Team invitation email payload is missing its encrypted delivery token.",
+      );
+    }
+
+    transientInvitationToken =
+      decryptInvitationToken(
+        payload.invitationTokenEncrypted,
+        payload.invitationId,
+      );
+  }
+
   const { subject, sender, content } = contentFor(
     payload.template,
     displayName,
     payload.workspaceName,
     payload.providerId,
     payload.reason,
-    payload,
+    invitationDelivery
+      ? {
+          ...payload,
+          invitationToken:
+            transientInvitationToken,
+        }
+      : payload,
   );
   const rendered = renderEmail(content);
   const adapter = new EmailChannelAdapter();

@@ -48,7 +48,7 @@ describe("NesAfric team invitation email", () => {
     expect(rendered.html).toContain(BRAND.siteUrl);
   });
 
-  it("does not expose the invitation token in rendered email text while acceptance flow is not yet implemented", () => {
+  it("places the invitation token only inside the secure acceptance URL", () => {
     const token = "secret-invitation-token";
 
     const email = contentFor(
@@ -67,7 +67,11 @@ describe("NesAfric team invitation email", () => {
 
     const rendered = renderEmail(email.content);
 
-    expect(rendered.html).not.toContain(token);
-    expect(rendered.text).not.toContain(token);
+    expect(rendered.html).toContain(
+      `/invitations/accept#token=${encodeURIComponent(token)}`,
+    );
+    expect(rendered.text).toContain(
+      `/invitations/accept#token=${encodeURIComponent(token)}`,
+    );
   });
 });

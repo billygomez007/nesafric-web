@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 
 type Workspaces = {
@@ -17,16 +20,20 @@ type Workspaces = {
 export default function GoogleAuthCompletePage() {
   const router = useRouter();
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   useEffect(() => {
     let cancelled = false;
 
     async function resolveWorkspace() {
       try {
-        const response = await fetch("/api/workspaces", {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          "/api/workspaces",
+          {
+            cache: "no-store",
+          },
+        );
 
         if (response.status === 401) {
           router.replace("/login");
@@ -34,14 +41,19 @@ export default function GoogleAuthCompletePage() {
         }
 
         if (!response.ok) {
-          throw new Error("Unable to load your NesAfric workspace.");
+          throw new Error(
+            "Unable to load your NesAfric workspace.",
+          );
         }
 
-        const workspaces = (await response.json()) as Workspaces;
+        const workspaces =
+          (await response.json()) as Workspaces;
 
         if (cancelled) return;
 
-        const organisation = workspaces.propertyOsOrganisations?.[0];
+        const organisation =
+          workspaces
+            .propertyOsOrganisations?.[0];
 
         if (organisation) {
           localStorage.setItem(
@@ -54,7 +66,9 @@ export default function GoogleAuthCompletePage() {
           return;
         }
 
-        const professional = workspaces.marketplaceProfessionals?.[0];
+        const professional =
+          workspaces
+            .marketplaceProfessionals?.[0];
 
         if (professional) {
           localStorage.setItem(
@@ -62,7 +76,9 @@ export default function GoogleAuthCompletePage() {
             professional.id,
           );
 
-          router.replace(`/pro/${professional.id}`);
+          router.replace(
+            `/pro/${professional.id}`,
+          );
 
           router.refresh();
           return;
@@ -74,7 +90,9 @@ export default function GoogleAuthCompletePage() {
         if (cancelled) return;
 
         setError(
-          cause instanceof Error ? cause.message : "Unable to continue.",
+          cause instanceof Error
+            ? cause.message
+            : "Unable to continue.",
         );
       }
     }
@@ -117,8 +135,7 @@ export default function GoogleAuthCompletePage() {
           </>
         ) : (
           <p className="mt-3 text-sm leading-6 text-muted">
-            Your Google account has been verified. We are loading your NesAfric
-            workspace.
+            Your Google account has been verified. We are loading your NesAfric workspace.
           </p>
         )}
       </div>

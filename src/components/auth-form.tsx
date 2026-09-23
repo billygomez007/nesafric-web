@@ -38,7 +38,11 @@ function GoogleIcon() {
   );
 }
 
-export function AuthForm({ mode }: { mode: "register" | "login" }) {
+export function AuthForm({
+  mode,
+}: {
+  mode: "register" | "login";
+}) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -104,7 +108,14 @@ export function AuthForm({ mode }: { mode: "register" | "login" }) {
       });
 
       const destination =
-        mode === "register" ? "/onboarding" : resolveWorkspace(body.workspaces);
+        typeof body.returnTo === "string" &&
+        body.returnTo.startsWith("/")
+          ? body.returnTo
+          : mode === "register"
+            ? "/onboarding"
+            : resolveWorkspace(
+                body.workspaces,
+              );
 
       router.push(destination);
       router.refresh();
