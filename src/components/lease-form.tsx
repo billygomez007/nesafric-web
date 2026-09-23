@@ -27,7 +27,15 @@ type TenantOption = {
 const INPUT =
   "mt-2 h-11 w-full rounded-xl border border-hairline bg-white px-3.5 text-sm text-ink outline-none transition placeholder:text-muted focus:border-teal focus:ring-2 focus:ring-teal/10 disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted";
 
-export function LeaseForm() {
+export function LeaseForm({
+  initialPropertyId = "",
+  initialUnitId = "",
+  initialTenantId = "",
+}: {
+  initialPropertyId?: string;
+  initialUnitId?: string;
+  initialTenantId?: string;
+}) {
   const router = useRouter();
 
   const [error, setError] = useState("");
@@ -35,7 +43,11 @@ export function LeaseForm() {
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [tenants, setTenants] = useState<TenantOption[]>([]);
-  const [propertyId, setPropertyId] = useState("");
+  const [propertyId, setPropertyId] = useState(initialPropertyId);
+  const [unitId, setUnitId] = useState(initialUnitId);
+  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>(
+    initialTenantId ? [initialTenantId] : [],
+  );
   const [loadingUnits, setLoadingUnits] = useState(false);
 
   useEffect(() => {
@@ -86,7 +98,11 @@ export function LeaseForm() {
   }, []);
 
   useEffect(() => {
-    if (!propertyId) return;
+    if (!propertyId) {
+      setUnits([]);
+      setUnitId("");
+      return;
+    }
 
     const organisationId = localStorage.getItem(
       "propertyos.activeOrganisationId",
@@ -106,12 +122,17 @@ export function LeaseForm() {
 
         const property = await response.json();
 
-        setUnits([
+        const nextUnits = [
           ...property.units,
           ...property.buildings.flatMap(
             (building: { units: UnitOption[] }) => building.units,
           ),
-        ]);
+        ] as UnitOption[];
+
+        setUnits(nextUnits);
+        if (unitId && !nextUnits.some((unit) => unit.id === unitId)) {
+          setUnitId("");
+        }
       })
       .catch((cause) =>
         setError(
@@ -119,7 +140,7 @@ export function LeaseForm() {
         ),
       )
       .finally(() => setLoadingUnits(false));
-  }, [propertyId]);
+  }, [propertyId, unitId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -135,9 +156,7 @@ export function LeaseForm() {
 
     const form = new FormData(event.currentTarget);
 
-    const tenantOrganisationIds = form
-      .getAll("tenantOrganisationIds")
-      .map(String);
+    const tenantOrganisationIds = selectedTenantIds;
 
     const response = await fetch("/api/leases", {
       method: "POST",
@@ -148,7 +167,7 @@ export function LeaseForm() {
       body: JSON.stringify({
         referenceNumber: form.get("referenceNumber"),
         propertyId: form.get("propertyId"),
-        unitId: form.get("unitId") || undefined,
+        unitId: unitId || undefined,
         tenantOrganisationIds,
         startDate: form.get("startDate"),
         endDate: form.get("endDate") || undefined,
@@ -219,6 +238,7 @@ export function LeaseForm() {
                 name="propertyId"
                 onChange={(event) => {
                   setUnits([]);
+                  setUnitId("");
                   setLoadingUnits(Boolean(event.target.value));
                   setPropertyId(event.target.value);
                 }}
@@ -247,6 +267,8 @@ export function LeaseForm() {
                 className={INPUT}
                 disabled={!propertyId || loadingUnits}
                 name="unitId"
+                onChange={(event) => setUnitId(event.target.value)}
+                value={unitId}
               >
                 <option value="">
                   {loadingUnits ? "Loading units..." : "No unit"}
@@ -266,7 +288,13 @@ export function LeaseForm() {
                 className="mt-2 min-h-32 w-full rounded-xl border border-hairline bg-white p-3 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
                 multiple
                 name="tenantOrganisationIds"
+                onChange={(event) =>
+                  setSelectedTenantIds(
+                    Array.from(event.target.selectedOptions, (option) => option.value),
+                  )
+                }
                 required
+                value={selectedTenantIds}
               >
                 {tenants.map((tenant) => (
                   <option key={tenant.id} value={tenant.id}>
