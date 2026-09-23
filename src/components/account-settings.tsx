@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type AccountProfile = {
@@ -44,7 +44,7 @@ function Card({
   eyebrow: string;
   title: string;
   description: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm sm:p-6">
@@ -163,7 +163,7 @@ export function AccountSettings() {
       }
 
       setProfile((current) =>
-        current ? { ...current, email: body.email, emailVerified: false } : current,
+        current ? { ...current, email: body.email, emailVerified: body.emailVerified } : current,
       );
       setEmail(body.email);
       setEmailPassword("");
