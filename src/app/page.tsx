@@ -2,32 +2,294 @@ import Link from "next/link";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { HeroSection } from "@/components/marketing/hero-section";
-import { ProductMockup } from "@/components/marketing/product-mockup";
 import { BRAND } from "@/platform/brand";
 
-const CAPABILITIES = [
-  ["⌂", "Property Management", "Everything you need to run your properties."],
-  ["♙", "Tenant & Lease Management", "From inquiry to renewal."],
-  ["₵", "Payments & Collections", "Secure and automated."],
-  ["↗", "Maintenance & Work Orders", "Keep properties in top shape."],
-  ["▣", "Property Marketplace", "Buy, rent or sell."],
-  ["♧", "Service Professionals", "Verified providers."],
-  ["▥", "Insights & Reports", "Data for better decisions."],
+const WORKFLOWS = [
+  {
+    eyebrow: "Operate",
+    title: "Property operations",
+    description: "Run portfolios, buildings and units without losing the detail that matters.",
+    items: ["Properties & units", "Tenants & leases", "Documents & records"],
+    className: "lg:col-span-2 lg:row-span-2",
+  },
+  {
+    eyebrow: "Collect",
+    title: "Rent & payments",
+    description: "Track obligations, collections, receipts and recurring charges in one financial view.",
+    items: ["Collections", "Receipts", "Recurring charges"],
+    className: "lg:col-span-2",
+  },
+  {
+    eyebrow: "Resolve",
+    title: "Maintenance",
+    description: "Turn requests into work orders and keep every property moving.",
+    items: ["Requests", "Assignments", "Work orders"],
+    className: "lg:col-span-1",
+  },
+  {
+    eyebrow: "Connect",
+    title: "Tenant experience",
+    description: "Keep tenant records, communication and lease journeys connected.",
+    items: ["Profiles", "Communication", "Lease lifecycle"],
+    className: "lg:col-span-1",
+  },
+  {
+    eyebrow: "Grow",
+    title: "Marketplace",
+    description: "List opportunities, generate enquiries and connect with the wider property ecosystem.",
+    items: ["Listings", "Leads", "Viewings"],
+    className: "lg:col-span-2",
+  },
+];
+
+const AUDIENCES = [
+  ["Property owners", "Operate properties and collections with a clearer view of performance.", "/for-property-owners"],
+  ["Professionals", "Build visibility, manage listings and turn enquiries into active opportunities.", "/for-professionals"],
+  ["Developers", "Showcase developments, manage inventory and coordinate sales activity.", "/for-developers"],
 ];
 
 export default function Home() {
-  const jsonLd = { "@context": "https://schema.org", "@type": "Organization", name: BRAND.name, description: "Real Estate OS for Africa", url: BRAND.siteUrl, logo: `${BRAND.siteUrl}${BRAND.logo.onLight}` };
-  return <>
-    <script dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} type="application/ld+json" />
-    <SiteNav />
-    <main>
-      <HeroSection />
-      <section className="border-y border-hairline bg-white"><div className="mx-auto grid max-w-[1400px] grid-cols-2 divide-x divide-hairline sm:grid-cols-4"><div className="p-6 sm:p-8"><p className="font-semibold text-forest">Property operations</p><p className="mt-1 text-sm text-muted">One connected workspace</p></div><div className="p-6 sm:p-8"><p className="font-semibold text-forest">Marketplace</p><p className="mt-1 text-sm text-muted">Real opportunities</p></div><div className="p-6 sm:p-8"><p className="font-semibold text-forest">Professionals</p><p className="mt-1 text-sm text-muted">People you can trust</p></div><div className="p-6 sm:p-8"><p className="font-semibold text-forest">Built for Africa</p><p className="mt-1 text-sm text-muted">Local insight, global standards</p></div></div></section>
-      <section className="bg-white px-5 py-16 sm:px-8 sm:py-20" id="product"><div className="mx-auto max-w-[1400px]"><p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">WHAT YOU CAN DO</p><div className="mt-5 grid gap-8 lg:grid-cols-[0.8fr_2.2fr]"><h2 className="max-w-md text-3xl font-semibold tracking-tight text-forest-deep sm:text-4xl">The connected system for every stage of real estate.</h2><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{CAPABILITIES.map(([icon, title, description]) => <article className="rounded-2xl border border-hairline bg-warm-white p-5 transition hover:-translate-y-0.5 hover:border-gold/60" key={title}><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cream text-xl text-gold" aria-hidden="true">{icon}</span><h3 className="mt-4 text-sm font-semibold text-ink">{title}</h3><p className="mt-2 text-xs leading-5 text-muted">{description}</p></article>)}</div></div></div></section>
-      <section className="bg-warm-white px-5 py-16 sm:px-8 sm:py-24"><div className="mx-auto grid max-w-[1400px] items-center gap-10 lg:grid-cols-[0.85fr_1.15fr]"><div><p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">WHY NESAFRIC</p><h2 className="mt-5 max-w-xl text-3xl font-semibold leading-tight tracking-tight text-forest-deep sm:text-4xl">More than a marketplace. A complete real estate operating system.</h2><p className="mt-5 max-w-lg leading-7 text-muted">NesAfric brings together landlords, tenants, agents, service professionals and developers on one intelligent platform designed for the African real estate ecosystem.</p><Link className="mt-7 inline-flex rounded-xl bg-forest px-5 py-3 text-sm font-semibold text-white" href="/for-property-owners">Learn More <span aria-hidden="true" className="ml-2">→</span></Link></div><ProductMockup alt="NesAfric property management workspace" src="/marketing/mockups/homepage-platform-overview.png" maxWidthClassName="max-w-3xl" theme="light" priority /></div></section>
-      <section className="relative overflow-hidden bg-forest-deep px-5 py-16 text-white sm:px-8 sm:py-20"><div className="mx-auto grid max-w-[1400px] items-center gap-10 lg:grid-cols-[1.4fr_0.6fr]"><div><p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold-soft">BUILT FOR AFRICA</p><h2 className="mt-5 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">Powering real estate growth across Africa</h2><p className="mt-5 max-w-xl leading-7 text-white/70">Local insights. Global standards. A platform built for our markets, opportunities and future.</p><div className="mt-8 h-px w-24 bg-gold" /></div><div className="border-l border-gold/50 pl-8"><p className="text-4xl font-semibold leading-none">One Africa</p><p className="mt-2 text-xl text-white/65">Many opportunities</p></div></div></section>
-      <section className="bg-white px-5 py-16 text-center sm:px-8 sm:py-20"><h2 className="text-3xl font-semibold tracking-tight text-forest-deep">Ready to build what comes next?</h2><p className="mx-auto mt-4 max-w-xl text-muted">Bring your properties, people and opportunities into one clear operating system.</p><div className="mt-7 flex justify-center gap-3"><Link className="rounded-xl bg-forest px-6 py-3.5 text-sm font-semibold text-white" href="/register">Get Started →</Link><Link className="rounded-xl border border-forest/30 px-6 py-3.5 text-sm font-semibold text-forest" href="/marketplace/properties">Explore Properties</Link></div></section>
-    </main>
-    <SiteFooter />
-  </>;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: BRAND.name,
+    description: "The operating system for African real estate",
+    url: BRAND.siteUrl,
+    logo: `${BRAND.siteUrl}${BRAND.logo.onLight}`,
+  };
+
+  return (
+    <>
+      <script
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        type="application/ld+json"
+      />
+      <SiteNav />
+
+      <main>
+        <HeroSection />
+
+        <section className="border-y border-hairline bg-white">
+          <div className="mx-auto grid max-w-[1400px] gap-px bg-hairline sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Property management", "One connected workspace"],
+              ["Payments", "Track money with clarity"],
+              ["Marketplace", "Real opportunities"],
+              ["Professionals", "A connected service ecosystem"],
+            ].map(([title, description]) => (
+              <div className="bg-white px-5 py-6 sm:px-8" key={title}>
+                <p className="text-sm font-semibold text-forest-deep">{title}</p>
+                <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white px-5 py-20 sm:px-8 sm:py-28" id="product">
+          <div className="mx-auto max-w-[1400px]">
+            <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr] lg:items-end">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">ONE OPERATING SYSTEM</p>
+                <h2 className="mt-5 max-w-xl text-4xl font-semibold leading-[1.02] tracking-[-0.035em] text-forest-deep sm:text-5xl">
+                  The business of property, finally connected.
+                </h2>
+              </div>
+              <p className="max-w-2xl text-base leading-7 text-muted lg:justify-self-end lg:text-lg">
+                NesAfric brings the operational, financial and marketplace sides of real estate into one platform,
+                so teams can move from fragmented tools to a single source of truth.
+              </p>
+            </div>
+
+            <div className="mt-12 grid auto-rows-[minmax(210px,auto)] gap-4 lg:grid-cols-4">
+              {WORKFLOWS.map((workflow) => (
+                <article
+                  className={`group relative overflow-hidden rounded-[28px] border border-hairline bg-warm-white p-6 transition duration-300 hover:-translate-y-1 hover:border-gold/40 hover:shadow-[0_24px_60px_rgba(8,64,58,0.08)] ${workflow.className}`}
+                  key={workflow.title}
+                >
+                  <div className="absolute right-5 top-5 h-12 w-12 rounded-full border border-gold/20 bg-white/70 transition group-hover:scale-110" />
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold">{workflow.eyebrow}</p>
+                  <h3 className="mt-4 max-w-md text-2xl font-semibold tracking-tight text-forest-deep">
+                    {workflow.title}
+                  </h3>
+                  <p className="mt-3 max-w-lg text-sm leading-6 text-muted">{workflow.description}</p>
+                  <div className="mt-8 flex flex-wrap gap-2">
+                    {workflow.items.map((item) => (
+                      <span className="rounded-full border border-hairline bg-white px-3 py-1.5 text-xs font-medium text-forest" key={item}>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="relative overflow-hidden bg-forest-deep px-5 py-20 text-white sm:px-8 sm:py-28">
+          <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full border border-gold/10" />
+          <div className="absolute -right-6 top-14 h-48 w-48 rounded-full border border-gold/10" />
+
+          <div className="mx-auto grid max-w-[1400px] gap-12 lg:grid-cols-[0.72fr_1.28fr] lg:items-center">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold-soft">NESAFRIC WORKSPACE</p>
+              <h2 className="mt-5 max-w-xl text-4xl font-semibold leading-[1.03] tracking-[-0.035em] sm:text-5xl">
+                A real operating view, not another marketing graphic.
+              </h2>
+              <p className="mt-6 max-w-xl text-base leading-7 text-white/68">
+                See property performance, occupancy, collections and operational work in one clear workspace.
+                The interface below is an illustrative NesAfric product view.
+              </p>
+              <Link className="mt-8 inline-flex items-center text-sm font-semibold text-gold-soft" href="/register">
+                Open your workspace <span className="ml-2" aria-hidden="true">→</span>
+              </Link>
+            </div>
+
+            <div className="relative rounded-[30px] border border-white/10 bg-[#0b1918] p-3 shadow-[0_35px_100px_rgba(0,0,0,0.35)] sm:p-5">
+              <div className="rounded-[24px] border border-white/10 bg-[#102321] p-5 sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold-soft">Illustrative workspace</p>
+                    <h3 className="mt-2 text-xl font-semibold">Portfolio overview</h3>
+                  </div>
+                  <span className="rounded-full border border-emerald/30 bg-emerald/10 px-3 py-1.5 text-xs font-medium text-emerald-200">
+                    Operations connected
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  {[
+                    ["24", "Total units", "Across active properties"],
+                    ["21", "Occupied", "Healthy occupancy"],
+                    ["3", "Available", "Ready for leasing"],
+                  ].map(([value, label, detail]) => (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4" key={label}>
+                      <p className="text-3xl font-semibold tracking-tight">{value}</p>
+                      <p className="mt-2 text-sm font-semibold">{label}</p>
+                      <p className="mt-1 text-xs text-white/45">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Rent collection</p>
+                        <p className="mt-1 text-xs text-white/45">Current month progress</p>
+                      </div>
+                      <p className="text-2xl font-semibold text-gold-soft">92%</p>
+                    </div>
+                    <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/10">
+                      <div className="h-full w-[92%] rounded-full bg-gold" />
+                    </div>
+                    <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
+                      <div><p className="text-white/40">Collected</p><p className="mt-1 font-semibold">On track</p></div>
+                      <div><p className="text-white/40">Due soon</p><p className="mt-1 font-semibold">3 tenants</p></div>
+                      <div><p className="text-white/40">Overdue</p><p className="mt-1 font-semibold">Needs action</p></div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                    <p className="text-sm font-semibold">Operational queue</p>
+                    <div className="mt-4 space-y-3">
+                      {[
+                        ["Lease renewal", "Review"],
+                        ["Maintenance request", "Assigned"],
+                        ["New enquiry", "Respond"],
+                      ].map(([label, state]) => (
+                        <div className="flex items-center justify-between rounded-xl border border-white/[0.08] bg-black/10 px-3 py-3" key={label}>
+                          <span className="text-xs text-white/72">{label}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-gold-soft">{state}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-warm-white px-5 py-20 sm:px-8 sm:py-28">
+          <div className="mx-auto max-w-[1400px]">
+            <div className="max-w-3xl">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">BUILT AROUND REAL WORK</p>
+              <h2 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-[-0.035em] text-forest-deep sm:text-5xl">
+                Built around how African real estate actually works.
+              </h2>
+              <p className="mt-6 max-w-2xl text-base leading-7 text-muted">
+                Local operations, property records, payments, tenant communication, service professionals and marketplace discovery — connected in one system that can grow with your business.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              {["Property records", "Rent & payments", "Tenant communication", "Service professionals", "Marketplace discovery"].map((item, index) => (
+                <div className="rounded-2xl border border-hairline bg-white p-5" key={item}>
+                  <span className="text-xs font-semibold text-gold">0{index + 1}</span>
+                  <p className="mt-7 text-sm font-semibold leading-6 text-forest-deep">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white px-5 py-20 sm:px-8 sm:py-28">
+          <div className="mx-auto max-w-[1400px]">
+            <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">BUILT FOR THE ECOSYSTEM</p>
+                <h2 className="mt-5 max-w-2xl text-4xl font-semibold leading-[1.04] tracking-[-0.035em] text-forest-deep sm:text-5xl">
+                  One platform. Different roles. Shared momentum.
+                </h2>
+              </div>
+              <p className="max-w-xl text-base leading-7 text-muted">
+                Start from the part of the property ecosystem you operate in today and expand as your needs grow.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-4 lg:grid-cols-3">
+              {AUDIENCES.map(([title, description, href], index) => (
+                <Link
+                  className="group rounded-[26px] border border-hairline bg-warm-white p-7 transition hover:-translate-y-1 hover:border-gold/40 hover:shadow-[0_22px_60px_rgba(8,64,58,0.08)]"
+                  href={href}
+                  key={title}
+                >
+                  <div className="flex items-start justify-between gap-6">
+                    <span className="text-xs font-semibold text-gold">0{index + 1}</span>
+                    <span className="text-2xl text-forest transition group-hover:translate-x-1" aria-hidden="true">→</span>
+                  </div>
+                  <h3 className="mt-12 text-2xl font-semibold text-forest-deep">{title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-muted">{description}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-forest-deep px-5 py-20 text-white sm:px-8 sm:py-24">
+          <div className="mx-auto flex max-w-[1400px] flex-col gap-8 rounded-[30px] border border-white/10 bg-white/[0.04] p-8 sm:p-12 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold-soft">READY WHEN YOU ARE</p>
+              <h2 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
+                Put your property business on one operating system.
+              </h2>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/65">
+                Bring your properties, people, payments and opportunities into a clearer way of working.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Link className="rounded-xl bg-gold px-6 py-3.5 text-sm font-semibold text-forest-deep transition hover:bg-gold-soft" href="/register">
+                Get started →
+              </Link>
+              <Link className="rounded-xl border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10" href="/marketplace/properties">
+                Explore properties
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <SiteFooter />
+    </>
+  );
 }
