@@ -32,6 +32,7 @@ const NAV_LINKS: NavItem[] = [
   { href: "/leases", label: "Leases", icon: "leases" },
   { href: "/leasing", label: "Leasing CRM", icon: "leasing" },
   { href: "/payments", label: "Payments", icon: "payments" },
+  { href: "/recurring-charges", label: "Recurring charges", icon: "payments" },
   { href: "/maintenance", label: "Maintenance", icon: "maintenance" },
   { href: "/providers", label: "Providers", icon: "providers" },
   { href: "/listings", label: "Listings", icon: "listings" },
