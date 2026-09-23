@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { BrandLogo } from "@/components/brand-logo";
@@ -43,6 +43,7 @@ const NAV_LINKS: NavItem[] = [
 ];
 
 const SETTINGS_LINKS = [
+  { href: "/settings", label: "Profile & account" },
   { href: "/settings/billing", label: "Billing" },
   { href: "/settings/communications", label: "Communications" },
   { href: "/settings/integrations", label: "Integrations" },
@@ -60,19 +61,6 @@ function isActive(pathname: string, href: string) {
   return href === "/dashboard"
     ? pathname === href
     : pathname === href || pathname.startsWith(`${href}/`);
-}
-
-async function signOut(router: ReturnType<typeof useRouter>) {
-  await fetch("/api/auth/logout", { method: "POST" });
-
-  try {
-    window.localStorage.removeItem("propertyos.activeOrganisationId");
-  } catch {
-    // Best-effort only; unavailable localStorage must never block sign-out.
-  }
-
-  router.push("/login");
-  router.refresh();
 }
 
 function NavIcon({ name }: { name: NavItem["icon"] }) {
@@ -213,7 +201,6 @@ function AppSidebar({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const inSettings = pathname.startsWith("/settings");
 
   return (
@@ -280,7 +267,7 @@ function AppSidebar({
                 ? "bg-teal/20 text-white ring-1 ring-inset ring-teal/25"
                 : "text-white/72 hover:bg-white/[0.07] hover:text-white"
             }`}
-            href="/settings/billing"
+            href="/settings"
             onClick={onNavigate}
           >
             <span className={inSettings ? "text-teal-light" : "text-white/55"}>
@@ -300,13 +287,6 @@ function AppSidebar({
           Marketplace workspace
         </Link>
 
-        <button
-          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
-          onClick={() => void signOut(router)}
-          type="button"
-        >
-          Sign out
-        </button>
       </div>
     </aside>
   );
@@ -339,7 +319,7 @@ function MobileTopbar({ onMenu }: { onMenu: () => void }) {
       <Link
         aria-label="Settings"
         className="flex h-10 w-10 items-center justify-center rounded-lg border border-hairline bg-white text-forest"
-        href="/settings/billing"
+        href="/settings"
       >
         <SettingsIcon />
       </Link>
