@@ -47,19 +47,19 @@ export function WorkspaceSwitcher({ current }: { current: { kind: "propertyos" |
   }, []);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative w-full min-w-0" ref={ref}>
       <button
-        className="flex items-center gap-1.5 rounded-xl border border-hairline bg-white/5 px-3 py-2 text-sm font-medium text-white/80 transition hover:border-teal-light hover:bg-white/10 hover:text-white"
+        className="flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-hairline bg-white/5 px-3 py-2.5 text-sm font-medium text-white/80 transition hover:border-teal-light hover:bg-white/10 hover:text-white"
         onClick={() => setOpen((value) => !value)}
         type="button"
       >
         <span className={`h-1.5 w-1.5 rounded-full ${current.kind === "propertyos" ? "bg-teal-light" : "bg-gold"}`} />
-        {current.label}
-        <span className="text-white/50">▾</span>
+        <span className="min-w-0 flex-1 truncate text-left">{current.label}</span>
+        <span className="shrink-0 text-white/50">▾</span>
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-hairline bg-white p-2 shadow-xl">
-          <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-teal">NesAfric management organisations</p>
+        <div className="absolute left-0 right-0 z-50 mt-2 max-h-[min(60vh,420px)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-2xl border border-hairline bg-white p-2 shadow-xl">
+          <p className="break-words px-2 py-1.5 text-[10px] font-semibold uppercase leading-4 tracking-[0.12em] text-teal">NesAfric management organisations</p>
           {!workspaces ? (
             <p className="px-2 py-2 text-sm text-muted">Loading…</p>
           ) : workspaces.propertyOsOrganisations.length === 0 ? (
@@ -70,27 +70,27 @@ export function WorkspaceSwitcher({ current }: { current: { kind: "propertyos" |
           ) : (
             workspaces.propertyOsOrganisations.map((org) => (
               <button
-                className="block w-full rounded-xl px-2 py-2 text-left text-sm text-forest transition hover:bg-cream"
+                className="block w-full min-w-0 rounded-xl px-2.5 py-2 text-left text-sm text-forest transition hover:bg-cream"
                 key={org.id}
                 onClick={() => selectOrganisation(org.id)}
                 type="button"
               >
-                {org.name}
+                <span className="block truncate">{org.name}</span>
               </button>
             ))
           )}
 
-          <p className="mt-2 border-t border-hairline px-2 pb-1 pt-2.5 text-xs font-semibold uppercase tracking-wide text-gold">Marketplace Professional profiles</p>
+          <p className="mt-2 break-words border-t border-hairline px-2 pb-1 pt-2.5 text-[10px] font-semibold uppercase leading-4 tracking-[0.12em] text-gold">Marketplace Professional profiles</p>
           {!workspaces ? (
             <p className="px-2 py-2 text-sm text-muted">Loading…</p>
           ) : workspaces.marketplaceProfessionals.length === 0 ? (
-            <Link className="block rounded-xl px-2 py-2 text-sm font-medium text-teal hover:bg-cream" href="/pro/new" onClick={() => setOpen(false)}>
+            <Link className="block min-w-0 rounded-xl px-2.5 py-2 text-sm font-medium leading-5 text-teal hover:bg-cream" href="/pro/new" onClick={() => setOpen(false)}>
               + Create a marketplace profile
             </Link>
           ) : (
             workspaces.marketplaceProfessionals.map((professional) => (
-              <Link className="block rounded-xl px-2 py-2 text-sm text-forest hover:bg-cream" href={`/pro/${professional.id}`} key={professional.id} onClick={() => setOpen(false)}>
-                {professional.displayName}
+              <Link className="block min-w-0 rounded-xl px-2.5 py-2 text-sm text-forest hover:bg-cream" href={`/pro/${professional.id}`} key={professional.id} onClick={() => setOpen(false)}>
+                <span className="block truncate">{professional.displayName}</span>
               </Link>
             ))
           )}
