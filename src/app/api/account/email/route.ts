@@ -28,9 +28,14 @@ export async function PATCH(request: Request) {
       throw new AppError("EMAIL_EXISTS", 409, "An account with this email already exists.");
     }
 
+    const emailChanged = email !== user.email.toLowerCase();
+
     const updated = await db.user.update({
       where: { id: user.id },
-      data: { email },
+      data: {
+        email,
+        ...(emailChanged ? { emailVerifiedAt: null } : {}),
+      },
       select: { id: true, email: true, displayName: true },
     });
 
