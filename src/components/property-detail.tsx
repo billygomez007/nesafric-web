@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { PropertyUnitForm } from "@/components/property-unit-form";
 import { ScopedMaintenanceHistory } from "@/components/scoped-maintenance-history";
 
@@ -89,7 +89,7 @@ function ActionLink({
   primary = false,
 }: {
   href: string;
-  children: React.ReactNode;
+  children: ReactNode;
   primary?: boolean;
 }) {
   return (
