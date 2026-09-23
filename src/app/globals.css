@@ -54,6 +54,20 @@
   --color-danger: #dc2626;
   --color-info: #2563eb;
 
+  /* Premium product system */
+  --radius-control: 8px;
+  --radius-field: 10px;
+  --radius-panel: 14px;
+  --radius-shell: 18px;
+  --shadow-float: 0 18px 50px rgba(16, 45, 42, 0.12);
+  --shadow-popover: 0 12px 32px rgba(16, 45, 42, 0.10);
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --ease-product: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --content-wide: 1480px;
+  --content-medium: 1120px;
+  --content-narrow: 760px;
+
   color-scheme: light;
 }
 
@@ -154,4 +168,20 @@ body {
   .nesafric-logo-marquee:hover {
     animation-play-state: paused;
   }
+}
+
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-teal) 68%, white);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-teal) 18%, white);
+  color: var(--color-forest-deep);
+}
+
+.product-transition {
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-product);
 }
