@@ -192,8 +192,8 @@ export function DashboardContent() {
 
   if (noOrganisation) {
     return (
-      <div className="rounded-[28px] border border-hairline bg-white p-10 text-center shadow-sm">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-teal/10 text-teal">
+      <div className="border-y border-hairline bg-white px-6 py-12 text-center sm:px-10">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[10px] bg-teal/8 text-teal">
           <DashboardIcon name="building" />
         </div>
         <h2 className="mt-5 text-xl font-semibold text-ink">
@@ -226,7 +226,7 @@ export function DashboardContent() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((item) => (
           <div
-            className="h-40 animate-pulse rounded-[22px] border border-hairline bg-white"
+            className="h-36 animate-pulse border-t border-hairline bg-white/70"
             key={item}
           />
         ))}
@@ -247,10 +247,7 @@ export function DashboardContent() {
 
   return (
     <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-[30px] bg-forest-deep px-6 py-7 text-white shadow-[0_22px_60px_rgba(16,45,42,0.16)] sm:px-8 sm:py-8">
-        <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-teal/15 blur-3xl" />
-        <div className="absolute -bottom-24 right-28 h-56 w-56 rounded-full bg-gold/10 blur-3xl" />
-
+      <section className="relative overflow-hidden rounded-[18px] border border-white/8 bg-forest-deep px-6 py-7 text-white sm:px-8 sm:py-8">
         <div className="relative grid gap-7 xl:grid-cols-[1.2fr_0.8fr] xl:items-end">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-teal-light">
@@ -287,7 +284,7 @@ export function DashboardContent() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur">
+            <div className="rounded-[12px] border border-white/10 bg-white/[0.045] p-4">
               <p className="text-[11px] uppercase tracking-[0.12em] text-white/45">
                 Collection rate
               </p>
@@ -297,7 +294,7 @@ export function DashboardContent() {
               <ProgressBar className="mt-3 bg-white/10" value={collectionRate} />
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur">
+            <div className="rounded-[12px] border border-white/10 bg-white/[0.045] p-4">
               <p className="text-[11px] uppercase tracking-[0.12em] text-white/45">
                 Outstanding
               </p>
@@ -316,7 +313,7 @@ export function DashboardContent() {
       </section>
 
       {billing && READ_ONLY_STATUSES.has(billing.status) && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           Your subscription is {billing.status.toLowerCase()}. Existing data is
           available, but new changes are restricted.{" "}
           <Link className="font-semibold underline" href="/settings/billing">
@@ -326,7 +323,7 @@ export function DashboardContent() {
       )}
 
       {reachedFeatures.length > 0 && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Plan limit reached for{" "}
           {reachedFeatures.map((feature) => feature.label).join(", ")}.{" "}
           <Link className="font-semibold underline" href="/settings/billing">
@@ -336,7 +333,7 @@ export function DashboardContent() {
       )}
 
       {reachedFeatures.length === 0 && approachingFeatures.length > 0 && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           You are approaching the limit for{" "}
           {approachingFeatures.map((feature) => feature.label).join(", ")}.
         </div>
@@ -346,7 +343,7 @@ export function DashboardContent() {
         <div className="grid gap-2">
           {opportunities.slice(0, 3).map((opportunity) => (
             <Link
-              className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+              className={`rounded-[10px] border px-4 py-3 text-sm font-medium ${
                 opportunity.tone === "upgrade"
                   ? "border-gold/25 bg-gold/10 text-forest"
                   : "border-teal/15 bg-teal/5 text-forest"
@@ -433,7 +430,7 @@ export function DashboardContent() {
             <ProgressBar className="mt-5" value={collectionRate} />
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-surface p-4">
+              <div className="rounded-[10px] bg-surface p-4">
                 <p className="text-[11px] text-muted">Expected</p>
                 <p className="mt-1 text-sm font-semibold text-ink">
                   {money(
@@ -442,7 +439,7 @@ export function DashboardContent() {
                   )}
                 </p>
               </div>
-              <div className="rounded-2xl bg-teal/5 p-4">
+              <div className="rounded-[10px] bg-teal/5 p-4">
                 <p className="text-[11px] text-muted">Collected</p>
                 <p className="mt-1 text-sm font-semibold text-ink">
                   {money(
@@ -451,7 +448,7 @@ export function DashboardContent() {
                   )}
                 </p>
               </div>
-              <div className="rounded-2xl bg-gold/10 p-4">
+              <div className="rounded-[10px] bg-gold/10 p-4">
                 <p className="text-[11px] text-muted">Outstanding</p>
                 <p className="mt-1 text-sm font-semibold text-ink">
                   {money(
@@ -553,7 +550,7 @@ export function DashboardContent() {
                 key={property.id}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal/10 text-teal">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-[9px] bg-teal/10 text-teal">
                     <DashboardIcon name="building" />
                   </div>
                   <div>
@@ -595,7 +592,7 @@ export function DashboardContent() {
         >
           <div className="space-y-3 p-5 sm:p-6">
             <Link
-              className="flex items-center justify-between rounded-2xl bg-surface p-4 transition hover:bg-cream"
+              className="flex items-center justify-between rounded-[10px] bg-surface p-4 transition hover:bg-cream"
               href="/maintenance"
             >
               <div>
@@ -610,7 +607,7 @@ export function DashboardContent() {
             </Link>
 
             <Link
-              className="flex items-center justify-between rounded-2xl bg-surface p-4 transition hover:bg-cream"
+              className="flex items-center justify-between rounded-[10px] bg-surface p-4 transition hover:bg-cream"
               href="/team"
             >
               <div>
@@ -623,7 +620,7 @@ export function DashboardContent() {
             </Link>
 
             <Link
-              className="flex items-center justify-between rounded-2xl bg-forest p-4 text-white"
+              className="flex items-center justify-between rounded-[10px] bg-forest p-4 text-white"
               href="/ai"
             >
               <div>
@@ -646,7 +643,7 @@ export function DashboardContent() {
           <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
             {onboarding.steps.map((step) => (
               <div
-                className="flex items-center gap-3 rounded-2xl bg-surface p-4"
+                className="flex items-center gap-3 rounded-[10px] bg-surface p-4"
                 key={step.key}
               >
                 <span
