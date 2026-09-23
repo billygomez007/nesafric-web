@@ -49,8 +49,8 @@ describe("shared theme tokens (regression guard for the platform-wide contrast f
   });
 
   it("defines a single, permanent light foreground/background pair", () => {
-    expect(globalsCss).toMatch(/--background:\s*#ffffff/);
-    expect(globalsCss).toMatch(/--foreground:\s*#171717/);
+    expect(globalsCss).toMatch(/--background:\s*#fcfbf8/);
+    expect(globalsCss).toMatch(/--foreground:\s*#102d2a/);
   });
 });
 

@@ -282,7 +282,7 @@ export default function InvitationAcceptPage() {
             {preview.organisationName}
           </h1>
 
-          <p className="mt-3 text-sm leading-6 text-slate-300">
+          <p className="mt-3 text-sm leading-6 text-slate-600">
             {preview.inviterName} invited you
             to collaborate in their NesAfric
             property workspace.
@@ -357,7 +357,7 @@ export default function InvitationAcceptPage() {
               onClick={() =>
                 void acceptInvitation()
               }
-              className="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed"
             >
               {accepting
                 ? "Accepting invitation…"

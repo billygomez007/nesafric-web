@@ -1032,7 +1032,7 @@ export function RecurringChargeWorkspace() {
 
           <div className="flex justify-end border-t border-hairline px-5 py-4 sm:px-6">
             <button
-              className="rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white"
               disabled={busy}
               type="submit"
             >
@@ -1290,7 +1290,7 @@ export function RecurringChargeWorkspace() {
 
           <div className="flex justify-end border-t border-hairline px-5 py-4">
             <button
-              className="rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white"
               disabled={busy}
               type="submit"
             >
