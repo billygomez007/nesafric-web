@@ -11,28 +11,26 @@ export function HeroSection() {
             Built for African real estate
           </div>
 
-          <h1 className="mt-5 text-[clamp(3rem,4.7vw,4.95rem)] font-semibold leading-[0.94] tracking-[-0.055em] text-forest-deep">
-            Run property.
+          <h1 className="mt-5 max-w-[700px] text-[clamp(3rem,4.7vw,5rem)] font-semibold leading-[0.94] tracking-[-0.055em] text-forest-deep">
+            Everything your
             <br />
-            Move money.
-            <br />
-            <span className="text-emerald">Grow with clarity.</span>
+            <span className="text-emerald">real estate business needs.</span>
           </h1>
 
-          <p className="mt-5 max-w-[560px] text-base leading-7 text-muted sm:text-[17px]">
-            The operating system for African real estate. Manage properties, collect rent,
-            serve tenants, coordinate maintenance and find opportunities from one connected platform.
+          <p className="mt-5 max-w-[585px] text-base leading-7 text-muted sm:text-[17px]">
+            Manage property, collect rent, serve tenants, close opportunities and coordinate
+            operations from one connected real estate platform.
           </p>
 
           <div className="mt-7 flex flex-wrap gap-3">
             <Link
-              className="rounded-xl bg-forest px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-forest/15 transition hover:-translate-y-0.5 hover:bg-emerald"
+              className="rounded-lg bg-forest px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-emerald"
               href="/register"
             >
-              Start managing <span aria-hidden="true">→</span>
+              Start with NesAfric <span aria-hidden="true">→</span>
             </Link>
             <Link
-              className="rounded-xl border border-forest/30 bg-white/70 px-6 py-3.5 text-sm font-semibold text-forest transition hover:border-gold/60 hover:bg-white"
+              className="rounded-lg border border-forest/20 bg-transparent px-6 py-3.5 text-sm font-semibold text-forest transition-colors hover:border-forest/40 hover:bg-white/60"
               href="/marketplace/properties"
             >
               Explore marketplace
