@@ -1,4 +1,18 @@
-/** Official five-part NesAfric identity supplied September 2026. */
+/**
+ * Single source of truth for customer-facing brand identity: name, domain, logo assets, contact
+ * details, and transactional-email sender identities.
+ */
+
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://nesafric.com").replace(/\/$/, "");
+
+export const BRAND = {
+  name: "NesAfric",
+  tagline: "The Operating System for Real Estate",
+  domain: "nesafric.com",
+  siteUrl: SITE_URL,
+
+  logo: {
+    /** Official five-part NesAfric identity supplied September 2026. */
     onLight: "/brand/nesafric-official-logo.png",
     onDark: "/brand/nesafric-official-logo.png",
     square: "/brand/nesafric-official-mark.png",
