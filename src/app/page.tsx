@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { HeroSection } from "@/components/marketing/hero-section";
+import { CompanyLogoMarquee } from "@/components/marketing/company-logo-marquee";
 import { BRAND } from "@/platform/brand";
 
 const WORKFLOWS = [
@@ -69,21 +70,7 @@ export default function Home() {
       <main>
         <HeroSection />
 
-        <section className="border-y border-hairline bg-white">
-          <div className="mx-auto grid max-w-[1400px] gap-px bg-hairline sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Property management", "One connected workspace"],
-              ["Payments", "Track money with clarity"],
-              ["Marketplace", "Real opportunities"],
-              ["Professionals", "A connected service ecosystem"],
-            ].map(([title, description]) => (
-              <div className="bg-white px-5 py-6 sm:px-8" key={title}>
-                <p className="text-sm font-semibold text-forest-deep">{title}</p>
-                <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        <CompanyLogoMarquee />
 
         <section className="bg-white px-5 py-20 sm:px-8 sm:py-28" id="product">
           <div className="mx-auto max-w-[1400px]">
