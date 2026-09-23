@@ -1,36 +1,10 @@
-/**
- * Single source of truth for customer-facing brand identity: name, domain, logo assets, contact
- * details, and transactional-email sender identities. Centralized so the brand migration touches
- * one file instead of scattering literals across every page/component/email template.
- */
-
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://nesafric.com").replace(/\/$/, "");
-
-export const BRAND = {
-  name: "NesAfric",
-  tagline: "Real Estate OS for Africa",
-  domain: "nesafric.com",
-  siteUrl: SITE_URL,
-
-  logo: {
-    /**
-     * Relative paths — used directly in on-site `<img>`/`next/image` tags. Email HTML needs
-     * absolute, publicly-fetchable URLs instead: wrap these in `absoluteUrl()` when building
-     * an email template.
-     *
-     * Both variants are the same artwork (navy symbol + turquoise "o"), rendered on a fully
-     * transparent background — `onDark` has the navy ink recolored to white so it reads on
-     * dark surfaces. Both share identical dimensions.
-     */
-    /** For light surfaces (marketing pages, auth, light app shells): navy symbol + turquoise "o". */
-    onLight: "/brand/nesafric-wordmark.png",
-    /** For dark surfaces (navy header/footer, dark hero sections): white symbol + turquoise "o". */
-    onDark: "/brand/nesafric-wordmark.png",
-    /** Square white-rounded mark, source for favicon/apple-touch-icon/social. */
-    square: "/brand/umo-afric-mark-square.png",
-    og: "/brand/nesafric-wordmark.png",
-    width: 2172,
-    height: 724,
+/** Official five-part NesAfric identity supplied September 2026. */
+    onLight: "/brand/nesafric-official-logo.png",
+    onDark: "/brand/nesafric-official-logo.png",
+    square: "/brand/nesafric-official-mark.png",
+    og: "/brand/nesafric-official-logo.png",
+    width: 2048,
+    height: 682,
   },
 
   contact: {
