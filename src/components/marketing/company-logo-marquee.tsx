@@ -25,7 +25,7 @@ function LogoStrip() {
 export function CompanyLogoMarquee() {
   return (
     <section className="border-y border-hairline bg-white" aria-label="Companies on NesAfric">
-      <div className="mx-auto grid max-w-[1400px] items-center gap-4 px-5 py-2.5 sm:px-8 lg:grid-cols-[220px_1fr]">
+      <div className="mx-auto grid max-w-[1400px] items-center gap-4 px-5 py-1.5 sm:px-8 lg:grid-cols-[220px_1fr]">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.19em] text-gold">ON THE PLATFORM</p>
           <p className="mt-1 text-sm font-semibold text-forest-deep">Companies building with NesAfric</p>
