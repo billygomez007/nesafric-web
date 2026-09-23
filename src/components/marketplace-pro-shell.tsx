@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
@@ -13,7 +13,8 @@ type ProIcon =
   | "developments"
   | "team"
   | "promotions"
-  | "voice";
+  | "voice"
+  | "settings";
 
 function Icon({ name }: { name: ProIcon }) {
   const paths: Record<ProIcon, ReactNode> = {
@@ -63,6 +64,12 @@ function Icon({ name }: { name: ProIcon }) {
         <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
       </>
     ),
+    settings: (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" />
+      </>
+    ),
   };
 
   return (
@@ -103,14 +110,12 @@ function ProfessionalSidebar({
   pathname,
   mobile = false,
   onNavigate,
-  onSignOut,
 }: {
   base: string;
   links: ProLink[];
   pathname: string;
   mobile?: boolean;
   onNavigate: () => void;
-  onSignOut: () => void;
 }) {
   return (
     <aside
@@ -171,6 +176,27 @@ function ProfessionalSidebar({
             );
           })}
         </div>
+
+        <div className="mt-6 border-t border-white/10 pt-4">
+          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
+            Account
+          </p>
+
+          <Link
+            className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium transition ${
+              pathname === `${base}/settings`
+                ? "bg-teal/20 text-white ring-1 ring-inset ring-teal/25"
+                : "text-white/70 hover:bg-white/[0.07] hover:text-white"
+            }`}
+            href={`${base}/settings`}
+            onClick={onNavigate}
+          >
+            <span className={pathname === `${base}/settings` ? "text-teal-light" : "text-white/50"}>
+              <Icon name="settings" />
+            </span>
+            Settings
+          </Link>
+        </div>
       </nav>
 
       <div className="border-t border-white/10 p-4">
@@ -182,13 +208,6 @@ function ProfessionalSidebar({
           Property management
         </Link>
 
-        <button
-          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-white/55 hover:bg-white/[0.06] hover:text-white"
-          onClick={onSignOut}
-          type="button"
-        >
-          Sign out
-        </button>
       </div>
     </aside>
   );
@@ -202,7 +221,6 @@ export function MarketplaceProShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const base = `/pro/${professionalId}`;
 
@@ -224,20 +242,6 @@ export function MarketplaceProShell({
     { href: `${base}/voice`, label: "Voice", icon: "voice" },
   ];
 
-  async function signOut() {
-    await fetch("/api/auth/logout", { method: "POST" });
-
-    try {
-      localStorage.removeItem("nesafric.activeMarketplaceProfessionalId");
-      localStorage.removeItem("propertyos.activeOrganisationId");
-    } catch {
-      // Best effort only.
-    }
-
-    router.push("/login");
-    router.refresh();
-  }
-
   return (
     <div className="min-h-screen bg-warm-white text-ink">
       <ProfessionalSidebar
@@ -245,7 +249,6 @@ export function MarketplaceProShell({
         links={links}
         pathname={pathname}
         onNavigate={() => setMobileOpen(false)}
-        onSignOut={() => void signOut()}
       />
 
       {mobileOpen && (
@@ -264,7 +267,6 @@ export function MarketplaceProShell({
               mobile
               pathname={pathname}
               onNavigate={() => setMobileOpen(false)}
-              onSignOut={() => void signOut()}
             />
           </div>
         </div>
