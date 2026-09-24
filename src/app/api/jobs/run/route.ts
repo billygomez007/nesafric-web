@@ -11,14 +11,36 @@ function safeEqual(expected: string, actual: string) {
 }
 
 function assertAuthorized(request: Request) {
-  const configuredSecret = process.env.JOBS_RUN_SECRET?.trim();
-  if (!configuredSecret) return;
-  // Accept the secret via either convention: a custom header for manual/curl/GitHub-Actions-style
-  // callers, or `Authorization: Bearer` for Vercel Cron, which always sends that header and cannot
-  // be configured to send a custom one. Both check the exact same `JOBS_RUN_SECRET` value.
+  const jobsRunSecret = process.env.JOBS_RUN_SECRET?.trim();
+  const cronSecret = process.env.CRON_SECRET?.trim();
+
+  if (!jobsRunSecret && !cronSecret) return;
+
+  const customSecret = request.headers.get("x-jobs-run-secret");
   const authHeader = request.headers.get("authorization");
-  const provided = request.headers.get("x-jobs-run-secret") ?? (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
-  if (!provided || !safeEqual(configuredSecret, provided)) throw new AppError("JOBS_RUN_UNAUTHORIZED", 401, "Invalid jobs-run secret.");
+  const bearerSecret = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+
+  const validCustomSecret =
+    Boolean(jobsRunSecret && customSecret) &&
+    safeEqual(jobsRunSecret!, customSecret!);
+
+  const validCronSecret =
+    Boolean(cronSecret && bearerSecret) &&
+    safeEqual(cronSecret!, bearerSecret!);
+
+  const validJobsBearer =
+    Boolean(jobsRunSecret && bearerSecret) &&
+    safeEqual(jobsRunSecret!, bearerSecret!);
+
+  if (!validCustomSecret && !validCronSecret && !validJobsBearer) {
+    throw new AppError(
+      "JOBS_RUN_UNAUTHORIZED",
+      401,
+      "Invalid jobs-run secret.",
+    );
+  }
 }
 
 /**
