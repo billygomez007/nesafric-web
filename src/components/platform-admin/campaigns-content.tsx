@@ -23,6 +23,28 @@ const PLACEMENT_LABELS: Record<string, string> = {
 };
 const PLACEMENTS = Object.keys(PLACEMENT_LABELS);
 
+const PLACEMENT_DESCRIPTIONS: Record<string, string> = {
+  HOMEPAGE_ANNOUNCEMENT: "Thin NesAfric-owned announcement bar on the corporate homepage. Text only — no promotional image is used.",
+  MARKETPLACE_INLINE: "Premium carousel placement at the top of the Property Marketplace.",
+  MARKETPLACE_PRIMARY: "Promotional carousel inside the Property Services Marketplace.",
+  PROFESSIONAL_FEATURED: "Featured placement for real estate professionals and companies.",
+  DEVELOPMENT_FEATURED: "Featured placement for property developments.",
+  SEARCH_FEATURED: "Promoted placement within relevant marketplace search results.",
+};
+
+const CTA_PRESETS = [
+  "Explore Properties",
+  "View Property",
+  "View Development",
+  "View Company",
+  "View Professional",
+  "Explore Services",
+  "Learn More",
+  "Contact",
+  "Book Now",
+  "Get Started",
+];
+
 const TYPE_LABELS: Record<string, string> = {
   PROPERTY: "Property",
   DEVELOPMENT: "Development",
@@ -120,6 +142,26 @@ function CampaignPreview({
   const spec = CREATIVE_SPECS[placement];
   const dim = device === "mobile" ? (spec?.mobile ?? { width: 800, height: 500 }) : (spec?.desktop ?? { width: 1600, height: 290 });
   const mediaUrl = device === "mobile" ? (mobileMediaUrl ?? desktopMediaUrl) : desktopMediaUrl;
+
+  if (placement === "HOMEPAGE_ANNOUNCEMENT") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-hairline bg-forest text-white shadow-sm">
+        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gold">NesAfric Announcement</p>
+            <p className="mt-1 text-sm font-semibold">{headline || "Announcement headline preview"}</p>
+            {supportingText && <p className="mt-1 text-xs leading-5 text-white/70">{supportingText}</p>}
+          </div>
+          {ctaLabel && (
+            <span className="w-fit shrink-0 rounded-lg bg-gold px-3 py-2 text-xs font-semibold text-forest">
+              {ctaLabel}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-hairline bg-forest" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
       <div className="relative h-full w-full">
@@ -259,6 +301,12 @@ export function CampaignsAdminContent() {
     acc[campaign.placement] = (acc[campaign.placement] ?? 0) + 1;
     return acc;
   }, {});
+
+  const scheduledCampaigns = withDisplayStatus.filter(({ status }) => status === "SCHEDULED").length;
+  const draftCampaigns = withDisplayStatus.filter(({ status }) => status === "DRAFT").length;
+  const totalImpressions = (campaigns ?? []).reduce((total, campaign) => total + campaign.impressionCount, 0);
+  const totalClicks = (campaigns ?? []).reduce((total, campaign) => total + campaign.clickCount, 0);
+  const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
 
   function openCreatePanel() {
     clearStaged("desktop"); clearStaged("mobile");
@@ -454,30 +502,76 @@ export function CampaignsAdminContent() {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-forest">Campaigns</h1>
-          <p className="text-sm text-muted">Manage promotional content across NesAfric.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal">Marketplace growth operations</p>
+          <h1 className="mt-1 text-2xl font-semibold text-forest">Campaigns</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">Create, schedule, publish and measure NesAfric-owned promotional placements across the marketplace ecosystem.</p>
         </div>
         <button className="rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-forest transition-colors hover:bg-gold-hover" onClick={openCreatePanel} type="button">
           + Create Campaign
         </button>
       </div>
 
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Live campaigns</p>
+          <p className="mt-2 text-2xl font-semibold text-forest">{liveCampaigns.length}</p>
+          <p className="mt-1 text-xs text-muted">Currently visible publicly</p>
+        </div>
+
+        <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Scheduled</p>
+          <p className="mt-2 text-2xl font-semibold text-forest">{scheduledCampaigns}</p>
+          <p className="mt-1 text-xs text-muted">Waiting for their start window</p>
+        </div>
+
+        <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Drafts</p>
+          <p className="mt-2 text-2xl font-semibold text-forest">{draftCampaigns}</p>
+          <p className="mt-1 text-xs text-muted">Not publicly visible</p>
+        </div>
+
+        <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Impressions</p>
+          <p className="mt-2 text-2xl font-semibold text-forest">{totalImpressions.toLocaleString()}</p>
+          <p className="mt-1 text-xs text-muted">Across all campaign history</p>
+        </div>
+
+        <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Overall CTR</p>
+          <p className="mt-2 text-2xl font-semibold text-forest">{overallCtr === null ? "—" : `${overallCtr.toFixed(1)}%`}</p>
+          <p className="mt-1 text-xs text-muted">{totalClicks.toLocaleString()} total clicks</p>
+        </div>
+      </section>
+
       <section className="rounded-2xl border border-hairline bg-white p-5 shadow-card">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Currently live</p>
-        <p className="mt-1 text-2xl font-semibold text-forest">{liveCampaigns.length} campaign{liveCampaigns.length === 1 ? "" : "s"}</p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">Live placement inventory</p>
+            <h2 className="mt-1 font-semibold text-forest">What NesAfric is promoting now</h2>
+          </div>
+          <p className="text-xs text-muted">{liveCampaigns.length} active placement{liveCampaigns.length === 1 ? "" : "s"}</p>
+        </div>
+
         {liveCampaigns.length > 0 ? (
-          <ul className="mt-3 grid gap-1 text-sm text-muted sm:grid-cols-2">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {Object.entries(liveByPlacement).map(([placement, count]) => (
-              <li key={placement}>{PLACEMENT_LABELS[placement] ?? placement}: <span className="font-semibold text-forest">{count}</span></li>
+              <div className="flex items-center justify-between rounded-xl border border-hairline bg-warm-white px-3 py-3" key={placement}>
+                <span className="text-sm text-ink">{PLACEMENT_LABELS[placement] ?? placement}</span>
+                <span className="rounded-full bg-forest px-2.5 py-1 text-xs font-semibold text-white">{count}</span>
+              </div>
             ))}
-          </ul>
+          </div>
         ) : (
-          <p className="mt-2 text-sm text-muted">Nothing is currently promoted publicly.</p>
+          <div className="mt-4 rounded-xl border border-dashed border-hairline bg-warm-white p-5">
+            <p className="text-sm font-semibold text-forest">No campaigns are currently live.</p>
+            <p className="mt-1 text-xs leading-5 text-muted">Create or publish a campaign to begin using NesAfric promotional inventory.</p>
+          </div>
         )}
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
           {STATUS_TABS.map((tab) => (
             <button
               className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${statusFilter === tab.value ? "border-forest bg-forest text-white" : "border-hairline text-muted hover:border-hairline"}`}
@@ -489,13 +583,14 @@ export function CampaignsAdminContent() {
             </button>
           ))}
         </div>
-        <select className="rounded-lg border p-2 text-sm" onChange={(event) => setPlacementFilter(event.target.value)} value={placementFilter}>
-          <option value="">All placements</option>
-          {PLACEMENTS.map((placement) => <option key={placement} value={placement}>{PLACEMENT_LABELS[placement]}</option>)}
-        </select>
+          <select className="rounded-xl border border-hairline bg-white p-2 text-sm text-ink" onChange={(event) => setPlacementFilter(event.target.value)} value={placementFilter}>
+            <option value="">All placements</option>
+            {PLACEMENTS.map((placement) => <option key={placement} value={placement}>{PLACEMENT_LABELS[placement]}</option>)}
+          </select>
+        </div>
       </div>
 
-      <section className="overflow-x-auto rounded-xl border bg-white shadow-card">
+      <section className="overflow-x-auto rounded-2xl border border-hairline bg-white shadow-card">
         <table className="w-full text-left text-sm">
           <thead className="border-b bg-warm-white text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
@@ -514,11 +609,11 @@ export function CampaignsAdminContent() {
           </thead>
           <tbody className="divide-y">
             {!campaigns ? (
-              <tr><td className="px-4 py-6 text-muted" colSpan={11}>Loading…</td></tr>
+              <tr><td className="px-4 py-10 text-center text-sm text-muted" colSpan={11}>Loading campaign operations…</td></tr>
             ) : campaigns.length === 0 ? (
-              <tr><td className="px-4 py-6 text-muted" colSpan={11}>No campaigns yet. Click + Create Campaign to add one.</td></tr>
+              <tr><td className="px-4 py-12 text-center" colSpan={11}><p className="font-semibold text-forest">No campaigns yet</p><p className="mt-1 text-sm text-muted">Create the first NesAfric-owned promotion to start using campaign inventory.</p></td></tr>
             ) : visible.length === 0 ? (
-              <tr><td className="px-4 py-6 text-muted" colSpan={11}>No campaigns match this filter.</td></tr>
+              <tr><td className="px-4 py-10 text-center" colSpan={11}><p className="font-semibold text-forest">No matching campaigns</p><p className="mt-1 text-sm text-muted">Change the status or placement filter to see other campaign records.</p></td></tr>
             ) : visible.map(({ campaign, status }) => {
               const rate = ctr(campaign);
               const thumb = campaign.desktopMediaUrl ?? campaign.mobileMediaUrl;
@@ -694,21 +789,35 @@ export function CampaignsAdminContent() {
 
       {panelOpen && (
         <section className="rounded-xl border bg-white p-5 shadow-card">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">{editingId ? "Edit campaign" : "Create a NesAfric-owned campaign"}</h2>
-            <button className="text-sm font-semibold text-muted" onClick={() => setPanelOpen(false)} type="button">Close</button>
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-hairline pb-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal">NesAfric campaign operations</p>
+              <h2 className="mt-1 text-lg font-semibold text-forest">{editingId ? "Edit campaign" : "Create a NesAfric-owned campaign"}</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">Create homepage announcements and platform-curated marketplace promotions. Public placement remains controlled by NesAfric and is never a self-service publishing surface.</p>
+            </div>
+            <button className="rounded-lg border border-hairline px-3 py-2 text-sm font-semibold text-muted hover:text-forest" onClick={() => setPanelOpen(false)} type="button">Close</button>
           </div>
-          <p className="mt-1 text-sm text-muted">Homepage announcements and platform-curated marketplace placements — never a self-service submission.</p>
 
           <div className="mt-4 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-            <form className="grid gap-3 sm:grid-cols-2" onSubmit={submitPanel}>
-              <input className="rounded-xl border border-hairline p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Internal campaign name" required value={draft.name} />
+            <form className="grid gap-4 sm:grid-cols-2" onSubmit={submitPanel}>
+              <div className="sm:col-span-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">1. Campaign setup</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Define what this campaign is and where NesAfric will surface it.</p>
+              </div>
+              <label className="grid gap-1.5 text-xs font-semibold text-ink sm:col-span-2">
+                Internal campaign name
+                <input className="rounded-xl border border-hairline p-2.5 text-sm font-normal" onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="e.g. Accra Luxury Developments — October" required value={draft.name} />
+              </label>
               <select className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, type: event.target.value })} value={draft.type}>
                 {CAMPAIGN_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
               </select>
               <select className="rounded-xl border border-hairline p-2 text-sm disabled:bg-surface" disabled={!!editingId} onChange={(event) => setDraft({ ...draft, placement: event.target.value })} value={draft.placement}>
                 {PLACEMENTS.map((placement) => <option key={placement} value={placement}>{PLACEMENT_LABELS[placement]}</option>)}
               </select>
+              <div className="rounded-xl border border-hairline bg-warm-white p-3 text-xs sm:col-span-2">
+                <p className="font-semibold text-forest">{PLACEMENT_LABELS[draft.placement]}</p>
+                <p className="mt-1 leading-5 text-muted">{PLACEMENT_DESCRIPTIONS[draft.placement]}</p>
+              </div>
 
               {SERVICE_PROVIDER_TYPES.has(draft.type) && (
                 <div className="grid gap-1.5 sm:col-span-2 rounded-lg border border-dashed p-3">
@@ -737,12 +846,31 @@ export function CampaignsAdminContent() {
                 </div>
               )}
 
-              <input className="rounded-xl border border-hairline p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Headline" required value={draft.headline} />
+              <div className="mt-2 border-t border-hairline pt-4 sm:col-span-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">2. Promoted content</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Write the customer-facing message and decide where the call to action leads.</p>
+              </div>
+              <label className="grid gap-1.5 text-xs font-semibold text-ink sm:col-span-2">
+                Headline
+                <input className="rounded-xl border border-hairline p-2.5 text-sm font-normal" onChange={(event) => setDraft({ ...draft, headline: event.target.value })} placeholder="Exceptional properties. Greater possibilities." required value={draft.headline} />
+              </label>
               <input className="rounded-xl border border-hairline p-2 text-sm sm:col-span-2" onChange={(event) => setDraft({ ...draft, supportingText: event.target.value })} placeholder="Supporting text (optional)" value={draft.supportingText} />
-              <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA label (optional)" value={draft.ctaLabel} />
+              <div>
+                <input className="w-full rounded-xl border border-hairline p-2 text-sm" list="campaign-cta-presets" onChange={(event) => setDraft({ ...draft, ctaLabel: event.target.value })} placeholder="CTA label — e.g. Explore Properties" value={draft.ctaLabel} />
+                <datalist id="campaign-cta-presets">
+                  {CTA_PRESETS.map((label) => <option key={label} value={label} />)}
+                </datalist>
+              </div>
               <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, destinationUrl: event.target.value })} placeholder="https://…" required type="url" value={draft.destinationUrl} />
               {!editingId && <>
-                <input className="rounded-xl border border-hairline p-2 text-sm" min={0} onChange={(event) => setDraft({ ...draft, priority: event.target.value })} placeholder="Priority" type="number" value={draft.priority} />
+                <div className="mt-2 border-t border-hairline pt-4 sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">3. Scheduling & delivery</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">Publish immediately or choose a future campaign window. Higher priority campaigns are preferred when multiple campaigns qualify for the same placement.</p>
+                </div>
+                <label className="grid gap-1.5 text-xs font-semibold text-ink">
+                  Priority
+                  <input className="rounded-xl border border-hairline p-2.5 text-sm font-normal" min={0} max={1000} onChange={(event) => setDraft({ ...draft, priority: event.target.value })} placeholder="0" type="number" value={draft.priority} />
+                </label>
                 <div />
                 <label className="text-xs text-muted">Start (optional)<input className="mt-1 block w-full rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, startAt: event.target.value })} type="datetime-local" value={draft.startAt} /></label>
                 <label className="text-xs text-muted">End (optional)<input className="mt-1 block w-full rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, endAt: event.target.value })} type="datetime-local" value={draft.endAt} /></label>
@@ -757,7 +885,7 @@ export function CampaignsAdminContent() {
                     {saving ? "Saving…" : "Save Draft"}
                   </button>
                   <button className="flex-1 rounded bg-forest px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted" disabled={saving} name="intent" type="submit" value="publish">
-                    {saving ? "Saving…" : "Create & Publish"}
+                    {saving ? "Saving…" : draft.startAt ? "Schedule Campaign" : "Publish Now"}
                   </button>
                 </div>
               )}
@@ -766,7 +894,10 @@ export function CampaignsAdminContent() {
             <div className="grid content-start gap-4">
               <div>
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-muted">Live preview</p>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">Production preview</p>
+                    <p className="mt-0.5 text-xs text-muted">{PLACEMENT_LABELS[draft.placement]}</p>
+                  </div>
                   <div className="flex gap-1.5">
                     <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "desktop" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setDraftDevice("desktop")} type="button">Desktop</button>
                     <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "mobile" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setDraftDevice("mobile")} type="button">Mobile</button>
@@ -783,7 +914,29 @@ export function CampaignsAdminContent() {
                     supportingText={draft.supportingText}
                   />
                 </div>
-                <p className="mt-1 text-[11px] text-muted">Approximate rendering in {PLACEMENT_LABELS[draft.placement]}.</p>
+                <p className="mt-1 text-[11px] text-muted">Preview uses the production placement proportions and current campaign content.</p>
+              </div>
+
+              <div className="rounded-xl border border-hairline bg-warm-white p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Publishing summary</p>
+                <dl className="mt-3 grid gap-2 text-xs">
+                  <div className="flex items-start justify-between gap-4">
+                    <dt className="text-muted">Placement</dt>
+                    <dd className="text-right font-semibold text-forest">{PLACEMENT_LABELS[draft.placement]}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <dt className="text-muted">Starts</dt>
+                    <dd className="text-right font-semibold text-forest">{draft.startAt ? "Scheduled date & time" : "Immediately when published"}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <dt className="text-muted">Ends</dt>
+                    <dd className="text-right font-semibold text-forest">{draft.endAt ? "Scheduled date & time" : "No automatic end date"}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <dt className="text-muted">Creative</dt>
+                    <dd className="text-right font-semibold text-forest">{draftSpec ? "Responsive desktop / mobile" : "Text announcement"}</dd>
+                  </div>
+                </dl>
               </div>
 
               {draftSpec && (
@@ -795,8 +948,12 @@ export function CampaignsAdminContent() {
                 </div>
               )}
 
+              {draftSpec ? (
               <div className="grid gap-3">
-                <p className="text-xs font-semibold text-ink">Promotional creative</p>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">4. Promotional creative</p>
+                  <p className="mt-1 text-xs text-muted">Upload placement-specific artwork. Mobile creative is optional and falls back to the desktop image.</p>
+                </div>
                 {editingId ? (
                   <>
                     <ImageSlot
@@ -833,6 +990,12 @@ export function CampaignsAdminContent() {
                   </>
                 )}
               </div>
+              ) : (
+                <div className="rounded-xl border border-hairline bg-warm-white p-4">
+                  <p className="text-xs font-semibold text-forest">Homepage Announcement</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">No image is required for this placement. The public homepage renders the headline, supporting text and optional call to action as a compact NesAfric announcement bar.</p>
+                </div>
+              )}
             </div>
           </div>
         </section>
