@@ -36,6 +36,7 @@ const UPLOAD_TARGET_NAMESPACES: Record<string, string> = {
   MOVE_IN_INSPECTION_MEDIA: "move-in-inspections",
   MOVE_OUT_INSPECTION_MEDIA: "move-out-inspections",
   APPLICATION_DOCUMENT: "application-documents",
+  ORGANISATION_LOGO: "organisations/branding",
 };
 const GENERATED_DOCUMENT_TYPES = ["RECEIPT", "TENANT_STATEMENT", "MOVE_OUT_STATEMENT", "LEASE_AGREEMENT"] as const;
 
@@ -184,14 +185,36 @@ async function performUpload(params: {
   }
 }
 
-const ORG_SCOPED_TARGETS = ["LISTING_MEDIA", "MAINTENANCE_ATTACHMENT", "MOVE_IN_INSPECTION_MEDIA", "MOVE_OUT_INSPECTION_MEDIA", "APPLICATION_DOCUMENT"];
+const ORG_SCOPED_TARGETS = ["LISTING_MEDIA", "MAINTENANCE_ATTACHMENT", "MOVE_IN_INSPECTION_MEDIA", "MOVE_OUT_INSPECTION_MEDIA", "APPLICATION_DOCUMENT", "ORGANISATION_LOGO"];
 
 export async function uploadOrganisationDocument(userId: string, organisationId: string, input: unknown) {
-  const data = uploadDocumentSchema.parse(input);
+  let data = uploadDocumentSchema.parse(input);
+
   if (!ORG_SCOPED_TARGETS.includes(data.targetType)) {
     throw new AppError("INVALID_UPLOAD_TARGET", 400, "This endpoint does not accept that upload target type.");
   }
-  return performUpload({ userId, organisationId, targetType: data.targetType, input: data });
+
+  if (data.targetType === "ORGANISATION_LOGO") {
+    if (data.targetId !== organisationId) {
+      throw new AppError(
+        "INVALID_UPLOAD_TARGET",
+        400,
+        "Organisation logo target must match the active organisation.",
+      );
+    }
+
+    data = uploadDocumentSchema.parse({
+      ...data,
+      classification: "PUBLIC",
+    });
+  }
+
+  return performUpload({
+    userId,
+    organisationId,
+    targetType: data.targetType,
+    input: data,
+  });
 }
 
 export async function uploadProviderEvidenceDocument(userId: string, providerId: string, input: unknown) {
