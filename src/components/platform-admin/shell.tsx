@@ -24,8 +24,9 @@ const NAV = [
   { href: "/platform-admin/subscriptions", label: "Subscriptions" },
   { href: "/platform-admin/payments", label: "Payments & reconciliation" },
   { href: "/platform-admin/flags", label: "Feature flags" },
-  { href: "/platform-admin/health", label: "Operations" },
-  { href: "/platform-admin/audit", label: "Audit activity" },
+  { href: "/platform-admin/system", label: "System Health" },
+  { href: "/platform-admin/audit", label: "Audit Log" },
+  { href: "/platform-admin/settings", label: "Platform Settings" },
 ];
 
 function active(pathname: string, href: string) {

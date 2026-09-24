@@ -2130,3 +2130,278 @@ export async function getAIOperationsForPlatform(
 
   return result;
 }
+
+// SUPER ADMIN PHASE 5 — EXECUTIVE OVERVIEW + PLATFORM SETTINGS
+// ---------------------------------------------------------------------------
+
+export async function getPlatformOverviewDashboard(
+  principal: PlatformPrincipal,
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.analyticsRead);
+
+  const [
+    totalUsers,
+    totalOrganisations,
+    activeSubscriptions,
+    totalProperties,
+    totalUnits,
+    activeLeases,
+    publishedListings,
+    verifiedProfessionals,
+    verifiedProviders,
+    openMaintenance,
+    unresolvedAIEscalations,
+    criticalAIEscalations,
+    failedPayments,
+    pastDueSubscriptions,
+    recentAudit,
+  ] = await Promise.all([
+    db.user.count(),
+
+    // MarketplaceProfessional backing organisations are technical shells and
+    // must not inflate the PropertyOS organisation KPI.
+    db.organisation.count({
+      where: {
+        archivedAt: null,
+        marketplaceProfessional: null,
+      },
+    }),
+
+    db.organisationSubscription.count({
+      where: { status: "ACTIVE" },
+    }),
+
+    db.property.count({
+      where: { archivedAt: null },
+    }),
+
+    db.unit.count({
+      where: { archivedAt: null },
+    }),
+
+    db.lease.count({
+      where: {
+        archivedAt: null,
+        status: "ACTIVE",
+      },
+    }),
+
+    db.listing.count({
+      where: { status: "PUBLISHED" },
+    }),
+
+    db.marketplaceProfessional.count({
+      where: {
+        archivedAt: null,
+        verificationStatus: "VERIFIED",
+      },
+    }),
+
+    db.serviceProvider.count({
+      where: {
+        archivedAt: null,
+        suspendedAt: null,
+        verificationStatus: "VERIFIED",
+      },
+    }),
+
+    db.maintenanceRequest.count({
+      where: {
+        status: {
+          in: [
+            "REPORTED",
+            "TRIAGED",
+            "AWAITING_APPROVAL",
+            "APPROVED",
+            "ASSIGNED",
+            "IN_PROGRESS",
+          ],
+        },
+      },
+    }),
+
+    db.aIEscalation.count({
+      where: {
+        status: { not: "RESOLVED" },
+      },
+    }),
+
+    db.aIEscalation.count({
+      where: {
+        status: { not: "RESOLVED" },
+        activity: {
+          severity: "CRITICAL",
+        },
+      },
+    }),
+
+    db.payment.count({
+      where: { status: "FAILED" },
+    }),
+
+    db.organisationSubscription.count({
+      where: {
+        status: {
+          in: ["PAST_DUE", "GRACE_PERIOD"],
+        },
+      },
+    }),
+
+    db.platformAuditEvent.findMany({
+      select: {
+        id: true,
+        action: true,
+        entityType: true,
+        entityId: true,
+        organisationId: true,
+        createdAt: true,
+        platformPrincipal: {
+          select: {
+            role: true,
+            user: {
+              select: {
+                displayName: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+    }),
+  ]);
+
+  const result = {
+    kpis: {
+      totalUsers,
+      totalOrganisations,
+      activeSubscriptions,
+      totalProperties,
+      totalUnits,
+      activeLeases,
+      publishedListings,
+      verifiedProfessionals,
+      verifiedProviders,
+      openMaintenance,
+      unresolvedAIEscalations,
+      criticalAIEscalations,
+      failedPayments,
+      pastDueSubscriptions,
+    },
+    recentAudit,
+  };
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.overview_viewed",
+    "platform_overview",
+    "*",
+    undefined,
+    {
+      totalOrganisations,
+      totalUsers,
+    },
+  );
+
+  return result;
+}
+
+export async function getPlatformSettingsSummary(
+  principal: PlatformPrincipal,
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.orgsRead);
+
+  const [
+    featureFlags,
+    featureFlagOverrides,
+    subscriptionPlans,
+    publicSubscriptionPlans,
+    marketplacePlans,
+    publicMarketplacePlans,
+    activeCountries,
+    activeCurrencies,
+    principalStatusGroups,
+    principalRoleGroups,
+  ] = await Promise.all([
+    db.featureFlag.count(),
+    db.organisationFeatureFlagOverride.count(),
+
+    db.subscriptionPlan.count({
+      where: { isActive: true },
+    }),
+
+    db.subscriptionPlan.count({
+      where: {
+        isActive: true,
+        isPublic: true,
+      },
+    }),
+
+    db.marketplacePlan.count({
+      where: { isActive: true },
+    }),
+
+    db.marketplacePlan.count({
+      where: {
+        isActive: true,
+        isPublic: true,
+      },
+    }),
+
+    db.country.count({
+      where: { isActive: true },
+    }),
+
+    db.currency.count({
+      where: { isActive: true },
+    }),
+
+    db.platformPrincipal.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    }),
+
+    db.platformPrincipal.groupBy({
+      by: ["role"],
+      _count: { _all: true },
+    }),
+  ]);
+
+  const result = {
+    configuration: {
+      featureFlags,
+      featureFlagOverrides,
+      subscriptionPlans,
+      publicSubscriptionPlans,
+      marketplacePlans,
+      publicMarketplacePlans,
+      activeCountries,
+      activeCurrencies,
+    },
+    platformAccess: {
+      byStatus: Object.fromEntries(
+        principalStatusGroups.map((entry) => [
+          entry.status,
+          entry._count._all,
+        ]),
+      ),
+      byRole: Object.fromEntries(
+        principalRoleGroups.map((entry) => [
+          entry.role,
+          entry._count._all,
+        ]),
+      ),
+    },
+  };
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.settings_summary_viewed",
+    "platform_settings",
+    "*",
+    undefined,
+    result.configuration,
+  );
+
+  return result;
+}
