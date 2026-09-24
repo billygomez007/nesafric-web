@@ -1006,3 +1006,558 @@ export async function listPaymentReconciliationForPlatform(
 
   return events;
 }
+
+// SUPER ADMIN PHASE 3 — LISTINGS + MARKETPLACE + VERIFICATION
+// ---------------------------------------------------------------------------
+
+const PLATFORM_LISTING_STATUSES = [
+  "DRAFT",
+  "PENDING_REVIEW",
+  "PUBLISHED",
+  "PAUSED",
+  "RESERVED",
+  "RENTED",
+  "ARCHIVED",
+  "REJECTED",
+] as const;
+
+const PLATFORM_LISTING_VERIFICATION_STATUSES = [
+  "UNVERIFIED",
+  "PENDING",
+  "VERIFIED",
+  "REJECTED",
+  "SUSPENDED",
+] as const;
+
+type PlatformListingStatus =
+  (typeof PLATFORM_LISTING_STATUSES)[number];
+
+type PlatformListingVerificationStatus =
+  (typeof PLATFORM_LISTING_VERIFICATION_STATUSES)[number];
+
+type PlatformListingDirectoryQuery = {
+  search?: string;
+  status?: string;
+  verificationStatus?: string;
+  take?: number;
+};
+
+export async function listListingsForPlatform(
+  principal: PlatformPrincipal,
+  input: PlatformListingDirectoryQuery = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.listingsRead);
+
+  const search = input.search?.trim();
+  const status = parsePlatformEnum<PlatformListingStatus>(
+    input.status,
+    PLATFORM_LISTING_STATUSES,
+  );
+  const verificationStatus =
+    parsePlatformEnum<PlatformListingVerificationStatus>(
+      input.verificationStatus,
+      PLATFORM_LISTING_VERIFICATION_STATUSES,
+    );
+  const take = boundedTake(input.take, 50, 100);
+
+  const where: Prisma.ListingWhereInput = {
+    ...(status ? { status } : {}),
+    ...(verificationStatus ? { verificationStatus } : {}),
+    ...(search
+      ? {
+          OR: [
+            { title: { contains: search, mode: "insensitive" } },
+            { city: { contains: search, mode: "insensitive" } },
+            { district: { contains: search, mode: "insensitive" } },
+            {
+              organisation: {
+                name: { contains: search, mode: "insensitive" },
+              },
+            },
+            {
+              marketplaceProfessional: {
+                displayName: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [
+    listings,
+    total,
+    statusGroups,
+    verificationGroups,
+    pendingVerification,
+  ] = await Promise.all([
+    db.listing.findMany({
+      where,
+      select: {
+        id: true,
+        organisationId: true,
+        listingType: true,
+        category: true,
+        title: true,
+        askingAmountMinor: true,
+        rentAmountMinor: true,
+        currencyCode: true,
+        frequency: true,
+        availableFrom: true,
+        countryCode: true,
+        region: true,
+        city: true,
+        district: true,
+        locality: true,
+        publicLocationLabel: true,
+        status: true,
+        verificationStatus: true,
+        evidenceReady: true,
+        listingAuthority: true,
+        marketplaceProfessionalId: true,
+        submittedAt: true,
+        publishedAt: true,
+        pausedAt: true,
+        rejectedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        organisation: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            countryCode: true,
+          },
+        },
+        marketplaceProfessional: {
+          select: {
+            id: true,
+            displayName: true,
+            slug: true,
+            type: true,
+            verificationStatus: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+          },
+        },
+        _count: {
+          select: {
+            media: true,
+            verificationEvidence: true,
+            leads: true,
+            viewingRequests: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take,
+    }),
+    db.listing.count(),
+    db.listing.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    }),
+    db.listing.groupBy({
+      by: ["verificationStatus"],
+      _count: { _all: true },
+    }),
+    db.listing.count({
+      where: { verificationStatus: "PENDING" },
+    }),
+  ]);
+
+  const serializable = listings.map((listing) => ({
+    ...listing,
+    askingAmountMinor: listing.askingAmountMinor?.toString() ?? null,
+    rentAmountMinor: listing.rentAmountMinor?.toString() ?? null,
+  }));
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.listings_listed",
+    "listing",
+    "*",
+    undefined,
+    {
+      count: serializable.length,
+      status: status ?? null,
+      verificationStatus: verificationStatus ?? null,
+      search: search ?? null,
+    },
+  );
+
+  return {
+    summary: {
+      total,
+      pendingVerification,
+      byStatus: Object.fromEntries(
+        statusGroups.map((entry) => [
+          entry.status,
+          entry._count._all,
+        ]),
+      ),
+      byVerificationStatus: Object.fromEntries(
+        verificationGroups.map((entry) => [
+          entry.verificationStatus,
+          entry._count._all,
+        ]),
+      ),
+    },
+    listings: serializable,
+  };
+}
+
+export async function getMarketplaceOverviewForPlatform(
+  principal: PlatformPrincipal,
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.marketplaceRead);
+
+  const [
+    professionals,
+    verifiedProfessionals,
+    pendingProfessionals,
+    listings,
+    publishedListings,
+    pendingListingVerification,
+    providers,
+    verifiedProviders,
+    suspendedProviders,
+  ] = await Promise.all([
+    db.marketplaceProfessional.count({
+      where: { archivedAt: null },
+    }),
+    db.marketplaceProfessional.count({
+      where: {
+        archivedAt: null,
+        verificationStatus: "VERIFIED",
+      },
+    }),
+    db.marketplaceProfessional.count({
+      where: {
+        archivedAt: null,
+        verificationStatus: "PENDING",
+      },
+    }),
+    db.listing.count(),
+    db.listing.count({
+      where: {
+        status: "PUBLISHED",
+        verificationStatus: "VERIFIED",
+      },
+    }),
+    db.listing.count({
+      where: { verificationStatus: "PENDING" },
+    }),
+    db.serviceProvider.count({
+      where: { archivedAt: null },
+    }),
+    db.serviceProvider.count({
+      where: {
+        archivedAt: null,
+        suspendedAt: null,
+        verificationStatus: "VERIFIED",
+      },
+    }),
+    db.serviceProvider.count({
+      where: {
+        archivedAt: null,
+        suspendedAt: { not: null },
+      },
+    }),
+  ]);
+
+  const result = {
+    professionals: {
+      total: professionals,
+      verified: verifiedProfessionals,
+      pendingVerification: pendingProfessionals,
+    },
+    listings: {
+      total: listings,
+      publishedAndVerified: publishedListings,
+      pendingVerification: pendingListingVerification,
+    },
+    providers: {
+      total: providers,
+      verified: verifiedProviders,
+      suspended: suspendedProviders,
+    },
+  };
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.marketplace_overview_viewed",
+    "marketplace",
+    "*",
+    undefined,
+    result,
+  );
+
+  return result;
+}
+
+export async function getVerificationQueueForPlatform(
+  principal: PlatformPrincipal,
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.listingsRead);
+
+  const [listingQueue, professionalQueue, providerCount] =
+    await Promise.all([
+      db.listing.findMany({
+        where: { verificationStatus: "PENDING" },
+        select: {
+          id: true,
+          title: true,
+          listingType: true,
+          category: true,
+          verificationStatus: true,
+          evidenceReady: true,
+          submittedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          city: true,
+          countryCode: true,
+          organisation: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          marketplaceProfessional: {
+            select: {
+              id: true,
+              displayName: true,
+              slug: true,
+              verificationStatus: true,
+            },
+          },
+          _count: {
+            select: {
+              verificationEvidence: true,
+              media: true,
+            },
+          },
+        },
+        orderBy: { updatedAt: "asc" },
+        take: 100,
+      }),
+      db.marketplaceProfessional.findMany({
+        where: {
+          archivedAt: null,
+          verificationStatus: "PENDING",
+        },
+        select: {
+          id: true,
+          displayName: true,
+          legalName: true,
+          type: true,
+          countryCode: true,
+          verificationStatus: true,
+          verificationEvidenceReferences: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { updatedAt: "asc" },
+        take: 100,
+      }),
+      db.serviceProvider.count({
+        where: {
+          archivedAt: null,
+          verificationStatus: {
+            in: ["PENDING", "REQUIRES_MORE_INFORMATION"],
+          },
+        },
+      }),
+    ]);
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.verification_queue_viewed",
+    "verification_queue",
+    "*",
+    undefined,
+    {
+      listingCount: listingQueue.length,
+      professionalCount: professionalQueue.length,
+      providerCount,
+    },
+  );
+
+  return {
+    listings: listingQueue,
+    professionals: professionalQueue,
+    providerCount,
+  };
+}
+
+const PLATFORM_LISTING_REVIEW_TRANSITIONS: Record<
+  PlatformListingVerificationStatus,
+  PlatformListingVerificationStatus[]
+> = {
+  UNVERIFIED: ["PENDING"],
+  PENDING: ["VERIFIED", "REJECTED", "SUSPENDED"],
+  VERIFIED: ["SUSPENDED"],
+  REJECTED: ["PENDING"],
+  SUSPENDED: ["PENDING"],
+};
+
+export async function reviewListingVerificationForPlatform(
+  principal: PlatformPrincipal,
+  listingId: string,
+  input: unknown,
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
+
+  const raw =
+    typeof input === "object" && input !== null
+      ? (input as Record<string, unknown>)
+      : {};
+
+  const status = parsePlatformEnum<PlatformListingVerificationStatus>(
+    raw.status,
+    PLATFORM_LISTING_VERIFICATION_STATUSES,
+  );
+
+  if (!status || !["VERIFIED", "REJECTED", "SUSPENDED"].includes(status)) {
+    throw new AppError(
+      "INVALID_LISTING_VERIFICATION_STATUS",
+      422,
+      "Platform review status must be VERIFIED, REJECTED, or SUSPENDED.",
+    );
+  }
+
+  const note =
+    typeof raw.note === "string" && raw.note.trim()
+      ? raw.note.trim().slice(0, 2000)
+      : undefined;
+
+  const listing = await db.listing.findUnique({
+    where: { id: listingId },
+    select: {
+      id: true,
+      organisationId: true,
+      title: true,
+      status: true,
+      verificationStatus: true,
+    },
+  });
+
+  if (!listing) throw notFound();
+
+  if (
+    !PLATFORM_LISTING_REVIEW_TRANSITIONS[
+      listing.verificationStatus
+    ].includes(status)
+  ) {
+    throw new AppError(
+      "INVALID_VERIFICATION_TRANSITION",
+      409,
+      "The listing verification cannot transition to that status.",
+    );
+  }
+
+  const pause =
+    status === "SUSPENDED" && listing.status === "PUBLISHED";
+  const now = new Date();
+
+  const updated = await db.$transaction(async (tx) => {
+    const result = await tx.listing.update({
+      where: { id: listing.id },
+      data: {
+        verificationStatus: status,
+        evidenceReady:
+          status === "VERIFIED" ||
+          listing.verificationStatus === "PENDING",
+        ...(pause
+          ? {
+              status: "PAUSED",
+              pausedAt: now,
+            }
+          : {}),
+      },
+    });
+
+    await tx.listingVerificationHistory.create({
+      data: {
+        listingId: listing.id,
+        actorUserId: principal.userId,
+        fromStatus: listing.verificationStatus,
+        toStatus: status,
+        note,
+      },
+    });
+
+    if (pause) {
+      await tx.listingStatusHistory.create({
+        data: {
+          listingId: listing.id,
+          actorUserId: principal.userId,
+          fromStatus: "PUBLISHED",
+          toStatus: "PAUSED",
+          note: "Verification suspended by NesAfric platform administration.",
+        },
+      });
+    }
+
+    await tx.auditEvent.create({
+      data: {
+        organisationId: listing.organisationId,
+        actorUserId: principal.userId,
+        action: `listing.verification_${status.toLowerCase()}`,
+        entityType: "listing",
+        entityId: listing.id,
+        metadata: {
+          authority: "PLATFORM",
+          fromStatus: listing.verificationStatus,
+          toStatus: status,
+          note: note ?? null,
+        },
+      },
+    });
+
+    if (pause) {
+      await tx.auditEvent.create({
+        data: {
+          organisationId: listing.organisationId,
+          actorUserId: principal.userId,
+          action: "listing.status_changed",
+          entityType: "listing",
+          entityId: listing.id,
+          metadata: {
+            authority: "PLATFORM",
+            fromStatus: "PUBLISHED",
+            toStatus: "PAUSED",
+            reason: "verification_suspended",
+          },
+        },
+      });
+    }
+
+    return result;
+  });
+
+  await recordPlatformAudit(
+    principal,
+    `platform_admin.listing_verification_${status.toLowerCase()}`,
+    "listing",
+    listing.id,
+    listing.organisationId,
+    {
+      title: listing.title,
+      fromStatus: listing.verificationStatus,
+      toStatus: status,
+      note: note ?? null,
+      listingPaused: pause,
+    },
+  );
+
+  return updated;
+}

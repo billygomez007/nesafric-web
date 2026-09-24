@@ -11,6 +11,8 @@ export const PLATFORM_PERMISSIONS = {
   marketplaceRead: "marketplace.read",
   subscriptionsRead: "subscriptions.read",
   paymentsRead: "payments.read",
+  listingsRead: "listings.read",
+  listingsVerify: "listings.verify",
   orgsManage: "orgs.manage",
   plansManage: "plans.manage",
   entitlementsOverride: "entitlements.override",
@@ -44,8 +46,8 @@ const ALL_PERMISSIONS = Object.values(PLATFORM_PERMISSIONS);
 const ROLE_PERMISSIONS: Record<PlatformRoleValue, readonly PlatformPermission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   BILLING_ADMIN: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.orgsManage, PLATFORM_PERMISSIONS.plansManage, PLATFORM_PERMISSIONS.entitlementsOverride, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.campaignReview],
-  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify, PLATFORM_PERMISSIONS.providerIdentityReview],
-  READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead],
+  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify, PLATFORM_PERMISSIONS.providerIdentityReview],
+  READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead],
 };
 
 export function platformRoleHasPermission(role: PlatformRoleValue, permission: PlatformPermission) {
