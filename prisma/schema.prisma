@@ -905,8 +905,8 @@ model Organisation {
   notifySms                   Boolean                           @default(false)
   notifyWhatsapp              Boolean                           @default(false)
   rentObligations             RentObligation[]
-  recurringChargeDefinitions RecurringChargeDefinition[]
-  chargeObligations          ChargeObligation[]
+  recurringChargeDefinitions  RecurringChargeDefinition[]
+  chargeObligations           ChargeObligation[]
   paymentIntents              PaymentIntent[]
   payments                    Payment[]
   receipts                    Receipt[]
@@ -1093,53 +1093,53 @@ model PropertyOwner {
 }
 
 model Property {
-  id                   String                 @id @default(uuid()) @db.Uuid
-  organisationId       String                 @db.Uuid
-  portfolioId          String?                @db.Uuid
-  ownerId              String?                @db.Uuid
-  referenceNumber      String
-  name                 String
-  description          String?
-  category             String
-  countryCode          String                 @db.Char(2)
-  region               String?
-  city                 String?
-  district             String?
-  addressLine1         String?
-  digitalAddress       String?
-  latitude             Decimal?               @db.Decimal(10, 7)
-  longitude            Decimal?               @db.Decimal(10, 7)
-  geocodeStatus        GeocodeStatus          @default(NOT_ATTEMPTED)
-  geocodedAt           DateTime?
-  currencyCode         String                 @db.Char(3)
-  status               PropertyStatus         @default(ACTIVE)
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  archivedAt           DateTime?
-  managingOrganisation Organisation           @relation("ManagingOrganisation", fields: [organisationId], references: [id], onDelete: Restrict)
-  portfolio            Portfolio?             @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
-  owner                PropertyOwner?         @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  buildings            Building[]
-  units                Unit[]
-  leases               Lease[]
-  rentObligations      RentObligation[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  organisationId             String                      @db.Uuid
+  portfolioId                String?                     @db.Uuid
+  ownerId                    String?                     @db.Uuid
+  referenceNumber            String
+  name                       String
+  description                String?
+  category                   String
+  countryCode                String                      @db.Char(2)
+  region                     String?
+  city                       String?
+  district                   String?
+  addressLine1               String?
+  digitalAddress             String?
+  latitude                   Decimal?                    @db.Decimal(10, 7)
+  longitude                  Decimal?                    @db.Decimal(10, 7)
+  geocodeStatus              GeocodeStatus               @default(NOT_ATTEMPTED)
+  geocodedAt                 DateTime?
+  currencyCode               String                      @db.Char(3)
+  status                     PropertyStatus              @default(ACTIVE)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  archivedAt                 DateTime?
+  managingOrganisation       Organisation                @relation("ManagingOrganisation", fields: [organisationId], references: [id], onDelete: Restrict)
+  portfolio                  Portfolio?                  @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+  owner                      PropertyOwner?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  buildings                  Building[]
+  units                      Unit[]
+  leases                     Lease[]
+  rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
   chargeObligations          ChargeObligation[]
-  paymentIntents       PaymentIntent[]
-  payments             Payment[]
-  receipts             Receipt[]
-  securityDeposits     SecurityDeposit[]
-  ledgerEntries        FinancialLedgerEntry[]
-  maintenanceRequests  MaintenanceRequest[]
-  workOrders           WorkOrder[]
-  marketplaceEnquiries MarketplaceEnquiry[]
-  listings             Listing[]
-  vacancyTurnovers     VacancyTurnover[]
-  aiAutonomyPolicies   AIAutonomyPolicy[]
-  aiEmployees          AIEmployeeProperty[]
-  conversations        Conversation[]
-  geocodeLookups       GeocodeLookup[]
-  generatedDocuments   GeneratedDocument[]
+  paymentIntents             PaymentIntent[]
+  payments                   Payment[]
+  receipts                   Receipt[]
+  securityDeposits           SecurityDeposit[]
+  ledgerEntries              FinancialLedgerEntry[]
+  maintenanceRequests        MaintenanceRequest[]
+  workOrders                 WorkOrder[]
+  marketplaceEnquiries       MarketplaceEnquiry[]
+  listings                   Listing[]
+  vacancyTurnovers           VacancyTurnover[]
+  aiAutonomyPolicies         AIAutonomyPolicy[]
+  aiEmployees                AIEmployeeProperty[]
+  conversations              Conversation[]
+  geocodeLookups             GeocodeLookup[]
+  generatedDocuments         GeneratedDocument[]
 
   @@unique([organisationId, referenceNumber])
   @@index([organisationId, archivedAt, status])
@@ -1162,35 +1162,35 @@ model Building {
 }
 
 model Unit {
-  id                  String                 @id @default(uuid()) @db.Uuid
-  propertyId          String                 @db.Uuid
-  buildingId          String?                @db.Uuid
-  name                String
-  unitType            String?
-  floor               String?
-  bedrooms            Int?
-  bathrooms           Int?
-  sizeSqm             Decimal?               @db.Decimal(12, 2)
-  status              UnitStatus             @default(AVAILABLE)
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
-  archivedAt          DateTime?
-  property            Property               @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  building            Building?              @relation(fields: [buildingId], references: [id], onDelete: Restrict)
-  leases              Lease[]
-  rentObligations     RentObligation[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  propertyId                 String                      @db.Uuid
+  buildingId                 String?                     @db.Uuid
+  name                       String
+  unitType                   String?
+  floor                      String?
+  bedrooms                   Int?
+  bathrooms                  Int?
+  sizeSqm                    Decimal?                    @db.Decimal(12, 2)
+  status                     UnitStatus                  @default(AVAILABLE)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  archivedAt                 DateTime?
+  property                   Property                    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  building                   Building?                   @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  leases                     Lease[]
+  rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
   chargeObligations          ChargeObligation[]
-  paymentIntents      PaymentIntent[]
-  payments            Payment[]
-  receipts            Receipt[]
-  securityDeposits    SecurityDeposit[]
-  ledgerEntries       FinancialLedgerEntry[]
-  maintenanceRequests MaintenanceRequest[]
-  workOrders          WorkOrder[]
-  listings            Listing[]
-  vacancyTurnovers    VacancyTurnover[]
-  conversations       Conversation[]
+  paymentIntents             PaymentIntent[]
+  payments                   Payment[]
+  receipts                   Receipt[]
+  securityDeposits           SecurityDeposit[]
+  ledgerEntries              FinancialLedgerEntry[]
+  maintenanceRequests        MaintenanceRequest[]
+  workOrders                 WorkOrder[]
+  listings                   Listing[]
+  vacancyTurnovers           VacancyTurnover[]
+  conversations              Conversation[]
 
   @@unique([propertyId, buildingId, name])
   @@index([propertyId, archivedAt, status])
@@ -1231,7 +1231,7 @@ model TenantOrganisation {
   notifications                Notification[]
   paymentIntents               PaymentIntent[]
   payments                     Payment[]
-  chargeObligations             ChargeObligation[]
+  chargeObligations            ChargeObligation[]
   receipts                     Receipt[]
   securityDeposits             SecurityDeposit[]
   maintenanceRequests          MaintenanceRequest[]
@@ -1250,59 +1250,59 @@ model TenantOrganisation {
 }
 
 model Lease {
-  id                     String                   @id @default(uuid()) @db.Uuid
-  organisationId         String                   @db.Uuid
-  propertyId             String                   @db.Uuid
-  unitId                 String?                  @db.Uuid
-  renewedFromLeaseId     String?                  @db.Uuid
-  referenceNumber        String
-  startDate              DateTime                 @db.Date
-  endDate                DateTime?                @db.Date
-  rentAmountMinor        Decimal                  @db.Decimal(19, 0)
-  currencyCode           String                   @db.Char(3)
-  rentFrequency          RentFrequency
-  customFrequency        String?
-  depositAmountMinor     Decimal?                 @db.Decimal(19, 0)
-  status                 LeaseStatus              @default(DRAFT)
-  renewalStatus          RenewalStatus            @default(NOT_RENEWED)
-  moveStatus             MoveStatus               @default(NOT_MOVED_IN)
-  notes                  String?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  archivedAt             DateTime?
-  organisation           Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  property               Property                 @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit                   Unit?                    @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  renewedFromLease       Lease?                   @relation("LeaseRenewals", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
-  renewals               Lease[]                  @relation("LeaseRenewals")
-  parties                LeaseParty[]
-  documents              LeaseDocument[]
-  history                LeaseHistory[]
-  amendments             LeaseAmendment[]
-  obligations            RentObligation[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  organisationId             String                      @db.Uuid
+  propertyId                 String                      @db.Uuid
+  unitId                     String?                     @db.Uuid
+  renewedFromLeaseId         String?                     @db.Uuid
+  referenceNumber            String
+  startDate                  DateTime                    @db.Date
+  endDate                    DateTime?                   @db.Date
+  rentAmountMinor            Decimal                     @db.Decimal(19, 0)
+  currencyCode               String                      @db.Char(3)
+  rentFrequency              RentFrequency
+  customFrequency            String?
+  depositAmountMinor         Decimal?                    @db.Decimal(19, 0)
+  status                     LeaseStatus                 @default(DRAFT)
+  renewalStatus              RenewalStatus               @default(NOT_RENEWED)
+  moveStatus                 MoveStatus                  @default(NOT_MOVED_IN)
+  notes                      String?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  archivedAt                 DateTime?
+  organisation               Organisation                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property                   Property                    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                       Unit?                       @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  renewedFromLease           Lease?                      @relation("LeaseRenewals", fields: [renewedFromLeaseId], references: [id], onDelete: Restrict)
+  renewals                   Lease[]                     @relation("LeaseRenewals")
+  parties                    LeaseParty[]
+  documents                  LeaseDocument[]
+  history                    LeaseHistory[]
+  amendments                 LeaseAmendment[]
+  obligations                RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
   chargeObligations          ChargeObligation[]
-  notifications          Notification[]
-  paymentIntents         PaymentIntent[]
-  payments               Payment[]
-  receipts               Receipt[]
-  securityDeposits       SecurityDeposit[]
-  ledgerEntries          FinancialLedgerEntry[]
-  maintenanceRequests    MaintenanceRequest[]
-  rentalApplications     RentalApplication[]
-  renewalWorkflowStatus  RenewalWorkflowStatus    @default(NONE)
-  building               Building?                @relation(fields: [buildingId], references: [id])
-  buildingId             String?                  @db.Uuid
-  executionStatus        LeaseExecutionStatus     @default(DRAFT)
-  activationRequirements Json?
-  executionDocuments     LeaseExecutionDocument[]
-  signatureRequests      LeaseSignatureRequest[]
-  moveIn                 MoveIn?
-  noticeToVacate         NoticeToVacate?
-  moveOut                MoveOut?
-  depositSettlement      DepositSettlement?
-  conversations          Conversation[]
-  generatedDocuments     GeneratedDocument[]
+  notifications              Notification[]
+  paymentIntents             PaymentIntent[]
+  payments                   Payment[]
+  receipts                   Receipt[]
+  securityDeposits           SecurityDeposit[]
+  ledgerEntries              FinancialLedgerEntry[]
+  maintenanceRequests        MaintenanceRequest[]
+  rentalApplications         RentalApplication[]
+  renewalWorkflowStatus      RenewalWorkflowStatus       @default(NONE)
+  building                   Building?                   @relation(fields: [buildingId], references: [id])
+  buildingId                 String?                     @db.Uuid
+  executionStatus            LeaseExecutionStatus        @default(DRAFT)
+  activationRequirements     Json?
+  executionDocuments         LeaseExecutionDocument[]
+  signatureRequests          LeaseSignatureRequest[]
+  moveIn                     MoveIn?
+  noticeToVacate             NoticeToVacate?
+  moveOut                    MoveOut?
+  depositSettlement          DepositSettlement?
+  conversations              Conversation[]
+  generatedDocuments         GeneratedDocument[]
 
   @@unique([organisationId, referenceNumber])
   @@index([organisationId, status, endDate])
@@ -1349,7 +1349,6 @@ model RentObligation {
   @@unique([leaseId, periodStart, periodEnd])
   @@index([organisationId, status, dueDate])
 }
-
 
 enum RecurringChargeType {
   SERVICE_CHARGE
@@ -1411,45 +1410,45 @@ enum ChargeCollectionState {
 }
 
 model RecurringChargeDefinition {
-  id                    String                         @id @default(uuid()) @db.Uuid
-  organisationId        String                         @db.Uuid
-  leaseId               String                         @db.Uuid
-  propertyId            String                         @db.Uuid
-  unitId                String?                        @db.Uuid
+  id             String  @id @default(uuid()) @db.Uuid
+  organisationId String  @db.Uuid
+  leaseId        String  @db.Uuid
+  propertyId     String  @db.Uuid
+  unitId         String? @db.Uuid
 
-  type                  RecurringChargeType
-  name                  String
-  description           String?
+  type        RecurringChargeType
+  name        String
+  description String?
 
-  calculationType       RecurringChargeCalculationType @default(FIXED)
-  amountMinor           Decimal?                       @db.Decimal(19, 0)
-  currencyCode          String                         @db.Char(3)
+  calculationType RecurringChargeCalculationType @default(FIXED)
+  amountMinor     Decimal?                       @db.Decimal(19, 0)
+  currencyCode    String                         @db.Char(3)
 
-  frequency             RecurringChargeFrequency
-  customFrequency       String?
+  frequency       RecurringChargeFrequency
+  customFrequency String?
 
-  billingMode           RecurringChargeBillingMode     @default(SEPARATE)
+  billingMode RecurringChargeBillingMode @default(SEPARATE)
 
-  startDate             DateTime                       @db.Date
-  endDate               DateTime?                      @db.Date
-  dueDay                Int?
+  startDate DateTime  @db.Date
+  endDate   DateTime? @db.Date
+  dueDay    Int?
 
-  notifyTenant          Boolean                        @default(true)
-  reminderDaysBefore    Int?
+  notifyTenant       Boolean @default(true)
+  reminderDaysBefore Int?
 
-  status                RecurringChargeStatus          @default(ACTIVE)
+  status RecurringChargeStatus @default(ACTIVE)
 
-  createdByUserId       String?                        @db.Uuid
-  createdAt             DateTime                       @default(now())
-  updatedAt             DateTime                       @updatedAt
-  archivedAt            DateTime?
+  createdByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  archivedAt      DateTime?
 
-  organisation          Organisation                   @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  lease                 Lease                          @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  property              Property                       @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit                  Unit?                          @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  lease        Lease        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property     Property     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit         Unit?        @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
-  obligations           ChargeObligation[]
+  obligations ChargeObligation[]
 
   @@index([organisationId, status, archivedAt])
   @@index([leaseId, status])
@@ -1457,44 +1456,44 @@ model RecurringChargeDefinition {
 }
 
 model ChargeObligation {
-  id                           String                     @id @default(uuid()) @db.Uuid
-  organisationId               String                     @db.Uuid
-  recurringChargeDefinitionId  String                     @db.Uuid
-  tenantOrganisationId         String                     @db.Uuid
-  leaseId                      String                     @db.Uuid
-  propertyId                   String                     @db.Uuid
-  unitId                       String?                    @db.Uuid
+  id                          String  @id @default(uuid()) @db.Uuid
+  organisationId              String  @db.Uuid
+  recurringChargeDefinitionId String  @db.Uuid
+  tenantOrganisationId        String  @db.Uuid
+  leaseId                     String  @db.Uuid
+  propertyId                  String  @db.Uuid
+  unitId                      String? @db.Uuid
 
-  dueDate                      DateTime                   @db.Date
-  periodStart                  DateTime                   @db.Date
-  periodEnd                    DateTime                   @db.Date
+  dueDate     DateTime @db.Date
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
 
-  amountMinor                  Decimal?                   @db.Decimal(19, 0)
-  currencyCode                 String                     @db.Char(3)
+  amountMinor  Decimal? @db.Decimal(19, 0)
+  currencyCode String   @db.Char(3)
 
-  typeSnapshot                 RecurringChargeType
-  nameSnapshot                 String
-  descriptionSnapshot          String?
-  billingModeSnapshot          RecurringChargeBillingMode
+  typeSnapshot        RecurringChargeType
+  nameSnapshot        String
+  descriptionSnapshot String?
+  billingModeSnapshot RecurringChargeBillingMode
 
-  status                       ChargeObligationStatus     @default(UPCOMING)
-  collectionState              ChargeCollectionState      @default(UNPAID)
+  status          ChargeObligationStatus @default(UPCOMING)
+  collectionState ChargeCollectionState  @default(UNPAID)
 
-  collectedAmountMinor         Decimal                    @default(0) @db.Decimal(19, 0)
-  waivedAmountMinor            Decimal                    @default(0) @db.Decimal(19, 0)
+  collectedAmountMinor Decimal @default(0) @db.Decimal(19, 0)
+  waivedAmountMinor    Decimal @default(0) @db.Decimal(19, 0)
 
-  finalisedAt                  DateTime?
-  createdAt                    DateTime                   @default(now())
-  updatedAt                    DateTime                   @updatedAt
+  finalisedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  organisation                 Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  recurringChargeDefinition    RecurringChargeDefinition  @relation(fields: [recurringChargeDefinitionId], references: [id], onDelete: Restrict)
-  tenantOrganisation           TenantOrganisation         @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
-  lease                        Lease                      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  property                     Property                   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
-  unit                         Unit?                      @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  organisation              Organisation              @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  recurringChargeDefinition RecurringChargeDefinition @relation(fields: [recurringChargeDefinitionId], references: [id], onDelete: Restrict)
+  tenantOrganisation        TenantOrganisation        @relation(fields: [tenantOrganisationId], references: [id], onDelete: Restrict)
+  lease                     Lease                     @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  property                  Property                  @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                      Unit?                     @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
-  allocations                  ChargePaymentAllocation[]
+  allocations ChargePaymentAllocation[]
 
   @@unique([recurringChargeDefinitionId, tenantOrganisationId, periodStart, periodEnd])
   @@index([organisationId, status, dueDate])
@@ -1504,17 +1503,17 @@ model ChargeObligation {
 }
 
 model ChargePaymentAllocation {
-  id                 String           @id @default(uuid()) @db.Uuid
-  paymentId          String           @db.Uuid
-  chargeObligationId String           @db.Uuid
+  id                 String @id @default(uuid()) @db.Uuid
+  paymentId          String @db.Uuid
+  chargeObligationId String @db.Uuid
 
-  amountMinor        Decimal          @db.Decimal(19, 0)
+  amountMinor Decimal @db.Decimal(19, 0)
 
-  allocatedAt        DateTime         @default(now())
-  reversedAt         DateTime?
+  allocatedAt DateTime  @default(now())
+  reversedAt  DateTime?
 
-  payment            Payment          @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  chargeObligation   ChargeObligation @relation(fields: [chargeObligationId], references: [id], onDelete: Restrict)
+  payment          Payment          @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  chargeObligation ChargeObligation @relation(fields: [chargeObligationId], references: [id], onDelete: Restrict)
 
   @@unique([paymentId, chargeObligationId])
   @@index([chargeObligationId, reversedAt])
@@ -2637,33 +2636,33 @@ model ProviderServiceArea {
 }
 
 model ProviderEvidence {
-  id                String                       @id @default(uuid()) @db.Uuid
-  providerId        String                       @db.Uuid
-  type              ProviderEvidenceType
-  reference         String
-  expiresAt         DateTime?
+  id                     String                       @id @default(uuid()) @db.Uuid
+  providerId             String                       @db.Uuid
+  type                   ProviderEvidenceType
+  reference              String
+  expiresAt              DateTime?
   /// Per-document review lifecycle — separate from `ServiceProvider.verificationStatus`, which is
   /// the aggregate outcome. Defaults to PENDING for every newly submitted document.
-  reviewStatus      ProviderEvidenceReviewStatus @default(PENDING)
-  reviewedByUserId  String?                      @db.Uuid
-  reviewedAt        DateTime?
-  rejectionReason   String?
+  reviewStatus           ProviderEvidenceReviewStatus @default(PENDING)
+  reviewedByUserId       String?                      @db.Uuid
+  reviewedAt             DateTime?
+  rejectionReason        String?
   /// Masked display value only (e.g. last 4 characters of a Ghana Card number). The full number
   /// is never persisted as a separate queryable field — it already lives in the evidence image
   /// itself, which a reviewer reads directly; storing a second unmasked copy would be identity
   /// data retention beyond what verification actually requires.
-  idNumberMasked    String?
-  nameOnDocument    String?
+  idNumberMasked         String?
+  nameOnDocument         String?
   /// Set when a newer document of the same type supersedes this one — preserves immutable history
   /// instead of deleting the old evidence.
-  supersededByEvidenceId String?             @unique @db.Uuid
-  submittedByUserId String                       @db.Uuid
-  createdAt         DateTime                     @default(now())
-  provider          ServiceProvider              @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  submittedBy       User                         @relation("ProviderEvidenceSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
-  reviewedBy        User?                        @relation("ProviderEvidenceReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
-  supersededByEvidence ProviderEvidence?         @relation("ProviderEvidenceSupersession", fields: [supersededByEvidenceId], references: [id], onDelete: Restrict)
-  supersedesEvidence   ProviderEvidence?         @relation("ProviderEvidenceSupersession")
+  supersededByEvidenceId String?                      @unique @db.Uuid
+  submittedByUserId      String                       @db.Uuid
+  createdAt              DateTime                     @default(now())
+  provider               ServiceProvider              @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  submittedBy            User                         @relation("ProviderEvidenceSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy             User?                        @relation("ProviderEvidenceReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  supersededByEvidence   ProviderEvidence?            @relation("ProviderEvidenceSupersession", fields: [supersededByEvidenceId], references: [id], onDelete: Restrict)
+  supersedesEvidence     ProviderEvidence?            @relation("ProviderEvidenceSupersession")
 
   @@unique([providerId, type, reference])
   @@index([providerId, expiresAt])
@@ -2687,30 +2686,30 @@ model ProviderVerificationConsent {
 }
 
 model ProviderDocumentRequirement {
-  id           String                     @id @default(uuid()) @db.Uuid
+  id               String                   @id @default(uuid()) @db.Uuid
   /// Null = applies to every country.
-  countryCode  String?                    @db.Char(2)
+  countryCode      String?                  @db.Char(2)
   /// Null = applies to every service category.
-  categoryId   String?                    @db.Uuid
+  categoryId       String?                  @db.Uuid
   /// Null = applies to both INDIVIDUAL and COMPANY providers.
-  providerType ServiceProviderType?
-  evidenceType ProviderEvidenceType
+  providerType     ServiceProviderType?
+  evidenceType     ProviderEvidenceType
   /// Legacy simple flag — kept so every existing reader (`getProviderDocumentRequirements`, the
   /// onboarding wizard) continues to work unchanged and CONDITIONAL never blocks submission on
   /// its own. New writes keep this in sync with `requirementLevel` (`REQUIRED` -> true,
   /// `CONDITIONAL`/`OPTIONAL` -> false); new code should prefer `requirementLevel` for the richer
   /// three-state distinction.
-  required     Boolean                    @default(true)
+  required         Boolean                  @default(true)
   requirementLevel DocumentRequirementLevel @default(REQUIRED)
   /// Explains a CONDITIONAL requirement's circumstance, e.g. "required only if performing
   /// gas-related work". Ignored for REQUIRED/OPTIONAL.
-  conditionNote String?
-  label        String
-  description  String?
-  active       Boolean                    @default(true)
-  createdAt    DateTime                   @default(now())
-  updatedAt    DateTime                   @updatedAt
-  category     ServiceCategory?           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  conditionNote    String?
+  label            String
+  description      String?
+  active           Boolean                  @default(true)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  category         ServiceCategory?         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   @@unique([countryCode, categoryId, providerType, evidenceType])
   @@index([countryCode, categoryId, providerType, active])
@@ -2986,24 +2985,32 @@ model MarketplaceEnquiryStatusHistory {
 }
 
 model Listing {
-  id                          String                        @id @default(uuid()) @db.Uuid
-  organisationId              String                        @db.Uuid
-  propertyId                  String?                       @db.Uuid
-  marketplaceAssetId          String?                       @db.Uuid
-  unitId                      String?                       @db.Uuid
-  createdByUserId             String                        @db.Uuid
-  listingType                 ListingType
-  category                    String
-  title                       String
-  publicDescription           String
-  askingAmountMinor           Decimal?                      @db.Decimal(19, 0)
-  rentAmountMinor             Decimal?                      @db.Decimal(19, 0)
-  currencyCode                String                        @db.Char(3)
-  frequency                   RentFrequency?
-  availableFrom               DateTime
-  bedrooms                    Int?
-  bathrooms                   Decimal?                      @db.Decimal(4, 1)
-  sizeSqm                     Decimal?                      @db.Decimal(12, 2)
+  id                 String         @id @default(uuid()) @db.Uuid
+  organisationId     String         @db.Uuid
+  propertyId         String?        @db.Uuid
+  marketplaceAssetId String?        @db.Uuid
+  unitId             String?        @db.Uuid
+  createdByUserId    String         @db.Uuid
+  listingType        ListingType
+  category           String
+  title              String
+  publicDescription  String
+  askingAmountMinor  Decimal?       @db.Decimal(19, 0)
+  rentAmountMinor    Decimal?       @db.Decimal(19, 0)
+  currencyCode       String         @db.Char(3)
+  frequency          RentFrequency?
+  availableFrom      DateTime
+  bedrooms           Int?
+  bathrooms          Decimal?       @db.Decimal(4, 1)
+  sizeSqm            Decimal?       @db.Decimal(12, 2)
+  landSizeSqm        Decimal?       @db.Decimal(14, 2)
+  toilets            Int?
+  parkingSpaces      Int?
+  furnishing         String?
+  propertyCondition  String?
+  negotiable         Boolean        @default(false)
+  yearBuilt          Int?
+
   countryCode                 String                        @db.Char(2)
   region                      String?
   city                        String?

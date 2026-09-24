@@ -122,6 +122,7 @@ function listingWriteData(data: ReturnType<typeof createListingSchema.parse>) {
     rentAmountMinor: decimal(fields.rentAmountMinor),
     bathrooms: decimal(fields.bathrooms),
     sizeSqm: decimal(fields.sizeSqm),
+    landSizeSqm: decimal(fields.landSizeSqm),
     mapLatitude: decimal(fields.mapLatitude),
     mapLongitude: decimal(fields.mapLongitude),
     amenities: {
