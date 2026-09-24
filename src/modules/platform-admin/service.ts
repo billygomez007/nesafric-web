@@ -401,6 +401,20 @@ export async function runDueJobsForPlatform(principal: PlatformPrincipal) {
   return result;
 }
 
+export async function runPendingJobsForPlatform(principal: PlatformPrincipal) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.jobsManage);
+  const result = await runDueJobs(jobHandlers, new Date(), ["PENDING"]);
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.pending_jobs_drained",
+    "background_job",
+    "*",
+    undefined,
+    result,
+  );
+  return result;
+}
+
 export async function getPlatformAuditLog(principal: PlatformPrincipal, input: unknown = {}) {
   requirePermission(principal, PLATFORM_PERMISSIONS.auditRead);
   const query = platformAuditQuerySchema.parse(input);

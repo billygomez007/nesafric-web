@@ -24,13 +24,16 @@ function HealthContent() {
 
   useEffect(load, []);
 
-  async function drainNow() {
+  async function drainNow(pendingOnly = false) {
     setDraining(true); setError(""); setNotice("");
     try {
-      const response = await fetch("/api/platform-admin/jobs/run", { method: "POST" });
+      const endpoint = pendingOnly
+        ? "/api/platform-admin/jobs/run?pendingOnly=1"
+        : "/api/platform-admin/jobs/run";
+      const response = await fetch(endpoint, { method: "POST" });
       const body = await response.json();
       if (!response.ok) return setError(body.error?.message ?? "Unable to run due jobs.");
-      setNotice(`Drained ${body.claimed} due job(s): ${body.succeeded} succeeded, ${body.failed} failed.`);
+      setNotice(`${pendingOnly ? "Pending-only drain" : "Drain"} processed ${body.claimed} job(s): ${body.succeeded} succeeded, ${body.failed} failed.`);
       load();
     } finally {
       setDraining(false);
@@ -45,9 +48,24 @@ function HealthContent() {
     <section className="rounded-xl border bg-white p-5 shadow-card">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Background jobs</h2>
-        <button className="rounded-lg bg-forest px-3.5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted" disabled={draining} onClick={() => void drainNow()} type="button">
-          {draining ? "Running…" : "Run due jobs now"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="rounded-lg border border-forest px-3.5 py-2 text-sm font-semibold text-forest disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={draining || !health.jobsByStatus.PENDING}
+            onClick={() => void drainNow(true)}
+            type="button"
+          >
+            {draining ? "Running…" : "Run pending only"}
+          </button>
+          <button
+            className="rounded-lg bg-forest px-3.5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted"
+            disabled={draining}
+            onClick={() => void drainNow(false)}
+            type="button"
+          >
+            {draining ? "Running…" : "Run due jobs now"}
+          </button>
+        </div>
       </div>
       <p className="mt-1 text-xs text-muted">
         Normally an external scheduler processes this queue automatically.

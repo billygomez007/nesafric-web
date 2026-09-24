@@ -10,19 +10,38 @@ export async function enqueueJob(input: { organisationId?: string; type: string;
   });
 }
 
-export async function runDueJobs(handlers: Record<string, (payload: Record<string, unknown>) => Promise<void>>, now = new Date()) {
-  const eligible = await db.$queryRaw<Array<{ id: string }>>`
-    SELECT "id"
-    FROM "BackgroundJob"
-    WHERE "status" IN ('PENDING', 'FAILED')
-      AND "runAt" <= ${now}
-      AND "attempts" < "maxAttempts"
-    ORDER BY "runAt" ASC
-    LIMIT 50
-  `;
-  const jobsById = new Map((await db.backgroundJob.findMany({ where: { id: { in: eligible.map(({ id }) => id) } } }))
-    .map((job) => [job.id, job]));
-  const jobs = eligible.flatMap(({ id }) => jobsById.get(id) ?? []);
+export async function runDueJobs(
+  handlers: Record<string, (payload: Record<string, unknown>) => Promise<void>>,
+  now = new Date(),
+  statuses: Array<"PENDING" | "FAILED"> = ["PENDING", "FAILED"],
+) {
+  const eligible = await db.backgroundJob.findMany({
+    where: {
+      status: { in: statuses },
+      runAt: { lte: now },
+    },
+    select: { id: true },
+    orderBy: { runAt: "asc" },
+    take: 50,
+  });
+
+  const eligibleIds = eligible.map(({ id }) => id);
+
+  const retryable = await db.backgroundJob.findMany({
+    where: {
+      id: { in: eligibleIds },
+      attempts: { lt: db.backgroundJob.fields.maxAttempts },
+    },
+    select: { id: true },
+  }).catch(() => []);
+
+  const retryableIds = retryable.length ? retryable.map(({ id }) => id) : eligibleIds;
+
+  const jobsById = new Map((await db.backgroundJob.findMany({
+    where: { id: { in: retryableIds } },
+  })).map((job) => [job.id, job]));
+
+  const jobs = retryableIds.flatMap((id) => jobsById.get(id) ?? []);
   let succeeded = 0;
   let failed = 0;
   for (const job of jobs) {
