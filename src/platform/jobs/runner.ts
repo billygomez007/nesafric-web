@@ -13,56 +13,187 @@ export async function enqueueJob(input: { organisationId?: string; type: string;
 export async function runDueJobs(
   handlers: Record<string, (payload: Record<string, unknown>) => Promise<void>>,
   now = new Date(),
-  statuses: Array<"PENDING" | "FAILED"> = ["PENDING", "FAILED"],
 ) {
-  const eligible = await db.backgroundJob.findMany({
-    where: {
-      status: { in: statuses },
-      runAt: { lte: now },
-    },
-    select: { id: true },
-    orderBy: { runAt: "asc" },
-    take: 50,
-  });
+  const eligible = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "BackgroundJob"
+    WHERE "status" IN ('PENDING', 'FAILED')
+      AND "runAt" <= ${now}
+      AND "attempts" < "maxAttempts"
+    ORDER BY "runAt" ASC
+    LIMIT 50
+  `;
 
-  const eligibleIds = eligible.map(({ id }) => id);
+  const jobsById = new Map(
+    (
+      await db.backgroundJob.findMany({
+        where: { id: { in: eligible.map(({ id }) => id) } },
+      })
+    ).map((job) => [job.id, job]),
+  );
 
-  const retryable = await db.backgroundJob.findMany({
-    where: {
-      id: { in: eligibleIds },
-      attempts: { lt: db.backgroundJob.fields.maxAttempts },
-    },
-    select: { id: true },
-  }).catch(() => []);
+  const jobs = eligible.flatMap(({ id }) => jobsById.get(id) ?? []);
 
-  const retryableIds = retryable.length ? retryable.map(({ id }) => id) : eligibleIds;
-
-  const jobsById = new Map((await db.backgroundJob.findMany({
-    where: { id: { in: retryableIds } },
-  })).map((job) => [job.id, job]));
-
-  const jobs = retryableIds.flatMap((id) => jobsById.get(id) ?? []);
   let succeeded = 0;
   let failed = 0;
+
   for (const job of jobs) {
-    const claimed = await db.backgroundJob.updateMany({ where: { id: job.id, status: { in: ["PENDING", "FAILED"] } }, data: { status: "RUNNING", lockedAt: now, attempts: { increment: 1 } } });
+    const claimed = await db.backgroundJob.updateMany({
+      where: {
+        id: job.id,
+        status: { in: ["PENDING", "FAILED"] },
+      },
+      data: {
+        status: "RUNNING",
+        lockedAt: now,
+        attempts: { increment: 1 },
+      },
+    });
+
     if (!claimed.count) continue;
+
     try {
       const handler = handlers[job.type];
       if (!handler) throw new Error(`No handler registered for ${job.type}.`);
+
       const payload = job.payload as Record<string, unknown>;
-      if (job.organisationId && payload.organisationId !== job.organisationId) {
-        throw new Error(`Job organisation ${job.organisationId} does not match its payload organisation.`);
+
+      if (
+        job.organisationId &&
+        payload.organisationId !== job.organisationId
+      ) {
+        throw new Error(
+          `Job organisation ${job.organisationId} does not match its payload organisation.`,
+        );
       }
+
       await handler(payload);
-      await db.backgroundJob.update({ where: { id: job.id }, data: { status: "SUCCEEDED", completedAt: new Date(), lastError: null } });
+
+      await db.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "SUCCEEDED",
+          completedAt: new Date(),
+          lastError: null,
+        },
+      });
+
       succeeded += 1;
     } catch (error) {
-      await db.backgroundJob.update({ where: { id: job.id }, data: { status: "FAILED", lastError: error instanceof Error ? error.message : "Unknown job failure", runAt: new Date(Date.now() + 60_000) } });
+      await db.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "FAILED",
+          lastError:
+            error instanceof Error
+              ? error.message
+              : "Unknown job failure",
+          runAt: new Date(Date.now() + 60_000),
+        },
+      });
+
       failed += 1;
     }
   }
-  return { claimed: jobs.length, succeeded, failed };
+
+  return {
+    claimed: jobs.length,
+    succeeded,
+    failed,
+  };
+}
+
+export async function runPendingJobs(
+  handlers: Record<string, (payload: Record<string, unknown>) => Promise<void>>,
+  now = new Date(),
+) {
+  const eligible = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "BackgroundJob"
+    WHERE "status" = 'PENDING'
+      AND "runAt" <= ${now}
+      AND "attempts" < "maxAttempts"
+    ORDER BY "runAt" ASC
+    LIMIT 50
+  `;
+
+  const jobsById = new Map(
+    (
+      await db.backgroundJob.findMany({
+        where: { id: { in: eligible.map(({ id }) => id) } },
+      })
+    ).map((job) => [job.id, job]),
+  );
+
+  const jobs = eligible.flatMap(({ id }) => jobsById.get(id) ?? []);
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const job of jobs) {
+    const claimed = await db.backgroundJob.updateMany({
+      where: {
+        id: job.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "RUNNING",
+        lockedAt: now,
+        attempts: { increment: 1 },
+      },
+    });
+
+    if (!claimed.count) continue;
+
+    try {
+      const handler = handlers[job.type];
+      if (!handler) throw new Error(`No handler registered for ${job.type}.`);
+
+      const payload = job.payload as Record<string, unknown>;
+
+      if (
+        job.organisationId &&
+        payload.organisationId !== job.organisationId
+      ) {
+        throw new Error(
+          `Job organisation ${job.organisationId} does not match its payload organisation.`,
+        );
+      }
+
+      await handler(payload);
+
+      await db.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "SUCCEEDED",
+          completedAt: new Date(),
+          lastError: null,
+        },
+      });
+
+      succeeded += 1;
+    } catch (error) {
+      await db.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "FAILED",
+          lastError:
+            error instanceof Error
+              ? error.message
+              : "Unknown job failure",
+          runAt: new Date(Date.now() + 60_000),
+        },
+      });
+
+      failed += 1;
+    }
+  }
+
+  return {
+    claimed: jobs.length,
+    succeeded,
+    failed,
+  };
 }
 
 export async function retryBackgroundJob(userId: string, organisationId: string, jobId: string) {

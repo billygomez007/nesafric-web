@@ -17,7 +17,7 @@ import {
 } from "@/modules/subscriptions/schemas";
 import { createFeatureFlagSchema, organisationListQuerySchema, platformAuditQuerySchema, setFlagOverrideSchema, updateFeatureFlagSchema } from "./schemas";
 import { getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
-import { runDueJobs } from "@/platform/jobs/runner";
+import { runDueJobs, runPendingJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -403,7 +403,7 @@ export async function runDueJobsForPlatform(principal: PlatformPrincipal) {
 
 export async function runPendingJobsForPlatform(principal: PlatformPrincipal) {
   requirePermission(principal, PLATFORM_PERMISSIONS.jobsManage);
-  const result = await runDueJobs(jobHandlers, new Date(), ["PENDING"]);
+  const result = await runPendingJobs(jobHandlers);
   await recordPlatformAudit(
     principal,
     "platform_admin.pending_jobs_drained",
