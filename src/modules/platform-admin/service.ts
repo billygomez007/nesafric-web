@@ -1561,3 +1561,572 @@ export async function reviewListingVerificationForPlatform(
 
   return updated;
 }
+
+// SUPER ADMIN PHASE 4 — MAINTENANCE + COMMUNICATIONS + AI OPERATIONS
+// ---------------------------------------------------------------------------
+
+const PLATFORM_MAINTENANCE_STATUSES = [
+  "REPORTED",
+  "TRIAGED",
+  "AWAITING_APPROVAL",
+  "APPROVED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CLOSED",
+  "REJECTED",
+  "CANCELLED",
+] as const;
+
+const PLATFORM_CONVERSATION_STATUSES = [
+  "OPEN",
+  "AI_ACTIVE",
+  "HUMAN_REQUIRED",
+  "HUMAN_ACTIVE",
+  "WAITING_CUSTOMER",
+  "RESOLVED",
+  "CLOSED",
+] as const;
+
+type PlatformMaintenanceStatus =
+  (typeof PLATFORM_MAINTENANCE_STATUSES)[number];
+
+type PlatformConversationStatus =
+  (typeof PLATFORM_CONVERSATION_STATUSES)[number];
+
+export async function listMaintenanceOperationsForPlatform(
+  principal: PlatformPrincipal,
+  input: {
+    search?: string;
+    status?: string;
+    take?: number;
+  } = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.maintenanceRead);
+
+  const search = input.search?.trim();
+  const status = parsePlatformEnum<PlatformMaintenanceStatus>(
+    input.status,
+    PLATFORM_MAINTENANCE_STATUSES,
+  );
+  const take = boundedTake(input.take, 50, 100);
+
+  const where: Prisma.MaintenanceRequestWhereInput = {
+    ...(status ? { status } : {}),
+    ...(search
+      ? {
+          OR: [
+            { title: { contains: search, mode: "insensitive" } },
+            { category: { contains: search, mode: "insensitive" } },
+            {
+              organisation: {
+                name: { contains: search, mode: "insensitive" },
+              },
+            },
+            {
+              property: {
+                name: { contains: search, mode: "insensitive" },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [
+    requests,
+    total,
+    statusGroups,
+    priorityGroups,
+    openWorkOrders,
+    overdueWorkOrders,
+  ] = await Promise.all([
+    db.maintenanceRequest.findMany({
+      where,
+      select: {
+        id: true,
+        organisationId: true,
+        title: true,
+        category: true,
+        priority: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        completedAt: true,
+        closedAt: true,
+        organisation: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        property: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        unit: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        reportedBy: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
+        _count: {
+          select: {
+            workOrders: true,
+            approvals: true,
+            attachments: true,
+            conversations: true,
+            dispatchAttempts: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take,
+    }),
+    db.maintenanceRequest.count(),
+    db.maintenanceRequest.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    }),
+    db.maintenanceRequest.groupBy({
+      by: ["priority"],
+      _count: { _all: true },
+    }),
+    db.workOrder.count({
+      where: {
+        status: {
+          in: ["OPEN", "ASSIGNED", "IN_PROGRESS"],
+        },
+      },
+    }),
+    db.workOrder.count({
+      where: {
+        dueAt: { lt: new Date() },
+        status: {
+          in: ["OPEN", "ASSIGNED", "IN_PROGRESS"],
+        },
+      },
+    }),
+  ]);
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.maintenance_listed",
+    "maintenance_request",
+    "*",
+    undefined,
+    {
+      count: requests.length,
+      status: status ?? null,
+      search: search ?? null,
+    },
+  );
+
+  return {
+    summary: {
+      total,
+      openWorkOrders,
+      overdueWorkOrders,
+      byStatus: Object.fromEntries(
+        statusGroups.map((entry) => [
+          entry.status,
+          entry._count._all,
+        ]),
+      ),
+      byPriority: Object.fromEntries(
+        priorityGroups.map((entry) => [
+          entry.priority,
+          entry._count._all,
+        ]),
+      ),
+    },
+    requests,
+  };
+}
+
+export async function listCommunicationsForPlatform(
+  principal: PlatformPrincipal,
+  input: {
+    search?: string;
+    status?: string;
+    take?: number;
+  } = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.communicationsRead);
+
+  const search = input.search?.trim();
+  const status = parsePlatformEnum<PlatformConversationStatus>(
+    input.status,
+    PLATFORM_CONVERSATION_STATUSES,
+  );
+  const take = boundedTake(input.take, 50, 100);
+
+  const where: Prisma.ConversationWhereInput = {
+    ...(status ? { status } : {}),
+    ...(search
+      ? {
+          OR: [
+            { subject: { contains: search, mode: "insensitive" } },
+            {
+              organisation: {
+                name: { contains: search, mode: "insensitive" },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [
+    conversations,
+    total,
+    statusGroups,
+    channelGroups,
+    handoffRequired,
+    aiActive,
+  ] = await Promise.all([
+    db.conversation.findMany({
+      where,
+      select: {
+        id: true,
+        organisationId: true,
+        channel: true,
+        status: true,
+        subject: true,
+        identityLevel: true,
+        lastMessageAt: true,
+        lastInboundAt: true,
+        lastOutboundAt: true,
+        resolvedAt: true,
+        closedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        organisation: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        assignedAIEmployee: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            status: true,
+          },
+        },
+        assignedMember: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            messages: true,
+            assignments: true,
+            participants: true,
+            voiceCalls: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take,
+    }),
+    db.conversation.count(),
+    db.conversation.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    }),
+    db.conversation.groupBy({
+      by: ["channel"],
+      _count: { _all: true },
+    }),
+    db.conversation.count({
+      where: { status: "HUMAN_REQUIRED" },
+    }),
+    db.conversation.count({
+      where: { status: "AI_ACTIVE" },
+    }),
+  ]);
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.communications_listed",
+    "conversation",
+    "*",
+    undefined,
+    {
+      count: conversations.length,
+      status: status ?? null,
+      search: search ?? null,
+    },
+  );
+
+  return {
+    summary: {
+      total,
+      handoffRequired,
+      aiActive,
+      byStatus: Object.fromEntries(
+        statusGroups.map((entry) => [
+          entry.status,
+          entry._count._all,
+        ]),
+      ),
+      byChannel: Object.fromEntries(
+        channelGroups.map((entry) => [
+          entry.channel,
+          entry._count._all,
+        ]),
+      ),
+    },
+    conversations,
+  };
+}
+
+export async function getAIOperationsForPlatform(
+  principal: PlatformPrincipal,
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.aiOperationsRead);
+
+  const [
+    totalEmployees,
+    activeEmployees,
+    employees,
+    recentActivities,
+    handoffs,
+    openHandoffs,
+    escalations,
+    openEscalations,
+    criticalEscalations,
+  ] = await Promise.all([
+    db.aIEmployee.count({
+      where: { archivedAt: null },
+    }),
+    db.aIEmployee.count({
+      where: {
+        archivedAt: null,
+        status: "ACTIVE",
+      },
+    }),
+    db.aIEmployee.findMany({
+      where: { archivedAt: null },
+      select: {
+        id: true,
+        organisationId: true,
+        marketplaceProfessionalId: true,
+        name: true,
+        role: true,
+        status: true,
+        scope: true,
+        timezone: true,
+        providerKey: true,
+        modelKey: true,
+        createdAt: true,
+        updatedAt: true,
+        organisation: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        marketplaceProfessional: {
+          select: {
+            id: true,
+            displayName: true,
+            type: true,
+          },
+        },
+        _count: {
+          select: {
+            activities: true,
+            handoffs: true,
+            conversations: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+    }),
+    db.aIEmployeeActivity.findMany({
+      select: {
+        id: true,
+        organisationId: true,
+        marketplaceProfessionalId: true,
+        aiEmployeeId: true,
+        type: true,
+        status: true,
+        actionKey: true,
+        policyDecision: true,
+        reason: true,
+        failureCode: true,
+        failureMessage: true,
+        createdAt: true,
+        completedAt: true,
+        aiEmployee: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+        organisation: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        marketplaceProfessional: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    db.aIEmployeeHandoff.findMany({
+      where: {
+        status: {
+          in: ["OPEN", "ASSIGNED"],
+        },
+      },
+      select: {
+        id: true,
+        organisationId: true,
+        marketplaceProfessionalId: true,
+        aiEmployeeId: true,
+        reason: true,
+        urgency: true,
+        status: true,
+        contextSummary: true,
+        createdAt: true,
+        updatedAt: true,
+        aiEmployee: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+        organisation: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        marketplaceProfessional: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    db.aIEmployeeHandoff.count({
+      where: {
+        status: {
+          in: ["OPEN", "ASSIGNED"],
+        },
+      },
+    }),
+    db.aIEscalation.findMany({
+      where: {
+        status: {
+          not: "RESOLVED",
+        },
+      },
+      select: {
+        id: true,
+        activityId: true,
+        status: true,
+        level: true,
+        reason: true,
+        createdAt: true,
+        updatedAt: true,
+        resolvedAt: true,
+        activity: {
+          select: {
+            organisationId: true,
+            type: true,
+            status: true,
+            severity: true,
+            conditionKey: true,
+            actionKey: true,
+            autonomyLevel: true,
+            policyDecision: true,
+            reason: true,
+            createdAt: true,
+            organisation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    db.aIEscalation.count({
+      where: {
+        status: {
+          not: "RESOLVED",
+        },
+      },
+    }),
+    db.aIEscalation.count({
+      where: {
+        status: {
+          not: "RESOLVED",
+        },
+        activity: {
+          severity: "CRITICAL",
+        },
+      },
+    }),
+  ]);
+
+  const result = {
+    summary: {
+      totalEmployees,
+      activeEmployees,
+      openHandoffs,
+      openEscalations,
+      criticalEscalations,
+    },
+    employees,
+    recentActivities,
+    handoffs,
+    escalations,
+  };
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.ai_operations_viewed",
+    "ai_operations",
+    "*",
+    undefined,
+    result.summary,
+  );
+
+  return result;
+}
