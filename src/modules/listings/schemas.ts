@@ -74,7 +74,7 @@ const listingFields = {
   enquiryEnabled: z.boolean().default(true),
   privateNotes: optionalText(10_000),
   amenities: z.array(listingAmenitySchema).max(200).default([]),
-  media: z.array(listingMediaSchema).max(100).default([]),
+  media: z.array(listingMediaSchema).max(12, "A property listing can contain up to 12 media items.").default([]),
   /// Phase 21A item 5 — optional marketplace-professional attribution. Every existing caller
   /// that omits these behaves byte-identical to before this phase.
   listingAuthority: z.enum(["OWNER_SELF", "PROPERTY_MANAGER", "MANAGING_AGENT", "BROKERAGE_AUTHORIZED", "DEVELOPER", "THIRD_PARTY_AUTHORIZED"]).nullable().optional(),
@@ -158,7 +158,7 @@ export const createMarketplaceAssetSchema = z.object({
   mapLongitude: z.number().min(-180).max(180).nullable().optional(),
   amenities: z.array(z.string().trim().min(1).max(120)).max(200).default([]),
   furnishing: optionalText(100),
-  mediaUrls: z.array(z.string().url().max(2_000)).max(100).default([]),
+  mediaUrls: z.array(z.string().url().max(2_000)).max(12, "A property listing can contain up to 12 images.").default([]),
   availableFrom: z.coerce.date(),
   authorityEvidenceReady: z.boolean().default(false),
 }).strict().superRefine((asset, context) => {
@@ -185,7 +185,7 @@ const updateListingFields = {
   showContactPhone: z.boolean(),
   enquiryEnabled: z.boolean(),
   amenities: z.array(listingAmenitySchema).max(200),
-  media: z.array(listingMediaSchema).max(100),
+  media: z.array(listingMediaSchema).max(12, "A property listing can contain up to 12 media items."),
 };
 
 export const updateListingSchema = z.object({

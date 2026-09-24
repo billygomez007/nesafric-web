@@ -16,6 +16,7 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
   const [listingType, setListingType] = useState("RENT");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [imageUrls, setImageUrls] = useState<string[]>([""]);
   useEffect(() => {
     const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
     if (!organisationId) { const timer = setTimeout(() => setError("Choose an organisation."), 0); return () => clearTimeout(timer); }
@@ -24,7 +25,16 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
       setProperties((await dashboardResponse.json()).properties);
       if (listingResponse) {
         if (!listingResponse.ok) throw new Error((await listingResponse.json()).error?.message ?? "Unable to load listing.");
-        const value = await listingResponse.json(); setListing(value); setPropertyId(value.propertyId); setListingType(value.listingType);
+        const value = await listingResponse.json();
+        setListing(value);
+        setPropertyId(value.propertyId);
+        setListingType(value.listingType);
+        const existingImages = (value.media ?? [])
+          .filter((item: { type: string }) => item.type === "PHOTO")
+          .sort((a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder)
+          .slice(0, 12)
+          .map((item: { publicUrl: string }) => item.publicUrl);
+        setImageUrls(existingImages.length ? existingImages : [""]);
       }
     }).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load listing editor."));
   }, [listingId]);
@@ -44,7 +54,10 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
     if (!organisationId) return setError("Choose an organisation.");
     const data = new FormData(event.currentTarget);
     const amenityLabels = String(data.get("amenities") || "").split(",").map((value) => value.trim()).filter(Boolean);
-    const mediaUrl = String(data.get("mediaUrl") || "").trim();
+    const propertyImages = imageUrls
+      .map((url) => url.trim())
+      .filter(Boolean)
+      .slice(0, 12);
     const payload = {
       propertyId, unitId: data.get("unitId") || null, listingType, category: data.get("category"), title: data.get("title"), publicDescription: data.get("publicDescription"),
       askingAmountMinor: listingType === "SALE" ? String(Math.round(Number(data.get("amount")) * 100)) : null, rentAmountMinor: listingType === "RENT" ? String(Math.round(Number(data.get("amount")) * 100)) : null,
@@ -53,7 +66,13 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
       countryCode: data.get("countryCode"), region: data.get("region") || null, city: data.get("city") || null, district: data.get("district") || null, locality: data.get("locality") || null, publicLocationLabel: data.get("publicLocationLabel") || null,
       contactName: data.get("contactName") || null, contactEmail: data.get("contactEmail") || null, contactPhone: data.get("contactPhone") || null, showContactEmail: data.get("showContactEmail") === "on", showContactPhone: data.get("showContactPhone") === "on", enquiryEnabled: data.get("enquiryEnabled") === "on", privateNotes: data.get("privateNotes") || null,
       amenities: amenityLabels.map((label) => ({ key: label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), label })),
-      media: mediaUrl ? [{ type: data.get("mediaType"), publicUrl: mediaUrl, title: data.get("mediaTitle") || null, altText: data.get("mediaAlt") || null, sortOrder: 0 }] : [],
+      media: propertyImages.map((publicUrl, index) => ({
+        type: "PHOTO",
+        publicUrl,
+        title: index === 0 ? "Cover photo" : `Property photo ${index + 1}`,
+        altText: `${String(data.get("title") || "Property")} — photo ${index + 1}`,
+        sortOrder: index,
+      })),
     };
     setSaving(true); setError("");
     const response = await fetch(listingId ? `/api/listings/${listingId}` : "/api/listings", { method: listingId ? "PATCH" : "POST", headers: { "content-type": "application/json", "x-organisation-id": organisationId }, body: JSON.stringify(payload) });
@@ -62,5 +81,72 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
   }
   if (listingId && !listing && !error) return <p className="rounded-xl border border-hairline border-hairline bg-white p-6 text-muted">Loading listing...</p>;
   const value = listing;
-  return <form className="grid gap-5 rounded-2xl border border-hairline bg-white p-6 shadow-sm" onSubmit={save}><div className="grid gap-4 md:grid-cols-3"><label className="text-sm font-medium">Managed property<select className="mt-1 w-full rounded-xl border border-hairline p-3" required value={propertyId} onChange={(event) => { setPropertyId(event.target.value); setUnits([]); }}><option value="">Select property</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.name} ({property.referenceNumber})</option>)}</select></label><label className="text-sm font-medium">Unit <span className="font-normal text-muted">(optional)</span><select className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.unitId ?? ""} name="unitId"><option value="">Whole property</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label><label className="text-sm font-medium">Listing type<select className="mt-1 w-full rounded-xl border border-hairline p-3" value={listingType} onChange={(event) => setListingType(event.target.value)}><option value="RENT">Rental</option><option value="SALE">Sale</option></select></label></div><div className="grid gap-4 md:grid-cols-2"><label className="text-sm font-medium">Title<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.title ?? ""} minLength={3} name="title" required /></label><label className="text-sm font-medium">Property category<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.category ?? ""} name="category" placeholder="Apartment, house, office..." required /></label></div><label className="text-sm font-medium">Public description<textarea className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.publicDescription ?? ""} minLength={20} name="publicDescription" required rows={5} /></label><div className="grid gap-4 md:grid-cols-4"><label className="text-sm font-medium">Amount<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value ? (Number(value.rentAmountMinor ?? value.askingAmountMinor ?? 0) / 100) || "" : ""} min="0.01" name="amount" required step="0.01" type="number" /></label><label className="text-sm font-medium">Currency<input className="mt-1 w-full rounded-xl border border-hairline p-3 uppercase" defaultValue={value?.currencyCode ?? ""} maxLength={3} name="currencyCode" required /></label>{listingType === "RENT" && <label className="text-sm font-medium">Frequency<select className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.frequency ?? "MONTHLY"} name="frequency"><option value="MONTHLY">Monthly</option><option value="QUARTERLY">Quarterly</option><option value="ANNUAL">Annual</option><option value="CUSTOM">Custom</option></select></label>}<label className="text-sm font-medium">Available from<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.availableFrom?.slice(0, 10) ?? ""} name="availableFrom" required type="date" /></label></div><div className="grid gap-4 md:grid-cols-3"><label className="text-sm font-medium">Bedrooms<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.bedrooms ?? ""} min="0" name="bedrooms" type="number" /></label><label className="text-sm font-medium">Bathrooms<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.bathrooms ?? ""} min="0" name="bathrooms" step="0.5" type="number" /></label><label className="text-sm font-medium">Size (m²)<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.sizeSqm ?? ""} min="0" name="sizeSqm" type="number" /></label></div><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public location</legend><div className="grid gap-3 md:grid-cols-3"><input className="rounded-xl border border-hairline p-3 text-sm uppercase" defaultValue={value?.countryCode ?? ""} maxLength={2} name="countryCode" placeholder="Country (e.g. GH)" required /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.region ?? ""} name="region" placeholder="Region / state" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.city ?? ""} name="city" placeholder="City" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.district ?? ""} name="district" placeholder="District" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.locality ?? ""} name="locality" placeholder="Locality" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.publicLocationLabel ?? ""} name="publicLocationLabel" placeholder="Public location label" /></div></fieldset><label className="text-sm font-medium">Amenities <span className="font-normal text-muted">(comma-separated)</span><input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.amenities.map((amenity) => amenity.label).join(", ") ?? ""} name="amenities" placeholder="Parking, security, internet, balcony" /></label><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public media metadata</legend><div className="grid gap-3 md:grid-cols-4"><select className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.media[0]?.type ?? "PHOTO"} name="mediaType"><option value="PHOTO">Photo</option><option value="VIDEO">Video</option><option value="FLOOR_PLAN">Floor plan</option></select><input className="rounded-xl border border-hairline p-3 text-sm md:col-span-2" defaultValue={value?.media[0]?.publicUrl ?? ""} name="mediaUrl" placeholder="Public media URL" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.media[0]?.altText ?? ""} name="mediaAlt" placeholder="Alt text" /></div><input className="mt-3 w-full rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.media[0]?.title ?? ""} name="mediaTitle" placeholder="Media title" /></fieldset><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Enquiry contact controls</legend><div className="grid gap-3 md:grid-cols-3"><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactName ?? ""} name="contactName" placeholder="Public contact name" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactEmail ?? ""} name="contactEmail" placeholder="Contact email" type="email" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactPhone ?? ""} name="contactPhone" placeholder="Contact phone" /></div><div className="mt-3 flex flex-wrap gap-4 text-sm"><label><input defaultChecked={value?.enquiryEnabled ?? true} name="enquiryEnabled" type="checkbox" /> Enquiries enabled</label><label><input defaultChecked={value?.showContactEmail ?? false} name="showContactEmail" type="checkbox" /> Publish email</label><label><input defaultChecked={value?.showContactPhone ?? false} name="showContactPhone" type="checkbox" /> Publish phone</label></div></fieldset><label className="text-sm font-medium">Private management notes<textarea className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.privateNotes ?? ""} name="privateNotes" rows={2} /></label>{error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}<button className="rounded-lg bg-forest p-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={saving || !propertyId}>{saving ? "Saving..." : listingId ? "Save listing" : "Create draft listing"}</button></form>;
+  return <form className="grid gap-5 rounded-2xl border border-hairline bg-white p-6 shadow-sm" onSubmit={save}><div className="grid gap-4 md:grid-cols-3"><label className="text-sm font-medium">Managed property<select className="mt-1 w-full rounded-xl border border-hairline p-3" required value={propertyId} onChange={(event) => { setPropertyId(event.target.value); setUnits([]); }}><option value="">Select property</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.name} ({property.referenceNumber})</option>)}</select></label><label className="text-sm font-medium">Unit <span className="font-normal text-muted">(optional)</span><select className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.unitId ?? ""} name="unitId"><option value="">Whole property</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label><label className="text-sm font-medium">Listing type<select className="mt-1 w-full rounded-xl border border-hairline p-3" value={listingType} onChange={(event) => setListingType(event.target.value)}><option value="RENT">Rental</option><option value="SALE">Sale</option></select></label></div><div className="grid gap-4 md:grid-cols-2"><label className="text-sm font-medium">Title<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.title ?? ""} minLength={3} name="title" required /></label><label className="text-sm font-medium">Property category<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.category ?? ""} name="category" placeholder="Apartment, house, office..." required /></label></div><label className="text-sm font-medium">Public description<textarea className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.publicDescription ?? ""} minLength={20} name="publicDescription" required rows={5} /></label><div className="grid gap-4 md:grid-cols-4"><label className="text-sm font-medium">Amount<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value ? (Number(value.rentAmountMinor ?? value.askingAmountMinor ?? 0) / 100) || "" : ""} min="0.01" name="amount" required step="0.01" type="number" /></label><label className="text-sm font-medium">Currency<input className="mt-1 w-full rounded-xl border border-hairline p-3 uppercase" defaultValue={value?.currencyCode ?? ""} maxLength={3} name="currencyCode" required /></label>{listingType === "RENT" && <label className="text-sm font-medium">Frequency<select className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.frequency ?? "MONTHLY"} name="frequency"><option value="MONTHLY">Monthly</option><option value="QUARTERLY">Quarterly</option><option value="ANNUAL">Annual</option><option value="CUSTOM">Custom</option></select></label>}<label className="text-sm font-medium">Available from<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.availableFrom?.slice(0, 10) ?? ""} name="availableFrom" required type="date" /></label></div><div className="grid gap-4 md:grid-cols-3"><label className="text-sm font-medium">Bedrooms<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.bedrooms ?? ""} min="0" name="bedrooms" type="number" /></label><label className="text-sm font-medium">Bathrooms<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.bathrooms ?? ""} min="0" name="bathrooms" step="0.5" type="number" /></label><label className="text-sm font-medium">Size (m²)<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.sizeSqm ?? ""} min="0" name="sizeSqm" type="number" /></label></div><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public location</legend><div className="grid gap-3 md:grid-cols-3"><input className="rounded-xl border border-hairline p-3 text-sm uppercase" defaultValue={value?.countryCode ?? ""} maxLength={2} name="countryCode" placeholder="Country (e.g. GH)" required /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.region ?? ""} name="region" placeholder="Region / state" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.city ?? ""} name="city" placeholder="City" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.district ?? ""} name="district" placeholder="District" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.locality ?? ""} name="locality" placeholder="Locality" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.publicLocationLabel ?? ""} name="publicLocationLabel" placeholder="Public location label" /></div></fieldset><label className="text-sm font-medium">Amenities <span className="font-normal text-muted">(comma-separated)</span><input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.amenities.map((amenity) => amenity.label).join(", ") ?? ""} name="amenities" placeholder="Parking, security, internet, balcony" /></label><fieldset className="rounded-xl border border-hairline p-4">
+  <legend className="px-1 text-sm font-semibold">Property images</legend>
+  <div className="mb-4 flex items-start justify-between gap-4">
+    <div>
+      <p className="text-sm font-semibold text-ink">Add up to 12 property images</p>
+      <p className="mt-1 text-xs text-muted">The first image becomes the cover photo shown across the marketplace.</p>
+    </div>
+    <span className="shrink-0 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-muted">
+      {imageUrls.filter((url) => url.trim()).length}/12
+    </span>
+  </div>
+
+  <div className="grid gap-3 md:grid-cols-2">
+    {imageUrls.map((url, index) => (
+      <div key={index} className="rounded-xl border border-hairline bg-surface/40 p-3">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold text-muted">
+            {index === 0 ? "Cover image" : `Image ${index + 1}`}
+          </span>
+          {imageUrls.length > 1 && (
+            <button
+              type="button"
+              className="text-xs font-semibold text-red-700 hover:underline"
+              onClick={() => setImageUrls((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+
+        <input
+          className="w-full rounded-xl border border-hairline bg-white p-3 text-sm"
+          type="url"
+          placeholder="https://example.com/property-photo.jpg"
+          value={url}
+          onChange={(event) =>
+            setImageUrls((current) =>
+              current.map((item, itemIndex) =>
+                itemIndex === index ? event.target.value : item,
+              ),
+            )
+          }
+        />
+
+        {url.trim() && (
+          <div className="mt-3 overflow-hidden rounded-xl border border-hairline bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`Property preview ${index + 1}`}
+              className="h-40 w-full object-cover"
+            />
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+
+  {imageUrls.length < 12 && (
+    <button
+      type="button"
+      className="mt-4 rounded-xl border border-hairline bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-surface"
+      onClick={() => setImageUrls((current) => [...current, ""])}
+    >
+      + Add another image
+    </button>
+  )}
+</fieldset><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Enquiry contact controls</legend><div className="grid gap-3 md:grid-cols-3"><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactName ?? ""} name="contactName" placeholder="Public contact name" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactEmail ?? ""} name="contactEmail" placeholder="Contact email" type="email" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactPhone ?? ""} name="contactPhone" placeholder="Contact phone" /></div><div className="mt-3 flex flex-wrap gap-4 text-sm"><label><input defaultChecked={value?.enquiryEnabled ?? true} name="enquiryEnabled" type="checkbox" /> Enquiries enabled</label><label><input defaultChecked={value?.showContactEmail ?? false} name="showContactEmail" type="checkbox" /> Publish email</label><label><input defaultChecked={value?.showContactPhone ?? false} name="showContactPhone" type="checkbox" /> Publish phone</label></div></fieldset><label className="text-sm font-medium">Private management notes<textarea className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.privateNotes ?? ""} name="privateNotes" rows={2} /></label>{error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}<button className="rounded-lg bg-forest p-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={saving || !propertyId}>{saving ? "Saving..." : listingId ? "Save listing" : "Create draft listing"}</button></form>;
 }
