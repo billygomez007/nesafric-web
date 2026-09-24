@@ -883,6 +883,8 @@ model Currency {
 model Organisation {
   id                          String                            @id @default(uuid()) @db.Uuid
   name                        String
+  logoUrl                     String?
+  logoStorageObjectId         String?                           @db.Uuid
   type                        OrganisationType
   countryCode                 String                            @db.Char(2)
   defaultCurrencyCode         String                            @db.Char(3)

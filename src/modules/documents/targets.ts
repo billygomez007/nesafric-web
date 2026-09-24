@@ -221,6 +221,54 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
    * only (checked directly against `PlatformPrincipal`, mirroring `PROVIDER_EVIDENCE`'s pattern,
    * since this framework's `authorize` only has a userId, not the full authenticated `User`).
    * Always PUBLIC: campaign creative is meant to be shown to every visitor, never signed/private. */
+  ORGANISATION_LOGO: {
+    allowedMimeTypes: IMAGE_MIME_TYPES,
+    allowedClassifications: ["PUBLIC"],
+    authorize: async (tx, { userId, organisationId, targetId }) => {
+      if (!organisationId || organisationId !== targetId) throw forbidden();
+
+      await requirePermission(
+        userId,
+        organisationId,
+        PERMISSIONS.organisationManageMembers,
+      );
+
+      const organisation = await tx.organisation.findFirst({
+        where: {
+          id: targetId,
+          archivedAt: null,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!organisation) throw notFound();
+
+      return { organisationId };
+    },
+    attach: async (tx, { targetId, storageObject }) => {
+      const adapter = getObjectStorageAdapter();
+      const publicUrl =
+        adapter.getPublicUrl(storageObject.storageKey) ??
+        buildInternalPublicMediaUrl(storageObject.storageKey);
+
+      return tx.organisation.update({
+        where: { id: targetId },
+        data: {
+          logoUrl: publicUrl,
+          logoStorageObjectId: storageObject.id,
+        },
+        select: {
+          id: true,
+          name: true,
+          logoUrl: true,
+          logoStorageObjectId: true,
+        },
+      });
+    },
+  },
+
   CAMPAIGN_CREATIVE: {
     allowedMimeTypes: IMAGE_MIME_TYPES,
     allowedClassifications: ["PUBLIC"],

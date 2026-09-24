@@ -81,6 +81,14 @@ type DashboardMetrics = {
   } | null;
 };
 
+function getTimeGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 const VERIFICATION: Record<
   string,
   { label: string; tone: "neutral" | "success" | "warning" | "danger" }
@@ -237,7 +245,11 @@ export function MarketplaceProfileDashboard({
               )}
             </div>
 
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em] sm:text-[38px]">
+            <p className="mt-3 text-sm font-medium text-white/60">
+              {getTimeGreeting()}
+            </p>
+
+            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.045em] sm:text-[38px]">
               {detail.displayName}
             </h1>
 

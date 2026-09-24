@@ -19,6 +19,11 @@ type Property = {
 };
 
 type Dashboard = {
+  organisation: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+  };
   properties: Property[];
   units: number;
   members: number;
@@ -69,6 +74,11 @@ type Opportunity = {
 const READ_ONLY_STATUSES = new Set(["SUSPENDED", "CANCELLED"]);
 
 const DEV_DASHBOARD: Dashboard = {
+  organisation: {
+    id: "dev-organisation",
+    name: "NesAfric Demo Properties",
+    logoUrl: null,
+  },
   properties: [
     { id: "p1", name: "The Ridge Apartments", referenceNumber: "PROP-001", category: "Residential", status: "ACTIVE" },
     { id: "p2", name: "Accra Business Centre", referenceNumber: "PROP-002", category: "Commercial", status: "ACTIVE" },
@@ -93,6 +103,12 @@ const DEV_MAINTENANCE: MaintenanceMetrics = {
   openByPriority: { EMERGENCY: 1 },
 };
 
+function getTimeGreeting(hour: number) {
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 function money(value?: string, currencyCode?: string | null) {
   if (!value || !currencyCode) return "—";
 
@@ -105,6 +121,18 @@ function money(value?: string, currencyCode?: string | null) {
 
 export function DashboardContent() {
   const [data, setData] = useState<Dashboard | null>(null);
+  const [greeting, setGreeting] = useState("");
+
+  useEffect(() => {
+    const updateGreeting = () => {
+      setGreeting(getTimeGreeting(new Date().getHours()));
+    };
+
+    updateGreeting();
+    const timer = window.setInterval(updateGreeting, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
   const [collection, setCollection] = useState<CollectionMetrics | null>(null);
   const [maintenance, setMaintenance] = useState<MaintenanceMetrics | null>(null);
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
@@ -253,9 +281,23 @@ export function DashboardContent() {
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-teal-light">
               Live portfolio
             </p>
-            <h2 className="mt-3 max-w-2xl text-2xl font-semibold tracking-[-0.04em] sm:text-[34px]">
-              Your property business at a glance.
-            </h2>
+            <p className="mt-3 text-sm font-medium text-white/60">
+              {greeting || "Welcome"}
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              {data.organisation.logoUrl ? (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/15 bg-white p-1.5 shadow-sm">
+                  <img
+                    alt={`${data.organisation.name} logo`}
+                    className="h-full w-full object-contain"
+                    src={data.organisation.logoUrl}
+                  />
+                </div>
+              ) : null}
+              <h2 className="max-w-2xl text-2xl font-semibold tracking-[-0.04em] sm:text-[34px]">
+                {data.organisation.name}
+              </h2>
+            </div>
             <p className="mt-3 max-w-xl text-sm leading-6 text-white/65">
               Track rent, properties, units, maintenance and team activity from
               one operating view.
