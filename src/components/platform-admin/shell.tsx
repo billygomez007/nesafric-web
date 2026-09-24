@@ -10,6 +10,8 @@ type WhoAmI = { isPlatformPrincipal: boolean; role?: string };
 const NAV = [
   { href: "/platform-admin", label: "Overview" },
   { href: "/platform-admin/organisations", label: "Organisations" },
+  { href: "/platform-admin/users", label: "Users" },
+  { href: "/platform-admin/professionals", label: "Real Estate Professionals" },
   { href: "/platform-admin/service-providers", label: "Providers & verification" },
   { href: "/platform-admin/campaigns", label: "Campaigns" },
   { href: "/platform-admin/plans", label: "Plans & entitlements" },

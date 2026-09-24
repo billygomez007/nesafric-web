@@ -410,3 +410,221 @@ export async function getPlatformAuditLog(principal: PlatformPrincipal, input: u
     take: query.take,
   });
 }
+
+// SUPER ADMIN PHASE 1 — USERS + PROFESSIONALS
+// ---------------------------------------------------------------------------
+
+type PlatformDirectoryQuery = {
+  search?: string;
+  take?: number;
+};
+
+function boundedTake(value: unknown, fallback = 50, maximum = 100) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(Math.trunc(parsed), 1), maximum);
+}
+
+/**
+ * Platform-wide user directory.
+ *
+ * Deliberately returns only operational account metadata. Password hashes, session tokens,
+ * provider credentials and other secrets are never selected.
+ */
+export async function listUsersForPlatform(
+  principal: PlatformPrincipal,
+  input: PlatformDirectoryQuery = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.usersRead);
+
+  const search = input.search?.trim();
+  const take = boundedTake(input.take);
+
+  const users = await db.user.findMany({
+    where: search
+      ? {
+          OR: [
+            { email: { contains: search, mode: "insensitive" } },
+            { displayName: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      emailVerifiedAt: true,
+      createdAt: true,
+      platformPrincipal: {
+        select: {
+          role: true,
+          status: true,
+        },
+      },
+      memberships: {
+        where: { archivedAt: null },
+        select: {
+          id: true,
+          status: true,
+          organisation: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+          roles: {
+            select: {
+              role: {
+                select: {
+                  key: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+        take: 20,
+      },
+      marketplaceProfessionalMemberships: {
+        where: { status: { in: ["ACTIVE", "INVITED", "SUSPENDED"] } },
+        select: {
+          id: true,
+          role: true,
+          status: true,
+          marketplaceProfessional: {
+            select: {
+              id: true,
+              displayName: true,
+              type: true,
+              status: true,
+              verificationStatus: true,
+            },
+          },
+        },
+        take: 20,
+      },
+      _count: {
+        select: {
+          memberships: true,
+          marketplaceProfessionalMemberships: true,
+          sessions: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take,
+  });
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.users_listed",
+    "user",
+    "*",
+    undefined,
+    { count: users.length, search: search ?? null },
+  );
+
+  return users;
+}
+
+/**
+ * Platform-wide Marketplace Professional directory for the NesAfric operations team.
+ *
+ * This is intentionally separate from PropertyOS organisations: MarketplaceProfessional is its
+ * own account family and the hidden backing organisation is not exposed here.
+ */
+export async function listMarketplaceProfessionalsForPlatform(
+  principal: PlatformPrincipal,
+  input: PlatformDirectoryQuery = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.marketplaceRead);
+
+  const search = input.search?.trim();
+  const take = boundedTake(input.take);
+
+  const professionals = await db.marketplaceProfessional.findMany({
+    where: {
+      ...(search
+        ? {
+            OR: [
+              { displayName: { contains: search, mode: "insensitive" } },
+              { legalName: { contains: search, mode: "insensitive" } },
+              { contactEmail: { contains: search, mode: "insensitive" } },
+              { slug: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      type: true,
+      displayName: true,
+      legalName: true,
+      slug: true,
+      logoUrl: true,
+      contactEmail: true,
+      contactPhone: true,
+      countryCode: true,
+      specialities: true,
+      servicesOffered: true,
+      serviceAreas: true,
+      status: true,
+      verificationStatus: true,
+      createdAt: true,
+      archivedAt: true,
+      subscription: {
+        select: {
+          status: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          plan: {
+            select: {
+              key: true,
+              name: true,
+            },
+          },
+        },
+      },
+      members: {
+        where: { status: { in: ["ACTIVE", "INVITED", "SUSPENDED"] } },
+        select: {
+          id: true,
+          role: true,
+          status: true,
+          user: {
+            select: {
+              id: true,
+              displayName: true,
+              email: true,
+            },
+          },
+        },
+        take: 20,
+      },
+      _count: {
+        select: {
+          members: true,
+          listings: true,
+          developments: true,
+          campaigns: true,
+          aiemployees: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take,
+  });
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.marketplace_professionals_listed",
+    "marketplace_professional",
+    "*",
+    undefined,
+    { count: professionals.length, search: search ?? null },
+  );
+
+  return professionals;
+}
+
