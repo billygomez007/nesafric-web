@@ -628,3 +628,381 @@ export async function listMarketplaceProfessionalsForPlatform(
   return professionals;
 }
 
+
+// SUPER ADMIN PHASE 2 — SUBSCRIPTIONS + PAYMENTS
+// ---------------------------------------------------------------------------
+
+const PLATFORM_SUBSCRIPTION_STATUSES = [
+  "TRIALING",
+  "ACTIVE",
+  "PAST_DUE",
+  "GRACE_PERIOD",
+  "SUSPENDED",
+  "CANCELLED",
+] as const;
+
+const PLATFORM_PAYMENT_STATUSES = [
+  "PENDING",
+  "PROCESSING",
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED",
+  "REVERSED",
+] as const;
+
+const PLATFORM_RECONCILIATION_STATUSES = [
+  "UNMATCHED",
+  "PENDING",
+  "MATCHED",
+  "MISMATCHED",
+  "DUPLICATE",
+] as const;
+
+type PlatformSubscriptionStatus =
+  (typeof PLATFORM_SUBSCRIPTION_STATUSES)[number];
+
+type PlatformPaymentStatus =
+  (typeof PLATFORM_PAYMENT_STATUSES)[number];
+
+type PlatformReconciliationStatus =
+  (typeof PLATFORM_RECONCILIATION_STATUSES)[number];
+
+function parsePlatformEnum<T extends string>(
+  value: unknown,
+  values: readonly T[],
+): T | undefined {
+  if (typeof value !== "string") return undefined;
+  return values.includes(value as T) ? (value as T) : undefined;
+}
+
+type PlatformSubscriptionDirectoryQuery = {
+  search?: string;
+  status?: string;
+  take?: number;
+};
+
+export async function listSubscriptionsForPlatform(
+  principal: PlatformPrincipal,
+  input: PlatformSubscriptionDirectoryQuery = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.subscriptionsRead);
+
+  const search = input.search?.trim();
+  const status = parsePlatformEnum<PlatformSubscriptionStatus>(
+    input.status,
+    PLATFORM_SUBSCRIPTION_STATUSES,
+  );
+  const take = boundedTake(input.take, 50, 100);
+
+  const where: Prisma.OrganisationSubscriptionWhereInput = {
+    ...(status ? { status } : {}),
+    ...(search
+      ? {
+          organisation: {
+            name: { contains: search, mode: "insensitive" },
+          },
+        }
+      : {}),
+  };
+
+  const [subscriptions, statusGroups, totalSubscriptions, failedInvoices] =
+    await Promise.all([
+      db.organisationSubscription.findMany({
+        where,
+        select: {
+          id: true,
+          organisationId: true,
+          status: true,
+          billingCycle: true,
+          currencyCode: true,
+          billingProviderKey: true,
+          trialEndsAt: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          cancelAtPeriodEnd: true,
+          cancelledAt: true,
+          suspendedAt: true,
+          gracePeriodEndsAt: true,
+          pastDueSince: true,
+          createdAt: true,
+          updatedAt: true,
+          organisation: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              countryCode: true,
+            },
+          },
+          plan: {
+            select: {
+              id: true,
+              key: true,
+              name: true,
+              isActive: true,
+              isPublic: true,
+            },
+          },
+          _count: {
+            select: {
+              invoices: true,
+              statusHistory: true,
+            },
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+        take,
+      }),
+      db.organisationSubscription.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      db.organisationSubscription.count(),
+      db.subscriptionInvoice.count({ where: { status: "FAILED" } }),
+    ]);
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.subscriptions_listed",
+    "organisation_subscription",
+    "*",
+    undefined,
+    {
+      count: subscriptions.length,
+      status: status ?? null,
+      search: search ?? null,
+    },
+  );
+
+  return {
+    summary: {
+      total: totalSubscriptions,
+      byStatus: Object.fromEntries(
+        statusGroups.map((entry) => [entry.status, entry._count._all]),
+      ),
+      failedInvoices,
+    },
+    subscriptions,
+  };
+}
+
+type PlatformPaymentDirectoryQuery = {
+  search?: string;
+  status?: string;
+  reconciliationStatus?: string;
+  take?: number;
+};
+
+export async function listPaymentsForPlatform(
+  principal: PlatformPrincipal,
+  input: PlatformPaymentDirectoryQuery = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.paymentsRead);
+
+  const search = input.search?.trim();
+  const status = parsePlatformEnum<PlatformPaymentStatus>(
+    input.status,
+    PLATFORM_PAYMENT_STATUSES,
+  );
+  const reconciliationStatus =
+    parsePlatformEnum<PlatformReconciliationStatus>(
+      input.reconciliationStatus,
+      PLATFORM_RECONCILIATION_STATUSES,
+    );
+  const take = boundedTake(input.take, 50, 100);
+
+  const where: Prisma.PaymentWhereInput = {
+    ...(status ? { status } : {}),
+    ...(reconciliationStatus ? { reconciliationStatus } : {}),
+    ...(search
+      ? {
+          OR: [
+            {
+              internalReference: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              externalReference: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              providerTransactionRef: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              organisation: {
+                name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [
+    payments,
+    paymentStatusGroups,
+    reconciliationGroups,
+    totalPayments,
+    failedPayments,
+    reconciliationExceptions,
+  ] = await Promise.all([
+    db.payment.findMany({
+      where,
+      select: {
+        id: true,
+        organisationId: true,
+        internalReference: true,
+        amountMinor: true,
+        currencyCode: true,
+        method: true,
+        source: true,
+        status: true,
+        paidAt: true,
+        externalReference: true,
+        providerKey: true,
+        providerTransactionRef: true,
+        reconciliationStatus: true,
+        failureReason: true,
+        confirmedAt: true,
+        reversedAt: true,
+        reversalReason: true,
+        createdAt: true,
+        organisation: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: {
+            reconciliationEvents: true,
+            ledgerEntries: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take,
+    }),
+    db.payment.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    }),
+    db.payment.groupBy({
+      by: ["reconciliationStatus"],
+      _count: { _all: true },
+    }),
+    db.payment.count(),
+    db.payment.count({ where: { status: "FAILED" } }),
+    db.paymentReconciliationEvent.count({
+      where: {
+        status: {
+          in: ["UNMATCHED", "MISMATCHED"],
+        },
+      },
+    }),
+  ]);
+
+  const serializablePayments = payments.map((payment) => ({
+    ...payment,
+    amountMinor: payment.amountMinor.toString(),
+  }));
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.payments_listed",
+    "payment",
+    "*",
+    undefined,
+    {
+      count: serializablePayments.length,
+      status: status ?? null,
+      reconciliationStatus: reconciliationStatus ?? null,
+      search: search ?? null,
+    },
+  );
+
+  return {
+    summary: {
+      total: totalPayments,
+      failed: failedPayments,
+      reconciliationExceptions,
+      byStatus: Object.fromEntries(
+        paymentStatusGroups.map((entry) => [
+          entry.status,
+          entry._count._all,
+        ]),
+      ),
+      byReconciliationStatus: Object.fromEntries(
+        reconciliationGroups.map((entry) => [
+          entry.reconciliationStatus,
+          entry._count._all,
+        ]),
+      ),
+    },
+    payments: serializablePayments,
+  };
+}
+
+export async function listPaymentReconciliationForPlatform(
+  principal: PlatformPrincipal,
+  input: {
+    status?: string;
+    take?: number;
+  } = {},
+) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.paymentsRead);
+
+  const status = parsePlatformEnum<PlatformReconciliationStatus>(
+    input.status,
+    PLATFORM_RECONCILIATION_STATUSES,
+  );
+  const take = boundedTake(input.take, 50, 100);
+
+  const events = await db.paymentReconciliationEvent.findMany({
+    where: status ? { status } : undefined,
+    select: {
+      id: true,
+      organisationId: true,
+      paymentId: true,
+      securityDepositId: true,
+      providerKey: true,
+      eventKey: true,
+      transactionRef: true,
+      status: true,
+      receivedAt: true,
+      processedAt: true,
+      organisation: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: { receivedAt: "desc" },
+    take,
+  });
+
+  await recordPlatformAudit(
+    principal,
+    "platform_admin.payment_reconciliation_listed",
+    "payment_reconciliation_event",
+    "*",
+    undefined,
+    {
+      count: events.length,
+      status: status ?? null,
+    },
+  );
+
+  return events;
+}

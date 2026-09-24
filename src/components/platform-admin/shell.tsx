@@ -15,6 +15,8 @@ const NAV = [
   { href: "/platform-admin/service-providers", label: "Providers & verification" },
   { href: "/platform-admin/campaigns", label: "Campaigns" },
   { href: "/platform-admin/plans", label: "Plans & entitlements" },
+  { href: "/platform-admin/subscriptions", label: "Subscriptions" },
+  { href: "/platform-admin/payments", label: "Payments & reconciliation" },
   { href: "/platform-admin/flags", label: "Feature flags" },
   { href: "/platform-admin/health", label: "Operations" },
   { href: "/platform-admin/audit", label: "Audit activity" },
