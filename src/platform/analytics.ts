@@ -1,21 +1,20 @@
 /**
- * Central GA4 configuration and event-tracking surface. The tag itself is loaded exactly once, in
- * the root layout, via `@next/third-parties/google`'s `<GoogleAnalytics>` component. Nothing else
- * should call `sendGAEvent` or touch `window.dataLayer` directly — go through `trackEvent` below so
- * every future analytics change (provider swap, param shape, PII rule) has one place to happen.
+ * Central analytics configuration and event-tracking surface.
+ *
+ * Google Tag Manager is loaded once in the root layout. Application analytics events are pushed
+ * into window.dataLayer through trackEvent so GTM can route them to GA4 and future destinations
+ * without duplicating analytics tags inside the application.
  */
-import { sendGAEvent } from "@next/third-parties/google";
+
 
 /**
- * Unset outside the real production environment (see `.env.production.local` / the Vercel
- * dashboard) — deliberately has no hardcoded fallback, unlike `BRAND.siteUrl`. A missing value
- * disables the tag entirely (`<GoogleAnalytics>` in the root layout only renders when this is
- * set), so local dev and Preview deployments never send traffic into the production GA4 property.
+ * Unset outside environments where analytics should run. A missing NEXT_PUBLIC_GTM_ID disables
+ * Google Tag Manager entirely, preventing accidental analytics traffic from local development.
  */
-export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+export const GTM_CONTAINER_ID = process.env.NEXT_PUBLIC_GTM_ID;
 
 export function isAnalyticsEnabled(): boolean {
-  return Boolean(GA_MEASUREMENT_ID);
+  return Boolean(GTM_CONTAINER_ID);
 }
 
 /**
@@ -86,7 +85,16 @@ export type AnalyticsEventParams = Record<string, string | number | boolean>;
 
 export function trackEvent(event: AnalyticsEvent, params: AnalyticsEventParams = {}) {
   if (typeof window === "undefined" || !isAnalyticsEnabled()) return;
-  sendGAEvent("event", event, params);
+
+  const target = window as Window & {
+    dataLayer?: Array<Record<string, unknown>>;
+  };
+
+  target.dataLayer = target.dataLayer ?? [];
+  target.dataLayer.push({
+    event,
+    ...params,
+  });
 }
 
 /**
