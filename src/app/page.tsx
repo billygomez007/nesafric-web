@@ -186,8 +186,8 @@ export default function Home() {
                           ].map(([name,location,occupancy,rent,status]) => (
                             <div className="grid gap-3 px-5 py-4 sm:grid-cols-[1.35fr_0.6fr_0.7fr_0.7fr] sm:items-center" key={name}>
                               <div><p className="text-sm font-semibold text-slate-900">{name}</p><p className="mt-1 text-xs text-slate-500">{location}</p></div>
-                              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Occupied</p><p className="mt-1 text-sm font-medium">{occupancy}</p></div>
-                              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Collected</p><p className="mt-1 text-sm font-medium">{rent}</p></div>
+                              <div><p className="text-[10px] uppercase tracking-wide text-slate-600">Occupied</p><p className="mt-1 text-sm font-medium">{occupancy}</p></div>
+                              <div><p className="text-[10px] uppercase tracking-wide text-slate-600">Collected</p><p className="mt-1 text-sm font-medium">{rent}</p></div>
                               <div><span className="text-xs font-medium text-forest">{status}</span></div>
                             </div>
                           ))}
@@ -217,7 +217,7 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <p className="text-[11px] leading-5 text-slate-400">
+                    <p className="text-[11px] leading-5 text-slate-600">
                       Sample workspace data shown for product demonstration. The structure reflects NesAfric&apos;s property, lease, payment and maintenance workflows.
                     </p>
                   </div>

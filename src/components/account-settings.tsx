@@ -270,7 +270,7 @@ export function AccountSettings() {
               Account created {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "—"}
             </p>
             <button
-              className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-deep disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-deep disabled:cursor-not-allowed disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
               disabled={savingProfile}
               type="submit"
             >
@@ -318,7 +318,7 @@ export function AccountSettings() {
               Status: {profile?.emailVerified ? "Verified" : "Verification required"}
             </p>
             <button
-              className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-deep disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-deep disabled:cursor-not-allowed disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
               disabled={savingEmail}
               type="submit"
             >
@@ -378,7 +378,7 @@ export function AccountSettings() {
 
           <div className="flex justify-end pt-1">
             <button
-              className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-deep disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-deep disabled:cursor-not-allowed disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
               disabled={savingPassword}
               type="submit"
             >

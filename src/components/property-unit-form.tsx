@@ -163,7 +163,7 @@ export function PropertyUnitForm({
           Cancel
         </button>
         <button
-          className="rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:opacity-60"
+          className="rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-light disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
           disabled={submitting}
           type="submit"
         >

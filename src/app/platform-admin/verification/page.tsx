@@ -299,7 +299,7 @@ function VerificationContent() {
 
                     <div className="flex flex-wrap gap-2">
                       <button
-                        className="rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                        className="rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
                         disabled={busy === `listing:${listing.id}`}
                         onClick={() =>
                           reviewListing(listing.id, "VERIFIED")
@@ -309,7 +309,7 @@ function VerificationContent() {
                         Verify
                       </button>
                       <button
-                        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
+                        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
                         disabled={busy === `listing:${listing.id}`}
                         onClick={() =>
                           reviewListing(listing.id, "REJECTED")
@@ -319,7 +319,7 @@ function VerificationContent() {
                         Reject
                       </button>
                       <button
-                        className="rounded-lg border border-hairline px-3 py-2 text-xs font-semibold text-forest disabled:opacity-50"
+                        className="rounded-lg border border-hairline px-3 py-2 text-xs font-semibold text-forest disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
                         disabled={busy === `listing:${listing.id}`}
                         onClick={() =>
                           reviewListing(listing.id, "SUSPENDED")
@@ -374,7 +374,7 @@ function VerificationContent() {
 
                     <div className="flex flex-wrap gap-2">
                       <button
-                        className="rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                        className="rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
                         disabled={
                           busy === `professional:${professional.id}`
                         }
@@ -386,7 +386,7 @@ function VerificationContent() {
                         Verify
                       </button>
                       <button
-                        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
+                        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
                         disabled={
                           busy === `professional:${professional.id}`
                         }
