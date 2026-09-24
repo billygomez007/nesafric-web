@@ -215,15 +215,29 @@ export function contentFor(
         subject: `Welcome to ${BRAND.name}`,
         sender: "hello",
         content: {
-          preheader: `Your ${BRAND.name} account is ready — continue setting up your workspace.`,
-          heading: `Welcome to ${BRAND.name}.`,
+          preheader: `Welcome to ${BRAND.name} — your real estate operating system is ready.`,
+          heading: `Welcome to ${BRAND.name}`,
           greeting: `Hi ${displayName},`,
           paragraphs: [
-            `${BRAND.name} brings property operations, marketplace tools, professional workflows and intelligent automation into one connected real estate platform.`,
-            "Continue your setup to start managing properties, marketing real estate, or offering property services — whichever fits you best.",
+            `Thank you for joining ${BRAND.name}. You're now part of a growing real estate ecosystem built for property managers, landlords, professionals and real estate businesses.`,
+            `${BRAND.name} brings property management, marketplace tools, payments, maintenance, professional workflows, team collaboration and intelligent automation into one connected platform.`,
+          ],
+          steps: [
+            {
+              title: "Set up your workspace",
+              description: "Complete your organisation or professional profile and choose how you want to use NesAfric.",
+            },
+            {
+              title: "Add your first property",
+              description: "Start managing a property, create a listing, or build your real estate portfolio.",
+            },
+            {
+              title: "Invite your team",
+              description: "Bring your team on board and manage operations together from one connected workspace.",
+            },
           ],
           features: ["Manage", "Market", "Connect", "Automate"],
-          cta: { label: `Continue to ${BRAND.name}`, path: "/onboarding" },
+          cta: { label: "Get Started", path: "/onboarding" },
           supportNote: `Need help getting started? Contact ${BRAND.contact.support}`,
         },
       };

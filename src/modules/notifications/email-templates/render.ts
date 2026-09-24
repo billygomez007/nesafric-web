@@ -30,6 +30,7 @@ export type EmailContent = {
   badge?: Badge;
   details?: DetailRow[];
   cta?: CallToAction;
+  steps?: Array<{ title: string; description: string }>;
   /** Short capability/feature words (e.g. "Manage", "Market", "Connect", "Automate"), rendered as
    * a compact row of turquoise-tinted chips. Keep this short — it's a visual accent, not a list. */
   features?: string[];
@@ -82,6 +83,37 @@ function renderHtml(content: EmailContent): string {
           .join("")}
       </tr></table>`
     : "";
+  const steps = content.steps?.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 28px;border-collapse:collapse;">
+        <tr>
+          <td colspan="2" style="padding:0 0 14px;">
+            <p style="margin:0 0 5px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c48729;">Get started in 3 simple steps</p>
+            <p style="margin:0;font-size:17px;line-height:1.45;font-weight:700;color:#082f49;">Set up your account and start managing with ease</p>
+          </td>
+        </tr>
+        ${content.steps
+          .map(
+            (step, index) =>
+              `<tr>
+                <td valign="top" width="42" style="padding:12px 12px 12px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td align="center" valign="middle" width="30" height="30" style="width:30px;height:30px;border-radius:15px;background:#083b46;color:#ffffff;font-size:12px;font-weight:700;">
+                        ${index + 1}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td valign="top" style="padding:12px 0;border-bottom:1px solid #e7edf2;">
+                  <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#082f49;">${escapeHtml(step.title)}</p>
+                  <p style="margin:0;font-size:13px;line-height:1.55;color:#64748b;">${escapeHtml(step.description)}</p>
+                </td>
+              </tr>`,
+          )
+          .join("")}
+      </table>`
+    : "";
+
   const supportNote = content.supportNote ?? `Need help? Reply to this email or contact us at ${BRAND.contact.support}.`;
 
   return `<!doctype html>
@@ -96,26 +128,56 @@ ${content.preheader ? `<meta name="description" content="${escapeHtml(content.pr
 ${content.preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(content.preheader)}</div>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
 <tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
-<tr><td style="background:#0d1117;padding:28px 32px;border-top:3px solid #00b6a3;">
-<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(BRAND.name)}" height="28" style="display:block;height:28px;width:auto;" />
-</td></tr>
-<tr><td style="padding:36px 32px 8px;">
-<h1 style="margin:0 0 20px;font-size:21px;line-height:1.35;color:#0d1117;font-weight:700;">${escapeHtml(content.heading)}</h1>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dce5ec;box-shadow:0 12px 30px rgba(15,23,42,.08);">
+<tr>
+  <td align="center" style="background:#ffffff;padding:30px 34px 24px;border-top:4px solid #00a99d;">
+    <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(BRAND.name)}" height="58" style="display:block;height:58px;max-width:270px;width:auto;" />
+    <p style="margin:9px 0 0;font-size:11px;letter-spacing:.8px;color:#64748b;">${escapeHtml(BRAND.tagline)}</p>
+  </td>
+</tr>
+<tr>
+  <td style="padding:36px 36px 10px;">
+    <p style="margin:0 0 8px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c48729;">NesAfric Platform</p>
+    <h1 style="margin:0 0 20px;font-size:28px;line-height:1.25;color:#082f49;font-weight:750;">${escapeHtml(content.heading)}</h1>
 ${badge ? `<div style="margin:0 0 16px;">${badge}</div>` : ""}
 ${greeting}
 ${paragraphs}
 ${details}
+${steps}
 ${features}
 ${cta}
 <p style="margin:0 0 4px;font-size:13px;line-height:1.6;color:#64748b;">${escapeHtml(supportNote)}</p>
 </td></tr>
-<tr><td style="padding:24px 32px 32px;border-top:1px solid #e2e8f0;">
-<p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#0d1117;">${escapeHtml(BRAND.name)}</p>
-<p style="margin:0 0 2px;font-size:12px;color:#94a3b8;">${escapeHtml(BRAND.contact.address)}</p>
-<p style="margin:0 0 2px;font-size:12px;color:#94a3b8;"><a href="mailto:${escapeHtml(BRAND.contact.support)}" style="color:#94a3b8;">${escapeHtml(BRAND.contact.support)}</a> · <a href="mailto:${escapeHtml(BRAND.contact.hello)}" style="color:#94a3b8;">${escapeHtml(BRAND.contact.hello)}</a> · <a href="https://${escapeHtml(BRAND.domain)}" style="color:#94a3b8;">${escapeHtml(BRAND.domain)}</a></p>
-<p style="margin:12px 0 0;font-size:11px;color:#cbd5e1;">You received this email because of activity on your ${escapeHtml(BRAND.name)} account. If this wasn't you, please contact ${escapeHtml(BRAND.contact.support)}.</p>
-</td></tr>
+<tr>
+  <td style="background:#062f3a;padding:28px 36px 30px;">
+    <p style="margin:0 0 10px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#9fc4c8;">Powered by NesAfric</p>
+
+    <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(BRAND.name)}" height="38" style="display:block;height:38px;max-width:190px;width:auto;margin:0 0 16px;" />
+
+    <p style="margin:0 0 5px;font-size:12px;color:#d6e6e8;">${escapeHtml(BRAND.tagline)}</p>
+
+    <p style="margin:0 0 3px;font-size:11px;line-height:1.5;color:#9fc4c8;">
+      ${escapeHtml(BRAND.contact.address)}
+    </p>
+
+    <p style="margin:0 0 3px;font-size:11px;line-height:1.5;color:#9fc4c8;">
+      <a href="mailto:${escapeHtml(BRAND.contact.support)}" style="color:#9fc4c8;text-decoration:none;">${escapeHtml(BRAND.contact.support)}</a>
+      &nbsp;·&nbsp;
+      <a href="mailto:${escapeHtml(BRAND.contact.hello)}" style="color:#9fc4c8;text-decoration:none;">${escapeHtml(BRAND.contact.hello)}</a>
+    </p>
+
+    <p style="margin:0 0 12px;font-size:11px;line-height:1.5;color:#9fc4c8;">
+      <a href="https://${escapeHtml(BRAND.domain)}" style="color:#ffffff;text-decoration:none;font-weight:600;">${escapeHtml(BRAND.domain)}</a>
+    </p>
+
+    <div style="height:1px;background:#174b55;margin:16px 0;"></div>
+
+    <p style="margin:0;font-size:10px;line-height:1.55;color:#6f9ca3;">
+      You received this email because of activity on your ${escapeHtml(BRAND.name)} account.
+      If this wasn't you, please contact ${escapeHtml(BRAND.contact.support)}.
+    </p>
+  </td>
+</tr>
 </table>
 </td></tr>
 </table>
@@ -131,6 +193,12 @@ function renderText(content: EmailContent): string {
   if (content.details?.length) {
     for (const row of content.details) lines.push(`${row.label}: ${row.value}`);
     lines.push("");
+  }
+  if (content.steps?.length) {
+    lines.push("GET STARTED IN 3 SIMPLE STEPS", "");
+    content.steps.forEach((step, index) => {
+      lines.push(`${index + 1}. ${step.title}`, step.description, "");
+    });
   }
   if (content.features?.length) lines.push(content.features.join(" · "), "");
   if (content.cta) lines.push(`${content.cta.label}: ${absoluteUrl(content.cta.path)}`, "");
