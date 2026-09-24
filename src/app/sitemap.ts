@@ -11,6 +11,36 @@ export const revalidate = 3600;
 
 type Entry = MetadataRoute.Sitemap[number];
 
+const SITEMAP_LOOKUP_TIMEOUT_MS = 5000;
+
+async function withSitemapTimeout(
+  label: string,
+  operation: Promise<Entry[]>,
+): Promise<Entry[]> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeout = new Promise<Entry[]>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn(
+        `sitemap: ${label} lookup exceeded ${SITEMAP_LOOKUP_TIMEOUT_MS}ms; omitting dynamic entries from this generation`,
+      );
+      resolve([]);
+    }, SITEMAP_LOOKUP_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([operation, timeout]);
+  } catch (error) {
+    console.error(
+      `sitemap: failed to load ${label}, omitting from this generation`,
+      error,
+    );
+    return [];
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // Hand-written marketing/product pages that are public, indexable, and not gated behind
 // authentication (`AppShell`/`MarketplaceProShell`) or an onboarding/auth flow. No `lastModified`
 // is set for these: they're static route content with no tracked modification timestamp, and
@@ -32,11 +62,9 @@ const STATIC_ENTRIES: Entry[] = [
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const dynamicEntries = await Promise.all([
-    // Published, verified property listings for which the underlying unit/property is currently
-    // available — anything else 404s on `/marketplace/properties/[listingId]` (see
-    // `getPublicListing`), so this mirrors that exact eligibility check to avoid listing broken URLs.
-    listPublicListingsForSitemap()
-      .then((listings) =>
+    withSitemapTimeout(
+      "public listings",
+      listPublicListingsForSitemap().then((listings) =>
         listings.map(
           (listing): Entry => ({
             url: `${BRAND.siteUrl}/marketplace/properties/${listing.id}`,
@@ -45,16 +73,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             priority: 0.7,
           }),
         ),
-      )
-      .catch((error) => {
-        console.error("sitemap: failed to load public listings, omitting from this generation", error);
-        return [];
-      }),
+      ),
+    ),
 
-    // Active, unarchived marketplace professionals (agents/brokers/brokerages/developers/etc.) —
-    // same eligibility as `getPublicMarketplaceProfessionalProfile`.
-    listPublicMarketplaceProfessionalsForSitemap()
-      .then((professionals) =>
+    withSitemapTimeout(
+      "marketplace professionals",
+      listPublicMarketplaceProfessionalsForSitemap().then((professionals) =>
         professionals.map(
           (professional): Entry => ({
             url: `${BRAND.siteUrl}/marketplace/professionals/${professional.slug}`,
@@ -63,19 +87,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             priority: 0.6,
           }),
         ),
-      )
-      .catch((error) => {
-        console.error("sitemap: failed to load marketplace professionals, omitting from this generation", error);
-        return [];
-      }),
+      ),
+    ),
 
-    // Verified, non-suspended property service professionals who have opted into public listing
-    // (`ProviderMarketplaceProfile.listed`) — same eligibility as `getPublicMarketplaceProvider`.
-    // The canonical URL mirrors what the marketplace UI itself links to (`marketplace-search.tsx`):
-    // `/marketplace/services/{slug}` when a slug exists, `/marketplace/{id}` otherwise — never both,
-    // to avoid indexing the same profile at two URLs.
-    listPublicServiceProvidersForSitemap()
-      .then((providers) =>
+    withSitemapTimeout(
+      "service providers",
+      listPublicServiceProvidersForSitemap().then((providers) =>
         providers.map(
           (provider): Entry => ({
             url: provider.slug
@@ -86,11 +103,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             priority: 0.6,
           }),
         ),
-      )
-      .catch((error) => {
-        console.error("sitemap: failed to load service providers, omitting from this generation", error);
-        return [];
-      }),
+      ),
+    ),
   ]);
 
   return [...STATIC_ENTRIES, ...dynamicEntries.flat()];
