@@ -1,7 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  filesToSelectedImages,
+  MAX_LISTING_IMAGES,
+  releaseSelectedImage,
+  type SelectedListingImage,
+  uploadListingImages,
+} from "@/lib/listing-image-upload";
 
 type Property = { id: string; name: string; referenceNumber: string };
 type Unit = { id: string; name: string; unitType: string | null; bedrooms: number | null; bathrooms: number | null; sizeSqm: string | null };
@@ -16,7 +23,7 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
   const [listingType, setListingType] = useState("RENT");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [imageUrls, setImageUrls] = useState<string[]>([""]);
+  const [images, setImages] = useState<SelectedListingImage[]>([]);
   useEffect(() => {
     const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
     if (!organisationId) { const timer = setTimeout(() => setError("Choose an organisation."), 0); return () => clearTimeout(timer); }
@@ -29,12 +36,6 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
         setListing(value);
         setPropertyId(value.propertyId);
         setListingType(value.listingType);
-        const existingImages = (value.media ?? [])
-          .filter((item: { type: string }) => item.type === "PHOTO")
-          .sort((a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder)
-          .slice(0, 12)
-          .map((item: { publicUrl: string }) => item.publicUrl);
-        setImageUrls(existingImages.length ? existingImages : [""]);
       }
     }).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load listing editor."));
   }, [listingId]);
@@ -48,16 +49,64 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
       setUnits([...property.units, ...property.buildings.flatMap((building: { units: Unit[] }) => building.units)]);
     }).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load units."));
   }, [propertyId]);
+  function addImages(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    const existingPhotoCount =
+      listing?.media.filter((item) => item.type === "PHOTO").length ?? 0;
+
+    const remaining =
+      MAX_LISTING_IMAGES - existingPhotoCount - images.length;
+
+    if (remaining <= 0) {
+      setError("A property can contain up to 12 images.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const selected = filesToSelectedImages(
+        files.slice(0, remaining),
+      );
+
+      setImages((current) => [...current, ...selected]);
+      setError("");
+
+      if (files.length > remaining) {
+        setError(
+          `Only ${remaining} more image${remaining === 1 ? "" : "s"} could be added. Maximum is 12.`,
+        );
+      }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to add selected images.",
+      );
+    }
+
+    event.target.value = "";
+  }
+
+  function removeSelectedImage(index: number) {
+    setImages((current) => {
+      const selected = current[index];
+
+      if (selected) {
+        releaseSelectedImage(selected);
+      }
+
+      return current.filter(
+        (_, itemIndex) => itemIndex !== index,
+      );
+    });
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const organisationId = localStorage.getItem("propertyos.activeOrganisationId");
     if (!organisationId) return setError("Choose an organisation.");
     const data = new FormData(event.currentTarget);
     const amenityLabels = String(data.get("amenities") || "").split(",").map((value) => value.trim()).filter(Boolean);
-    const propertyImages = imageUrls
-      .map((url) => url.trim())
-      .filter(Boolean)
-      .slice(0, 12);
     const payload = {
       propertyId, unitId: data.get("unitId") || null, listingType, category: data.get("category"), title: data.get("title"), publicDescription: data.get("publicDescription"),
       askingAmountMinor: listingType === "SALE" ? String(Math.round(Number(data.get("amount")) * 100)) : null, rentAmountMinor: listingType === "RENT" ? String(Math.round(Number(data.get("amount")) * 100)) : null,
@@ -73,18 +122,34 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
       countryCode: data.get("countryCode"), region: data.get("region") || null, city: data.get("city") || null, district: data.get("district") || null, locality: data.get("locality") || null, publicLocationLabel: data.get("publicLocationLabel") || null,
       contactName: data.get("contactName") || null, contactEmail: data.get("contactEmail") || null, contactPhone: data.get("contactPhone") || null, showContactEmail: data.get("showContactEmail") === "on", showContactPhone: data.get("showContactPhone") === "on", enquiryEnabled: data.get("enquiryEnabled") === "on", privateNotes: data.get("privateNotes") || null,
       amenities: amenityLabels.map((label) => ({ key: label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), label })),
-      media: propertyImages.map((publicUrl, index) => ({
-        type: "PHOTO",
-        publicUrl,
-        title: index === 0 ? "Cover photo" : `Property photo ${index + 1}`,
-        altText: `${String(data.get("title") || "Property")} — photo ${index + 1}`,
-        sortOrder: index,
-      })),
+      ...(listingId ? {} : { media: [] }),
     };
     setSaving(true); setError("");
     const response = await fetch(listingId ? `/api/listings/${listingId}` : "/api/listings", { method: listingId ? "PATCH" : "POST", headers: { "content-type": "application/json", "x-organisation-id": organisationId }, body: JSON.stringify(payload) });
     if (!response.ok) { setError((await response.json()).error?.message ?? "Unable to save listing."); setSaving(false); return; }
-    const saved = await response.json(); router.push(`/listings/${saved.id}`);
+    const saved = await response.json();
+
+    if (images.length) {
+      try {
+        await uploadListingImages({
+          listingId: saved.id,
+          organisationId,
+          title: String(data.get("title") || "Property"),
+          images,
+        });
+      } catch (cause) {
+        setSaving(false);
+        setError(
+          cause instanceof Error
+            ? `${cause.message} The property draft was saved, but one or more photos were not uploaded.`
+            : "The property draft was saved, but its photos could not be uploaded.",
+        );
+        return;
+      }
+    }
+
+    images.forEach(releaseSelectedImage);
+    router.push(`/listings/${saved.id}`);
   }
   if (listingId && !listing && !error) return <p className="rounded-xl border border-hairline border-hairline bg-white p-6 text-muted">Loading listing...</p>;
   const value = listing;
@@ -100,71 +165,105 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
 <label className="text-sm font-medium">Year built<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.yearBuilt ?? ""} min="1800" max="2200" name="yearBuilt" type="number" /></label>
 </div>
 <label className="flex items-center gap-2 text-sm"><input defaultChecked={value?.negotiable ?? false} name="negotiable" type="checkbox" /> Price is negotiable</label><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public location</legend><div className="grid gap-3 md:grid-cols-3"><input className="rounded-xl border border-hairline p-3 text-sm uppercase" defaultValue={value?.countryCode ?? ""} maxLength={2} name="countryCode" placeholder="Country (e.g. GH)" required /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.region ?? ""} name="region" placeholder="Region / state" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.city ?? ""} name="city" placeholder="City" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.district ?? ""} name="district" placeholder="District" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.locality ?? ""} name="locality" placeholder="Locality" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.publicLocationLabel ?? ""} name="publicLocationLabel" placeholder="Public location label" /></div></fieldset><label className="text-sm font-medium">Amenities <span className="font-normal text-muted">(comma-separated)</span><input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.amenities.map((amenity) => amenity.label).join(", ") ?? ""} name="amenities" placeholder="Parking, security, internet, balcony" /></label><fieldset className="rounded-xl border border-hairline p-4">
-  <legend className="px-1 text-sm font-semibold">Property images</legend>
+  <legend className="px-1 text-sm font-semibold">
+    Property images
+  </legend>
+
   <div className="mb-4 flex items-start justify-between gap-4">
     <div>
-      <p className="text-sm font-semibold text-ink">Add up to 12 property images</p>
-      <p className="mt-1 text-xs text-muted">The first image becomes the cover photo shown across the marketplace.</p>
+      <p className="text-sm font-semibold text-ink">
+        Upload up to 12 property images
+      </p>
+
+      <p className="mt-1 text-xs text-muted">
+        Choose images directly from your phone or computer.
+        The first image becomes the cover photo.
+      </p>
     </div>
+
     <span className="shrink-0 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-muted">
-      {imageUrls.filter((url) => url.trim()).length}/12
+      {(listing?.media.filter((item) => item.type === "PHOTO").length ?? 0) + images.length}/12
     </span>
   </div>
 
-  <div className="grid gap-3 md:grid-cols-2">
-    {imageUrls.map((url, index) => (
-      <div key={index} className="rounded-xl border border-hairline bg-surface/40 p-3">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <span className="text-xs font-semibold text-muted">
-            {index === 0 ? "Cover image" : `Image ${index + 1}`}
-          </span>
-          {imageUrls.length > 1 && (
+  {listing?.media.some((item) => item.type === "PHOTO") && (
+    <div className="mb-5 grid gap-3 md:grid-cols-3">
+      {listing.media
+        .filter((item) => item.type === "PHOTO")
+        .map((item, index) => (
+          <div
+            key={`${item.publicUrl}-${index}`}
+            className="overflow-hidden rounded-xl border border-hairline bg-white"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt={item.altText ?? `Property image ${index + 1}`}
+              className="h-36 w-full object-cover"
+              src={item.publicUrl}
+            />
+
+            <p className="p-2 text-xs font-semibold text-muted">
+              {index === 0
+                ? "Cover photo"
+                : `Photo ${index + 1}`}
+            </p>
+          </div>
+        ))}
+    </div>
+  )}
+
+  <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-hairline bg-surface/40 px-5 py-8 text-center transition hover:bg-surface">
+    <span className="text-sm font-semibold">
+      Click to upload photos
+    </span>
+
+    <span className="mt-1 text-xs text-muted">
+      JPG, PNG or WebP · Maximum 10MB each
+    </span>
+
+    <span className="mt-3 rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">
+      Choose photos
+    </span>
+
+    <input
+      accept="image/jpeg,image/png,image/webp"
+      className="sr-only"
+      multiple
+      onChange={addImages}
+      type="file"
+    />
+  </label>
+
+  {images.length > 0 && (
+    <div className="mt-4 grid gap-3 md:grid-cols-3">
+      {images.map((image, index) => (
+        <div
+          key={`${image.file.name}-${index}`}
+          className="overflow-hidden rounded-xl border border-hairline bg-white"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt={`Selected property image ${index + 1}`}
+            className="h-36 w-full object-cover"
+            src={image.previewUrl}
+          />
+
+          <div className="flex items-center justify-between gap-3 p-2">
+            <span className="truncate text-xs font-semibold">
+              {image.file.name}
+            </span>
+
             <button
+              className="shrink-0 text-xs font-semibold text-red-700"
+              onClick={() => removeSelectedImage(index)}
               type="button"
-              className="text-xs font-semibold text-red-700 hover:underline"
-              onClick={() => setImageUrls((current) => current.filter((_, itemIndex) => itemIndex !== index))}
             >
               Remove
             </button>
-          )}
-        </div>
-
-        <input
-          className="w-full rounded-xl border border-hairline bg-white p-3 text-sm"
-          type="url"
-          placeholder="https://example.com/property-photo.jpg"
-          value={url}
-          onChange={(event) =>
-            setImageUrls((current) =>
-              current.map((item, itemIndex) =>
-                itemIndex === index ? event.target.value : item,
-              ),
-            )
-          }
-        />
-
-        {url.trim() && (
-          <div className="mt-3 overflow-hidden rounded-xl border border-hairline bg-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt={`Property preview ${index + 1}`}
-              className="h-40 w-full object-cover"
-            />
           </div>
-        )}
-      </div>
-    ))}
-  </div>
-
-  {imageUrls.length < 12 && (
-    <button
-      type="button"
-      className="mt-4 rounded-xl border border-hairline bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-surface"
-      onClick={() => setImageUrls((current) => [...current, ""])}
-    >
-      + Add another image
-    </button>
+        </div>
+      ))}
+    </div>
   )}
 </fieldset><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Enquiry contact controls</legend><div className="grid gap-3 md:grid-cols-3"><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactName ?? ""} name="contactName" placeholder="Public contact name" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactEmail ?? ""} name="contactEmail" placeholder="Contact email" type="email" /><input className="rounded-xl border border-hairline p-3 text-sm" defaultValue={value?.contactPhone ?? ""} name="contactPhone" placeholder="Contact phone" /></div><div className="mt-3 flex flex-wrap gap-4 text-sm"><label><input defaultChecked={value?.enquiryEnabled ?? true} name="enquiryEnabled" type="checkbox" /> Enquiries enabled</label><label><input defaultChecked={value?.showContactEmail ?? false} name="showContactEmail" type="checkbox" /> Publish email</label><label><input defaultChecked={value?.showContactPhone ?? false} name="showContactPhone" type="checkbox" /> Publish phone</label></div></fieldset><label className="text-sm font-medium">Private management notes<textarea className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={value?.privateNotes ?? ""} name="privateNotes" rows={2} /></label>{error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}<button className="rounded-lg bg-forest p-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={saving || !propertyId}>{saving ? "Saving..." : listingId ? "Save listing" : "Create draft listing"}</button></form>;
 }

@@ -5,6 +5,7 @@ import { membershipHasPermission } from "@/platform/authorization/policy";
 import { AppError, forbidden, notFound } from "@/platform/errors";
 import { ownsProvider } from "@/modules/providers/service";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/platform-admin/permissions";
+import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { DOCUMENT_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, getObjectStorageAdapter, buildInternalPublicMediaUrl } from "@/platform/storage";
 import type { z } from "zod";
 import type { uploadDocumentSchema } from "./schemas";
@@ -54,9 +55,31 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
     allowedClassifications: ["PRIVATE", "PUBLIC"],
     authorize: async (tx, { userId, organisationId, targetId }) => {
       if (!organisationId) throw forbidden();
-      await requirePermission(userId, organisationId, PERMISSIONS.listingManage);
-      const listing = await tx.listing.findFirst({ where: { id: targetId, organisationId } });
+
+      const listing = await tx.listing.findFirst({
+        where: { id: targetId, organisationId },
+        select: {
+          id: true,
+          marketplaceProfessionalId: true,
+        },
+      });
+
       if (!listing) throw notFound();
+
+      if (listing.marketplaceProfessionalId) {
+        await requireMarketplaceRole(
+          userId,
+          listing.marketplaceProfessionalId,
+          "AGENT",
+        );
+      } else {
+        await requirePermission(
+          userId,
+          organisationId,
+          PERMISSIONS.listingManage,
+        );
+      }
+
       return { organisationId };
     },
     attach: async (tx, { targetId, storageObject, contentType, sizeBytes, checksum, input }) => {
@@ -78,6 +101,7 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
           sortOrder: (highestSortOrder._max.sortOrder ?? -1) + 1,
           fileSizeBytes: sizeBytes,
           checksum,
+          isCover: highestSortOrder._max.sortOrder == null,
         },
       });
     },

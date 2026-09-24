@@ -1,9 +1,15 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  filesToSelectedImages,
+  MAX_LISTING_IMAGES,
+  releaseSelectedImage,
+  type SelectedListingImage,
+  uploadListingImages,
+} from "@/lib/listing-image-upload";
 
-const MAX_IMAGES = 12;
 
 const PROPERTY_TYPES = [
   ["APARTMENT", "Apartment"],
@@ -58,7 +64,7 @@ export function MarketplaceListingForm({
   const [busy, setBusy] = useState(false);
   const [category, setCategory] = useState("APARTMENT");
   const [purpose, setPurpose] = useState("RENT");
-  const [imageUrls, setImageUrls] = useState<string[]>([""]);
+  const [images, setImages] = useState<SelectedListingImage[]>([]);
   const [amenities, setAmenities] = useState<string[]>([]);
 
   const isResidential = useMemo(
@@ -79,6 +85,55 @@ export function MarketplaceListingForm({
     );
   }
 
+
+  function addImages(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    const remaining = MAX_LISTING_IMAGES - images.length;
+
+    if (remaining <= 0) {
+      setError("A property can contain up to 12 images.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const selected = filesToSelectedImages(
+        files.slice(0, remaining),
+      );
+
+      setImages((current) => [...current, ...selected]);
+      setError("");
+
+      if (files.length > remaining) {
+        setError(
+          `Only ${remaining} more image${remaining === 1 ? "" : "s"} could be added. Maximum is 12.`,
+        );
+      }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to add selected images.",
+      );
+    }
+
+    event.target.value = "";
+  }
+
+  function removeImage(index: number) {
+    setImages((current) => {
+      const selected = current[index];
+
+      if (selected) {
+        releaseSelectedImage(selected);
+      }
+
+      return current.filter(
+        (_, itemIndex) => itemIndex !== index,
+      );
+    });
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -90,11 +145,6 @@ export function MarketplaceListingForm({
     const priceMinor = String(
       Math.round(Number(form.get("price") || 0) * 100),
     );
-
-    const images = imageUrls
-      .map((url) => url.trim())
-      .filter(Boolean)
-      .slice(0, MAX_IMAGES);
 
     if (!images.length) {
       setBusy(false);
@@ -173,13 +223,7 @@ export function MarketplaceListingForm({
         label,
       })),
 
-      media: images.map((publicUrl, index) => ({
-        type: "PHOTO" as const,
-        publicUrl,
-        title: index === 0 ? "Cover photo" : `Property photo ${index + 1}`,
-        altText: `${title} — property photo ${index + 1}`,
-        sortOrder: index,
-      })),
+      media: [],
     };
 
     const body = {
@@ -200,7 +244,7 @@ export function MarketplaceListingForm({
         sizeSqm: listing.sizeSqm,
         amenities,
         furnishing: listing.furnishing,
-        mediaUrls: images,
+        mediaUrls: [],
         availableFrom,
         authorityEvidenceReady:
           form.get("authorityEvidenceReady") === "on",
@@ -228,13 +272,32 @@ export function MarketplaceListingForm({
     );
 
     const result = await response.json();
-    setBusy(false);
 
     if (!response.ok) {
+      setBusy(false);
       setError(result.error?.message ?? "Unable to create listing.");
       return;
     }
 
+    try {
+      await uploadListingImages({
+        listingId: result.id,
+        organisationId: result.organisationId,
+        title,
+        images,
+      });
+    } catch (cause) {
+      setBusy(false);
+      setError(
+        cause instanceof Error
+          ? `${cause.message} The property draft was created, but one or more photos were not uploaded.`
+          : "The property draft was created, but its photos could not be uploaded.",
+      );
+      return;
+    }
+
+    images.forEach(releaseSelectedImage);
+    setBusy(false);
     router.push(`/pro/${professionalId}/listings`);
     router.refresh();
   }
@@ -533,89 +596,79 @@ export function MarketplaceListingForm({
               5. Property photos
             </p>
             <h2 className="mt-1 text-lg font-semibold">
-              Add up to 12 images
+              Upload up to 12 photos
             </h2>
             <p className="mt-1 text-sm text-muted">
-              The first image becomes the marketplace cover photo.
+              Choose photos directly from your phone or computer.
+              The first photo becomes the marketplace cover image.
             </p>
           </div>
 
           <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold">
-            {imageUrls.filter((url) => url.trim()).length}/{MAX_IMAGES}
+            {images.length}/{MAX_LISTING_IMAGES}
           </span>
         </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          {imageUrls.map((url, index) => (
-            <div
-              key={index}
-              className="rounded-xl border border-hairline bg-surface/40 p-3"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold">
-                  {index === 0
-                    ? "Cover photo"
-                    : `Photo ${index + 1}`}
-                </span>
+        <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-hairline bg-surface/40 px-6 py-10 text-center transition hover:bg-surface">
+          <span className="text-base font-semibold">
+            Click to upload property photos
+          </span>
 
-                {imageUrls.length > 1 && (
+          <span className="mt-1 text-sm text-muted">
+            JPG, PNG or WebP · Maximum 10MB per image
+          </span>
+
+          <span className="mt-3 rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">
+            Choose photos
+          </span>
+
+          <input
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            disabled={images.length >= MAX_LISTING_IMAGES}
+            multiple
+            onChange={addImages}
+            type="file"
+          />
+        </label>
+
+        {images.length > 0 && (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {images.map((image, index) => (
+              <div
+                key={`${image.file.name}-${index}`}
+                className="overflow-hidden rounded-xl border border-hairline bg-white"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  alt={`Property preview ${index + 1}`}
+                  className="h-44 w-full object-cover"
+                  src={image.previewUrl}
+                />
+
+                <div className="flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold">
+                      {index === 0
+                        ? "Cover photo"
+                        : `Photo ${index + 1}`}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted">
+                      {image.file.name}
+                    </p>
+                  </div>
+
                   <button
-                    className="text-xs font-semibold text-red-700"
-                    onClick={() =>
-                      setImageUrls((current) =>
-                        current.filter(
-                          (_, itemIndex) => itemIndex !== index,
-                        ),
-                      )
-                    }
+                    className="shrink-0 text-xs font-semibold text-red-700"
+                    onClick={() => removeImage(index)}
                     type="button"
                   >
                     Remove
                   </button>
-                )}
-              </div>
-
-              <input
-                className={input}
-                placeholder="https://example.com/property.jpg"
-                required={index === 0}
-                type="url"
-                value={url}
-                onChange={(event) =>
-                  setImageUrls((current) =>
-                    current.map((item, itemIndex) =>
-                      itemIndex === index
-                        ? event.target.value
-                        : item,
-                    ),
-                  )
-                }
-              />
-
-              {url.trim() && (
-                <div className="mt-3 overflow-hidden rounded-xl">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    alt={`Property preview ${index + 1}`}
-                    className="h-44 w-full object-cover"
-                    src={url}
-                  />
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {imageUrls.length < MAX_IMAGES && (
-          <button
-            className="mt-4 rounded-xl border border-hairline px-4 py-2 text-sm font-semibold"
-            onClick={() =>
-              setImageUrls((current) => [...current, ""])
-            }
-            type="button"
-          >
-            + Add another photo
-          </button>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
