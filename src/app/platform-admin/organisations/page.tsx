@@ -62,20 +62,46 @@ function OrganisationsContent() {
       </select>
       <button className="rounded-xl border border-hairline px-3 py-2 text-sm font-semibold" onClick={() => void load()}>Search</button>
     </div>
-    {!rows ? <p className="text-muted">Loading…</p> : <div className="overflow-x-auto rounded-xl border bg-white">
+    {!rows ? <p className="text-muted">Loading…</p> : <>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {rows.length} organisation{rows.length === 1 ? "" : "s"} shown
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-xl border bg-white">
       <table className="w-full text-left text-sm">
         <thead className="border-b bg-warm-white"><tr><th className="p-3">Organisation</th><th className="p-3">Plan</th><th className="p-3">Status</th><th className="p-3">Members</th><th className="p-3">Properties</th><th className="p-3">Created</th></tr></thead>
         <tbody>{rows.map((row) => <tr className="border-b last:border-0" key={row.id}>
-          <td className="p-3"><Link className="font-semibold text-teal" href={`/platform-admin/organisations/${row.id}`}>{row.name}</Link><p className="text-xs text-muted">{row.countryCode} · {row.type}</p></td>
-          <td className="p-3">{row.subscription?.plan.name ?? "—"}</td>
-          <td className="p-3">{row.subscription && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[row.subscription.status] ?? ""}`}>{row.subscription.status.replaceAll("_", " ")}</span>}</td>
+          <td className="p-3"><Link className="font-semibold text-teal" href={`/platform-admin/organisations/${row.id}`}>{row.name}</Link><p className="text-xs text-muted">{row.countryCode} · {row.type.replaceAll("_", " ")}</p></td>
+          <td className="p-3">
+            {row.subscription?.plan.name ?? <span className="text-muted">No plan</span>}
+          </td>
+          <td className="p-3">
+            {row.subscription ? (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[row.subscription.status] ?? ""}`}>
+                {row.subscription.status.replaceAll("_", " ")}
+              </span>
+            ) : (
+              <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-muted">
+                NO SUBSCRIPTION
+              </span>
+            )}
+          </td>
           <td className="p-3">{row._count.members}</td>
           <td className="p-3">{row._count.properties}</td>
           <td className="p-3">{new Date(row.createdAt).toLocaleDateString()}</td>
         </tr>)}</tbody>
       </table>
-      {rows.length === 0 && <p className="p-4 text-sm text-muted">No organisations match this filter.</p>}
-    </div>}
+      {rows.length === 0 && (
+        <div className="p-6">
+          <p className="font-semibold text-forest">No organisations found</p>
+          <p className="mt-1 text-sm text-muted">
+            Try changing the search term or subscription-status filter.
+          </p>
+        </div>
+      )}
+    </div>
+    </>}
   </div>;
 }
 

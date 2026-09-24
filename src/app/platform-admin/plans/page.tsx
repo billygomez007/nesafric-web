@@ -9,6 +9,49 @@ type Plan = {
   entitlements: Array<{ id: string; featureKey: string; kind: string; booleanValue: boolean | null; limitValue: string | null; isUnlimited: boolean }>;
 };
 
+const ENTITLEMENT_LABELS: Record<string, string> = {
+  "properties.max": "Properties",
+  "units.max": "Units",
+  "team.members.max": "Team members",
+  "listings.max": "Listings",
+  "documents.monthly_max": "Documents per month",
+  "messages.monthly_max": "Messages per month",
+  "integrations.operations.monthly_max": "Integration operations per month",
+  "integrations.enabled": "Integrations",
+  "automation.enabled": "Automation",
+  "reporting.advanced": "Advanced reporting",
+  "propertyos.ai.property_manager": "AI Property Manager",
+  "propertyos.ai.receptionist.text": "AI Receptionist — Text",
+  "propertyos.ai.receptionist.voice": "AI Receptionist — Voice",
+  "propertyos.maintenance.ai_classification": "Maintenance AI classification",
+  "propertyos.maintenance.ai_dispatch": "Maintenance AI dispatch",
+  "propertyos.maintenance.voice_dispatch": "Maintenance voice dispatch",
+  "propertyos.predictive_maintenance": "Predictive maintenance",
+  "propertyos.portfolio_intelligence": "Portfolio intelligence",
+  "propertyos.voice.outbound_enabled": "Outbound voice",
+  "propertyos.voice.call_volume_max": "Voice calls",
+  "propertyos.voice.recording_enabled": "Voice recording",
+  "propertyos.voice.inbound_minutes_monthly_max": "Inbound voice minutes",
+  "propertyos.voice.outbound_minutes_monthly_max": "Outbound voice minutes",
+  "propertyos.voice.human_transfer_enabled": "Human transfer",
+  "propertyos.voice.concurrent_calls_max": "Concurrent voice calls",
+};
+
+function entitlementLabel(key: string) {
+  return (
+    ENTITLEMENT_LABELS[key] ??
+    key.replaceAll(".", " ").replaceAll("_", " ")
+  );
+}
+
+function entitlementValue(entitlement: Plan["entitlements"][number]) {
+  if (entitlement.isUnlimited) return "Unlimited";
+  if (entitlement.kind === "BOOLEAN") {
+    return entitlement.booleanValue ? "Included" : "Not included";
+  }
+  return entitlement.limitValue ?? "—";
+}
+
 function PlansContent() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [error, setError] = useState("");
@@ -25,7 +68,12 @@ function PlansContent() {
   if (!plans) return <p className="text-muted">Loading…</p>;
 
   return <div className="grid gap-4">
-    <p className="text-sm text-muted">Configurable plans, prices, and entitlements (item 1 + item 2). Editing a plan here changes what every subscribed organisation is entitled to going forward; existing usage/records are never deleted.</p>
+    <div>
+      <h2 className="text-xl font-semibold text-forest">Plans & entitlements</h2>
+      <p className="mt-1 text-sm text-muted">
+        Review platform pricing and customer entitlements. Plan changes affect subscribed organisations going forward and never delete existing customer records.
+      </p>
+    </div>
     {plans.map((plan) => <section className="rounded-xl border bg-white p-5 shadow-card" key={plan.id}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">{plan.name} <span className="text-xs font-normal text-muted">({plan.key})</span></h2>
@@ -39,7 +87,21 @@ function PlansContent() {
         </div>
         <div>
           <h3 className="text-sm font-semibold">Entitlements</h3>
-          <ul className="mt-1 grid gap-1 text-sm">{plan.entitlements.map((entitlement) => <li key={entitlement.id}>{entitlement.featureKey}: {entitlement.isUnlimited ? "unlimited" : entitlement.kind === "BOOLEAN" ? String(entitlement.booleanValue) : entitlement.limitValue}</li>)}</ul>
+          <div className="mt-2 grid gap-1">
+            {plan.entitlements.map((entitlement) => (
+              <div
+                className="flex items-center justify-between gap-4 border-b border-hairline/60 py-1.5 text-sm last:border-0"
+                key={entitlement.id}
+              >
+                <span className="text-muted">
+                  {entitlementLabel(entitlement.featureKey)}
+                </span>
+                <span className="font-medium text-ink">
+                  {entitlementValue(entitlement)}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>)}

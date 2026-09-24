@@ -143,7 +143,20 @@ function ProvidersQueue() {
         <div>
           {rows === null ? <p className="text-sm text-muted">Loading…</p> : (
             <div className="grid gap-2">
-              {rows.length === 0 && <p className="text-sm text-muted">Nothing in this view.</p>}
+              {rows.length === 0 && (
+                <div className="rounded-xl border border-dashed border-hairline bg-white p-6">
+                  <p className="font-semibold text-forest">
+                    {tab === "PENDING_VERIFICATION"
+                      ? "No providers awaiting verification"
+                      : "No providers in this view"}
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    {tab === "PENDING_VERIFICATION"
+                      ? "New provider verification submissions will appear here automatically."
+                      : "Choose another verification status to view matching providers."}
+                  </p>
+                </div>
+              )}
               {rows.map((provider) => (
                 <button
                   className={`rounded-lg border p-3 text-left text-sm ${selectedId === provider.id ? "border-emerald-600 bg-teal/10" : ""}`}

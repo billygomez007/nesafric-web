@@ -49,7 +49,10 @@ function HealthContent() {
           {draining ? "Running…" : "Run due jobs now"}
         </button>
       </div>
-      <p className="mt-1 text-xs text-muted">Normally an external scheduler drains this queue automatically. Use this if that scheduler is unavailable.</p>
+      <p className="mt-1 text-xs text-muted">
+        Normally an external scheduler processes this queue automatically.
+        Run jobs manually only when the scheduler is unavailable or after the underlying failure has been corrected.
+      </p>
       <dl className="mt-3 grid grid-cols-2 gap-1 text-sm md:grid-cols-4">{Object.entries(health.jobsByStatus).map(([status, count]) => <div key={status}><dt className="inline font-semibold">{status}:</dt> <dd className="inline"> {count}</dd></div>)}</dl>
     </section>
     <section className="rounded-xl border bg-white p-5 shadow-card">
@@ -65,12 +68,21 @@ function HealthContent() {
       {health.recentAccountEmailJobs.length ? <ul className="mt-3 grid gap-1 text-sm">{health.recentAccountEmailJobs.map((job) => (
         <li key={job.id}>
           <span className="font-semibold">{job.payload.template ?? job.type}</span> — {job.status} ({job.attempts}/{job.maxAttempts} attempts){job.lastError ? ` — ${job.lastError}` : ""}
-          <span className="ml-1 text-xs text-muted">id={job.id} · key={job.idempotencyKey}</span>
+          <span className="ml-1 text-xs text-muted">
+            Created {new Date(job.createdAt).toLocaleString()}
+          </span>
         </li>
       ))}</ul> : <p className="mt-2 text-sm text-muted">No account emails yet.</p>}
     </section>
     <section className="rounded-xl border bg-white p-5 shadow-card">
-      <h2 className="font-semibold">Recent failed jobs</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Recent failed jobs</h2>
+        {health.failedJobs.length > 0 && (
+          <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800">
+            {health.failedJobs.length} requiring attention
+          </span>
+        )}
+      </div>
       {health.failedJobs.length ? <ul className="mt-3 grid gap-1 text-sm">{health.failedJobs.map((job) => <li key={job.id}>{job.type} ({job.attempts}/{job.maxAttempts} attempts) — {job.lastError ?? "no error recorded"}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No failed jobs.</p>}
     </section>
     <section className="rounded-xl border bg-white p-5 shadow-card">
