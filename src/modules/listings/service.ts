@@ -372,8 +372,20 @@ export async function listMarketplaceProfessionalListings(userId: string, market
   return { items, total, page: filters.page, pageSize: filters.pageSize };
 }
 
-export async function listMarketplaceProfessionalLeads(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
+/**
+ * Read access to a marketplace professional's enquiry inbox: an ACTIVE member (any role) of a
+ * professional profile that isn't archived. Owning or creating a profile grants nothing by itself.
+ * Enquiries and viewings are then scoped by the listing's `marketplaceProfessionalId`, never by a
+ * client-supplied organisation.
+ */
+async function requireProfessionalInboxAccess(userId: string, marketplaceProfessionalId: string) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const professional = await db.marketplaceProfessional.findFirst({ where: { id: marketplaceProfessionalId, archivedAt: null }, select: { id: true } });
+  if (!professional) throw notFound();
+}
+
+export async function listMarketplaceProfessionalLeads(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
   // Scope by the listing's `marketplaceProfessionalId`, not by `organisationId`: a third-party
   // listing (brokerage marketing a landlord's property) attributes its lead to the landlord's
   // organisation, so filtering on `organisationId` alone would silently drop those leads from
@@ -388,7 +400,7 @@ export async function listMarketplaceProfessionalLeads(userId: string, marketpla
   const [items, total] = await db.$transaction([
     db.marketplaceLead.findMany({
       where,
-      include: leadInclude,
+      include: leadListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,
@@ -402,7 +414,7 @@ export async function listMarketplaceProfessionalLeads(userId: string, marketpla
 }
 
 export async function getMarketplaceProfessionalLead(userId: string, marketplaceProfessionalId: string, leadId: string) {
-  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
   leadId = leadIdSchema.parse(leadId);
   const lead = await db.marketplaceLead.findFirst({ where: { id: leadId, listing: { marketplaceProfessionalId } }, include: leadInclude });
   if (!lead) throw notFound();
@@ -418,10 +430,40 @@ export async function updateMarketplaceProfessionalLead(userId: string, marketpl
 }
 
 export async function listMarketplaceProfessionalViewings(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
-  await requireMarketplaceMember(userId, marketplaceProfessionalId);
-  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { backingOrganisationId: true } });
-  if (!professional) throw notFound();
-  return listViewingRequests(userId, professional.backingOrganisationId, query);
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
+  // Same scope as the professional's leads: the listing's professional, so viewings for a
+  // third-party listing (attributed to the landlord's organisation) are included, and the backing
+  // organisation's other rows are not.
+  const filters = viewingRequestListSchema.parse(query);
+  const where: Prisma.ViewingRequestWhereInput = {
+    listing: { marketplaceProfessionalId },
+    ...(filters.listingId ? { listingId: filters.listingId } : {}),
+    ...(filters.leadId ? { leadId: filters.leadId } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.assigneeMemberId ? { assigneeMemberId: filters.assigneeMemberId } : {}),
+  };
+  const [items, total] = await db.$transaction([
+    db.viewingRequest.findMany({
+      where,
+      include: viewingListInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (filters.page - 1) * filters.pageSize,
+      take: filters.pageSize,
+    }),
+    db.viewingRequest.count({ where }),
+  ]);
+  return {
+    items,
+    pagination: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.ceil(total / filters.pageSize) },
+  };
+}
+
+export async function getMarketplaceProfessionalViewing(userId: string, marketplaceProfessionalId: string, viewingRequestId: string) {
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
+  viewingRequestId = viewingRequestIdSchema.parse(viewingRequestId);
+  const viewing = await db.viewingRequest.findFirst({ where: { id: viewingRequestId, listing: { marketplaceProfessionalId } }, include: viewingInclude });
+  if (!viewing) throw notFound();
+  return viewing;
 }
 
 export async function getMarketplaceProfessionalListing(userId: string, marketplaceProfessionalId: string, listingId: string) {
@@ -1060,6 +1102,14 @@ const leadInclude = {
   },
 } satisfies Prisma.MarketplaceLeadInclude;
 
+/** List rows only need what `leadListItem` returns — not full history, activities or notes. */
+const leadListInclude = {
+  listing: { select: { id: true, title: true, listingType: true, status: true } },
+  assignee: { select: { id: true, user: { select: { displayName: true } } } },
+  viewingRequests: { select: { id: true, status: true, confirmedStartsAt: true, createdAt: true }, orderBy: { createdAt: "desc" as const } },
+  rentalApplications: { select: { id: true, status: true }, orderBy: { createdAt: "desc" as const } },
+} satisfies Prisma.MarketplaceLeadInclude;
+
 /**
  * Binds a public-form submission (`Idempotency-Key`) to the row it creates. Stored in the same
  * transaction as the lead / viewing, under a unique (listingId, idempotencyKeyHash) constraint, so a
@@ -1126,7 +1176,7 @@ export async function listMarketplaceLeads(userId: string, organisationId: strin
   const [items, total] = await db.$transaction([
     db.marketplaceLead.findMany({
       where,
-      include: leadInclude,
+      include: leadListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,
@@ -1249,6 +1299,14 @@ const viewingInclude = {
   history: { orderBy: { createdAt: "asc" as const } },
 } satisfies Prisma.ViewingRequestInclude;
 
+/** List rows only need what `viewingListItem` returns (no history, no requester contact). */
+const viewingListInclude = {
+  listing: { select: { id: true, title: true, listingType: true, status: true } },
+  lead: { select: { id: true, name: true, status: true } },
+  assignee: { select: { id: true, user: { select: { displayName: true } } } },
+  preferredTimes: { orderBy: { startsAt: "asc" as const } },
+} satisfies Prisma.ViewingRequestInclude;
+
 export async function createViewingRequest(
   listingId: string,
   userId: string | undefined,
@@ -1349,7 +1407,7 @@ export async function listViewingRequests(userId: string, organisationId: string
   const [items, total] = await db.$transaction([
     db.viewingRequest.findMany({
       where,
-      include: viewingInclude,
+      include: viewingListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,

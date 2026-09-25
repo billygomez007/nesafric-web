@@ -108,7 +108,8 @@ export async function createMarketplaceProfessional(userId: string, input: unkno
 
 export async function listUserMarketplaceProfessionals(userId: string) {
   const memberships = await db.marketplaceProfessionalMember.findMany({
-    where: { userId, status: "ACTIVE" },
+    // Active membership of a profile that isn't archived (an archived profile's inbox is refused).
+    where: { userId, status: "ACTIVE", marketplaceProfessional: { archivedAt: null } },
     select: { role: true, marketplaceProfessional: { select: { id: true, displayName: true, type: true, status: true, verificationStatus: true, slug: true } } },
     orderBy: { createdAt: "asc" },
   });

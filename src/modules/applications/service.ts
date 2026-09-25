@@ -628,13 +628,19 @@ export async function getCrmDashboard(userId: string, organisationId: string) {
     db.rentalApplication.groupBy({ by: ["status"], where: { organisationId }, orderBy: { status: "asc" }, _count: { id: true } }),
     db.marketplaceLead.findMany({
       where: { organisationId },
-      include: { listing: { select: { id: true, title: true } }, assignee: { include: { user: true } } },
+      // Explicit selects: never the whole User row (it holds the password hash) or the lead's
+      // private notes / submission hashes.
+      select: {
+        id: true, name: true, email: true, phone: true, status: true, source: true, createdAt: true, lastActivityAt: true,
+        listing: { select: { id: true, title: true } },
+        assignee: { select: { id: true, user: { select: { displayName: true } } } },
+      },
       orderBy: { lastActivityAt: "desc" },
       take: 20,
     }),
     db.rentalApplication.findMany({
       where: { organisationId },
-      include: { applicant: true, listing: { select: { id: true, title: true } }, assignee: { include: { user: true } } },
+      include: { applicant: true, listing: { select: { id: true, title: true } }, assignee: { select: { id: true, user: { select: { displayName: true } } } } },
       orderBy: { lastActivityAt: "desc" },
       take: 20,
     }),
