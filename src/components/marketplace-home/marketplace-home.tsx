@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { MarketplaceCarousel } from "@/components/marketplace-carousel";
 import { CompaniesCarouselSection } from "@/components/marketing/companies-carousel-section";
 import { ListingCard, type PublicListing } from "@/components/property-marketplace-search";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -323,11 +322,8 @@ export function MarketplaceHome() {
   const listings = useJson<ListingsResult>(`/api/public/listings?page=1&pageSize=${LISTING_SAMPLE_SIZE}`);
   return (
     <>
-      <section aria-label="Promoted" className="mx-auto max-w-[1400px] px-5 pt-10 sm:px-8 sm:pt-14">
-        <MarketplaceCarousel placement="MARKETPLACE_PRIMARY" />
-      </section>
-      <PropertyDiscovery result={listings} />
       <CompaniesCarouselSection />
+      <PropertyDiscovery result={listings} />
       <PopularLocations result={listings} />
       <ProfessionalDiscovery />
       <ServiceProviders />
