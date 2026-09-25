@@ -22,6 +22,7 @@ import { archiveStorageObjectSchema, documentCenterQuerySchema, listingMediaOrde
 import { recordIntegrationOutcome } from "@/modules/integrations/service";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
+import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -213,6 +214,46 @@ export async function uploadOrganisationDocument(userId: string, organisationId:
     userId,
     organisationId,
     targetType: data.targetType,
+    input: data,
+  });
+}
+
+export async function uploadMarketplaceListingMedia(
+  userId: string,
+  marketplaceProfessionalId: string,
+  listingId: string,
+  input: unknown,
+) {
+  await requireMarketplaceRole(
+    userId,
+    marketplaceProfessionalId,
+    "AGENT",
+  );
+
+  const listing = await db.listing.findFirst({
+    where: {
+      id: listingId,
+      marketplaceProfessionalId,
+    },
+    select: {
+      id: true,
+      organisationId: true,
+    },
+  });
+
+  if (!listing) throw notFound();
+
+  const data = uploadDocumentSchema.parse({
+    ...(input as object),
+    targetType: "LISTING_MEDIA",
+    targetId: listing.id,
+    classification: "PUBLIC",
+  });
+
+  return performUpload({
+    userId,
+    organisationId: listing.organisationId,
+    targetType: "LISTING_MEDIA",
     input: data,
   });
 }

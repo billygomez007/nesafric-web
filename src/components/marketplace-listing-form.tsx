@@ -282,7 +282,7 @@ export function MarketplaceListingForm({
     try {
       await uploadListingImages({
         listingId: result.id,
-        organisationId: result.organisationId,
+        professionalId,
         title,
         images,
       });
