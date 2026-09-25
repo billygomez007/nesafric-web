@@ -14,9 +14,9 @@ export function SoloAgentSection() {
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="grid gap-14 lg:grid-cols-2 lg:items-center lg:gap-16">
           <div>
-            <p className="text-xs font-semibold tracking-[0.22em] text-navy">FOR THE INDIVIDUAL AGENT</p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-              Run like a team — even when it&apos;s just you.
+            <p className="text-sm font-medium text-gold-ink">For the independent agent</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em] text-forest-deep sm:text-[40px] sm:leading-[1.1]">
+              Working on your own, with the structure of a team.
             </h2>
             <p className="mt-4 text-base leading-7 text-slate-600">
               One professional, working alone, can operate with the same structure as a full sales team —
@@ -25,21 +25,16 @@ export function SoloAgentSection() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <div className="rounded-xl bg-slate-50 p-5 sm:p-6">
-              <p className="text-xs font-medium tracking-wide text-slate-500">YOUR WORKSPACE</p>
-              <div className="mt-4 space-y-2.5">
-                {TOOLS.map((tool) => (
-                  <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3" key={tool.label}>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{tool.label}</p>
-                      <p className="text-xs text-slate-500">{tool.detail}</p>
-                    </div>
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div>
+            <p className="text-sm font-semibold text-forest-deep">In your workspace</p>
+            <dl className="mt-3 divide-y divide-hairline border-y border-hairline">
+              {TOOLS.map((tool) => (
+                <div className="grid gap-1 py-3.5 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] sm:gap-6" key={tool.label}>
+                  <dt className="text-sm font-semibold text-forest-deep">{tool.label}</dt>
+                  <dd className="text-sm leading-6 text-slate-600">{tool.detail}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
       </div>

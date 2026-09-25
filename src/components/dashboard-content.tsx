@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { EmptyState } from "@/components/ui/states";
+import { buttonClass } from "@/components/ui/button-styles";
 import {
   DashboardIcon,
   DashboardPanel,
@@ -103,11 +105,12 @@ const DEV_MAINTENANCE: MaintenanceMetrics = {
   openByPriority: { EMERGENCY: 1 },
 };
 
-function getTimeGreeting(hour: number) {
-  if (hour >= 5 && hour < 12) return "Good morning";
-  if (hour >= 12 && hour < 17) return "Good afternoon";
-  return "Good evening";
+function formatToday(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(date);
 }
+
+/** Categorical fills for the portfolio mix bar, in order of category size. */
+const MIX_COLOURS = ["bg-forest", "bg-teal", "bg-gold", "bg-teal-light", "bg-slate-400"];
 
 function money(value?: string, currencyCode?: string | null) {
   if (!value || !currencyCode) return "—";
@@ -125,7 +128,7 @@ export function DashboardContent() {
 
   useEffect(() => {
     const updateGreeting = () => {
-      setGreeting(getTimeGreeting(new Date().getHours()));
+      setGreeting(formatToday(new Date()));
     };
 
     updateGreeting();
@@ -275,18 +278,15 @@ export function DashboardContent() {
 
   return (
     <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-[18px] border border-white/8 bg-forest-deep px-6 py-7 text-white sm:px-8 sm:py-8">
-        <div className="relative grid gap-7 xl:grid-cols-[1.2fr_0.8fr] xl:items-end">
+      <section className="rounded-[var(--radius-panel)] bg-forest-deep px-5 py-6 text-white sm:px-8 sm:py-7">
+        <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-teal-light">
-              Live portfolio
-            </p>
-            <p className="mt-3 text-sm font-medium text-white/60">
-              {greeting || "Welcome"}
+            <p className="text-sm font-medium text-white/65">
+              {greeting || "Portfolio"}
             </p>
             <div className="mt-2 flex items-center gap-3">
               {data.organisation.logoUrl ? (
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/15 bg-white p-1.5 shadow-sm">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-control)] border border-white/15 bg-white p-1.5">
                   <img
                     alt={`${data.organisation.name} logo`}
                     className="h-full w-full object-contain"
@@ -294,61 +294,30 @@ export function DashboardContent() {
                   />
                 </div>
               ) : null}
-              <h2 className="max-w-2xl text-2xl font-semibold tracking-[-0.04em] sm:text-[34px]">
+              <h2 className="max-w-2xl text-2xl font-semibold tracking-[-0.025em] sm:text-[32px]">
                 {data.organisation.name}
               </h2>
             </div>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-white/65">
-              Track rent, properties, units, maintenance and team activity from
-              one operating view.
-            </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
               <Link
-                className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-forest"
+                className={buttonClass("primaryOnDark", "sm")}
                 href="/payments"
               >
                 Review payments
               </Link>
               <Link
-                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white"
+                className={buttonClass("secondaryOnDark", "sm")}
                 href="/maintenance"
               >
                 Open maintenance
               </Link>
               <Link
-                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white"
+                className={buttonClass("secondaryOnDark", "sm")}
                 href="/ai"
               >
                 Ask AI manager
               </Link>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-[12px] border border-white/10 bg-white/[0.045] p-4">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-white/45">
-                Collection rate
-              </p>
-              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
-                {collectionRate}%
-              </p>
-              <ProgressBar className="mt-3 bg-white/10" value={collectionRate} />
-            </div>
-
-            <div className="rounded-[12px] border border-white/10 bg-white/[0.045] p-4">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-white/45">
-                Outstanding
-              </p>
-              <p className="mt-2 text-xl font-semibold tracking-[-0.03em]">
-                {money(
-                  collection?.outstandingAmountMinor,
-                  collection?.currencyCode,
-                )}
-              </p>
-              <p className="mt-3 text-xs text-white/45">
-                Across current rent obligations
-              </p>
             </div>
           </div>
         </div>
@@ -399,7 +368,7 @@ export function DashboardContent() {
         </div>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Portfolio summary" className="grid grid-cols-2 gap-x-6 xl:grid-cols-4">
         <DashboardStat
           href="/properties"
           icon={<DashboardIcon name="building" />}
@@ -453,14 +422,14 @@ export function DashboardContent() {
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div>
                 <p className="text-xs text-muted">Collection rate</p>
-                <p className="mt-1 text-[38px] font-semibold tracking-[-0.05em] text-ink">
+                <p className="mt-1 text-[36px] font-semibold tabular-nums tracking-[-0.02em] text-ink">
                   {collectionRate}%
                 </p>
               </div>
 
               <div className="text-left sm:text-right">
                 <p className="text-xs text-muted">Collected this period</p>
-                <p className="mt-1 text-lg font-semibold text-ink">
+                <p className="mt-1 text-lg font-semibold tabular-nums text-ink">
                   {money(
                     collection?.collectedAmountMinor,
                     collection?.currencyCode,
@@ -471,35 +440,20 @@ export function DashboardContent() {
 
             <ProgressBar className="mt-5" value={collectionRate} />
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[10px] bg-surface p-4">
-                <p className="text-[11px] text-muted">Expected</p>
-                <p className="mt-1 text-sm font-semibold text-ink">
-                  {money(
-                    collection?.chargedAmountMinor,
-                    collection?.currencyCode,
-                  )}
-                </p>
+            <dl className="mt-6 grid grid-cols-2 divide-x divide-hairline border-y border-hairline">
+              <div className="py-3 pr-4">
+                <dt className="text-xs text-muted">Expected</dt>
+                <dd className="mt-1 text-sm font-semibold tabular-nums text-ink">
+                  {money(collection?.chargedAmountMinor, collection?.currencyCode)}
+                </dd>
               </div>
-              <div className="rounded-[10px] bg-teal/5 p-4">
-                <p className="text-[11px] text-muted">Collected</p>
-                <p className="mt-1 text-sm font-semibold text-ink">
-                  {money(
-                    collection?.collectedAmountMinor,
-                    collection?.currencyCode,
-                  )}
-                </p>
+              <div className="py-3 pl-4">
+                <dt className="text-xs text-muted">Outstanding</dt>
+                <dd className="mt-1 text-sm font-semibold tabular-nums text-ink">
+                  {money(collection?.outstandingAmountMinor, collection?.currencyCode)}
+                </dd>
               </div>
-              <div className="rounded-[10px] bg-gold/10 p-4">
-                <p className="text-[11px] text-muted">Outstanding</p>
-                <p className="mt-1 text-sm font-semibold text-ink">
-                  {money(
-                    collection?.outstandingAmountMinor,
-                    collection?.currencyCode,
-                  )}
-                </p>
-              </div>
-            </div>
+            </dl>
           </div>
         </DashboardPanel>
 
@@ -516,58 +470,53 @@ export function DashboardContent() {
           title="Portfolio mix"
         >
           <div className="p-5 sm:p-6">
-            <div className="grid gap-6 sm:grid-cols-[150px_1fr] sm:items-center">
-              <div className="relative mx-auto flex h-36 w-36 items-center justify-center rounded-full bg-[conic-gradient(var(--color-teal)_0_46%,var(--color-gold)_46%_67%,var(--color-forest-light)_67%_84%,var(--color-cream)_84%_100%)]">
-                <div className="flex h-[98px] w-[98px] flex-col items-center justify-center rounded-full bg-white">
-                  <p className="text-3xl font-semibold tracking-[-0.04em] text-ink">
-                    {data.properties.length}
-                  </p>
-                  <p className="mt-1 text-[10px] uppercase tracking-[0.12em] text-muted">
-                    Properties
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {propertyBreakdown.map(([category, count], index) => {
-                  const dots = [
-                    "bg-teal",
-                    "bg-gold",
-                    "bg-forest-light",
-                    "bg-amber-300",
-                    "bg-slate-400",
-                  ];
-
-                  return (
-                    <div
-                      className="flex items-center justify-between"
+            {/* Proportions are computed from the organisation's own properties — never fixed. */}
+            {data.properties.length > 0 ? (
+              <>
+                <p className="text-sm text-muted">
+                  <span className="text-2xl font-semibold tabular-nums text-ink">{data.properties.length}</span>{" "}
+                  {data.properties.length === 1 ? "property" : "properties"}
+                </p>
+                <div
+                  aria-hidden="true"
+                  className="mt-4 flex h-2.5 overflow-hidden rounded-[2px] bg-cream"
+                >
+                  {propertyBreakdown.map(([category, count], index) => (
+                    <span
+                      className={`h-full ${MIX_COLOURS[index] ?? "bg-slate-400"} ${index > 0 ? "border-l-2 border-white" : ""}`}
                       key={category}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            dots[index] ?? "bg-muted"
-                          }`}
-                        />
-                        <span className="text-sm text-muted">{category}</span>
-                      </div>
-                      <span className="text-sm font-semibold text-ink">
-                        {count}
-                      </span>
-                    </div>
-                  );
-                })}
-
-                <div className="border-t border-hairline pt-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted">Team members</span>
-                    <span className="font-semibold text-ink">
-                      {data.members}
-                    </span>
-                  </div>
+                      style={{ width: `${(count / data.properties.length) * 100}%` }}
+                    />
+                  ))}
                 </div>
-              </div>
-            </div>
+                <dl className="mt-4 divide-y divide-hairline border-y border-hairline">
+                  {propertyBreakdown.map(([category, count], index) => (
+                    <div className="flex items-center justify-between gap-4 py-2.5" key={category}>
+                      <dt className="flex items-center gap-2.5 text-sm text-ink">
+                        <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-[2px] ${MIX_COLOURS[index] ?? "bg-slate-400"}`} />
+                        {category}
+                      </dt>
+                      <dd className="text-sm tabular-nums text-muted">
+                        <span className="font-semibold text-ink">{count}</span>
+                        {" · "}
+                        {Math.round((count / data.properties.length) * 100)}%
+                      </dd>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between gap-4 py-2.5">
+                    <dt className="text-sm text-muted">Team members</dt>
+                    <dd className="text-sm font-semibold tabular-nums text-ink">{data.members}</dd>
+                  </div>
+                </dl>
+              </>
+            ) : (
+              <EmptyState
+                action={<Link className={buttonClass("secondary", "sm")} href="/properties/new">Add a property</Link>}
+                className="border-y-0 py-4"
+                description="Your portfolio mix appears here once you add properties."
+                title="No properties yet"
+              />
+            )}
           </div>
         </DashboardPanel>
       </div>

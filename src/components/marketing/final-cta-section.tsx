@@ -1,35 +1,36 @@
 import Link from "next/link";
 import { BRAND } from "@/platform/brand";
+import { buttonClass } from "@/components/ui/button-styles";
 
 export function FinalCtaSection() {
   return (
-    <section className="marketing-grid relative overflow-hidden bg-navy py-24 sm:py-32">
-      <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
-        <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+    <section className="border-t border-white/10 bg-forest-deep py-16 sm:py-24">
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
+        <h2 className="max-w-3xl text-3xl font-semibold tracking-[-0.025em] text-white sm:text-[40px] sm:leading-[1.1]">
           Run your real estate business on NesAfric.
         </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-400">
+        <p className="mt-4 max-w-2xl text-base leading-7 text-white/70">
           Owners, managers, agents, brokers, brokerages and developers can operate, market and grow — from
-          listing to renewal, from lead to lease — on one intelligent platform.
+          listing to renewal, from lead to lease — on one record.
         </p>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link
-            className="rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
+            className={buttonClass("primaryOnDark")}
             href="/register"
           >
-            Manage Properties
+            Manage properties
           </Link>
           <Link
-            className="rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
+            className={buttonClass("secondaryOnDark")}
             href="/register"
           >
-            Market Properties
+            Market properties
           </Link>
         </div>
-        <p className="mt-6 text-sm text-slate-500">
+        <p className="mt-6 text-sm text-white/60">
           Represent a brokerage or a large real estate company?{" "}
           <Link
-            className="font-semibold text-slate-300 transition-colors hover:text-white"
+            className="font-semibold text-white underline-offset-4 hover:underline"
             href={`mailto:${BRAND.contact.hello}?subject=${encodeURIComponent(`Book a demo — ${BRAND.name}`)}`}
           >
             Book a demo
