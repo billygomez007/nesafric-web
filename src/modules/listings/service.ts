@@ -54,13 +54,8 @@ export const PUBLIC_LISTING_RATE_LIMIT = {
   enforcement: "gateway-ready",
 } as const;
 
-export const PUBLIC_LISTING_WRITE_RATE_LIMIT = {
-  policy: "public-listing-enquiry",
-  limit: 20,
-  windowSeconds: 60,
-  keyStrategy: "ip+listing",
-  enforcement: "gateway-ready",
-} as const;
+// Guest enquiry / viewing write limits are enforced (not just advertised) by
+// `src/platform/security/public-write-limit.ts` at the public HTTP routes.
 
 const listingInclude = {
   property: { select: { id: true, name: true, referenceNumber: true, status: true, archivedAt: true } },

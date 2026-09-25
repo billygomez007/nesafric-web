@@ -1,22 +1,28 @@
 import { NextResponse } from "next/server";
-import { createViewingRequest, PUBLIC_LISTING_WRITE_RATE_LIMIT } from "@/modules/listings/service";
+import { createViewingRequest } from "@/modules/listings/service";
+import { createViewingRequestSchema, listingIdSchema } from "@/modules/listings/schemas";
 import { getOptionalUser } from "@/platform/auth/session";
-import { errorResponse } from "@/platform/errors";
+import { fingerprintOf, readIdempotencyKey, runIdempotent } from "@/platform/security/idempotency";
+import { assertPublicWriteAllowed, publicWriteErrorResponse } from "@/platform/security/public-write-limit";
 
+/** Viewing request for an existing enquiry (lead). Rate-limited per IP, lead and listing; idempotent. */
 export async function POST(request: Request, { params }: { params: Promise<{ listingId: string }> }) {
   try {
-    return NextResponse.json(await createViewingRequest(
-      (await params).listingId,
-      (await getOptionalUser())?.id,
-      await request.json(),
-    ), {
-      status: 201,
-      headers: {
-        "Cache-Control": "no-store",
-        "X-RateLimit-Policy": `${PUBLIC_LISTING_WRITE_RATE_LIMIT.policy};w=${PUBLIC_LISTING_WRITE_RATE_LIMIT.windowSeconds};limit=${PUBLIC_LISTING_WRITE_RATE_LIMIT.limit}`,
+    const listingId = listingIdSchema.parse((await params).listingId);
+    const userId = (await getOptionalUser())?.id;
+    const data = createViewingRequestSchema.parse(await request.json().catch(() => null));
+    const result = await runIdempotent(
+      { scope: `viewing:${listingId}`, key: readIdempotencyKey(request.headers), fingerprint: fingerprintOf({ listingId, userId: userId ?? null, data }) },
+      async () => {
+        await assertPublicWriteAllowed(request.headers, { kind: "viewing", listingId, leadId: data.leadId });
+        return { status: 201, body: await createViewingRequest(listingId, userId, data) };
       },
+    );
+    return NextResponse.json(result.body, {
+      status: result.status,
+      headers: { "Cache-Control": "no-store", ...(result.replayed ? { "Idempotent-Replayed": "true" } : {}) },
     });
   } catch (error) {
-    return errorResponse(error);
+    return publicWriteErrorResponse(error);
   }
 }
