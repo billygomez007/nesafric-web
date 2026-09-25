@@ -16,25 +16,25 @@ export default async function LoginPage({
   return (
     <main className="min-h-screen bg-warm-white lg:grid lg:grid-cols-[0.9fr_1.1fr]">
       <section className="hidden bg-forest-deep p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
-        <Link href="/">
-          <BrandLogo height={31} variant="light" />
+        <Link aria-label="NesAfric home" href="/">
+          <BrandLogo height={31} variant="dark" />
         </Link>
 
         <div className="max-w-md">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold-soft">
-            REAL ESTATE OS FOR AFRICA
+          <p className="text-sm font-medium text-gold-soft">
+            The operating system for real estate
           </p>
 
-          <h1 className="mt-5 text-4xl font-semibold leading-tight xl:text-5xl">
+          <p className="font-display mt-5 text-4xl font-semibold leading-tight xl:text-5xl">
             Your properties, people and opportunities in one place.
-          </h1>
+          </p>
 
           <p className="mt-5 text-base leading-7 text-white/70">
             Manage the work behind every property with a connected NesAfric workspace.
           </p>
         </div>
 
-        <p className="text-xs text-white/45">
+        <p className="text-xs text-white/65">
           © NesAfric
         </p>
       </section>
@@ -42,6 +42,7 @@ export default async function LoginPage({
       <section className="flex min-h-screen items-center justify-center px-6 py-12 sm:px-10">
         <div className="w-full max-w-md">
           <Link
+            aria-label="NesAfric home"
             className="inline-flex lg:hidden"
             href="/"
           >
@@ -51,14 +52,14 @@ export default async function LoginPage({
             />
           </Link>
 
-          <div className="mt-10 rounded-3xl border border-hairline bg-white p-7 shadow-card sm:p-9 lg:mt-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
-              WELCOME BACK
+          <div className="mt-10 rounded-panel border border-hairline bg-white p-7 sm:p-9 lg:mt-0">
+            <p className="text-sm font-medium text-gold-ink">
+              Welcome back
             </p>
 
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-forest">
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.02em] text-forest-deep">
               Sign in to NesAfric
-            </h2>
+            </h1>
 
             <p className="mt-2 text-sm leading-6 text-muted">
               Use your email and password to continue to your workspace.
@@ -66,7 +67,7 @@ export default async function LoginPage({
 
             {googleError && (
               <p
-                className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900"
+                className="mt-5 border-l-2 border-danger bg-danger-tint p-3 text-sm text-danger-ink"
                 role="alert"
               >
                 {googleError}
@@ -78,7 +79,7 @@ export default async function LoginPage({
             <p className="mt-6 text-center text-sm text-muted">
               New to NesAfric?{" "}
               <Link
-                className="font-semibold text-teal hover:text-emerald"
+                className="font-semibold text-emerald underline-offset-4 hover:text-forest hover:underline"
                 href="/register"
               >
                 Create an account

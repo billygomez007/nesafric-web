@@ -169,7 +169,7 @@ export default function Home() {
                       {[
                         ["24","Units"],
                         ["21","Occupied"],
-                        ["GHS 68.4k","Collected this month"],
+                        ["GH₵68,400","Collected this month"],
                         ["2","Open maintenance jobs"],
                       ].map(([value,label]) => (
                         <div className="bg-white p-5" key={label}>
@@ -190,9 +190,9 @@ export default function Home() {
                         </div>
                         <div className="divide-y divide-slate-100">
                           {[
-                            ["Cantonments Court","Cantonments, Accra","8 / 8","GHS 31,200","Healthy"],
-                            ["Ridge House","North Ridge, Accra","7 / 8","GHS 22,400","1 available"],
-                            ["Airport Residence","Airport Residential","6 / 8","GHS 14,800","2 due soon"],
+                            ["Cantonments Court","Cantonments, Accra","8 / 8","GH₵31,200","Healthy"],
+                            ["Ridge House","North Ridge, Accra","7 / 8","GH₵22,400","1 available"],
+                            ["Airport Residence","Airport Residential","6 / 8","GH₵14,800","2 due soon"],
                           ].map(([name,location,occupancy,rent,status]) => (
                             <div className="grid gap-3 px-5 py-4 sm:grid-cols-[1.35fr_0.6fr_0.7fr_0.7fr] sm:items-center" key={name}>
                               <div><p className="text-sm font-semibold text-slate-900">{name}</p><p className="mt-1 text-xs text-slate-500">{location}</p></div>
@@ -212,7 +212,7 @@ export default function Home() {
                         <div className="divide-y divide-slate-100">
                           {[
                             ["Lease renewal","Unit B4 · Ridge House","Review by 25 Sep"],
-                            ["Rent follow-up","Unit C2 · Airport Residence","GHS 2,400 overdue"],
+                            ["Rent follow-up","Unit C2 · Airport Residence","GH₵2,400 overdue"],
                             ["Maintenance","Unit A7 · Cantonments Court","Plumber assigned"],
                             ["Viewing","Unit B8 · Ridge House","Tomorrow · 14:00"],
                           ].map(([title,detail,state]) => (

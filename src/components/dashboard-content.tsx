@@ -409,7 +409,7 @@ export function DashboardContent() {
         <DashboardPanel
           action={
             <Link
-              className="text-xs font-semibold text-teal hover:text-forest"
+              className="inline-flex min-h-6 items-center text-xs font-semibold text-emerald hover:text-forest hover:underline"
               href="/payments"
             >
               View ledger →
@@ -460,7 +460,7 @@ export function DashboardContent() {
         <DashboardPanel
           action={
             <Link
-              className="text-xs font-semibold text-teal hover:text-forest"
+              className="inline-flex min-h-6 items-center text-xs font-semibold text-emerald hover:text-forest hover:underline"
               href="/properties"
             >
               Portfolio →
@@ -525,7 +525,7 @@ export function DashboardContent() {
         <DashboardPanel
           action={
             <Link
-              className="text-xs font-semibold text-teal hover:text-forest"
+              className="inline-flex min-h-6 items-center text-xs font-semibold text-emerald hover:text-forest hover:underline"
               href="/properties"
             >
               View all →
@@ -560,10 +560,10 @@ export function DashboardContent() {
                   </StatusBadge>
 
                   <Link
-                    className="text-xs font-semibold text-teal"
+                    className="inline-flex min-h-6 items-center text-xs font-semibold text-emerald hover:underline"
                     href={`/maintenance/properties/${property.id}`}
                   >
-                    Open →
+                    Open<span className="sr-only"> {property.name}</span> <span aria-hidden="true">→</span>
                   </Link>
                 </div>
               </div>
@@ -607,7 +607,7 @@ export function DashboardContent() {
                   {data.members}
                 </p>
               </div>
-              <span className="text-xs font-semibold text-teal">Manage →</span>
+              <span className="inline-flex min-h-6 items-center text-xs font-semibold text-emerald hover:underline">Manage →</span>
             </Link>
 
             <Link
@@ -640,7 +640,7 @@ export function DashboardContent() {
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
                     step.done
-                      ? "bg-teal/10 text-teal"
+                      ? "bg-teal/10 text-emerald"
                       : "bg-white text-muted ring-1 ring-hairline"
                   }`}
                 >
