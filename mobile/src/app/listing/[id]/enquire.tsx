@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ApiError } from "@/api/client";
+import { idempotencyKeyFor, type IdempotencySlot } from "@/api/idempotency";
 import { createEnquiry, requestViewing } from "@/api/marketplace";
 import { useApi } from "@/api/provider";
 import { useListing } from "@/api/queries";
@@ -45,6 +46,9 @@ export default function EnquireScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const inFlight = useRef(false);
+  // Same key for an identical retry (no duplicate lead after a timeout); new key if the form changes.
+  const leadKey = useRef<IdempotencySlot>(null);
+  const viewingKey = useRef<IdempotencySlot>(null);
   const availableSlots = useMemo(() => upcomingViewingSlots(new Date()), []);
 
   const update = (patch: Partial<EnquiryForm>) => setForm((current) => ({ ...current, ...patch }));
@@ -63,15 +67,17 @@ export default function EnquireScreen() {
     inFlight.current = true;
     setSubmitting(true);
     try {
-      const lead = await createEnquiry(api, id, toLeadInput(form, viewing ? "VIEWING" : "CONTACT"));
+      const leadInput = toLeadInput(form, viewing ? "VIEWING" : "CONTACT");
+      const lead = await createEnquiry(api, id, leadInput, idempotencyKeyFor(leadKey, leadInput));
       if (viewing) {
         const chosen = availableSlots.filter((slot) => slots.includes(slot.key));
+        const viewingInput = {
+          leadId: lead.id,
+          preferredTimes: chosen.map((slot) => ({ startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), timezone: deviceTimeZone() })),
+          requesterNote: form.message.trim() || undefined,
+        };
         try {
-          await requestViewing(api, id, {
-            leadId: lead.id,
-            preferredTimes: chosen.map((slot) => ({ startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), timezone: deviceTimeZone() })),
-            requesterNote: form.message.trim() || undefined,
-          });
+          await requestViewing(api, id, viewingInput, idempotencyKeyFor(viewingKey, viewingInput));
         } catch (error) {
           // The enquiry itself went through; say so instead of inviting a duplicate submission.
           setOutcome({ kind: "viewingFailed", message: error instanceof Error ? error.message : "The viewing request didn't go through." });
@@ -87,7 +93,13 @@ export default function EnquireScreen() {
         }
         setErrors(fieldErrors);
       }
-      setFormError(error instanceof Error ? error.message : "Something went wrong. Please try again.");
+      setFormError(
+        error instanceof ApiError && error.code === "PUBLIC_WRITE_RATE_LIMITED"
+          ? "You’ve sent several requests in a short time. Please wait a few minutes and try again."
+          : error instanceof Error
+            ? error.message
+            : "Something went wrong. Please try again.",
+      );
     } finally {
       inFlight.current = false;
       setSubmitting(false);

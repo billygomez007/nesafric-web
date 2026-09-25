@@ -36,6 +36,12 @@ function mockApi(handlers: { search?: (url: URL) => unknown; lead?: () => [numbe
   }) as jest.Mock;
 }
 
+function keysFor(pathEnd: string) {
+  return calls
+    .filter((entry) => entry.url.endsWith(pathEnd) && entry.init.method === "POST")
+    .map((entry) => (entry.init.headers as Record<string, string>)["idempotency-key"]);
+}
+
 function bodyOf(pathEnd: string) {
   const call = calls.find((entry) => entry.url.endsWith(pathEnd) && entry.init.method === "POST");
   return call ? JSON.parse(String(call.init.body)) : undefined;
@@ -120,5 +126,40 @@ describe("signed-out marketplace", () => {
 
     await waitFor(() => expect(screen.getByText("Invalid email address")).toBeTruthy());
     expect(screen.getByText("The request contains invalid input.")).toBeTruthy();
+  });
+
+  it("sends an idempotency key, reusing it only for an identical retry", async () => {
+    let failNext = true;
+    mockApi({ lead: () => (failNext ? ((failNext = false), [503, { error: { code: "HTTP_503", message: "Service unavailable" } }]) : [201, { id: "a1b2c3d4-0000-4000-8000-000000000009", listingId: house.id, status: "NEW", createdAt: "now" }]) });
+    renderRouter(APP_DIR, { initialUrl: `/listing/${house.id}/enquire?mode=contact` });
+
+    fireEvent.changeText(await screen.findByLabelText("Your name"), "Ama");
+    fireEvent.changeText(screen.getByLabelText("Phone"), "0241234567");
+    fireEvent.press(screen.getByTestId("share-consent"));
+    await act(async () => fireEvent.press(screen.getByTestId("submit-enquiry")));
+    expect(await screen.findByText("Service unavailable")).toBeTruthy();
+
+    // Identical retry: same key, so the server can replay instead of creating a duplicate lead.
+    await act(async () => fireEvent.press(screen.getByTestId("submit-enquiry")));
+    expect(await screen.findByText("Message sent")).toBeTruthy();
+    const [first, second] = keysFor("/leads");
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second).toBe(first);
+  });
+
+  it("uses a new key when the form changes, and explains rate limiting", async () => {
+    mockApi({ lead: () => [429, { error: { code: "PUBLIC_WRITE_RATE_LIMITED", message: "Too many requests." } }] });
+    renderRouter(APP_DIR, { initialUrl: `/listing/${house.id}/enquire?mode=contact` });
+
+    fireEvent.changeText(await screen.findByLabelText("Your name"), "Ama");
+    fireEvent.changeText(screen.getByLabelText("Phone"), "0241234567");
+    fireEvent.press(screen.getByTestId("share-consent"));
+    await act(async () => fireEvent.press(screen.getByTestId("submit-enquiry")));
+    expect(await screen.findByText(/sent several requests in a short time/)).toBeTruthy();
+
+    fireEvent.changeText(screen.getByLabelText("Message (optional)"), "Is parking included?");
+    await act(async () => fireEvent.press(screen.getByTestId("submit-enquiry")));
+    const [first, second] = keysFor("/leads");
+    expect(second).not.toBe(first);
   });
 });
