@@ -1,72 +1,66 @@
-import { ProductMockup } from "@/components/marketing/product-mockup";
-
 const AI_ROLES = [
   {
-    title: "AI Receptionist",
-    description: "Handles digital enquiries, understands your listings and inventory, and answers routine questions immediately — day or night.",
+    title: "AI receptionist",
+    description: "Answers routine questions about your listings and availability as enquiries arrive — day or night — and hands anything unusual to a person.",
   },
   {
-    title: "AI Sales Agent",
-    description: "Assists with leads, listing enquiries, inventory matching and viewing workflows, so nothing sits untouched.",
+    title: "AI sales assistant",
+    description: "Follows up on leads, matches enquiries to available units and keeps viewings moving so no enquiry sits untouched.",
   },
   {
-    title: "AI Property Manager",
-    description: "Assists day-to-day property operations — rent, leases, vacancies and exceptions, kept visible across the portfolio.",
+    title: "AI property manager",
+    description: "Watches rent, leases and vacancies across the portfolio and raises the exceptions that need a decision.",
   },
   {
-    title: "AI Maintenance Coordinator",
-    description: "Supports maintenance workflows and provider dispatch, from report to resolution.",
+    title: "AI maintenance coordinator",
+    description: "Turns a reported problem into a request, gathers the details and helps dispatch the right provider.",
   },
 ];
 
+/**
+ * AI employees are real NesAfric features (plan-dependent). Presented as numbered editorial rows
+ * with the operating principle stated plainly — AI works inside your permissions and approvals.
+ */
 export function AICapabilitiesSection({
-  kicker = "AI, BUILT IN",
-  heading = "Your real-estate business. Now with AI built in.",
-  intro = "AI employees work inside your NesAfric workspace — available according to your plan — to take on the repetitive work around the business, not the judgment calls that need you.",
-  mockup,
+  kicker = "AI inside your workspace",
+  heading = "AI assistants that work inside your rules.",
+  intro = "AI employees work inside your NesAfric workspace — available according to your plan — to take on the repetitive work around the business, not the judgement calls that need you.",
 }: {
   kicker?: string;
   heading?: string;
   intro?: string;
-  mockup?: { src: string; alt: string };
 }) {
   return (
-    <section className="bg-navy py-24 sm:py-32">
-      <div className="mx-auto max-w-7xl px-6 sm:px-8">
-        <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-brand">{kicker}</p>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">{heading}</h2>
-          <p className="mt-4 text-base leading-7 text-slate-400">{intro}</p>
-        </div>
-
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {AI_ROLES.map((role) => (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6" key={role.title}>
-              <p className="text-sm font-semibold text-white">{role.title}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{role.description}</p>
-            </div>
-          ))}
-        </div>
-
-        {mockup && (
-          <div className="mt-14">
-            <ProductMockup alt={mockup.alt} src={mockup.src} />
-          </div>
-        )}
-
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-5">
+    <section className="bg-forest-deep py-16 text-white sm:py-24">
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
+        <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
           <div>
-            <p className="text-sm font-semibold text-white">AI Voice Receptionist</p>
-            <p className="mt-1 text-sm leading-6 text-slate-400">Live telephone answering by AI — not yet available on the platform.</p>
+            <p className="text-sm font-medium text-gold-soft">{kicker}</p>
+            <h2 className="mt-3 max-w-xl text-3xl font-semibold leading-[1.08] tracking-[-0.025em] sm:text-[40px]">{heading}</h2>
           </div>
-          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold tracking-wide text-amber-300">
-            COMING SOON
-          </span>
+          <p className="max-w-2xl text-base leading-7 text-white/70 lg:justify-self-end">{intro}</p>
         </div>
 
-        <p className="mt-8 max-w-2xl text-sm leading-6 text-slate-500">
-          AI works inside your workspace, within your permissions and your approval workflow. It takes on
-          repetitive work around the business — it doesn&apos;t replace the professional who closes the deal.
+        <ol className="mt-12 divide-y divide-white/10 border-y border-white/10">
+          {AI_ROLES.map((role, index) => (
+            <li className="grid gap-2 py-6 sm:grid-cols-[56px_minmax(0,0.8fr)_minmax(0,1.4fr)] sm:gap-6" key={role.title}>
+              <span className="text-sm font-semibold tabular-nums text-gold-soft">0{index + 1}</span>
+              <h3 className="font-display text-lg font-semibold">{role.title}</h3>
+              <p className="text-sm leading-6 text-white/70">{role.description}</p>
+            </li>
+          ))}
+          <li className="grid gap-2 py-6 sm:grid-cols-[56px_minmax(0,0.8fr)_minmax(0,1.4fr)] sm:gap-6">
+            <span aria-hidden="true" className="text-sm text-white/40">—</span>
+            <h3 className="font-display text-lg font-semibold text-white/80">AI voice receptionist</h3>
+            <p className="text-sm leading-6 text-white/60">
+              Live telephone answering by AI. <span className="font-semibold text-gold-soft">Not available yet.</span>
+            </p>
+          </li>
+        </ol>
+
+        <p className="mt-8 max-w-2xl text-sm leading-6 text-white/60">
+          AI works within your team&apos;s permissions and your approval workflow. It takes on repetitive work around
+          the business — it doesn&apos;t replace the professional who closes the deal.
         </p>
       </div>
     </section>

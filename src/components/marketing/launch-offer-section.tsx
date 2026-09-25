@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
+import { buttonClass } from "@/components/ui/button-styles";
 
 const INCLUDED = [
   "A professional profile and company presence on the NesAfric Marketplace",
@@ -14,12 +15,12 @@ const INCLUDED = [
 
 export function LaunchOfferSection({ ctaLabel = "Claim Your Free Professional Account" }: { ctaLabel?: string }) {
   return (
-    <section className="bg-warm-white py-24 sm:py-32" id="ghana-launch-offer">
+    <section className="bg-warm-white py-16 sm:py-24" id="ghana-launch-offer">
       <div className="mx-auto max-w-5xl px-6 sm:px-8">
-        <div className="overflow-hidden rounded-3xl border border-hairline shadow-sm">
+        <div className="overflow-hidden rounded-[var(--radius-panel)] border border-hairline">
           <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
             <div className="bg-forest p-10 sm:p-12">
-              <p className="text-xs font-semibold tracking-[0.22em] text-gold-soft">GHANA LAUNCH</p>
+              <p className="text-sm font-medium text-gold-soft">Ghana launch offer</p>
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
                 Marketplace Professional.
                 <br />
@@ -47,7 +48,7 @@ export function LaunchOfferSection({ ctaLabel = "Claim Your Free Professional Ac
                 simply today&apos;s offer for professionals joining now.
               </p>
               <Link
-                className="mt-8 inline-flex items-center justify-center rounded-full bg-forest px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-emerald"
+                className={`mt-8 ${buttonClass("primary")}`}
                 href="/register"
                 onClick={() => trackCampaignEvent("join_free_click", { placement: "launch_offer" })}
               >

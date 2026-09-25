@@ -1,100 +1,95 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
-import { BRAND } from "@/platform/brand";
+import { buttonClass } from "@/components/ui/button-styles";
 
 const NAV_LINKS = [
-  { href: "/#product", label: "Platform" },
-  { href: "/for-property-owners", label: "Solutions" },
-  { href: "/marketplace/properties", label: "Marketplace" },
-  { href: "/#resources", label: "Resources" },
+  { href: "/#product", label: "Platform", match: (path: string) => path === "/" },
+  { href: "/for-property-owners", label: "Property owners", match: (path: string) => path.startsWith("/for-property-owners") },
+  { href: "/for-professionals", label: "Professionals", match: (path: string) => path.startsWith("/for-professionals") },
+  { href: "/for-developers", label: "Developers", match: (path: string) => path.startsWith("/for-developers") },
+  { href: "/marketplace/properties", label: "Marketplace", match: (path: string) => path.startsWith("/marketplace") },
+  { href: "/pricing", label: "Pricing", match: (path: string) => path.startsWith("/pricing") },
 ];
 
 export function SiteNav() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname() ?? "/";
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  // Escape closes the mobile menu and returns focus to the toggle that opened it.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      toggleRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-forest-deep/97 text-white backdrop-blur-xl">
-      <div className="border-b border-white/[0.07] bg-[#062b27]">
-        <div className="mx-auto flex min-h-7 max-w-[1400px] items-center justify-between gap-4 px-5 py-1 text-[11px] text-white/58 sm:px-8">
-          <a
-            className="hidden tracking-[0.01em] transition-colors hover:text-white sm:inline"
-            href={`mailto:${BRAND.contact.support}`}
-          >
-            {BRAND.contact.support}
-          </a>
-          <span aria-hidden="true" className="hidden flex-1 sm:block" />
-          <a
-            className="font-medium tracking-[0.01em] text-white/70 transition-colors hover:text-white"
-            href={`tel:${BRAND.contact.phoneTel}`}
-          >
-            {BRAND.contact.phoneDisplay}
-          </a>
-        </div>
-      </div>
-
-      <div className="mx-auto flex h-[70px] max-w-[1400px] items-center justify-between px-5 sm:px-8">
-        <Link className="shrink-0" href="/">
-          <BrandLogo height={32} variant="dark" />
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-forest-deep text-white">
+      <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between gap-4 px-5 sm:px-8 lg:h-[72px] xl:gap-6">
+        <Link aria-label="NesAfric home" className="shrink-0" href="/">
+          <BrandLogo height={30} variant="dark" />
         </Link>
 
-        <nav className="hidden items-center gap-9 lg:flex">
-          {NAV_LINKS.map((link, index) => (
-            <Link
-              className={`relative py-2 text-[13px] font-medium tracking-[-0.01em] transition-colors ${
-                index === 0 ? "text-white" : "text-white/66 hover:text-white"
-              }`}
-              href={link.href}
-              key={link.label}
-            >
-              {link.label}
-            </Link>
-          ))}
+        <nav aria-label="Main" className="hidden items-center gap-5 lg:flex xl:gap-7">
+          {NAV_LINKS.map((link) => {
+            const active = link.match(pathname);
+            return (
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={`font-display relative whitespace-nowrap py-2 text-[13px] font-medium transition-colors ${
+                  active
+                    ? "text-white after:absolute after:inset-x-0 after:-bottom-[1px] after:h-px after:bg-gold"
+                    : "text-white/70 hover:text-white"
+                }`}
+                href={link.href}
+                key={link.label}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="hidden items-center gap-3 lg:flex">
-          <Link
-            className="px-3 py-2.5 text-[13px] font-medium text-white/72 transition-colors hover:text-white"
-            href="/login"
-          >
-            Sign In
+        <div className="hidden items-center gap-2 lg:flex">
+          <Link className="font-display whitespace-nowrap px-3 py-2 text-[13px] font-medium text-white/75 transition-colors hover:text-white" href="/login">
+            Sign in
           </Link>
-
-          <Link
-            className="rounded-lg bg-gold px-5 py-2.5 text-[13px] font-semibold text-forest-deep transition-colors hover:bg-gold-soft"
-            href="/register"
-          >
-            Start with NesAfric <span aria-hidden="true">→</span>
+          <Link className={buttonClass("primaryOnDark", "sm")} href="/register">
+            Start with NesAfric
           </Link>
         </div>
 
         <button
+          aria-controls="site-nav-mobile"
           aria-expanded={open}
-          aria-label="Toggle navigation"
-          className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/12 text-white transition hover:bg-white/[0.06] lg:hidden"
+          aria-label={open ? "Close menu" : "Open menu"}
+          className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-white/15 text-white transition hover:bg-white/[0.06] lg:hidden"
           onClick={() => setOpen((value) => !value)}
+          ref={toggleRef}
           type="button"
         >
-          <span aria-hidden="true" className="text-xl">{open ? "×" : "☰"}</span>
+          <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24">
+            {open ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+          </svg>
         </button>
       </div>
 
       {open && (
-        <div className="border-t border-white/10 bg-forest-deep px-5 py-5 lg:hidden">
-          <div className="mb-4 grid gap-2 border-b border-white/10 pb-4 text-xs text-white/60">
-            <a className="transition hover:text-gold-soft" href={`mailto:${BRAND.contact.support}`}>
-              {BRAND.contact.support}
-            </a>
-            <a className="transition hover:text-gold-soft" href={`tel:${BRAND.contact.phoneTel}`}>
-              {BRAND.contact.phoneDisplay}
-            </a>
-          </div>
-          <nav className="grid gap-1">
+        <div className="border-t border-white/10 bg-forest-deep px-5 pb-6 pt-2 lg:hidden" id="site-nav-mobile">
+          <nav aria-label="Main" className="grid">
             {NAV_LINKS.map((link) => (
               <Link
-                className="rounded-lg px-3 py-3 text-sm font-medium text-white/75 transition hover:bg-white/[0.07] hover:text-white"
+                aria-current={link.match(pathname) ? "page" : undefined}
+                className="font-display flex min-h-12 items-center border-b border-white/[0.08] text-[15px] font-medium text-white/85 transition hover:text-white"
                 href={link.href}
                 key={link.label}
                 onClick={() => setOpen(false)}
@@ -104,18 +99,12 @@ export function SiteNav() {
             ))}
           </nav>
 
-          <div className="mt-4 grid gap-2 border-t border-white/10 pt-4">
-            <Link
-              className="rounded-lg px-3 py-3 text-center text-sm font-semibold text-white/85 transition hover:bg-white/[0.07]"
-              href="/login"
-            >
-              Sign In
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <Link className={buttonClass("secondaryOnDark")} href="/login" onClick={() => setOpen(false)}>
+              Sign in
             </Link>
-            <Link
-              className="rounded-xl bg-gold px-4 py-3 text-center text-sm font-semibold text-forest-deep transition hover:bg-gold-soft"
-              href="/register"
-            >
-              Start with NesAfric
+            <Link className={buttonClass("primaryOnDark")} href="/register" onClick={() => setOpen(false)}>
+              Get started
             </Link>
           </div>
         </div>

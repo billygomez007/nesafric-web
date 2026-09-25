@@ -6,24 +6,32 @@ import { BRAND } from "@/platform/brand";
 import { GTM_CONTAINER_ID } from "@/platform/analytics";
 import "./globals.css";
 
+/*
+ * NesAfric type pairing. Both are self-hosted variable fonts (SIL OFL, see ./fonts) so every
+ * weight the UI asks for is real and builds never depend on a network font fetch.
+ * - Montserrat: brand/display — page titles, major headings, navigation, marketing display.
+ * - Inter: text — body copy, forms, tables and dense operational data (large x-height at the
+ *   10–13px sizes the workspaces use, true tabular figures for money).
+ */
 const montserrat = localFont({
-  src: [
-    { path: "../modules/documents/assets/fonts/NotoSans-Regular.ttf", weight: "400" },
-    { path: "../modules/documents/assets/fonts/NotoSans-Bold.ttf", weight: "700" },
-  ],
+  src: "./fonts/Montserrat-Variable-latin.woff2",
+  weight: "100 900",
   variable: "--font-montserrat",
+  display: "swap",
 });
 
-const geistMono = localFont({
-  src: "../modules/documents/assets/fonts/NotoSans-Regular.ttf",
-  variable: "--font-geist-mono",
+const inter = localFont({
+  src: "./fonts/Inter-Variable-latin.woff2",
+  weight: "100 900",
+  variable: "--font-inter",
+  display: "swap",
 });
 
-const TITLE = `${BRAND.name} | Real Estate OS for Africa`;
+const TITLE = `${BRAND.name} | ${BRAND.tagline}`;
 const DESCRIPTION =
-  "NesAfric is the intelligent real estate operating and marketplace platform for Africa: properties, people, payments, maintenance and opportunities in one connected workspace.";
+  "NesAfric is the operating system for real estate: properties, tenants, rent, maintenance and listings for property businesses in Ghana and across Africa.";
 const SOCIAL_DESCRIPTION =
-  "Real Estate OS for Africa for owners, managers, agents, brokers, developers and service professionals.";
+  "The operating system for real estate — for owners, managers, agents, brokers, developers and service professionals.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(BRAND.siteUrl),
@@ -53,7 +61,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${montserrat.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${montserrat.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
       {/* Google Tag Manager is loaded once globally when NEXT_PUBLIC_GTM_ID is configured. */}

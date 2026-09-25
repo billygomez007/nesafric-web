@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { BrandLogo } from "@/components/brand-logo";
+import { AccountChip } from "@/components/account-chip";
 
 type NavItem = {
   href: string;
@@ -213,6 +214,7 @@ function AppSidebar({
     >
       <div className="flex h-[78px] items-center border-b border-white/10 px-6">
         <Link
+          aria-label="NesAfric property management dashboard"
           className="flex items-center"
           href="/dashboard"
           onClick={onNavigate}
@@ -294,10 +296,10 @@ function AppSidebar({
 
 function MobileTopbar({ onMenu }: { onMenu: () => void }) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-hairline bg-warm-white/95 px-4 backdrop-blur lg:hidden">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-hairline bg-warm-white px-4 lg:hidden">
       <button
         aria-label="Open navigation"
-        className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-hairline bg-white text-forest"
+        className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-hairline bg-white text-forest"
         onClick={onMenu}
         type="button"
       >
@@ -318,7 +320,7 @@ function MobileTopbar({ onMenu }: { onMenu: () => void }) {
 
       <Link
         aria-label="Settings"
-        className="flex h-10 w-10 items-center justify-center rounded-lg border border-hairline bg-white text-forest"
+        className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-hairline bg-white text-forest"
         href="/settings"
       >
         <SettingsIcon />
@@ -329,60 +331,8 @@ function MobileTopbar({ onMenu }: { onMenu: () => void }) {
 
 function DesktopTopbar() {
   return (
-    <div className="hidden h-[78px] items-center justify-between border-b border-hairline bg-warm-white/95 px-8 lg:flex xl:px-10">
-      <div className="relative w-full max-w-md">
-        <svg
-          aria-hidden="true"
-          className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeWidth="1.8"
-          viewBox="0 0 24 24"
-        >
-          <circle cx="11" cy="11" r="6" />
-          <path d="m16 16 4 4" />
-        </svg>
-
-        <input
-          aria-label="Search workspace"
-          className="h-10 w-full rounded-[9px] border border-hairline bg-white pl-10 pr-4 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
-          placeholder="Search your workspace..."
-          type="search"
-        />
-      </div>
-
-      <div className="ml-6 flex items-center gap-3">
-        <button
-          aria-label="Notifications"
-          className="relative flex h-10 w-10 items-center justify-center rounded-[9px] border border-hairline bg-white text-muted transition hover:border-teal/30 hover:text-forest"
-          type="button"
-        >
-          <svg
-            aria-hidden="true"
-            className="h-[18px] w-[18px]"
-            fill="none"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.8"
-            viewBox="0 0 24 24"
-          >
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-            <path d="M10 21h4" />
-          </svg>
-        </button>
-
-        <div className="flex items-center gap-3 border-l border-hairline pl-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-forest text-xs font-bold text-white">
-            N
-          </div>
-          <div className="hidden xl:block">
-            <p className="text-xs font-semibold text-ink">NesAfric Workspace</p>
-            <p className="mt-0.5 text-[11px] text-muted">Property Management</p>
-          </div>
-        </div>
-      </div>
+    <div className="hidden h-[72px] items-center justify-end border-b border-hairline bg-warm-white px-8 lg:flex xl:px-10">
+      <AccountChip context="Property management" />
     </div>
   );
 }
@@ -449,7 +399,7 @@ export function AppShell({
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
             aria-label="Close navigation"
-            className="absolute inset-0 bg-forest-deep/55 backdrop-blur-sm"
+            className="absolute inset-0 bg-forest-deep/55"
             onClick={() => setMobileOpen(false)}
             type="button"
           />
@@ -468,12 +418,12 @@ export function AppShell({
             <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
               <div>
                 {eyebrow && (
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald">
                     {eyebrow}
                   </p>
                 )}
 
-                <h1 className="mt-1.5 text-2xl font-semibold tracking-[-0.025em] text-ink sm:text-[30px]">
+                <h1 className="mt-1.5 text-2xl font-semibold tracking-[-0.02em] text-forest-deep sm:text-[28px]">
                   {title}
                 </h1>
 
