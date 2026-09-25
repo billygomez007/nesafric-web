@@ -90,11 +90,14 @@ How `/api/jobs/run` is triggered today:
 
 - **Production:** Vercel Cron from `vercel.json` (`*/5 * * * *`, GET). Vercel runs crons only for
   the **production** deployment and authenticates with `Authorization: Bearer $CRON_SECRET`.
-  The route accepts that header, so production needs `CRON_SECRET` set. If only `JOBS_RUN_SECRET`
-  is set, Vercel's cron call is refused (401) and neither jobs nor this sweep run; if neither is
-  set the endpoint is open to anyone. Confirm in the Vercel dashboard (Settings → Cron Jobs) that
-  the job is listed and its recent invocations return 200, and that the plan permits a 5-minute
-  schedule.
+  The route accepts that header, so production needs `CRON_SECRET` set. The endpoint **fails
+  closed**: with neither `CRON_SECRET` nor `JOBS_RUN_SECRET` set, every call gets
+  `503 JOBS_RUN_NOT_CONFIGURED` and no work runs (local development may opt in with
+  `ALLOW_UNAUTHENTICATED_JOBS_RUN=true`, which is ignored when `NODE_ENV=production`). If only
+  `JOBS_RUN_SECRET` is set, Vercel's cron call is refused (401). Either way neither jobs nor this
+  sweep run, so **set `CRON_SECRET` in production before deploying this change**. Confirm in the
+  Vercel dashboard (Settings → Cron Jobs) that the job is listed and its recent invocations return
+  200, and that the plan permits a 5-minute schedule.
 - **Staging:** `.github/workflows/staging-jobs-cron.yml` POSTs every 5 minutes with
   `STAGING_JOBS_RUN_SECRET`.
 - Preview deployments have no cron; the opportunistic sweep still bounds their tables.

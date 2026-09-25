@@ -27,7 +27,17 @@ function assertAuthorized(request: Request) {
   const jobsRunSecret = process.env.JOBS_RUN_SECRET?.trim();
   const cronSecret = process.env.CRON_SECRET?.trim();
 
-  if (!jobsRunSecret && !cronSecret) return;
+  if (!jobsRunSecret && !cronSecret) {
+    // Fail closed: an unconfigured endpoint must not let anyone trigger the job drain. Local
+    // development can opt in explicitly; the opt-in is ignored in production builds (Vercel
+    // preview and production both run with NODE_ENV=production).
+    if (process.env.NODE_ENV !== "production" && process.env.ALLOW_UNAUTHENTICATED_JOBS_RUN === "true") return;
+    throw new AppError(
+      "JOBS_RUN_NOT_CONFIGURED",
+      503,
+      "The scheduled jobs endpoint is not configured. Set CRON_SECRET (Vercel Cron) or JOBS_RUN_SECRET.",
+    );
+  }
 
   const customSecret = request.headers.get("x-jobs-run-secret");
   const authHeader = request.headers.get("authorization");
@@ -65,8 +75,9 @@ function assertAuthorized(request: Request) {
  * standalone long-running process instead (see `scripts/run-worker.ts`) — either is sufficient,
  * but at least one must run continuously or the job queue never drains.
  *
- * Guarded by an optional shared secret, exactly like the voice media-stream sweep endpoint — only
- * enforced when `JOBS_RUN_SECRET` is actually configured. GET exists solely so Vercel Cron (which
+ * Guarded by a shared secret and fail-closed: with neither `CRON_SECRET` nor `JOBS_RUN_SECRET`
+ * configured every call is refused (503), except in local development with
+ * `ALLOW_UNAUTHENTICATED_JOBS_RUN=true`. GET exists solely so Vercel Cron (which
  * only ever issues GET requests and cannot set custom headers) can trigger the same drain; it is
  * gated by the identical secret and does nothing POST doesn't already do.
  */

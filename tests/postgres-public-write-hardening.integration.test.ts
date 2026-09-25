@@ -154,9 +154,9 @@ describe("guest write protection hardening", () => {
 
   it("runs the sweep from the scheduled jobs endpoint", async () => {
     delete process.env.JOBS_RUN_SECRET;
-    delete process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "cron-secret-for-tests-only";
     await db.publicWriteCounter.create({ data: { bucket: "enquiry.ip.10m", keyHash: "old", windowStart: new Date(0), count: 1, expiresAt: new Date(1000) } });
-    expect((await jobsRoute(new Request("https://nesafric.test/api/jobs/run"))).status).toBe(200);
+    expect((await jobsRoute(new Request("https://nesafric.test/api/jobs/run", { headers: { authorization: "Bearer cron-secret-for-tests-only" } }))).status).toBe(200);
     expect(await db.publicWriteCounter.count()).toBe(0);
   });
 
