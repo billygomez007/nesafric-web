@@ -5,10 +5,16 @@ import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
 
-/** Drains due jobs, then prunes expired guest-write rate-limit and idempotency rows (never fails the run). */
+/**
+ * Drains due jobs and prunes expired guest-write rate-limit / idempotency rows. The sweep runs even
+ * if the job drain throws (and never fails the run itself), so cleanup doesn't depend on job health.
+ */
 async function runScheduledWork() {
-  await runDueJobs(jobHandlers);
-  await sweepExpiredPublicWriteRecords().catch(() => console.error("Public write record sweep failed."));
+  try {
+    await runDueJobs(jobHandlers);
+  } finally {
+    await sweepExpiredPublicWriteRecords().catch(() => console.error("Public write record sweep failed."));
+  }
 }
 
 function safeEqual(expected: string, actual: string) {

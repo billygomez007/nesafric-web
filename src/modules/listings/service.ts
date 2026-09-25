@@ -1060,7 +1060,14 @@ const leadInclude = {
   },
 } satisfies Prisma.MarketplaceLeadInclude;
 
-export async function createMarketplaceLead(listingId: string, userId: string | undefined, input: unknown) {
+/**
+ * Binds a public-form submission (`Idempotency-Key`) to the row it creates. Stored in the same
+ * transaction as the lead / viewing, under a unique (listingId, idempotencyKeyHash) constraint, so a
+ * retried submission can never create a second row or notification — however long after.
+ */
+export type SubmissionBinding = { keyHash: string; fingerprint: string };
+
+export async function createMarketplaceLead(listingId: string, userId: string | undefined, input: unknown, options: { submission?: SubmissionBinding } = {}) {
   listingId = listingIdSchema.parse(listingId);
   const data = createMarketplaceLeadSchema.parse(input);
   const result = await db.$transaction(async (tx) => {
@@ -1074,6 +1081,8 @@ export async function createMarketplaceLead(listingId: string, userId: string | 
         listingId,
         userId,
         ...data,
+        idempotencyKeyHash: options.submission?.keyHash,
+        idempotencyFingerprint: options.submission?.fingerprint,
         history: { create: { actorUserId: userId, toStatus: "NEW" } },
         activities: { create: { actorUserId: userId, type: "lead.created" } },
       },
@@ -1244,6 +1253,7 @@ export async function createViewingRequest(
   listingId: string,
   userId: string | undefined,
   input: unknown,
+  options: { submission?: SubmissionBinding } = {},
 ) {
   listingId = listingIdSchema.parse(listingId);
   const data = createViewingRequestSchema.parse(input);
@@ -1267,6 +1277,8 @@ export async function createViewingRequest(
         leadId: lead.id,
         createdByUserId: userId,
         requesterNote: data.requesterNote,
+        idempotencyKeyHash: options.submission?.keyHash,
+        idempotencyFingerprint: options.submission?.fingerprint,
         preferredTimes: { create: data.preferredTimes },
         history: { create: { actorUserId: userId, toStatus: "REQUESTED" } },
       },
@@ -1480,4 +1492,38 @@ export async function updateViewingRequest(
     }
     return updated;
   });
+}
+
+/**
+ * Finds the lead a public-form submission already created on this listing. Returns the same public
+ * result shape as `createMarketplaceLead`, or null. Matching needs the client's secret random key AND
+ * an identical submission fingerprint, so knowing someone's phone number or email never reveals
+ * their lead; the same key with different contents is rejected.
+ */
+export async function findLeadForSubmission(listingId: string, submission: SubmissionBinding) {
+  const lead = await db.marketplaceLead.findUnique({
+    where: { listingId_idempotencyKeyHash: { listingId, idempotencyKeyHash: submission.keyHash } },
+    select: { id: true, listingId: true, status: true, createdAt: true, idempotencyFingerprint: true },
+  });
+  if (!lead) return null;
+  if (lead.idempotencyFingerprint !== submission.fingerprint) throw idempotencyKeyReused();
+  return { id: lead.id, listingId: lead.listingId, status: lead.status, createdAt: lead.createdAt };
+}
+
+/** As `findLeadForSubmission`, for viewing requests (same result shape as `createViewingRequest`). */
+export async function findViewingForSubmission(listingId: string, submission: SubmissionBinding) {
+  const viewing = await db.viewingRequest.findUnique({
+    where: { listingId_idempotencyKeyHash: { listingId, idempotencyKeyHash: submission.keyHash } },
+    select: {
+      id: true, listingId: true, leadId: true, status: true, createdAt: true, idempotencyFingerprint: true,
+      preferredTimes: { orderBy: { startsAt: "asc" } },
+    },
+  });
+  if (!viewing) return null;
+  if (viewing.idempotencyFingerprint !== submission.fingerprint) throw idempotencyKeyReused();
+  return { id: viewing.id, listingId: viewing.listingId, leadId: viewing.leadId, status: viewing.status, preferredTimes: viewing.preferredTimes, createdAt: viewing.createdAt };
+}
+
+function idempotencyKeyReused() {
+  return new AppError("IDEMPOTENCY_KEY_REUSED", 422, "This request key was already used for a different submission. Start a new submission instead of reusing the key.");
 }

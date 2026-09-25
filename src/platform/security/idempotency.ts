@@ -19,7 +19,9 @@ const KEY_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const RECORD_TTL_MS = 24 * 60 * 60 * 1000;
 /**
  * A PENDING claim older than this is treated as abandoned (crashed or timed-out request) and may be
- * retaken. The public write routes set `maxDuration = 30`, so no live request can still be running.
+ * retaken. Retaking is safe because the created row carries the submission binding: a rerun finds
+ * it rather than creating another. (`maxDuration = 30` on the routes additionally keeps a live
+ * request from overlapping a retake.)
  */
 export const STALE_PENDING_MS = 2 * 60 * 1000;
 
@@ -67,15 +69,24 @@ async function claim(scope: string, keyHash: string, fingerprint: string, now: D
   }
 }
 
+export type IdempotentWork = (context: { keyHash: string | null }) => Promise<{ status: number; body: unknown; replayed?: boolean }>;
+
 /**
  * Runs `work` at most once per (scope, key) for a given submission fingerprint. Without a key the
  * work simply runs. `work` returns the HTTP status and JSON body to store and send.
+ *
+ * `work` receives the key hash so it can bind the created row to the submission (see
+ * `SubmissionBinding` in the listings service) and reconcile with a row a previous attempt already
+ * created — the durable guarantee. This record is the fast path in front of it.
  */
 export async function runIdempotent(
   input: { scope: string; key: string | null; fingerprint: string; now?: Date },
-  work: () => Promise<{ status: number; body: unknown }>,
+  work: IdempotentWork,
 ): Promise<IdempotentResult> {
-  if (!input.key) return { ...(await work()), replayed: false };
+  if (!input.key) {
+    const result = await work({ keyHash: null });
+    return { status: result.status, body: result.body, replayed: result.replayed ?? false };
+  }
   const now = input.now ?? new Date();
   const keyHash = sha256(input.key);
   const where = { scope_keyHash: { scope: input.scope, keyHash } };
@@ -105,9 +116,9 @@ export async function runIdempotent(
     }
   }
 
-  let result: { status: number; body: unknown };
+  let result: { status: number; body: unknown; replayed?: boolean };
   try {
-    result = await work();
+    result = await work({ keyHash });
   } catch (error) {
     // The work failed, so nothing was created: release the claim so the same submission can be
     // retried (validation, 404, 429, transient database error…).
@@ -120,10 +131,15 @@ export async function runIdempotent(
       data: { status: "COMPLETED", responseStatus: result.status, responseBody: JSON.parse(JSON.stringify(result.body)), completedAt: new Date() },
     });
   } catch {
-    // The work DID succeed; keep the PENDING claim rather than releasing it, so an immediate retry
-    // gets 409 instead of creating a duplicate. It becomes reclaimable after STALE_PENDING_MS.
-    // Logged without the key, scope contents or submission data.
+    // The work DID succeed; keep the PENDING claim so an immediate retry gets 409. After
+    // STALE_PENDING_MS a retry may reclaim it and rerun `work`, which then finds the row bound to this
+    // submission instead of creating another. Logged without the key, scope or submission data.
     console.error("Idempotency record could not be marked completed; claim left pending.");
   }
-  return { ...result, replayed: false };
+  return { status: result.status, body: result.body, replayed: result.replayed ?? false };
+}
+
+/** True for a unique-constraint violation (e.g. a concurrent retry already bound the submission). */
+export function isUniqueViolation(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }

@@ -52,16 +52,77 @@ Web and mobile forms send `Idempotency-Key` (reused only while the payload is id
   no new lead, no new notification, no rate-limit charge.
 - Same key + different submission → `422 IDEMPOTENCY_KEY_REUSED`.
 - Same key while the first request is still running → `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`.
-- Failed work releases the key. If the lead was created but the result couldn't be stored, the
-  claim is kept (retry gets 409, never a duplicate) and becomes reclaimable after 2 minutes.
-  The protected routes set `maxDuration = 30`, so no live request can outlast that window.
+- Failed work releases the key.
 - Records expire after 24 hours.
+
+### Durable guarantee: one submission, one lead, one notification
+
+The idempotency record is only the fast path. The durable guarantee is on the created row itself:
+`MarketplaceLead` and `ViewingRequest` store `idempotencyKeyHash` (SHA-256 of the client's random
+key) and `idempotencyFingerprint`, written **in the same transaction** that creates the row, with a
+unique constraint on `(listingId, idempotencyKeyHash)`. Notifications are queued only after that
+transaction commits.
+
+What a customer sees when they retry the same submission (same key, same form contents):
+
+| Situation | Result |
+| --- | --- |
+| First attempt still running | `409`, "already being processed" — nothing created |
+| First attempt created the lead, result stored | the original lead (`Idempotent-Replayed: true`) |
+| First attempt created the lead but storing the result failed, retry **within** 2 min | `409`; retry again shortly |
+| Same, retry **after** the 2-minute stale window (claim retaken) | the route finds the lead bound to the submission and returns it (`Idempotent-Replayed: true`) — no new lead, notification or quota |
+| Several such retries at once | at most one proceeds; if two reach creation, the unique constraint lets one commit and the other rolls back (before any notification) and returns the winner's lead |
+| Retry after the idempotency record expired/was swept (>24 h) | still reconciled with the bound lead |
+
+Privacy: reconciliation needs the client's secret random key **and** an identical submission
+fingerprint on the **same listing**. Entering someone else's phone number or email never matches
+their lead (it creates a separate lead, subject to the limits); reusing a key with different
+contents is refused with `422`.
 
 ## Cleanup
 
 Expired counters and idempotency records are deleted in bounded batches by the scheduled jobs
-endpoint (`/api/jobs/run`, Vercel Cron every 5 minutes), by `npm run worker` every 5 minutes, and
-opportunistically on ~2% of guest writes.
+endpoint (`/api/jobs/run`), by `npm run worker` every 5 minutes, and opportunistically on ~2% of
+guest writes. The sweep runs even if the job drain fails. The durable lead/viewing binding is never
+swept.
+
+How `/api/jobs/run` is triggered today:
+
+- **Production:** Vercel Cron from `vercel.json` (`*/5 * * * *`, GET). Vercel runs crons only for
+  the **production** deployment and authenticates with `Authorization: Bearer $CRON_SECRET`.
+  The route accepts that header, so production needs `CRON_SECRET` set. If only `JOBS_RUN_SECRET`
+  is set, Vercel's cron call is refused (401) and neither jobs nor this sweep run; if neither is
+  set the endpoint is open to anyone. Confirm in the Vercel dashboard (Settings → Cron Jobs) that
+  the job is listed and its recent invocations return 200, and that the plan permits a 5-minute
+  schedule.
+- **Staging:** `.github/workflows/staging-jobs-cron.yml` POSTs every 5 minutes with
+  `STAGING_JOBS_RUN_SECRET`.
+- Preview deployments have no cron; the opportunistic sweep still bounds their tables.
+
+## Deploying the migrations
+
+This change adds two migrations, both additive:
+
+- `20260925120000_public_write_protection` — new `PublicWriteCounter` and `PublicIdempotencyRecord` tables.
+- `20260925130000_submission_idempotency_binding` — nullable `idempotencyKeyHash` /
+  `idempotencyFingerprint` columns on `MarketplaceLead` and `ViewingRequest`, and unique indexes on
+  `(listingId, idempotencyKeyHash)`. Existing rows stay NULL (Postgres unique indexes ignore NULLs).
+  Index builds briefly block writes to those two tables; at current table sizes this is negligible.
+
+Sequence (the build does not run migrations):
+
+1. **Existing database (production/staging):** `npm run db:deploy` (`prisma migrate deploy`)
+   **before** promoting the new code. Verified locally against a database built from `main`: it
+   applies exactly these two migrations and leaves no schema drift.
+2. **Brand-new empty database:** use `npm run db:bootstrap:fresh` (see
+   `docs/FRESH_DATABASE_BOOTSTRAP.md`), **not** `migrate deploy`. On an empty database
+   `migrate deploy` fails at the pre-existing out-of-order migration
+   `20260829070919_phase25_service_category_admin_controls` (unrelated to this change). The bootstrap
+   creates the current schema, including these tables/columns, and records all migrations.
+   Known gap: the bootstrap does not create the history-immutability triggers defined in older
+   migration SQL.
+3. Deploy the application. Old code ignores the new columns/tables, so the migration can safely go
+   first.
 
 ## Deployment settings
 

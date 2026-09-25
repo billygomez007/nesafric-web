@@ -3304,6 +3304,13 @@ model MarketplaceLead {
   rentalApplications     RentalApplication[]
   conversations          Conversation[]
 
+  /// Public-form submission binding (`Idempotency-Key`): SHA-256 of the client's random key and the
+  /// submission fingerprint, written in the same transaction as the lead so a retry can always be
+  /// reconciled with it, even after the idempotency record's claim went stale or expired.
+  idempotencyKeyHash     String?
+  idempotencyFingerprint String?
+
+  @@unique([listingId, idempotencyKeyHash])
   @@index([organisationId, status, createdAt])
   @@index([listingId, createdAt])
   @@index([userId, createdAt])
@@ -3352,6 +3359,11 @@ model ViewingRequest {
   preferredTimes    ViewingPreferredTime[]
   history           ViewingRequestStatusHistory[]
 
+  /// Public-form submission binding (`Idempotency-Key`); see MarketplaceLead.idempotencyKeyHash.
+  idempotencyKeyHash     String?
+  idempotencyFingerprint String?
+
+  @@unique([listingId, idempotencyKeyHash])
   @@index([organisationId, status, createdAt])
   @@index([listingId, createdAt])
   @@index([leadId, createdAt])
