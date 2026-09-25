@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   // Mirrors the real behaviour for an organisation with no OrganisationSubscription.
   assertOperational: vi.fn(),
   recordIntegrationOutcome: vi.fn(),
-  listing: null as null | { id: string; organisationId: string; marketplaceProfessionalId: string | null; _count?: { media: number } },
+  listing: null as null | { id: string; organisationId: string; marketplaceProfessionalId: string | null; status?: string; _count?: { media: number } },
   mediaCreate: vi.fn(),
   storageObjectCreate: vi.fn(),
 }));
@@ -66,7 +66,7 @@ describe("uploadMarketplaceListingMedia", () => {
     mocks.requireMarketplaceRole.mockResolvedValue(undefined);
     mocks.assertWritableMarketplaceProfessional.mockResolvedValue(undefined);
     mocks.assertOperational.mockImplementation(async () => { throw notFound(); });
-    mocks.listing = { id: LISTING_ID, organisationId: BACKING_ORG_ID, marketplaceProfessionalId: PROFESSIONAL_ID, _count: { media: 0 } };
+    mocks.listing = { id: LISTING_ID, organisationId: BACKING_ORG_ID, marketplaceProfessionalId: PROFESSIONAL_ID, status: "DRAFT", _count: { media: 0 } };
     mocks.storageObjectCreate.mockImplementation(async ({ data }) => ({ id: "storage-1", ...data }));
     mocks.mediaCreate.mockImplementation(async ({ data }) => ({ id: "media-1", ...data }));
   });
@@ -110,6 +110,13 @@ describe("uploadMarketplaceListingMedia", () => {
     mocks.assertWritableMarketplaceProfessional.mockRejectedValue(new AppError("MARKETPLACE_PROFESSIONAL_READ_ONLY", 402, "Read only"));
 
     await expect(upload()).rejects.toMatchObject({ code: "MARKETPLACE_PROFESSIONAL_READ_ONLY" });
+    expect(mocks.storageObjectCreate).not.toHaveBeenCalled();
+  });
+
+  it.each(["PENDING_REVIEW", "PUBLISHED", "ARCHIVED"])("refuses photo uploads while the listing is %s", async (status) => {
+    mocks.listing = { ...mocks.listing!, status };
+
+    await expect(upload()).rejects.toMatchObject({ code: "LISTING_NOT_EDITABLE" });
     expect(mocks.storageObjectCreate).not.toHaveBeenCalled();
   });
 

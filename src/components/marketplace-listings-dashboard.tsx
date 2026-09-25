@@ -100,6 +100,13 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[item.status] ?? "bg-surface text-muted"}`}>{item.status.replaceAll("_", " ")}</span>
+                  {item.marketplaceAssetId && (["DRAFT", "REJECTED", "PAUSED"].includes(item.status) ? (
+                    <Link className="rounded-md bg-forest px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald" href={`/pro/${professionalId}/listings/${item.id}/edit`}>Edit property</Link>
+                  ) : (
+                    <span className="rounded-md border border-dashed px-3 py-1.5 text-sm text-muted" title={item.status === "PUBLISHED" ? "Pause this listing to edit it." : "Listings in review, reserved, let or archived can't be edited."}>
+                      {item.status === "PUBLISHED" ? "Pause to edit" : "Editing locked"}
+                    </span>
+                  ))}
                   {item.verificationStatus === "UNVERIFIED" && <button className="rounded-md border px-3 py-1.5 text-sm font-medium" onClick={() => void submitVerification(item.id)} type="button">Submit verification</button>}
                   {item.status === "DRAFT" && <button className="rounded-md border px-3 py-1.5 text-sm font-medium" onClick={() => void transition(item.id, "PENDING_REVIEW")} type="button">Submit for review</button>}
                   {item.status === "PUBLISHED" && <button className="rounded-md border px-3 py-1.5 text-sm font-medium" onClick={() => void transition(item.id, "PAUSED")} type="button">Pause</button>}

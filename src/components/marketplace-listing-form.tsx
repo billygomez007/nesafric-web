@@ -53,19 +53,67 @@ const AMENITIES = [
   "Pet friendly",
 ] as const;
 
+/** The subset of GET /api/marketplace-professionals/[id]/listings/[listingId] the edit form uses. */
+export type EditableMarketplaceListing = {
+  id: string;
+  status: string;
+  listingType: string;
+  category: string;
+  title: string;
+  publicDescription: string;
+  askingAmountMinor: string | null;
+  rentAmountMinor: string | null;
+  frequency: string | null;
+  availableFrom: string;
+  bedrooms: number | null;
+  bathrooms: string | number | null;
+  toilets: number | null;
+  sizeSqm: string | number | null;
+  landSizeSqm: string | number | null;
+  parkingSpaces: number | null;
+  furnishing: string | null;
+  propertyCondition: string | null;
+  negotiable: boolean;
+  yearBuilt: number | null;
+  region: string | null;
+  city: string | null;
+  district: string | null;
+  locality: string | null;
+  publicLocationLabel: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  showContactEmail: boolean;
+  showContactPhone: boolean;
+  listingAuthority: string | null;
+  amenities: { label: string }[];
+  media: { id: string; type: string; publicUrl: string; isCover: boolean; altText: string | null }[];
+  marketplaceAsset: { authorityEvidenceReady: boolean; developmentUnitId: string | null } | null;
+};
+
+const text = (value: string | number | null | undefined) => (value === null || value === undefined ? "" : String(value));
+
 export function MarketplaceListingForm({
   professionalId,
+  listing: existing,
 }: {
   professionalId: string;
+  /** When present the form edits this listing in place instead of creating a new one. */
+  listing?: EditableMarketplaceListing;
 }) {
   const router = useRouter();
+  const editing = Boolean(existing);
 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [category, setCategory] = useState("APARTMENT");
-  const [purpose, setPurpose] = useState("RENT");
+  const [category, setCategory] = useState(existing?.category ?? "APARTMENT");
+  const [purpose, setPurpose] = useState(existing?.listingType ?? "RENT");
   const [images, setImages] = useState<SelectedListingImage[]>([]);
-  const [amenities, setAmenities] = useState<string[]>([]);
+  const [existingMedia, setExistingMedia] = useState(existing?.media ?? []);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [amenities, setAmenities] = useState<string[]>(existing?.amenities.map((amenity) => amenity.label) ?? []);
+  const totalImages = existingMedia.length + images.length;
+  const existingPrice = existing ? existing.rentAmountMinor ?? existing.askingAmountMinor : null;
 
   const isResidential = useMemo(
     () =>
@@ -88,7 +136,7 @@ export function MarketplaceListingForm({
 
   function addImages(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    const remaining = MAX_LISTING_IMAGES - images.length;
+    const remaining = MAX_LISTING_IMAGES - existingMedia.length - images.length;
 
     if (remaining <= 0) {
       setError("A property can contain up to 12 images.");
@@ -134,6 +182,21 @@ export function MarketplaceListingForm({
     });
   }
 
+  async function changeExistingMedia(mediaId: string, action: "remove" | "cover") {
+    if (!existing) return;
+    setMediaBusy(true);
+    setError("");
+    const base = `/api/marketplace-professionals/${professionalId}/listings/${existing.id}/media/${mediaId}`;
+    const response = await fetch(action === "remove" ? base : `${base}/cover`, { method: action === "remove" ? "DELETE" : "POST" });
+    const result = await response.json();
+    setMediaBusy(false);
+    if (!response.ok) {
+      setError(result.error?.message ?? "Unable to update photos.");
+      return;
+    }
+    setExistingMedia(result.media ?? []);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -146,7 +209,7 @@ export function MarketplaceListingForm({
       Math.round(Number(form.get("price") || 0) * 100),
     );
 
-    if (!images.length) {
+    if (!totalImages) {
       setBusy(false);
       setError("Add at least one property image.");
       return;
@@ -260,10 +323,17 @@ export function MarketplaceListingForm({
       listingAuthority: String(form.get("listingAuthority")),
     };
 
+    if (editing) {
+      // The development unit is fixed once a listing exists.
+      delete (body.asset as { developmentUnitId?: string }).developmentUnitId;
+    }
+
     const response = await fetch(
-      `/api/marketplace-professionals/${professionalId}/listings`,
+      editing
+        ? `/api/marketplace-professionals/${professionalId}/listings/${existing!.id}/details`
+        : `/api/marketplace-professionals/${professionalId}/listings`,
       {
-        method: "POST",
+        method: editing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -275,11 +345,11 @@ export function MarketplaceListingForm({
 
     if (!response.ok) {
       setBusy(false);
-      setError(result.error?.message ?? "Unable to create listing.");
+      setError(result.error?.message ?? (editing ? "Unable to save changes." : "Unable to create listing."));
       return;
     }
 
-    try {
+    if (images.length) try {
       await uploadListingImages({
         listingId: result.id,
         professionalId,
@@ -290,8 +360,8 @@ export function MarketplaceListingForm({
       setBusy(false);
       setError(
         cause instanceof Error
-          ? `${cause.message} The property draft was created, but one or more photos were not uploaded.`
-          : "The property draft was created, but its photos could not be uploaded.",
+          ? `${cause.message} ${editing ? "Your changes were saved" : "The property draft was created"}, but one or more photos were not uploaded.`
+          : editing ? "Your changes were saved, but the new photos could not be uploaded." : "The property draft was created, but its photos could not be uploaded.",
       );
       return;
     }
@@ -312,11 +382,12 @@ export function MarketplaceListingForm({
           Marketplace inventory
         </p>
         <h1 className="mt-1 text-3xl font-semibold">
-          Add a property
+          {editing ? "Edit property" : "Add a property"}
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Complete the property information below. You can save the listing
-          as a draft before submitting it for publication.
+          {editing
+            ? "Update the property details and photos. Changes are saved to this listing; it keeps its current status."
+            : "Complete the property information below. You can save the listing as a draft before submitting it for publication."}
         </p>
       </div>
 
@@ -337,6 +408,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="title"
+              defaultValue={text(existing?.title)}
               placeholder="Luxury 4 bedroom house at East Legon"
               required
             />
@@ -376,6 +448,7 @@ export function MarketplaceListingForm({
               className={input}
               minLength={20}
               name="description"
+              defaultValue={text(existing?.publicDescription)}
               placeholder="Describe the property, its location, condition and standout features..."
               required
               rows={6}
@@ -400,6 +473,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="region"
+              defaultValue={text(existing?.region)}
               placeholder="Greater Accra"
             />
           </label>
@@ -409,6 +483,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="city"
+              defaultValue={text(existing?.city)}
               placeholder="Accra"
               required
             />
@@ -419,6 +494,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="district"
+              defaultValue={text(existing?.district)}
               placeholder="Ayawaso West"
             />
           </label>
@@ -428,6 +504,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="locality"
+              defaultValue={text(existing?.locality)}
               placeholder="East Legon"
             />
           </label>
@@ -437,6 +514,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="publicLocationLabel"
+              defaultValue={text(existing?.publicLocationLabel)}
               placeholder="East Legon, Accra"
             />
           </label>
@@ -457,6 +535,7 @@ export function MarketplaceListingForm({
                   className={input}
                   min="0"
                   name="bedrooms"
+              defaultValue={text(existing?.bedrooms)}
                   type="number"
                 />
               </label>
@@ -467,6 +546,7 @@ export function MarketplaceListingForm({
                   className={input}
                   min="0"
                   name="bathrooms"
+              defaultValue={text(existing?.bathrooms == null ? null : Number(existing.bathrooms))}
                   step="0.5"
                   type="number"
                 />
@@ -478,6 +558,7 @@ export function MarketplaceListingForm({
                   className={input}
                   min="0"
                   name="toilets"
+              defaultValue={text(existing?.toilets)}
                   type="number"
                 />
               </label>
@@ -491,6 +572,7 @@ export function MarketplaceListingForm({
                 className={input}
                 min="1"
                 name="sizeSqm"
+              defaultValue={text(existing?.sizeSqm == null ? null : Number(existing.sizeSqm))}
                 type="number"
               />
             </label>
@@ -502,6 +584,7 @@ export function MarketplaceListingForm({
               className={input}
               min="1"
               name="landSizeSqm"
+              defaultValue={text(existing?.landSizeSqm == null ? null : Number(existing.landSizeSqm))}
               type="number"
             />
           </label>
@@ -512,6 +595,7 @@ export function MarketplaceListingForm({
               className={input}
               min="0"
               name="parkingSpaces"
+              defaultValue={text(existing?.parkingSpaces)}
               type="number"
             />
           </label>
@@ -520,7 +604,7 @@ export function MarketplaceListingForm({
             <>
               <label className="text-sm font-medium">
                 Property condition
-                <select className={input} name="propertyCondition">
+                <select className={input} defaultValue={text(existing?.propertyCondition)} name="propertyCondition">
                   <option value="">Select condition</option>
                   <option value="NEW">New</option>
                   <option value="NEWLY_RENOVATED">
@@ -541,6 +625,7 @@ export function MarketplaceListingForm({
                   min="1800"
                   max="2200"
                   name="yearBuilt"
+              defaultValue={text(existing?.yearBuilt)}
                   type="number"
                 />
               </label>
@@ -550,7 +635,7 @@ export function MarketplaceListingForm({
           {!isLand && (
             <label className="text-sm font-medium">
               Furnishing
-              <select className={input} name="furnishing">
+              <select className={input} defaultValue={text(existing?.furnishing)} name="furnishing">
                 <option value="">Select furnishing</option>
                 <option value="FURNISHED">Furnished</option>
                 <option value="SEMI_FURNISHED">
@@ -605,7 +690,7 @@ export function MarketplaceListingForm({
           </div>
 
           <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold">
-            {images.length}/{MAX_LISTING_IMAGES}
+            {totalImages}/{MAX_LISTING_IMAGES}
           </span>
         </div>
 
@@ -625,12 +710,40 @@ export function MarketplaceListingForm({
           <input
             accept="image/jpeg,image/png,image/webp"
             className="sr-only"
-            disabled={images.length >= MAX_LISTING_IMAGES}
+            disabled={totalImages >= MAX_LISTING_IMAGES}
             multiple
             onChange={addImages}
             type="file"
           />
         </label>
+
+        {existingMedia.length > 0 && (
+          <div className="mt-5">
+            <p className="text-sm font-semibold">Current photos</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {existingMedia.map((media, index) => (
+                <div className="overflow-hidden rounded-xl border border-hairline bg-white" key={media.id}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- listing photos are served from the storage provider's public URL */}
+                  <img alt={media.altText ?? `Property photo ${index + 1}`} className="h-44 w-full object-cover" src={media.publicUrl} />
+                  <div className="flex items-center justify-between gap-3 p-3">
+                    <p className="truncate text-xs font-semibold">{media.isCover ? "Cover photo" : `Photo ${index + 1}`}</p>
+                    <div className="flex shrink-0 gap-3">
+                      {!media.isCover && media.type === "PHOTO" && (
+                        <button className="text-xs font-semibold text-forest disabled:text-muted" disabled={mediaBusy} onClick={() => void changeExistingMedia(media.id, "cover")} type="button">
+                          Make cover
+                        </button>
+                      )}
+                      <button className="text-xs font-semibold text-red-700 disabled:text-muted" disabled={mediaBusy} onClick={() => void changeExistingMedia(media.id, "remove")} type="button">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {images.length > 0 && <p className="mt-5 text-sm font-semibold">New photos to upload</p>}
+          </div>
+        )}
 
         {images.length > 0 && (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -649,9 +762,9 @@ export function MarketplaceListingForm({
                 <div className="flex items-center justify-between gap-3 p-3">
                   <div className="min-w-0">
                     <p className="truncate text-xs font-semibold">
-                      {index === 0
+                      {index === 0 && existingMedia.length === 0
                         ? "Cover photo"
-                        : `Photo ${index + 1}`}
+                        : `Photo ${existingMedia.length + index + 1}`}
                     </p>
                     <p className="mt-1 truncate text-xs text-muted">
                       {image.file.name}
@@ -684,6 +797,7 @@ export function MarketplaceListingForm({
               className={input}
               min="0"
               name="price"
+              defaultValue={existingPrice ? String(Number(existingPrice) / 100) : ""}
               required
               step="0.01"
               type="number"
@@ -693,7 +807,7 @@ export function MarketplaceListingForm({
           {purpose === "RENT" && (
             <label className="text-sm font-medium">
               Payment frequency
-              <select className={input} name="frequency">
+              <select className={input} defaultValue={existing?.frequency ?? "MONTHLY"} name="frequency">
                 <option value="MONTHLY">Monthly</option>
                 <option value="QUARTERLY">Quarterly</option>
                 <option value="ANNUAL">Annual</option>
@@ -707,6 +821,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="availableFrom"
+              defaultValue={existing ? existing.availableFrom.slice(0, 10) : undefined}
               required
               type="date"
             />
@@ -714,7 +829,7 @@ export function MarketplaceListingForm({
         </div>
 
         <label className="mt-4 flex items-center gap-3 text-sm">
-          <input name="negotiable" type="checkbox" />
+          <input defaultChecked={existing?.negotiable ?? false} name="negotiable" type="checkbox" />
           Price is negotiable
         </label>
       </section>
@@ -730,6 +845,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="contactName"
+              defaultValue={text(existing?.contactName)}
               placeholder="Public contact person"
             />
           </label>
@@ -739,6 +855,7 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="contactPhone"
+              defaultValue={text(existing?.contactPhone)}
               placeholder="+233..."
             />
           </label>
@@ -748,13 +865,14 @@ export function MarketplaceListingForm({
             <input
               className={input}
               name="contactEmail"
+              defaultValue={text(existing?.contactEmail)}
               type="email"
             />
           </label>
 
           <label className="text-sm font-medium">
             Your authority to list this property
-            <select className={input} name="listingAuthority">
+            <select className={input} defaultValue={existing?.listingAuthority ?? "OWNER_SELF"} name="listingAuthority">
               <option value="OWNER_SELF">Property owner</option>
               <option value="PROPERTY_MANAGER">
                 Property manager
@@ -772,30 +890,32 @@ export function MarketplaceListingForm({
             </select>
           </label>
 
-          <label className="text-sm font-medium sm:col-span-2">
-            Development unit ID
-            <input
-              className={input}
-              name="developmentUnitId"
-              placeholder="Optional"
-            />
-          </label>
+          {!editing && (
+            <label className="text-sm font-medium sm:col-span-2">
+              Development unit ID
+              <input
+                className={input}
+                name="developmentUnitId"
+                placeholder="Optional"
+              />
+            </label>
+          )}
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="flex items-center gap-3 text-sm">
-            <input name="showContactPhone" type="checkbox" />
+            <input defaultChecked={existing?.showContactPhone ?? false} name="showContactPhone" type="checkbox" />
             Show phone number publicly
           </label>
 
           <label className="flex items-center gap-3 text-sm">
-            <input name="showContactEmail" type="checkbox" />
+            <input defaultChecked={existing?.showContactEmail ?? false} name="showContactEmail" type="checkbox" />
             Show email publicly
           </label>
 
           <label className="flex items-center gap-3 text-sm sm:col-span-2">
             <input
-              name="authorityEvidenceReady"
+              defaultChecked={existing?.marketplaceAsset?.authorityEvidenceReady ?? false} name="authorityEvidenceReady"
               type="checkbox"
             />
             I confirm that I have authority to market this property
@@ -809,7 +929,7 @@ export function MarketplaceListingForm({
         </p>
 
         <h2 className="mt-2 text-lg font-semibold">
-          Your listing will be created as a draft
+          {editing ? "Your changes update this listing" : "Your listing will be created as a draft"}
         </h2>
 
         <p className="mt-2 text-sm text-muted">
@@ -822,7 +942,7 @@ export function MarketplaceListingForm({
         className="rounded-xl bg-forest px-5 py-3 font-semibold text-white disabled:opacity-60"
         disabled={busy}
       >
-        {busy ? "Creating property…" : "Create draft property"}
+        {busy ? (editing ? "Saving changes…" : "Creating property…") : editing ? "Save changes" : "Create draft property"}
       </button>
     </form>
   );

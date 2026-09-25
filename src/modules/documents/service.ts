@@ -258,6 +258,7 @@ export async function uploadMarketplaceListingMedia(
       id: true,
       organisationId: true,
       marketplaceProfessionalId: true,
+      status: true,
       _count: { select: { media: true } },
     },
   });
@@ -285,6 +286,12 @@ export async function uploadMarketplaceListingMedia(
       409,
       "The property listing is not attached to the active professional account.",
     );
+  }
+
+  // Photos change only while the listing itself is editable (draft, rejected, paused), so a listing
+  // in review or live on the marketplace can't be altered outside the moderation lifecycle.
+  if (!["DRAFT", "REJECTED", "PAUSED"].includes(listing.status)) {
+    throw new AppError("LISTING_NOT_EDITABLE", 409, "Photos can only be changed while the listing is a draft, rejected, or paused.");
   }
 
   if (listing._count.media >= MAX_MARKETPLACE_LISTING_MEDIA) {
