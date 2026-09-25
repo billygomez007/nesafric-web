@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "SET_ME_BEFORE_BUILDING"
+        "EXPO_PUBLIC_API_URL": "https://www.nesafric.com"
       }
     },
     "production": {
