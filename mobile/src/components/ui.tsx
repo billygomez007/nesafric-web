@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps, type TextProps, type ViewProps } from "react-native";
 
 import { colors, fonts, radii, spacing, type } from "@/theme/tokens";
@@ -48,11 +49,12 @@ const buttonVariants = {
 
 const buttonText = { primary: colors.ink, secondary: colors.ink, dark: colors.white };
 
-export function TextField({ label, error, style, ...props }: TextInputProps & { label: string; error?: string }) {
+export function TextField({ label, error, style, ref, ...props }: TextInputProps & { label: string; error?: string; ref?: Ref<TextInput> }) {
   return (
     <View style={styles.field}>
       <AppText variant="label">{label}</AppText>
       <TextInput
+        ref={ref}
         accessibilityLabel={label}
         placeholderTextColor={colors.muted}
         {...props}

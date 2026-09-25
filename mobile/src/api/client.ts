@@ -1,8 +1,10 @@
 /**
  * Thin typed client for the NesAfric JSON API (`src/app/api/**` in the web repo).
  *
- * Phase 1A only calls public, unauthenticated endpoints. It normalises the platform error
- * envelope `{ error: { code, message, details?, issues? } }` and never sends cookies.
+ * Public marketplace calls are unauthenticated. Account calls opt in with `auth: true`, which adds
+ * `Authorization: Bearer <session token>` (and `x-organisation-id` when given). A 401 on an
+ * authenticated call reports the session as lost via `onUnauthenticated`. The error envelope
+ * `{ error: { code, message, details?, issues? } }` is normalised, and cookies are never sent.
  */
 export type ApiIssue = { path: string; message: string };
 
@@ -27,18 +29,40 @@ export type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /** Send the signed-in user's session token. Never set on public marketplace calls. */
+  auth?: boolean;
+  /** Workspace scope (`x-organisation-id`) for an authenticated call; the server enforces membership. */
+  organisationId?: string;
 };
 
-export type ClientOptions = { baseUrl: string; timeoutMs?: number; fetchImpl?: typeof fetch };
+export type ClientOptions = {
+  baseUrl: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  /** Current session token (read from memory; the durable copy lives in secure storage). */
+  getToken?: () => string | null;
+  /** Called when an authenticated call gets 401 (expired or revoked session). */
+  onUnauthenticated?: () => void;
+};
+
+export const UNAUTHENTICATED = "UNAUTHENTICATED";
 
 export function buildQuery(query: RequestOptions["query"]) {
   const params = Object.entries(query ?? {}).filter((entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== "");
   return params.length ? `?${params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join("&")}` : "";
 }
 
-export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl = fetch }: ClientOptions) {
-  async function request<T>(path: string, { method = "GET", query, body, headers: extraHeaders, signal }: RequestOptions = {}): Promise<T> {
+export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl, getToken, onUnauthenticated }: ClientOptions) {
+  // Resolved per call (not captured at creation) so a replaced global fetch is always honoured.
+  const doFetch: typeof fetch = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
+  async function request<T>(path: string, { method = "GET", query, body, headers: extraHeaders, signal, auth = false, organisationId }: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = { accept: "application/json", ...extraHeaders };
+    if (auth) {
+      const token = getToken?.();
+      if (!token) throw new ApiError(401, UNAUTHENTICATED, "Please sign in to continue.");
+      headers.authorization = `Bearer ${token}`;
+      if (organisationId) headers["x-organisation-id"] = organisationId;
+    }
     if (body !== undefined) headers["content-type"] = "application/json";
 
     const controller = new AbortController();
@@ -48,7 +72,7 @@ export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl = fetch
 
     let response: Response;
     try {
-      response = await fetchImpl(`${baseUrl}${path}${buildQuery(query)}`, {
+      response = await doFetch(`${baseUrl}${path}${buildQuery(query)}`, {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -65,6 +89,7 @@ export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl = fetch
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
       const error = payload?.error ?? {};
+      if (auth && response.status === 401) onUnauthenticated?.();
       throw new ApiError(
         response.status,
         typeof error.code === "string" ? error.code : `HTTP_${response.status}`,

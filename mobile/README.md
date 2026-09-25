@@ -15,13 +15,14 @@ door; professional workspaces come later behind one NesAfric identity.
 | Property details | Photo gallery, price, facts, description, amenities, listed-by, approximate location, **Contact agent** / **Schedule viewing**. | `GET /api/public/listings/:id` |
 | Contact / viewing | Guest form (no account): name + phone or email, required consent to share details with the lister, optional follow-up consent, up to 3 viewing windows. | `POST /api/public/listings/:id/leads`, then `/viewings` |
 | Saved | Hearted properties, stored **on this device only** (AsyncStorage). | none |
-| Account | Support, privacy, terms. Sign-in is **not** in this phase (see below). | none |
+| Account | Optional sign-in (Phase 1B). Signed out: sign-in, "create an account" (opens the web registration page), support, privacy, terms. Signed in: real profile, the workspaces the server lists, sign out. | `POST /api/auth/mobile/session`, `GET /api/account/profile`, `GET /api/workspaces`, `POST /api/auth/logout` |
+| Workspace overview | Read-only summary of a property-management workspace the user belongs to (properties, units, team members); the server enforces membership and `property.read`. Professional profiles open on the website. | `GET /api/dashboard` with `x-organisation-id` |
 
 Deliberately **not** included yet:
 
 - **Map tab** — deferred until a real interactive map ships (needs a Google Maps key for Android).
-- **Sign in / accounts / workspaces** — Phase 1B, pending review of the mobile session security
-  design. No sign-in buttons are shown that can't work.
+- **Password reset, Google sign-in, service-provider workspaces and management screens** — no
+  backend flow yet or later phases; kept out of navigation. See `../docs/mobile-auth.md`.
 - Filters the API can't answer (furnished, new developments, amenities, availability, geo-bounds)
   and collections that need new backend support (Featured, Near You, New Developments).
 
@@ -82,7 +83,8 @@ store build, as it can't be changed after publishing.
 
 ```
 src/app/               Expo Router screens: (tabs)/index|search|saved|account, listing/[id]/index|enquire
-src/api/               API client, public marketplace endpoints, response types, React Query hooks
+src/api/               API client (public + opt-in bearer auth), marketplace & account endpoints, React Query hooks
+src/auth/              Session provider, secure token storage (expo-secure-store), workspace memory
 src/marketplace/       Pure logic: price/facts formatting, search filters, enquiry validation, local saves
 src/components/        UI kit (buttons, fields, cards, chips, checkbox) in NesAfric tokens
 src/theme/tokens.ts    Mirrors src/app/globals.css (test fails on drift)
