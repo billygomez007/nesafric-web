@@ -53,4 +53,25 @@ describe("api client", () => {
     });
     await expect(api.request("/x")).rejects.toMatchObject({ status: 502, code: "HTTP_502" });
   });
+
+  it("uses an explicit token for a revocation call without reporting the current session as lost", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(response(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } }));
+    const onUnauthenticated = jest.fn();
+    const api = createApiClient({ baseUrl: "https://api.test", fetchImpl, getToken: () => "current-session-token-123", onUnauthenticated });
+
+    await expect(api.request("/api/auth/logout", { method: "POST", auth: true, token: "signed-out-token-4567" })).rejects.toMatchObject({ status: 401 });
+    expect(fetchImpl.mock.calls[0][1].headers.authorization).toBe("Bearer signed-out-token-4567");
+    expect(onUnauthenticated).not.toHaveBeenCalled();
+
+    // An ordinary authenticated call still reports a 401 for the current session.
+    await expect(api.request("/api/account/profile", { auth: true })).rejects.toMatchObject({ status: 401 });
+    expect(onUnauthenticated).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an authenticated call once there is no token, without touching the network", async () => {
+    const fetchImpl = jest.fn();
+    const api = createApiClient({ baseUrl: "https://api.test", fetchImpl, getToken: () => null });
+    await expect(api.request("/api/workspaces", { auth: true })).rejects.toMatchObject({ status: 401, code: "UNAUTHENTICATED" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });
