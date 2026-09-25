@@ -47,13 +47,14 @@ describe("marketplace homepage data quality", () => {
     for (const url of directoryUrls()) expect(url.searchParams.get("verifiedOnly")).toBe("true");
   });
 
-  it("hides the company carousel and omits counts when no professional is verified", async () => {
+  it("keeps the company section with an honest empty state and omits counts when no professional is verified", async () => {
     mockApi({ providers: { items: [], pagination: { total: 0 } }, directory: () => ({ items: [], total: 0 }) });
     render(<MarketplaceHome />);
     await screen.findByText("Agents, brokerages and developers");
     await waitFor(() => expect(directoryUrls().length).toBeGreaterThanOrEqual(5));
-    expect(screen.queryByText("Companies and professionals on NesAfric")).toBeNull();
-    expect(screen.queryByText(/verified$/)).toBeNull();
+    expect(screen.getByText("Companies and professionals on NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Verified companies will appear here")).toBeTruthy();
+    expect(screen.queryByText(/^\d+ verified$/)).toBeNull();
   });
 
   it("shows the verified count when there is one", async () => {

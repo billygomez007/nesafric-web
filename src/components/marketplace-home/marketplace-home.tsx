@@ -16,15 +16,20 @@ const LISTING_SAMPLE_SIZE = 50;
 const SECTION_SIZE = 6;
 
 type ListingsResult = { items: PublicListing[]; pagination: { total: number } };
+const NO_LISTINGS: ListingsResult = { items: [], pagination: { total: 0 } };
 
-function useJson<T>(url: string) {
+/** Fetches public JSON. `onError`, when given, is used as the result if the request fails, so a
+ * section can settle into its empty state instead of waiting forever. */
+function useJson<T>(url: string, onError?: T) {
   const [data, setData] = useState<T | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     fetch(url, { signal: controller.signal })
-      .then(async (response) => { if (response.ok) setData(await response.json()); })
-      .catch(() => {});
+      .then(async (response) => { if (response.ok) setData(await response.json()); else if (onError !== undefined) setData(onError); })
+      .catch(() => { if (onError !== undefined && !controller.signal.aborted) setData(onError); });
     return () => controller.abort();
+    // `onError` is a constant empty result per call site.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
   return data;
 }
@@ -59,7 +64,17 @@ function PropertyDiscovery({ result }: { result: ListingsResult | null }) {
   const [active, setActive] = useState("recent");
   const current = tabs.find((tab) => tab.key === active) ?? tabs[0];
 
-  if (!result) return null;
+  if (!result) {
+    return (
+      <section aria-busy="true" aria-labelledby="discover-heading" className="mx-auto max-w-[1400px] px-5 py-14 sm:px-8 sm:py-20">
+        <SectionHeading id="discover-heading" title="Properties on NesAfric" />
+        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" role="status">
+          <span className="sr-only">Loading properties</span>
+          {[0, 1, 2].map((key) => <div aria-hidden="true" className={`aspect-[4/3] rounded-[var(--radius-panel)] bg-surface/70 ${key > 0 ? "hidden sm:block" : ""} ${key > 1 ? "sm:hidden lg:block" : ""}`} key={key} />)}
+        </div>
+      </section>
+    );
+  }
 
   if (!current) {
     return (
@@ -319,10 +334,10 @@ function BusinessGateway() {
 /* ---------- Page body ---------- */
 
 export function MarketplaceHome() {
-  const listings = useJson<ListingsResult>(`/api/public/listings?page=1&pageSize=${LISTING_SAMPLE_SIZE}`);
+  const listings = useJson<ListingsResult>(`/api/public/listings?page=1&pageSize=${LISTING_SAMPLE_SIZE}`, NO_LISTINGS);
   return (
     <>
-      <CompaniesCarouselSection />
+      <CompaniesCarouselSection emptyState />
       <PropertyDiscovery result={listings} />
       <PopularLocations result={listings} />
       <ProfessionalDiscovery />
