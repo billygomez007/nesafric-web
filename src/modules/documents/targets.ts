@@ -54,12 +54,11 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
     allowedMimeTypes: [...IMAGE_MIME_TYPES, ...VIDEO_MIME_TYPES, "application/pdf"],
     allowedClassifications: ["PRIVATE", "PUBLIC"],
     authorize: async (tx, { userId, organisationId, targetId }) => {
-      if (!organisationId) throw forbidden();
-
-      const listing = await tx.listing.findFirst({
-        where: { id: targetId, organisationId },
+      const listing = await tx.listing.findUnique({
+        where: { id: targetId },
         select: {
           id: true,
+          organisationId: true,
           marketplaceProfessionalId: true,
         },
       });
@@ -72,13 +71,22 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
           listing.marketplaceProfessionalId,
           "AGENT",
         );
-      } else {
-        await requirePermission(
-          userId,
-          organisationId,
-          PERMISSIONS.listingManage,
-        );
+
+        return { organisationId: listing.organisationId };
       }
+
+      if (
+        !organisationId ||
+        listing.organisationId !== organisationId
+      ) {
+        throw notFound();
+      }
+
+      await requirePermission(
+        userId,
+        organisationId,
+        PERMISSIONS.listingManage,
+      );
 
       return { organisationId };
     },
