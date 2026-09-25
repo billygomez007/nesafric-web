@@ -17,6 +17,7 @@ door; professional workspaces come later behind one NesAfric identity.
 | Saved | Hearted properties, stored **on this device only** (AsyncStorage). | none |
 | Account | Optional sign-in (Phase 1B). Signed out: sign-in, "create an account" (opens the web registration page), support, privacy, terms. Signed in: real profile, the workspaces the server lists, sign out (immediate on the device; server revocation in the background, reported honestly — see `docs/mobile-auth.md`). | `POST /api/auth/mobile/session`, `GET /api/account/profile`, `GET /api/workspaces`, `POST /api/auth/logout` |
 | Workspace overview | Read-only summary of a property-management workspace the user belongs to (properties, units, team members); the server enforces membership and `property.read`. Professional profiles open on the website. | `GET /api/dashboard` with `x-organisation-id` |
+| Enquiries & viewings | Read-only inbox inside a workspace: sections shown only when the server allows them, paged lists, details, Call / Email for usable contact details. See `../docs/mobile-workspace-inbox.md`. | `GET /api/marketplace-leads[/:id]`, `GET /api/viewing-requests[/:id]` with `x-organisation-id` |
 
 Deliberately **not** included yet:
 
@@ -82,9 +83,11 @@ store build, as it can't be changed after publishing.
 ## Structure
 
 ```
-src/app/               Expo Router screens: (tabs)/index|search|saved|account, listing/[id]/index|enquire
+src/app/               Expo Router screens: (tabs)/index|search|saved|account, listing/[id]/index|enquire,
+                       sign-in, workspace/[organisationId]/index|inbox|enquiry/[leadId]|viewing/[viewingId]
 src/api/               API client (public + opt-in bearer auth), marketplace & account endpoints, React Query hooks
 src/auth/              Session provider, secure token storage (expo-secure-store), workspace memory
+src/workspace/         Inbox UI pieces, workspace gate, contact-detail checks
 src/marketplace/       Pure logic: price/facts formatting, search filters, enquiry validation, local saves
 src/components/        UI kit (buttons, fields, cards, chips, checkbox) in NesAfric tokens
 src/theme/tokens.ts    Mirrors src/app/globals.css (test fails on drift)

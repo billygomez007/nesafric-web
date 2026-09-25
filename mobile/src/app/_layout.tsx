@@ -78,7 +78,10 @@ export default function RootLayout() {
                 <Stack.Screen name="listing/[id]/index" options={{ headerShown: true, title: "", headerBackTitle: "Back" }} />
                 <Stack.Screen name="listing/[id]/enquire" options={{ headerShown: true, presentation: "modal", title: "Contact" }} />
                 <Stack.Screen name="sign-in" options={{ headerShown: true, presentation: "modal", title: "Sign in" }} />
-                <Stack.Screen name="workspace/[organisationId]" options={{ headerShown: true, title: "Workspace", headerBackTitle: "Account" }} />
+                <Stack.Screen name="workspace/[organisationId]/index" options={{ headerShown: true, title: "Workspace", headerBackTitle: "Account" }} />
+                <Stack.Screen name="workspace/[organisationId]/inbox" options={{ headerShown: true, title: "Enquiries & viewings", headerBackTitle: "Workspace" }} />
+                <Stack.Screen name="workspace/[organisationId]/enquiry/[leadId]" options={{ headerShown: true, title: "Enquiry", headerBackTitle: "Inbox" }} />
+                <Stack.Screen name="workspace/[organisationId]/viewing/[viewingId]" options={{ headerShown: true, title: "Viewing request", headerBackTitle: "Inbox" }} />
               </Stack>
             </SavedProvider>
             </SessionProvider>
