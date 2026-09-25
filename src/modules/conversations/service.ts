@@ -80,7 +80,16 @@ async function resolveWebChatContext(input: { listingId?: string; propertyId?: s
   return { organisationId: property.organisationId, propertyId: property.id, listingId: undefined, listingTitle: undefined };
 }
 
-export async function startWebChatConversation(input: unknown, context: { userId?: string } = {}) {
+/** Refund handle returned by a public-write guard (see `reservePublicWrite`). */
+type GuardReservation = { release: () => Promise<void> } | void;
+
+/**
+ * Optional guard run just before a public web chat creates a marketplace lead (e.g. rate limiting).
+ * Its reservation is released if the lead isn't actually created.
+ */
+export type WebChatLeadGuard = (target: { listingId: string; email?: string; phone?: string }) => Promise<GuardReservation>;
+
+export async function startWebChatConversation(input: unknown, context: { userId?: string; beforeLeadCreate?: WebChatLeadGuard } = {}) {
   const data = startWebChatConversationSchema.parse(input);
   const target = await resolveWebChatContext(data);
   const identity = await resolveTenantIdentity(target.organisationId, {
@@ -90,6 +99,8 @@ export async function startWebChatConversation(input: unknown, context: { userId
   });
   let marketplaceLeadId: string | undefined;
   if (target.listingId && (data.visitorEmail || data.visitorPhone) && identity.level !== "VERIFIED") {
+    // Outside the lead's own error swallowing below: a rate-limit rejection must reach the caller.
+    const reservation = await context.beforeLeadCreate?.({ listingId: target.listingId, email: data.visitorEmail, phone: data.visitorPhone });
     const lead = await createMarketplaceLead(target.listingId, context.userId, {
       name: data.visitorName ?? "Website visitor",
       email: data.visitorEmail,
@@ -98,6 +109,7 @@ export async function startWebChatConversation(input: unknown, context: { userId
       marketingConsent: false,
       source: "web_chat",
     }).catch(() => null);
+    if (!lead) await reservation?.release();
     marketplaceLeadId = lead?.id;
   }
   const { token, tokenHash } = mintChatToken();
@@ -172,16 +184,25 @@ export async function postWebChatMessage(conversationId: string, input: unknown,
   return getWebChatConversation(conversationId, data.chatToken);
 }
 
-export async function requestWebChatViewing(conversationId: string, input: unknown) {
+export async function requestWebChatViewing(
+  conversationId: string,
+  input: unknown,
+  options: { beforeCreate?: (target: { listingId: string; leadId: string }) => Promise<GuardReservation> } = {},
+) {
   const data = webChatViewingRequestSchema.parse(input);
   const conversation = await requireWebChatConversation(conversationId, data.chatToken);
   if (!conversation.listingId || !conversation.marketplaceLeadId) {
     throw new AppError("VIEWING_REQUEST_UNAVAILABLE", 409, "A listing enquiry is required before requesting a viewing.");
   }
+  // Runs only after the chat token is verified, so strangers can't spend a lead's viewing budget.
+  const reservation = await options.beforeCreate?.({ listingId: conversation.listingId, leadId: conversation.marketplaceLeadId });
   const viewing = await createViewingRequest(conversation.listingId, undefined, {
     leadId: conversation.marketplaceLeadId,
     preferredTimes: data.preferredTimes,
     requesterNote: data.requesterNote,
+  }).catch(async (error: unknown) => {
+    await reservation?.release();
+    throw error;
   });
   await db.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
   return viewing;

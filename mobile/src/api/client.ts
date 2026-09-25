@@ -25,6 +25,7 @@ export type RequestOptions = {
   method?: "GET" | "POST";
   query?: Record<string, string | number | undefined>;
   body?: unknown;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 
@@ -36,8 +37,8 @@ export function buildQuery(query: RequestOptions["query"]) {
 }
 
 export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl = fetch }: ClientOptions) {
-  async function request<T>(path: string, { method = "GET", query, body, signal }: RequestOptions = {}): Promise<T> {
-    const headers: Record<string, string> = { accept: "application/json" };
+  async function request<T>(path: string, { method = "GET", query, body, headers: extraHeaders, signal }: RequestOptions = {}): Promise<T> {
+    const headers: Record<string, string> = { accept: "application/json", ...extraHeaders };
     if (body !== undefined) headers["content-type"] = "application/json";
 
     const controller = new AbortController();
