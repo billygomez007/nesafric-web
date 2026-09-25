@@ -7,11 +7,12 @@ import { BrandLogo } from "@/components/brand-logo";
 import { buttonClass } from "@/components/ui/button-styles";
 
 const NAV_LINKS = [
-  { href: "/#product", label: "Platform", match: (path: string) => path === "/" },
-  { href: "/for-property-owners", label: "Property owners", match: (path: string) => path.startsWith("/for-property-owners") },
-  { href: "/for-professionals", label: "Professionals", match: (path: string) => path.startsWith("/for-professionals") },
-  { href: "/for-developers", label: "Developers", match: (path: string) => path.startsWith("/for-developers") },
-  { href: "/marketplace/properties", label: "Marketplace", match: (path: string) => path.startsWith("/marketplace") },
+  { href: "/marketplace/properties?listingType=SALE", label: "Buy", match: () => false },
+  { href: "/marketplace/properties?listingType=RENT", label: "Rent", match: () => false },
+  { href: "/marketplace/professionals?type=DEVELOPER", label: "New developments", match: () => false },
+  { href: "/marketplace/professionals", label: "Professionals", match: (path: string) => path.startsWith("/marketplace/professionals") },
+  { href: "/marketplace/services", label: "Service providers", match: (path: string) => path.startsWith("/marketplace/services") },
+  { href: "/platform", label: "Platform", match: (path: string) => path.startsWith("/platform") || path.startsWith("/for-") },
   { href: "/pricing", label: "Pricing", match: (path: string) => path.startsWith("/pricing") },
 ];
 
@@ -64,7 +65,7 @@ export function SiteNav() {
             Sign in
           </Link>
           <Link className={buttonClass("primaryOnDark", "sm")} href="/register">
-            Start with NesAfric
+            Get started
           </Link>
         </div>
 

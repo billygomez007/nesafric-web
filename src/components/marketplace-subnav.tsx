@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/marketplace/properties", label: "Properties" },
   { href: "/marketplace/professionals", label: "Professionals" },
-  { href: "/marketplace", label: "Service providers", exact: true },
+  { href: "/marketplace/services", label: "Service providers" },
   { href: "/marketplace/requests", label: "My requests" },
 ];
 
@@ -20,7 +20,7 @@ export function MarketplaceSubnav() {
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-6 px-5 sm:px-8">
         <nav aria-label="Marketplace" className="-mx-1 flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
           {LINKS.map((link) => {
-            const active = link.exact ? pathname === link.href : pathname === link.href || pathname.startsWith(`${link.href}/`);
+            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 aria-current={active ? "page" : undefined}

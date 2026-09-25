@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { MarketplaceCarousel } from "@/components/marketplace-carousel";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -15,17 +16,49 @@ const fieldClass =
   "h-11 w-full rounded-[var(--radius-control)] border border-hairline bg-white px-3 text-sm text-ink outline-none transition placeholder:text-slate-500 focus:border-forest focus:ring-2 focus:ring-forest/10";
 const labelClass = "mb-1.5 block text-xs font-medium text-muted";
 
+const PASS_THROUGH_KEYS = ["q", "listingType", "category", "scope", "country", "region", "city", "district", "bedroomsMin", "bathroomsMin", "currencyCode", "availableOn", "amenities"] as const;
+const ADVANCED_KEYS = ["category", "scope", "country", "region", "city", "district", "bathroomsMin", "currencyCode", "availableOn", "amenities", "minPrice"];
+
+/** Location filters need a country for the public API; NesAfric's marketplace is Ghana-first. */
+function withDefaultCountry(params: URLSearchParams) {
+  if (!params.get("country") && (params.get("region") || params.get("city") || params.get("district"))) params.set("country", "GH");
+  return params;
+}
+
+/** Reads a deep link such as ?listingType=RENT&region=Greater%20Accra&maxPrice=9000 into form
+ * defaults and the equivalent public-listings API query (prices arrive in whole cedis). */
+function initialFromUrl(searchParams: URLSearchParams) {
+  const form: Record<string, string> = {};
+  const api = new URLSearchParams();
+  for (const key of PASS_THROUGH_KEYS) {
+    const value = searchParams.get(key)?.trim();
+    if (value) { form[key] = value; api.set(key, value); }
+  }
+  for (const [formKey, apiKey] of [["minPrice", "minPriceMinor"], ["maxPrice", "maxPriceMinor"]] as const) {
+    const whole = searchParams.get(formKey)?.trim();
+    if (whole && Number.isFinite(Number(whole)) && Number(whole) >= 0) { form[formKey] = whole; api.set(apiKey, String(Math.round(Number(whole) * 100))); }
+  }
+  withDefaultCountry(api);
+  return { form, api: api.toString(), advanced: ADVANCED_KEYS.some((key) => form[key]) };
+}
+
 export function PropertyMarketplaceSearch() {
+  const searchParams = useSearchParams();
+  const initial = useMemo(() => initialFromUrl(new URLSearchParams(searchParams?.toString() ?? "")), [searchParams]);
   const [result, setResult] = useState<Result | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initial.api);
   const [error, setError] = useState("");
-  const [filtered, setFiltered] = useState(false);
+  const [filtered, setFiltered] = useState(initial.api.length > 0);
   async function search(search = "") {
     const response = await fetch(`/api/public/listings${search ? `?${search}` : ""}`);
     if (!response.ok) throw new Error((await response.json()).error?.message ?? "Unable to search listings.");
     setResult(await response.json());
   }
-  useEffect(() => { void search().catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load listings.")); }, []);
+  useEffect(() => {
+    setQuery(initial.api);
+    setFiltered(initial.api.length > 0);
+    void search(initial.api).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load listings."));
+  }, [initial.api]);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -41,8 +74,16 @@ export function PropertyMarketplaceSearch() {
       const whole = String(data.get(formKey) ?? "").trim();
       if (whole) params.set(apiKey, String(Math.round(Number(whole) * 100)));
     }
+    withDefaultCountry(params);
     setQuery(params.toString());
     setFiltered(params.toString().length > 0);
+    // Keep the address bar shareable: whole-cedi prices and the plain filters, no pagination.
+    const shareable = new URLSearchParams();
+    for (const key of [...PASS_THROUGH_KEYS, "minPrice", "maxPrice"]) {
+      const value = String(data.get(key) ?? "").trim();
+      if (value) shareable.set(key, value);
+    }
+    window.history.replaceState(null, "", `${window.location.pathname}${shareable.toString() ? `?${shareable.toString()}` : ""}`);
     setError("");
     // Engagement, not a conversion — fires once per explicit form submission (never per keystroke,
     // never on the initial unfiltered load in the mount effect above). The free-text "q" field is
@@ -57,6 +98,7 @@ export function PropertyMarketplaceSearch() {
     void search(params.toString()).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to search listings."));
   }
   function reset() {
+    window.history.replaceState(null, "", window.location.pathname);
     setQuery("");
     setFiltered(false);
     setError("");
@@ -67,15 +109,15 @@ export function PropertyMarketplaceSearch() {
     <div className="grid gap-8">
       <MarketplaceCarousel placement="MARKETPLACE_INLINE" />
 
-      <form aria-label="Search public listings" className="border-y border-hairline py-5" onReset={reset} onSubmit={submit}>
+      <form aria-label="Search public listings" className="border-y border-hairline py-5" key={initial.api} onReset={reset} onSubmit={submit}>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto] md:items-end">
           <div className="col-span-2 md:col-span-1">
             <label className={labelClass} htmlFor="pms-q">Area, neighbourhood or keyword</label>
-            <input className={fieldClass} id="pms-q" name="q" placeholder="e.g. East Legon, 3 bedroom" type="search" />
+            <input className={fieldClass} defaultValue={initial.form.q ?? ""} id="pms-q" name="q" placeholder="e.g. East Legon, 3 bedroom" type="search" />
           </div>
           <div>
             <label className={labelClass} htmlFor="pms-type">Rent or buy</label>
-            <select className={fieldClass} id="pms-type" name="listingType">
+            <select className={fieldClass} defaultValue={initial.form.listingType ?? ""} id="pms-type" name="listingType">
               <option value="">Rent or buy</option>
               <option value="RENT">To rent</option>
               <option value="SALE">To buy</option>
@@ -83,7 +125,7 @@ export function PropertyMarketplaceSearch() {
           </div>
           <div>
             <label className={labelClass} htmlFor="pms-beds">Bedrooms</label>
-            <select className={fieldClass} id="pms-beds" name="bedroomsMin">
+            <select className={fieldClass} defaultValue={initial.form.bedroomsMin ?? ""} id="pms-beds" name="bedroomsMin">
               <option value="">Any</option>
               <option value="1">1+</option>
               <option value="2">2+</option>
@@ -94,12 +136,12 @@ export function PropertyMarketplaceSearch() {
           </div>
           <div>
             <label className={labelClass} htmlFor="pms-max">Max price</label>
-            <input className={fieldClass} id="pms-max" inputMode="numeric" min="0" name="maxPrice" placeholder="Any" type="number" />
+            <input className={fieldClass} defaultValue={initial.form.maxPrice ?? ""} id="pms-max" inputMode="numeric" min="0" name="maxPrice" placeholder="Any" type="number" />
           </div>
           <button className={`${buttonClass("primary")} w-full self-end md:w-auto`} type="submit">Search</button>
         </div>
 
-        <details className="group mt-4">
+        <details className="group mt-4" open={initial.advanced || undefined}>
           <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-forest marker:hidden hover:text-emerald [&::-webkit-details-marker]:hidden">
             More filters
             <svg aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
@@ -107,11 +149,11 @@ export function PropertyMarketplaceSearch() {
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className={labelClass} htmlFor="pms-category">Property type</label>
-              <input className={fieldClass} id="pms-category" name="category" placeholder="e.g. Apartment, House, Land" />
+              <input className={fieldClass} defaultValue={initial.form.category ?? ""} id="pms-category" name="category" placeholder="e.g. Apartment, House, Land" />
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-scope">Whole property or unit</label>
-              <select className={fieldClass} id="pms-scope" name="scope">
+              <select className={fieldClass} defaultValue={initial.form.scope ?? ""} id="pms-scope" name="scope">
                 <option value="">Either</option>
                 <option value="PROPERTY">Whole property</option>
                 <option value="UNIT">Unit in a building</option>
@@ -119,7 +161,7 @@ export function PropertyMarketplaceSearch() {
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-baths">Bathrooms</label>
-              <select className={fieldClass} id="pms-baths" name="bathroomsMin">
+              <select className={fieldClass} defaultValue={initial.form.bathroomsMin ?? ""} id="pms-baths" name="bathroomsMin">
                 <option value="">Any</option>
                 <option value="1">1+</option>
                 <option value="2">2+</option>
@@ -129,30 +171,30 @@ export function PropertyMarketplaceSearch() {
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-min">Min price</label>
-              <input className={fieldClass} id="pms-min" inputMode="numeric" min="0" name="minPrice" placeholder="Any" type="number" />
+              <input className={fieldClass} defaultValue={initial.form.minPrice ?? ""} id="pms-min" inputMode="numeric" min="0" name="minPrice" placeholder="Any" type="number" />
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-city">City</label>
-              <input className={fieldClass} id="pms-city" name="city" placeholder="e.g. Accra" />
+              <input className={fieldClass} defaultValue={initial.form.city ?? ""} id="pms-city" name="city" placeholder="e.g. Accra" />
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-district">District</label>
-              <input className={fieldClass} id="pms-district" name="district" placeholder="e.g. Ayawaso West" />
+              <input className={fieldClass} defaultValue={initial.form.district ?? ""} id="pms-district" name="district" placeholder="e.g. Ayawaso West" />
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-region">Region</label>
-              <input className={fieldClass} id="pms-region" name="region" placeholder="e.g. Greater Accra" />
+              <input className={fieldClass} defaultValue={initial.form.region ?? ""} id="pms-region" name="region" placeholder="e.g. Greater Accra" />
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-country">Country</label>
-              <select className={fieldClass} id="pms-country" name="country">
+              <select className={fieldClass} defaultValue={initial.form.country ?? ""} id="pms-country" name="country">
                 <option value="">Any country</option>
                 <option value="GH">Ghana</option>
               </select>
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-currency">Currency</label>
-              <select className={fieldClass} id="pms-currency" name="currencyCode">
+              <select className={fieldClass} defaultValue={initial.form.currencyCode ?? ""} id="pms-currency" name="currencyCode">
                 <option value="">Any currency</option>
                 <option value="GHS">Ghana cedi (GH₵)</option>
                 <option value="USD">US dollar (US$)</option>
@@ -160,11 +202,11 @@ export function PropertyMarketplaceSearch() {
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-available">Available from</label>
-              <input className={fieldClass} id="pms-available" name="availableOn" type="date" />
+              <input className={fieldClass} defaultValue={initial.form.availableOn ?? ""} id="pms-available" name="availableOn" type="date" />
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass} htmlFor="pms-amenities">Amenities</label>
-              <input className={fieldClass} id="pms-amenities" name="amenities" placeholder="e.g. parking, internet, generator" />
+              <input className={fieldClass} defaultValue={initial.form.amenities ?? ""} id="pms-amenities" name="amenities" placeholder="e.g. parking, internet, generator" />
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -234,7 +276,7 @@ export function PropertyMarketplaceSearch() {
   );
 }
 
-function ListingCard({ listing }: { listing: PublicListing }) {
+export function ListingCard({ listing }: { listing: PublicListing }) {
   const photo = listing.media.find((media) => media.type === "PHOTO");
   const amount = listing.pricing.rentAmountMinor ?? listing.pricing.askingAmountMinor;
   const suffix = listing.listingType === "RENT" ? frequencySuffix(listing.pricing.frequency) : "";

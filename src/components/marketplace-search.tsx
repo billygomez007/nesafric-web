@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { buttonClass } from "@/components/ui/button-styles";
 import { controlClass, fieldLabelClass } from "@/components/ui/field-styles";
 import { humanize } from "@/lib/listing-display";
@@ -20,13 +21,18 @@ export function MarketplaceSearch() {
     if (!response.ok) throw new Error((await response.json()).error?.message ?? "Unable to search providers.");
     setResult(await response.json());
   }
+  const searchParams = useSearchParams();
+  // Deep links such as /marketplace/services?category=plumbing open pre-filtered by service.
+  const initialCategory = searchParams?.get("category")?.trim() ?? "";
   useEffect(() => {
-    Promise.all([fetch("/api/public/marketplace/categories"), fetch("/api/public/marketplace/providers")]).then(async ([categoryResponse, providerResponse]) => {
+    const initialQuery = initialCategory ? `?${new URLSearchParams({ category: initialCategory }).toString()}` : "";
+    if (initialCategory) setQuery(initialQuery.slice(1));
+    Promise.all([fetch("/api/public/marketplace/categories"), fetch(`/api/public/marketplace/providers${initialQuery}`)]).then(async ([categoryResponse, providerResponse]) => {
       if (categoryResponse.ok) setCategories(await categoryResponse.json());
       if (!providerResponse.ok) throw new Error("Unable to load the marketplace.");
       setResult(await providerResponse.json());
     }).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load the marketplace."));
-  }, []);
+  }, [initialCategory]);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -42,7 +48,7 @@ export function MarketplaceSearch() {
   return (
     <div className="grid gap-6">
       <form aria-label="Search service providers" className="grid gap-3 border-y border-hairline py-5 sm:grid-cols-2 lg:grid-cols-4" onSubmit={submit}>
-        <div><label className={fieldLabelClass} htmlFor="msp-category">Service</label><select className={controlClass} id="msp-category" name="category"><option value="">All services</option>{categories.map((category) => <option key={category.id} value={category.key}>{category.name}</option>)}</select></div>
+        <div><label className={fieldLabelClass} htmlFor="msp-category">Service</label><select className={controlClass} defaultValue={initialCategory} id="msp-category" key={`${initialCategory}-${categories.length}`} name="category"><option value="">All services</option>{categories.map((category) => <option key={category.id} value={category.key}>{category.name}</option>)}</select></div>
         <div><label className={fieldLabelClass} htmlFor="msp-type">Provider type</label><select className={controlClass} id="msp-type" name="providerType"><option value="">Individuals and companies</option><option value="INDIVIDUAL">Individual</option><option value="COMPANY">Company</option></select></div>
         <div><label className={fieldLabelClass} htmlFor="msp-city">City</label><input className={controlClass} id="msp-city" name="city" placeholder="e.g. Accra" /></div>
         <div><label className={fieldLabelClass} htmlFor="msp-district">District</label><input className={controlClass} id="msp-district" name="district" placeholder="e.g. Ayawaso West" /></div>
