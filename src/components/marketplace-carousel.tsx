@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 type Banner = {
   id: string;
@@ -21,8 +21,12 @@ const AUTO_ROTATE_MS = 7000;
  * controls for a one-item carousel would be pointless chrome; only shows the full carousel UI for
  * two or more. Auto-rotation is restrained, pauses on hover/focus/touch, and is skipped entirely
  * under `prefers-reduced-motion`, per item 25's accessibility requirements.
+ *
+ * `fallback` (opt-in, e.g. the homepage's platform-owned banner) is shown instead of nothing when
+ * no campaign is eligible or campaigns can't be loaded; until the answer is known a same-height
+ * placeholder holds the space, so a real campaign never flashes behind the fallback.
  */
-export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number }) {
+export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallback }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; fallback?: ReactNode }) {
   const [banners, setBanners] = useState<Banner[] | null>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -42,10 +46,11 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
     if (countryCode) params.set("countryCode", countryCode);
     let cancelled = false;
     fetch(`/api/public/campaigns?${params}`).then(async (response) => {
-      if (!response.ok || cancelled) return;
+      if (cancelled) return;
+      if (!response.ok) { setBanners([]); return; }
       const body = await response.json();
       setBanners(Array.isArray(body.banners) ? body.banners : []);
-    });
+    }).catch(() => { if (!cancelled) setBanners([]); });
     return () => { cancelled = true; };
   }, [placement, countryCode, limit]);
 
@@ -70,7 +75,10 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
     return () => clearInterval(timer);
   }, [canRotate, paused, reducedMotion, banners]);
 
-  if (!banners || banners.length === 0) return null;
+  if (!banners || banners.length === 0) {
+    if (!fallback) return null;
+    return banners ? <>{fallback}</> : <div aria-busy="true" aria-label="Loading featured content" className="h-64 bg-forest-deep sm:h-72 lg:h-80" role="status" />;
+  }
 
   const multi = banners.length > 1;
 
@@ -122,7 +130,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
             <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-forest-deep/95 via-forest-deep/60 to-transparent" />
-          <div className={`relative flex h-full max-w-xl flex-col justify-end gap-2 pb-10 pt-6 sm:justify-center sm:pb-8 ${multi ? "pl-6 pr-14 sm:pl-10 sm:pr-16" : "px-6 sm:px-10"}`}>
+          <div className={`relative flex h-full max-w-xl flex-col justify-end gap-2 pb-10 pt-6 sm:justify-center sm:pb-8 ${multi ? "pl-6 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-10"}`}>
             <span className="w-fit text-xs font-semibold text-gold-soft">
               Promoted
             </span>

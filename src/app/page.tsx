@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { HeroSearch } from "@/components/marketplace-home/hero-search";
+import { MarketplaceCarousel } from "@/components/marketplace-carousel";
+import { PlatformBanner } from "@/components/marketplace-home/platform-banner";
 import { MarketplaceHome } from "@/components/marketplace-home/marketplace-home";
 import { BRAND } from "@/platform/brand";
 
@@ -69,6 +71,11 @@ export default function Home() {
               <p className="mt-4 max-w-2xl text-base leading-7 text-white/75 sm:text-[17px]">
                 Homes, land and commercial space to rent or buy — listed by the owners, managers, agents and developers responsible for them.
               </p>
+            </div>
+            {/* The advertising slot is always present: live campaigns when there are any,
+                otherwise NesAfric's own banner. */}
+            <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
+              <MarketplaceCarousel fallback={<PlatformBanner />} placement="MARKETPLACE_PRIMARY" />
             </div>
             <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
               <HeroSearch />
