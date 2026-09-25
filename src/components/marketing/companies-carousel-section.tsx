@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CompaniesCarouselTrack, type CompanyCarouselItem } from "@/components/marketing/companies-carousel-track";
 
-/** Ecosystem trust signal: real, active marketplace professionals only — never fabricated.
+/** Ecosystem trust signal: real, active and VERIFIED marketplace professionals only — never
+ * fabricated, and never unverified profiles simply because they exist.
  * Fetched client-side from the existing public directory API (same one `MarketplaceDirectory`
  * uses) so the marketing homepage stays a static, DB-free build artifact rather than depending
  * on a live database connection at prerender time. Collapses entirely on zero results or if the
@@ -15,7 +16,7 @@ export function CompaniesCarouselSection() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/public/marketplace-directory?page=1&pageSize=16", { signal: controller.signal })
+    fetch("/api/public/marketplace-directory?page=1&pageSize=16&verifiedOnly=true", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) return;
         const body = await response.json();
