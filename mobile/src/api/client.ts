@@ -31,6 +31,12 @@ export type RequestOptions = {
 
 export type ClientOptions = { baseUrl: string; timeoutMs?: number; fetchImpl?: typeof fetch };
 
+/** This branch previews real listings without sending writes to the live NesAfric API. */
+export function isProductionApi(baseUrl: string): boolean {
+  const host = new URL(baseUrl).hostname.toLowerCase();
+  return host === "nesafric.com" || host === "www.nesafric.com";
+}
+
 export function buildQuery(query: RequestOptions["query"]) {
   const params = Object.entries(query ?? {}).filter((entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== "");
   return params.length ? `?${params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join("&")}` : "";
@@ -38,6 +44,9 @@ export function buildQuery(query: RequestOptions["query"]) {
 
 export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl = fetch }: ClientOptions) {
   async function request<T>(path: string, { method = "GET", query, body, headers: extraHeaders, signal }: RequestOptions = {}): Promise<T> {
+    if (method !== "GET" && isProductionApi(baseUrl)) {
+      throw new ApiError(403, "READ_ONLY_PREVIEW", "Contact and viewing requests are disabled in this preview.");
+    }
     const headers: Record<string, string> = { accept: "application/json", ...extraHeaders };
     if (body !== undefined) headers["content-type"] = "application/json";
 
