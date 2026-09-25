@@ -5,6 +5,7 @@ import { useState } from "react";
 import { FlatList, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { isProductionApi } from "@/api/client";
 import { useApi } from "@/api/provider";
 import { useListing } from "@/api/queries";
 import type { PublicListing } from "@/api/types";
@@ -33,7 +34,9 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
   const price = formatListingPrice(listing);
   const location = formatLocation(listing.location);
   const facts = formatFacts(listing.attributes);
-  const canContact = listing.contact.enquiryEnabled;
+  const { apiUrl } = useApi();
+  const readOnlyPreview = isProductionApi(apiUrl);
+  const canContact = listing.contact.enquiryEnabled && !readOnlyPreview;
   // Public locations are deliberately approximate (APPROXIMATE / DISTRICT / CITY / REGION).
   const approximate = Boolean(listing.location.map.precision);
 
@@ -88,7 +91,11 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
             </Section>
           ) : null}
 
-          {!canContact ? <AppText variant="caption">The lister isn’t taking enquiries through NesAfric for this property right now.</AppText> : null}
+          {readOnlyPreview ? (
+            <AppText variant="caption">Read-only preview: contact and viewing requests are disabled.</AppText>
+          ) : !canContact ? (
+            <AppText variant="caption">The lister isn’t taking enquiries through NesAfric for this property right now.</AppText>
+          ) : null}
         </View>
       </ScrollView>
 
