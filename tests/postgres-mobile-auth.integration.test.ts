@@ -125,6 +125,11 @@ describe("mobile bearer sessions", () => {
     as({ bearer: first });
     expect((await logout()).status).toBe(204);
     expect((await profile()).status).toBe(401);
+    // The app treats 204 (and 401) as "the server session has ended": repeating the logout for an
+    // already-revoked token is still 204 and changes nothing.
+    as({ bearer: first });
+    expect((await logout()).status).toBe(204);
+    expect(await db.session.count({ where: { tokenHash: hashSessionToken(first) } })).toBe(0);
     // Logging out one device leaves the other signed in.
     as({ bearer: second });
     expect((await profile()).status).toBe(200);

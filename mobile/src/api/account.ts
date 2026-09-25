@@ -35,12 +35,16 @@ export type WorkspaceDashboard = {
 export const createMobileSession = (api: ApiClient, input: { email: string; password: string }) =>
   api.request<MobileSessionResponse>("/api/auth/mobile/session", { method: "POST", body: input });
 
-/** Revokes this device's session on the server (the same route the web uses). */
-export const revokeSession = (api: ApiClient) => api.request<void>("/api/auth/logout", { method: "POST", auth: true });
+/**
+ * Asks the server to revoke this token (the same route the web uses; 204 once no session row
+ * remains for it). Takes the token explicitly because sign-out has already dropped it locally.
+ */
+export const revokeSession = (api: ApiClient, token: string) =>
+  api.request<void>("/api/auth/logout", { method: "POST", auth: true, token, timeoutMs: 10_000 });
 
-export const getProfile = (api: ApiClient) => api.request<Profile>("/api/account/profile", { auth: true });
+export const getProfile = (api: ApiClient, signal?: AbortSignal) => api.request<Profile>("/api/account/profile", { auth: true, signal });
 
-export const getWorkspaces = (api: ApiClient) => api.request<Workspaces>("/api/workspaces", { auth: true });
+export const getWorkspaces = (api: ApiClient, signal?: AbortSignal) => api.request<Workspaces>("/api/workspaces", { auth: true, signal });
 
-export const getWorkspaceDashboard = (api: ApiClient, organisationId: string) =>
-  api.request<WorkspaceDashboard>("/api/dashboard", { auth: true, organisationId });
+export const getWorkspaceDashboard = (api: ApiClient, organisationId: string, signal?: AbortSignal) =>
+  api.request<WorkspaceDashboard>("/api/dashboard", { auth: true, organisationId, signal });

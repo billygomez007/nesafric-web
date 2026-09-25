@@ -2,10 +2,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import * as SecureStore from "expo-secure-store";
+import { router } from "expo-router";
 import { renderRouter } from "expo-router/testing-library";
 import path from "path";
 
-import { clearSession, setActiveToken } from "@/auth/token-store";
+import { SIGNED_OUT_FLAG, setActiveToken } from "@/auth/token-store";
 import { listing } from "@/test-utils/fixtures";
 
 const APP_DIR = path.join(__dirname, "../app");
@@ -52,6 +53,35 @@ function mockApi(overrides: Overrides = {}) {
 const header = (call: Call, name: string) => (call.init.headers as Record<string, string> | undefined)?.[name];
 const callsTo = (pathname: string) => calls.filter((call) => call.url.pathname === pathname);
 
+/** A response the test releases by hand, to hold a request "on the wire". */
+function deferred() {
+  let resolve!: (response: Response) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<Response>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, respond: (status: number, body?: unknown) => resolve({ ok: status < 300, status, json: async () => body } as Response), fail: () => reject(new TypeError("Network request failed")) };
+}
+
+const offline = () => Promise.reject(new TypeError("Network request failed"));
+
+/** Simulates closing and reopening the app: module memory is gone, storage remains. */
+function restartApp(initialUrl = "/account") {
+  setActiveToken(null);
+  renderRouter(APP_DIR, { initialUrl });
+}
+
+async function asyncStorageHoldsToken() {
+  const entries = await AsyncStorage.multiGet(await AsyncStorage.getAllKeys());
+  return entries.some(([, value]) => value?.includes(TOKEN));
+}
+
+async function tapSignOut() {
+  const button = await screen.findByTestId("sign-out", {}, { timeout: 5000 });
+  await act(async () => fireEvent.press(button));
+}
+
 function storeSession(expiresAt = new Date(Date.now() + 86_400_000).toISOString()) {
   secureStore.set(SESSION_KEY, JSON.stringify({ token: TOKEN, expiresAt, user: { id: "u1", email: "ama@example.com", displayName: "Ama Mensah" } }));
 }
@@ -66,7 +96,6 @@ async function signInThroughUi() {
 beforeEach(async () => {
   secureStore.clear();
   await AsyncStorage.clear();
-  await clearSession();
   setActiveToken(null);
   jest.clearAllMocks();
 });
@@ -148,28 +177,144 @@ describe("optional account access", () => {
     expect((await screen.findAllByText("GH₵8,500/month")).length).toBeGreaterThan(0);
   });
 
-  it("revokes the session on sign-out, even offline, and keeps saved properties", async () => {
+  it("signs out on this device at once and reports server revocation only once the server confirms it", async () => {
     await AsyncStorage.setItem("nesafric.saved-listings.v1", JSON.stringify([{ listing: house, savedAt: "2026-09-25T00:00:00.000Z" }]));
-    mockApi();
+    const logout = deferred();
+    mockApi({ logout: () => logout.promise });
     storeSession();
     renderRouter(APP_DIR, { initialUrl: "/account" });
-    const signOutButton = await screen.findByTestId("sign-out", {}, { timeout: 5000 });
-    await act(async () => fireEvent.press(signOutButton));
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
-    expect(header(callsTo("/api/auth/logout")[0], "authorization")).toBe(`Bearer ${TOKEN}`);
-    expect(secureStore.has(SESSION_KEY)).toBe(false);
+    await tapSignOut();
 
-    // Offline: the server can't be told, but the device still forgets the session.
-    storeSession();
-    mockApi({ logout: () => Promise.reject(new TypeError("Network request failed")) });
-    renderRouter(APP_DIR, { initialUrl: "/account" });
-    const offlineSignOut = await screen.findByTestId("sign-out", {}, { timeout: 5000 });
-    await act(async () => fireEvent.press(offlineSignOut));
+    // The server hasn't answered yet, but the device is already signed out.
     expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(screen.getByTestId("notice-server-pending")).toBeTruthy();
+    expect(screen.queryByTestId("notice-server-ended")).toBeNull();
     expect(secureStore.has(SESSION_KEY)).toBe(false);
+    expect(await AsyncStorage.getItem(SIGNED_OUT_FLAG)).toBeNull();
+    expect(header(callsTo("/api/auth/logout")[0], "authorization")).toBe(`Bearer ${TOKEN}`);
+
+    // Nothing can use the old token any more, even while the logout request is in flight.
+    const before = calls.length;
+    act(() => router.push(`/workspace/${ORG.id}`));
+    expect(await screen.findByText("Sign in to see this workspace")).toBeTruthy();
+    expect(calls.slice(before).some((call) => header(call, "authorization"))).toBe(false);
+
+    act(() => router.back());
+    await act(async () => logout.respond(204));
+    expect(await screen.findByTestId("notice-server-ended")).toBeTruthy();
 
     renderRouter(APP_DIR, { initialUrl: "/saved" });
     expect(await screen.findByText(house.title)).toBeTruthy();
+  });
+
+  it("offline, signs out on this device only and says the server session is still valid", async () => {
+    mockApi({ logout: offline });
+    storeSession("2026-10-09T10:00:00.000Z");
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    await tapSignOut();
+
+    expect(await screen.findByTestId("notice-server-not-confirmed")).toBeTruthy();
+    expect(screen.getByText(/couldn’t reach NesAfric to end the session there\. It stays valid on our servers until 9 October 2026/)).toBeTruthy();
+    expect(screen.queryByTestId("notice-server-ended")).toBeNull();
+    expect(screen.getByText("Sign in to NesAfric")).toBeTruthy();
+    expect(secureStore.has(SESSION_KEY)).toBe(false);
+    expect(await asyncStorageHoldsToken()).toBe(false);
+
+    // Back online: Try again revokes the same token on the server.
+    mockApi();
+    await act(async () => fireEvent.press(screen.getByTestId("retry-sign-out")));
+    expect(await screen.findByTestId("notice-server-ended")).toBeTruthy();
+    expect(header(callsTo("/api/auth/logout")[0], "authorization")).toBe(`Bearer ${TOKEN}`);
+
+    // Restarting doesn't bring the session back.
+    restartApp();
+    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(callsTo("/api/account/profile")).toHaveLength(0);
+  });
+
+  it("never restores a credential whose deletion from secure storage failed", async () => {
+    mockApi();
+    storeSession();
+    const deleteItem = SecureStore.deleteItemAsync as jest.Mock;
+    const setItem = SecureStore.setItemAsync as jest.Mock;
+    deleteItem.mockRejectedValueOnce(new Error("Keychain unavailable"));
+    setItem.mockRejectedValueOnce(new Error("Keychain unavailable")); // the overwrite fails too
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    await tapSignOut();
+
+    // The credential really is still in secure storage, and the app says so.
+    expect(await screen.findByTestId("notice-device-pending")).toBeTruthy();
+    expect(screen.getByText("Sign in to NesAfric")).toBeTruthy();
+    expect(secureStore.get(SESSION_KEY)).toContain(TOKEN);
+    expect(await AsyncStorage.getItem(SIGNED_OUT_FLAG)).toBe("1");
+    expect(await asyncStorageHoldsToken()).toBe(false);
+
+    // Next launch: not restored, deletion retried, flag cleared once it succeeds.
+    deleteItem.mockClear();
+    const before = calls.length;
+    restartApp();
+    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    await waitFor(() => expect(secureStore.has(SESSION_KEY)).toBe(false));
+    expect(deleteItem).toHaveBeenCalledWith(SESSION_KEY, expect.anything());
+    await waitFor(async () => expect(await AsyncStorage.getItem(SIGNED_OUT_FLAG)).toBeNull());
+    expect(calls.slice(before).some((call) => header(call, "authorization"))).toBe(false);
+  });
+
+  it("warns when nothing could be written on sign-out, and Try again finishes the job", async () => {
+    mockApi();
+    storeSession();
+    (SecureStore.deleteItemAsync as jest.Mock).mockRejectedValueOnce(new Error("Keychain unavailable"));
+    (SecureStore.setItemAsync as jest.Mock).mockRejectedValueOnce(new Error("Keychain unavailable"));
+    (AsyncStorage.setItem as jest.Mock).mockRejectedValueOnce(new Error("disk full")); // the signed-out flag
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    await tapSignOut();
+
+    expect(await screen.findByTestId("notice-device-failed")).toBeTruthy();
+    expect(screen.getByText("Sign in to NesAfric")).toBeTruthy();
+
+    await act(async () => fireEvent.press(screen.getByTestId("retry-sign-out")));
+    await waitFor(() => expect(screen.queryByTestId("notice-device-failed")).toBeNull());
+    expect(secureStore.has(SESSION_KEY)).toBe(false);
+    restartApp();
+    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+  });
+
+  it("ignores account responses that arrive after sign-out", async () => {
+    const workspaces = deferred();
+    mockApi({ workspaces: () => workspaces.promise });
+    storeSession();
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    await tapSignOut();
+    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+
+    // A request sent before sign-out comes back 401: that's not a "session ended" surprise.
+    await act(async () => workspaces.respond(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } }));
+    expect(screen.queryByTestId("notice-expired")).toBeNull();
+    expect(await screen.findByTestId("notice-server-ended")).toBeTruthy();
+    expect(screen.queryByText(ORG.name)).toBeNull();
+  });
+
+  it("does not let a slow revocation of the old session sign out a new one", async () => {
+    const logout = deferred();
+    mockApi({ logout: () => logout.promise });
+    storeSession();
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    await tapSignOut();
+    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+
+    const NEW_TOKEN = "tok_NEWsession_ZyXwVuTsRqPoNmLkJi";
+    mockApi({
+      logout: () => logout.promise,
+      signIn: () => json(200, { token: NEW_TOKEN, tokenType: "Bearer", expiresAt: new Date(Date.now() + 86_400_000).toISOString(), user: { id: "u1", email: "ama@example.com", displayName: "Ama Mensah" } }),
+    });
+    await signInThroughUi();
+    await act(async () => logout.respond(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } }));
+
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    expect(await screen.findByLabelText("Signed in as Ama Mensah")).toBeTruthy();
+    expect(screen.queryByTestId("notice-expired")).toBeNull();
+    expect(secureStore.get(SESSION_KEY)).toContain(NEW_TOKEN);
+    expect(header(callsTo("/api/workspaces").at(-1)!, "authorization")).toBe(`Bearer ${NEW_TOKEN}`);
   });
 
   it("opens only listed workspaces and scopes the dashboard to that organisation", async () => {

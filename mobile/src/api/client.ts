@@ -33,6 +33,12 @@ export type RequestOptions = {
   auth?: boolean;
   /** Workspace scope (`x-organisation-id`) for an authenticated call; the server enforces membership. */
   organisationId?: string;
+  /**
+   * Use this token instead of the current session's (sign-out revoking a token that is no longer
+   * active). A 401 on such a call does not report the current session as lost.
+   */
+  token?: string;
+  timeoutMs?: number;
 };
 
 export type ClientOptions = {
@@ -55,10 +61,10 @@ export function buildQuery(query: RequestOptions["query"]) {
 export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl, getToken, onUnauthenticated }: ClientOptions) {
   // Resolved per call (not captured at creation) so a replaced global fetch is always honoured.
   const doFetch: typeof fetch = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
-  async function request<T>(path: string, { method = "GET", query, body, headers: extraHeaders, signal, auth = false, organisationId }: RequestOptions = {}): Promise<T> {
+  async function request<T>(path: string, { method = "GET", query, body, headers: extraHeaders, signal, auth = false, organisationId, token: explicitToken, timeoutMs: requestTimeoutMs = timeoutMs }: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = { accept: "application/json", ...extraHeaders };
     if (auth) {
-      const token = getToken?.();
+      const token = explicitToken ?? getToken?.();
       if (!token) throw new ApiError(401, UNAUTHENTICATED, "Please sign in to continue.");
       headers.authorization = `Bearer ${token}`;
       if (organisationId) headers["x-organisation-id"] = organisationId;
@@ -66,7 +72,7 @@ export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl, getTok
     if (body !== undefined) headers["content-type"] = "application/json";
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
     const abort = () => controller.abort();
     signal?.addEventListener("abort", abort);
 
@@ -89,7 +95,7 @@ export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl, getTok
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
       const error = payload?.error ?? {};
-      if (auth && response.status === 401) onUnauthenticated?.();
+      if (auth && !explicitToken && response.status === 401) onUnauthenticated?.();
       throw new ApiError(
         response.status,
         typeof error.code === "string" ? error.code : `HTTP_${response.status}`,

@@ -15,7 +15,7 @@ door; professional workspaces come later behind one NesAfric identity.
 | Property details | Photo gallery, price, facts, description, amenities, listed-by, approximate location, **Contact agent** / **Schedule viewing**. | `GET /api/public/listings/:id` |
 | Contact / viewing | Guest form (no account): name + phone or email, required consent to share details with the lister, optional follow-up consent, up to 3 viewing windows. | `POST /api/public/listings/:id/leads`, then `/viewings` |
 | Saved | Hearted properties, stored **on this device only** (AsyncStorage). | none |
-| Account | Optional sign-in (Phase 1B). Signed out: sign-in, "create an account" (opens the web registration page), support, privacy, terms. Signed in: real profile, the workspaces the server lists, sign out. | `POST /api/auth/mobile/session`, `GET /api/account/profile`, `GET /api/workspaces`, `POST /api/auth/logout` |
+| Account | Optional sign-in (Phase 1B). Signed out: sign-in, "create an account" (opens the web registration page), support, privacy, terms. Signed in: real profile, the workspaces the server lists, sign out (immediate on the device; server revocation in the background, reported honestly — see `docs/mobile-auth.md`). | `POST /api/auth/mobile/session`, `GET /api/account/profile`, `GET /api/workspaces`, `POST /api/auth/logout` |
 | Workspace overview | Read-only summary of a property-management workspace the user belongs to (properties, units, team members); the server enforces membership and `property.read`. Professional profiles open on the website. | `GET /api/dashboard` with `x-organisation-id` |
 
 Deliberately **not** included yet:

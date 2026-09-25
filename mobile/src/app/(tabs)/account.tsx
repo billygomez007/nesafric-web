@@ -11,7 +11,7 @@ import type { ProfessionalWorkspace, Workspaces } from "@/api/account";
 import { useProfile, useWorkspaces } from "@/api/account-queries";
 import { ApiError, NETWORK_ERROR } from "@/api/client";
 import { useApi } from "@/api/provider";
-import { useSession } from "@/auth/session";
+import { useSession, type SessionNotice } from "@/auth/session";
 import { loadLastWorkspace, rememberWorkspace } from "@/auth/workspaces";
 import { BRAND } from "@/brand";
 import { AppText, Button, Card, Notice } from "@/components/ui";
@@ -27,7 +27,7 @@ type IconName = ComponentProps<typeof Ionicons>["name"];
  */
 export default function AccountScreen() {
   const { apiUrl } = useApi();
-  const { status, notice, dismissNotice } = useSession();
+  const { status, notice } = useSession();
   const version = Constants.expoConfig?.version ?? "";
 
   return (
@@ -36,11 +36,7 @@ export default function AccountScreen() {
         <AppText variant="title" accessibilityRole="header">
           Account
         </AppText>
-        {notice === "expired" ? (
-          <Pressable accessibilityRole="button" accessibilityHint="Dismisses this message" onPress={dismissNotice}>
-            <Notice tone="warning" message="You’ve been signed out because your session ended. Sign in again to see your workspaces. Your saved properties are still here." />
-          </Pressable>
-        ) : null}
+        {notice ? <SignOutNotice notice={notice} /> : null}
 
         {status === "restoring" ? (
           <View style={styles.restoring} accessibilityLabel="Checking your sign-in">
@@ -67,6 +63,71 @@ export default function AccountScreen() {
   );
 }
 
+const SAVED_KEPT = "Your saved properties are still here.";
+
+function formatDate(iso: string | null) {
+  const date = iso ? new Date(iso) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+}
+
+/**
+ * What actually happened on sign-out or session loss. Never claims the server ended the session
+ * unless it answered; never claims the device forgot it unless secure storage confirmed deletion.
+ */
+function signOutMessages(notice: NonNullable<SessionNotice>) {
+  const messages: { tone: "info" | "warning"; text: string; testID: string }[] = [];
+  if (notice.kind === "expired") {
+    messages.push({ tone: "warning", testID: "notice-expired", text: `You’ve been signed out because your session ended. Sign in again to see your workspaces. ${SAVED_KEPT}` });
+  } else if (notice.server === "pending") {
+    messages.push({ tone: "info", testID: "notice-server-pending", text: "You’re signed out on this device. Ending your session on NesAfric…" });
+  } else if (notice.server === "ended") {
+    messages.push({ tone: "info", testID: "notice-server-ended", text: `You’re signed out on this device and your session on NesAfric has ended. ${SAVED_KEPT}` });
+  } else {
+    const until = formatDate(notice.expiresAt);
+    messages.push({
+      tone: "warning",
+      testID: "notice-server-not-confirmed",
+      text: `You’re signed out on this device, but we couldn’t reach NesAfric to end the session there. It stays valid on our servers ${until ? `until ${until}` : "until it expires"}, or until you change your password on nesafric.com (which signs out every device). ${SAVED_KEPT}`,
+    });
+  }
+  if (notice.device === "pendingDeletion") {
+    messages.push({ tone: "warning", testID: "notice-device-pending", text: "We couldn’t fully remove your sign-in from this device’s secure storage. It won’t be used again, and we’ll finish removing it the next time the app opens." });
+  } else if (notice.device === "failed") {
+    messages.push({ tone: "warning", testID: "notice-device-failed", text: "We couldn’t remove your sign-in from this device’s secure storage, so it may come back when the app restarts. Tap Try again, or sign out again after restarting." });
+  }
+  return messages;
+}
+
+function SignOutNotice({ notice }: { notice: NonNullable<SessionNotice> }) {
+  const { dismissNotice, retrySignOut } = useSession();
+  const [retrying, setRetrying] = useState(false);
+  const canRetry = notice.device === "failed" || (notice.kind === "signedOut" && notice.server === "notConfirmed");
+  return (
+    <View style={styles.notices}>
+      {signOutMessages(notice).map((message) => (
+        <View key={message.testID} testID={message.testID}>
+          <Notice tone={message.tone} message={message.text} />
+        </View>
+      ))}
+      <View style={styles.noticeActions}>
+        {canRetry ? (
+          <Button
+            label="Try again"
+            variant="secondary"
+            loading={retrying}
+            testID="retry-sign-out"
+            onPress={async () => {
+              setRetrying(true);
+              await retrySignOut().finally(() => setRetrying(false));
+            }}
+          />
+        ) : null}
+        {notice.kind === "signedOut" && notice.server === "pending" ? null : <Button label="Dismiss" variant="secondary" onPress={dismissNotice} testID="dismiss-notice" />}
+      </View>
+    </View>
+  );
+}
+
 function SignedOutAccount({ apiUrl }: { apiUrl: string }) {
   return (
     <Card style={styles.intro}>
@@ -85,7 +146,6 @@ function SignedInAccount() {
   const { user, signOut } = useSession();
   const profile = useProfile();
   const workspaces = useWorkspaces();
-  const [signingOut, setSigningOut] = useState(false);
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
 
   useEffect(() => {
@@ -135,12 +195,9 @@ function SignedInAccount() {
       <Button
         label="Sign out"
         variant="secondary"
-        loading={signingOut}
         testID="sign-out"
-        onPress={async () => {
-          setSigningOut(true);
-          await signOut();
-        }}
+        // Local sign-out is immediate; server revocation continues in the background.
+        onPress={() => void signOut()}
       />
     </>
   );
@@ -248,6 +305,8 @@ function Row({ icon, label, detail, onPress, last = false, testID }: { icon: Ico
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, gap: spacing.lg },
+  notices: { gap: spacing.sm },
+  noticeActions: { gap: spacing.sm },
   intro: { gap: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.gold },
   restoring: { paddingVertical: spacing.xl, alignItems: "center" },
   profile: { flexDirection: "row", alignItems: "center", gap: spacing.md },
