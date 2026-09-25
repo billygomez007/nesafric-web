@@ -41,6 +41,17 @@ describe("api client", () => {
     expect(error).toMatchObject({ status: 400, code: "VALIDATION_ERROR", issues: [{ path: "email", message: "Invalid email" }] });
   });
 
+  it("allows real listing reads but never sends writes to the live API in this preview", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(response(200, { listings: [] }));
+    const api = createApiClient({ baseUrl: "https://www.nesafric.com", fetchImpl });
+    await expect(api.request("/api/public/listings")).resolves.toEqual({ listings: [] });
+    await expect(api.request("/api/public/listings/id/leads", { method: "POST", body: { name: "Example" } })).rejects.toMatchObject({
+      status: 403,
+      code: "READ_ONLY_PREVIEW",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("reports network failures distinctly", async () => {
     const api = createApiClient({ baseUrl: "https://api.test", fetchImpl: jest.fn().mockRejectedValue(new TypeError("Network request failed")) });
     await expect(api.request("/x")).rejects.toMatchObject({ status: 0, code: NETWORK_ERROR });
