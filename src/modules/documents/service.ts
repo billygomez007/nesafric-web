@@ -23,6 +23,7 @@ import { recordIntegrationOutcome } from "@/modules/integrations/service";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
+import { assertWritableMarketplaceProfessional } from "@/modules/marketplace-professionals/entitlements";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -67,11 +68,22 @@ async function record(tx: Tx, organisationId: string | null, actorUserId: string
  * are created together in one transaction; if the domain attach fails, the just-written bytes are
  * best-effort deleted so nothing is left referencing a record that was never created.
  */
+/**
+ * Whose plan governs an upload. PropertyOS uploads (the default) are checked against the
+ * organisation's `OrganisationSubscription`. A marketplace professional's listing belongs to the
+ * professional's hidden backing organisation, which by design has no `OrganisationSubscription`
+ * (see `MarketplaceProfessional` in schema.prisma) — checking it there always failed with a bare
+ * NOT_FOUND — so those uploads are checked against the professional's `MarketplaceSubscription`.
+ * Only `uploadMarketplaceListingMedia`, after its own role and ownership checks, passes this.
+ */
+type UploadEntitlementScope = { kind: "organisation" } | { kind: "marketplace"; marketplaceProfessionalId: string };
+
 async function performUpload(params: {
   userId: string;
   organisationId: string | null;
   targetType: string;
   input: ReturnType<typeof uploadDocumentSchema.parse>;
+  entitlementScope?: UploadEntitlementScope;
 }) {
   const { userId, targetType, input } = params;
   const descriptor = getUploadDescriptor(targetType);
@@ -87,7 +99,12 @@ async function performUpload(params: {
   // Representative entitlement check (item 2): total stored bytes (uploads + generated
   // documents) is capped per plan. Provider-evidence uploads have no organisation (organisationId
   // is null) and are never plan-limited.
-  if (params.organisationId) await assertOperational(params.organisationId, ENTITLEMENTS.storageBytesMax.key, bytes.length);
+  const entitlementScope = params.entitlementScope ?? { kind: "organisation" };
+  if (entitlementScope.kind === "marketplace") {
+    await assertWritableMarketplaceProfessional(entitlementScope.marketplaceProfessionalId);
+  } else if (params.organisationId) {
+    await assertOperational(params.organisationId, ENTITLEMENTS.storageBytesMax.key, bytes.length);
+  }
   const sniffed = sniffFileType(bytes);
   if (!sniffed) throw new AppError("UNSUPPORTED_FILE_TYPE", 422, "The file's contents are not a supported, recognisable file type.");
   if (!descriptor.allowedMimeTypes.includes(sniffed.mimeType)) {
@@ -218,6 +235,9 @@ export async function uploadOrganisationDocument(userId: string, organisationId:
   });
 }
 
+/** Same cap the listing form and `createListingSchema.mediaUrls` already state to users. */
+const MAX_MARKETPLACE_LISTING_MEDIA = 12;
+
 export async function uploadMarketplaceListingMedia(
   userId: string,
   marketplaceProfessionalId: string,
@@ -238,6 +258,7 @@ export async function uploadMarketplaceListingMedia(
       id: true,
       organisationId: true,
       marketplaceProfessionalId: true,
+      _count: { select: { media: true } },
     },
   });
 
@@ -266,6 +287,14 @@ export async function uploadMarketplaceListingMedia(
     );
   }
 
+  if (listing._count.media >= MAX_MARKETPLACE_LISTING_MEDIA) {
+    throw new AppError(
+      "LISTING_MEDIA_LIMIT_REACHED",
+      422,
+      `A property listing can contain up to ${MAX_MARKETPLACE_LISTING_MEDIA} images.`,
+    );
+  }
+
   const data = uploadDocumentSchema.parse({
     ...(input as object),
     targetType: "LISTING_MEDIA",
@@ -273,12 +302,32 @@ export async function uploadMarketplaceListingMedia(
     classification: "PUBLIC",
   });
 
-  return performUpload({
-    userId,
-    organisationId: listing.organisationId,
-    targetType: "LISTING_MEDIA",
-    input: data,
-  });
+  try {
+    const result = await performUpload({
+      userId,
+      organisationId: listing.organisationId,
+      targetType: "LISTING_MEDIA",
+      input: data,
+      entitlementScope: { kind: "marketplace", marketplaceProfessionalId },
+    });
+    console.info("[marketplace-listing-media] uploaded", {
+      listingId,
+      marketplaceProfessionalId,
+      storageObjectId: result.storageObject.id,
+      mediaId: result.attached.id,
+    });
+    return result;
+  } catch (error) {
+    // Identifiers and error codes only — never file contents, URLs with credentials or secrets.
+    console.error("[marketplace-listing-media] upload failed", {
+      listingId,
+      marketplaceProfessionalId,
+      code: error instanceof AppError ? error.code : undefined,
+      status: error instanceof AppError ? error.status : undefined,
+      name: error instanceof Error ? error.name : typeof error,
+    });
+    throw error;
+  }
 }
 
 export async function uploadProviderEvidenceDocument(userId: string, providerId: string, input: unknown) {
