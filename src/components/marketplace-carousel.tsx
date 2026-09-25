@@ -122,7 +122,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
             <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-forest-deep/95 via-forest-deep/60 to-transparent" />
-          <div className={`relative flex h-full max-w-xl flex-col justify-end gap-2 pb-10 pt-6 sm:justify-center sm:pb-8 ${multi ? "pl-6 pr-14 sm:pl-10 sm:pr-16" : "px-6 sm:px-10"}`}>
+          <div className={`relative flex h-full max-w-xl flex-col justify-end gap-2 pb-10 pt-6 sm:justify-center sm:pb-8 ${multi ? "pl-6 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-10"}`}>
             <span className="w-fit text-xs font-semibold text-gold-soft">
               Promoted
             </span>
