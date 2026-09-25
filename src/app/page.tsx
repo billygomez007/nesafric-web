@@ -3,6 +3,7 @@ import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { HeroSearch } from "@/components/marketplace-home/hero-search";
 import { MarketplaceCarousel } from "@/components/marketplace-carousel";
+import { PlatformBanner } from "@/components/marketplace-home/platform-banner";
 import { MarketplaceHome } from "@/components/marketplace-home/marketplace-home";
 import { BRAND } from "@/platform/brand";
 
@@ -71,10 +72,10 @@ export default function Home() {
                 Homes, land and commercial space to rent or buy — listed by the owners, managers, agents and developers responsible for them.
               </p>
             </div>
-            {/* MarketplaceCarousel renders nothing without an eligible campaign; `empty:hidden`
-                then removes this wrapper's margin and border so no gap is left behind. */}
-            <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-white/10 empty:hidden">
-              <MarketplaceCarousel placement="MARKETPLACE_PRIMARY" />
+            {/* The advertising slot is always present: live campaigns when there are any,
+                otherwise NesAfric's own banner. */}
+            <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
+              <MarketplaceCarousel fallback={<PlatformBanner />} placement="MARKETPLACE_PRIMARY" />
             </div>
             <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
               <HeroSearch />
