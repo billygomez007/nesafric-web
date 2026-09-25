@@ -1,28 +1,28 @@
 import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { useState, type ReactElement } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ApiError, NETWORK_ERROR } from "@/api/client";
-import type { Enquiry, Page, Viewing } from "@/api/inbox";
+import type { EnquirySummary, Page, ViewingSummary } from "@/api/inbox";
 import { useEnquiryList, useInboxAccess, useViewingList, type InboxKind } from "@/api/inbox-queries";
 import { Chip } from "@/components/chip";
 import { AppText, Button, Loading, StateMessage } from "@/components/ui";
 import { colors, spacing } from "@/theme/tokens";
 import { formatDateTime, StatusPill, useWorkspaceGate, viewingWhen } from "@/workspace/inbox-ui";
+import { enquiryRoute, viewingRoute, type InboxScope } from "@/workspace/scope";
 
 const LABELS: Record<InboxKind, string> = { enquiries: "Enquiries", viewings: "Viewings" };
 
 /**
- * Read-only inbox for one workspace. Tabs appear only for sections the server lets this person read;
- * every list call carries this workspace's `x-organisation-id`, and the server filters by it.
+ * Read-only inbox for one workspace (organisation or agent). Tabs appear only for sections the
+ * server lets this person read; every call is scoped to this workspace and re-checked by the server.
  */
-export default function InboxScreen() {
-  const params = useLocalSearchParams<{ organisationId: string; tab?: string }>();
-  const { gate, organisationId } = useWorkspaceGate(params.organisationId);
-  const access = useInboxAccess(organisationId);
-  const [chosen, setChosen] = useState<InboxKind | null>(params.tab === "viewings" || params.tab === "enquiries" ? params.tab : null);
+export function InboxScreen({ kind, id, tab: initialTab }: { kind: InboxScope["kind"]; id: string | undefined; tab?: string }) {
+  const { gate, scope } = useWorkspaceGate(kind, id);
+  const access = useInboxAccess(scope);
+  const [chosen, setChosen] = useState<InboxKind | null>(initialTab === "viewings" || initialTab === "enquiries" ? initialTab : null);
 
   if (gate) return <View style={styles.screen}>{gate}</View>;
   const states = { enquiries: access.enquiries, viewings: access.viewings };
@@ -49,45 +49,45 @@ export default function InboxScreen() {
           ))}
         </View>
       ) : null}
-      {tab === "enquiries" ? <EnquiryList organisationId={organisationId!} /> : <ViewingList organisationId={organisationId!} />}
+      {tab === "enquiries" ? <EnquiryList scope={scope!} /> : <ViewingList scope={scope!} />}
     </View>
   );
 }
 
-function EnquiryList({ organisationId }: { organisationId: string }) {
-  const list = useEnquiryList(organisationId);
+function EnquiryList({ scope }: { scope: InboxScope }) {
+  const list = useEnquiryList(scope);
   return (
     <InboxList
       list={list}
       empty="No enquiries yet. They appear here when someone contacts you about one of your listings."
-      renderRow={(item: Enquiry) => (
+      renderRow={(item: EnquirySummary) => (
         <Row
           testID={`enquiry-${item.id}`}
           title={item.name}
           subtitle={item.listing.title}
           meta={`Received ${formatDateTime(item.createdAt) ?? ""}`}
           status={item.status}
-          onPress={() => router.push({ pathname: "/workspace/[organisationId]/enquiry/[leadId]", params: { organisationId, leadId: item.id } })}
+          onPress={() => router.push(enquiryRoute(scope, item.id))}
         />
       )}
     />
   );
 }
 
-function ViewingList({ organisationId }: { organisationId: string }) {
-  const list = useViewingList(organisationId);
+function ViewingList({ scope }: { scope: InboxScope }) {
+  const list = useViewingList(scope);
   return (
     <InboxList
       list={list}
       empty="No viewing requests yet. They appear here when someone asks to see one of your listings."
-      renderRow={(item: Viewing) => (
+      renderRow={(item: ViewingSummary) => (
         <Row
           testID={`viewing-${item.id}`}
           title={item.lead.name}
           subtitle={item.listing.title}
           meta={viewingWhen(item)}
           status={item.status}
-          onPress={() => router.push({ pathname: "/workspace/[organisationId]/viewing/[viewingId]", params: { organisationId, viewingId: item.id } })}
+          onPress={() => router.push(viewingRoute(scope, item.id))}
         />
       )}
     />

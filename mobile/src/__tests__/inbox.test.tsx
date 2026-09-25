@@ -21,6 +21,9 @@ const TOKEN = "tok_A1b2C3d4E5f6G7h8I9j0KlMnOpQrStUv";
 const ORG_A = { id: "0b8f6a52-5b0c-4a1e-9c1c-00000000000a", name: "Golden Coast Properties" };
 const ORG_B = { id: "0b8f6a52-5b0c-4a1e-9c1c-00000000000b", name: "Volta Homes" };
 const UNLISTED = "0b8f6a52-5b0c-4a1e-9c1c-0000000000ff";
+/** Agent workspaces (marketplace professionals). The user is an active member of X only. */
+const PRO_X = { id: "7a1f0c2e-0000-4000-8000-000000000001", displayName: "Xcel Realty", type: "BROKERAGE", status: "ACTIVE", verificationStatus: "VERIFIED", slug: "xcel-realty", myRole: "AGENT" };
+const PRO_Y = "7a1f0c2e-0000-4000-8000-000000000002";
 const secureStore = (SecureStore as unknown as { __store: Map<string, string> }).__store;
 const house = listing();
 
@@ -72,10 +75,13 @@ function viewing(n: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Keyed by organisation id (organisation routes) or professional id (agent routes). */
 type Server = {
   leads: Record<string, ReturnType<typeof lead>[]>;
   viewings: Record<string, ReturnType<typeof viewing>[]>;
   deny?: { leads?: string[]; viewings?: string[]; dashboard?: string[] };
+  /** Professional profiles the signed-in user is an active member of (default: PRO_X). */
+  memberOf?: string[];
   /** Fail matching requests (by pathname + page) `times` times (default once). */
   failOnce?: { path: string; page?: number; with: "offline" | 401; times?: number }[];
 };
@@ -87,6 +93,18 @@ function page<T>(items: T[], url: URL) {
 }
 
 const forbidden = () => respond(403, { error: { code: "FORBIDDEN", message: "You do not have permission to perform this action." } });
+const notFound = () => respond(404, { error: { code: "NOT_FOUND", message: "Not found" } });
+
+// The server's response shapes (web repo `lead-responses.ts`): `view=inbox` list rows are lean and
+// details never include private notes.
+const leadSummary = ({ id, name, status, createdAt, lastActivityAt, listing }: ReturnType<typeof lead>) => ({ id, name, status, createdAt, lastActivityAt, listing });
+const leadDetailFor = (item: ReturnType<typeof lead>, view: string | null) => {
+  const { privateNotes, ...rest } = item;
+  return view === "inbox" ? rest : { ...rest, privateNotes };
+};
+const viewingSummary = ({ id, status, confirmedStartsAt, confirmedEndsAt, createdAt, listing, lead: who, assignee, preferredTimes }: ReturnType<typeof viewing>) => ({
+  id, status, confirmedStartsAt, confirmedEndsAt, createdAt, listing, lead: { id: who.id, name: who.name, status: who.status }, assignee, preferredTimes,
+});
 
 function mockServer(server: Server) {
   calls = [];
@@ -101,8 +119,27 @@ function mockServer(server: Server) {
       if (rule.times <= 0) server.failOnce!.splice(failure, 1);
       return rule.with === "offline" ? Promise.reject(new TypeError("Network request failed")) : respond(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
     }
-    const leadMatch = url.pathname.match(/^\/api\/marketplace-leads\/(.+)$/);
-    const viewingMatch = url.pathname.match(/^\/api\/viewing-requests\/(.+)$/);
+    const view = url.searchParams.get("view");
+    const pro = url.pathname.match(/^\/api\/marketplace-professionals\/([^/]+)\/(leads|viewings)(?:\/([^/]+))?$/);
+    const orgRoute = url.pathname.match(/^\/api\/(marketplace-leads|viewing-requests)(?:\/([^/]+))?$/);
+    if (pro || orgRoute) {
+      // Scope: the professional in the URL (membership checked), or the organisation header.
+      const scope = pro ? pro[1] : org;
+      if (pro && !(server.memberOf ?? [PRO_X.id]).includes(scope)) return forbidden();
+      const kind = pro ? (pro[2] as "leads" | "viewings") : orgRoute![1] === "marketplace-leads" ? "leads" : "viewings";
+      const itemId = pro ? pro[3] : orgRoute![2];
+      if (server.deny?.[kind]?.includes(scope)) return forbidden();
+      if (kind === "leads") {
+        const rows = server.leads[scope] ?? [];
+        if (!itemId) return respond(200, { ...page(rows, url), items: page(rows, url).items.map((item) => (view === "inbox" ? leadSummary(item) : item)) });
+        const found = rows.find((item) => item.id === itemId);
+        return found ? respond(200, leadDetailFor(found, view)) : notFound();
+      }
+      const rows = server.viewings[scope] ?? [];
+      if (!itemId) return respond(200, { ...page(rows, url), items: page(rows, url).items.map(viewingSummary) });
+      const found = rows.find((item) => item.id === itemId);
+      return found ? respond(200, found) : notFound();
+    }
     switch (true) {
       case url.pathname === "/api/public/listings":
         return respond(200, { items: [house], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
@@ -111,23 +148,9 @@ function mockServer(server: Server) {
       case url.pathname === "/api/account/profile":
         return respond(200, { id: "u1", displayName: "Ama Mensah", email: "ama@example.com", emailVerified: true, createdAt: "2026-09-01T00:00:00.000Z" });
       case url.pathname === "/api/workspaces":
-        return respond(200, { propertyOsOrganisations: [ORG_A, ORG_B], marketplaceProfessionals: [] });
+        return respond(200, { propertyOsOrganisations: [ORG_A, ORG_B], marketplaceProfessionals: (server.memberOf ?? [PRO_X.id]).includes(PRO_X.id) ? [PRO_X] : [] });
       case url.pathname === "/api/dashboard":
         return server.deny?.dashboard?.includes(org) ? forbidden() : respond(200, { organisation: { id: org, name: "Org", logoUrl: null }, properties: [], units: 0, members: 1 });
-      case url.pathname === "/api/marketplace-leads":
-        return server.deny?.leads?.includes(org) ? forbidden() : respond(200, page(server.leads[org] ?? [], url));
-      case url.pathname === "/api/viewing-requests":
-        return server.deny?.viewings?.includes(org) ? forbidden() : respond(200, page(server.viewings[org] ?? [], url));
-      case Boolean(leadMatch): {
-        if (server.deny?.leads?.includes(org)) return forbidden();
-        const found = (server.leads[org] ?? []).find((item) => item.id === leadMatch![1]);
-        return found ? respond(200, found) : respond(404, { error: { code: "NOT_FOUND", message: "Not found" } });
-      }
-      case Boolean(viewingMatch): {
-        if (server.deny?.viewings?.includes(org)) return forbidden();
-        const found = (server.viewings[org] ?? []).find((item) => item.id === viewingMatch![1]);
-        return found ? respond(200, found) : respond(404, { error: { code: "NOT_FOUND", message: "Not found" } });
-      }
       default:
         return respond(404, { error: { code: "NOT_FOUND", message: "Not found" } });
     }
@@ -135,7 +158,7 @@ function mockServer(server: Server) {
 }
 
 const header = (call: Call, name: string) => (call.init.headers as Record<string, string> | undefined)?.[name];
-const inboxCalls = () => calls.filter((call) => /^\/api\/(marketplace-leads|viewing-requests)/.test(call.url.pathname));
+const inboxCalls = () => calls.filter((call) => /^\/api\/(marketplace-leads|viewing-requests|marketplace-professionals\/[^/]+\/(leads|viewings))/.test(call.url.pathname));
 
 function signedIn() {
   secureStore.set("nesafric.session.v1", JSON.stringify({ token: TOKEN, expiresAt: new Date(Date.now() + 86_400_000).toISOString(), user: { id: "u1", email: "ama@example.com", displayName: "Ama Mensah" } }));
@@ -339,16 +362,91 @@ describe("inbox helpers", () => {
 
   it("clears other workspaces' inbox data from the cache, and nothing else", () => {
     const client = new QueryClient();
-    client.setQueryData([...inboxKey("u1", ORG_A.id), "enquiries", "list"], { secret: "A" });
-    client.setQueryData([...inboxKey("u1", ORG_B.id), "enquiries", "list"], { secret: "B" });
+    const a = { kind: "organisation", id: ORG_A.id } as const;
+    const b = { kind: "organisation", id: ORG_B.id } as const;
+    // A professional whose id equals an organisation id must still be a different workspace.
+    const proSameId = { kind: "professional", id: ORG_B.id } as const;
+    client.setQueryData([...inboxKey("u1", a), "enquiries", "list"], { secret: "A" });
+    client.setQueryData([...inboxKey("u1", b), "enquiries", "list"], { secret: "B" });
+    client.setQueryData([...inboxKey("u1", proSameId), "enquiries", "list"], { secret: "P" });
     client.setQueryData(["account", "u1", "workspaces"], { kept: true });
     client.setQueryData(["search", {}], { kept: true });
 
-    clearOtherWorkspaces(client, ORG_B.id);
-    expect(client.getQueryData([...inboxKey("u1", ORG_A.id), "enquiries", "list"])).toBeUndefined();
-    expect(client.getQueryData([...inboxKey("u1", ORG_B.id), "enquiries", "list"])).toEqual({ secret: "B" });
+    clearOtherWorkspaces(client, b);
+    expect(client.getQueryData([...inboxKey("u1", a), "enquiries", "list"])).toBeUndefined();
+    expect(client.getQueryData([...inboxKey("u1", proSameId), "enquiries", "list"])).toBeUndefined();
+    expect(client.getQueryData([...inboxKey("u1", b), "enquiries", "list"])).toEqual({ secret: "B" });
     expect(client.getQueryData(["account", "u1", "workspaces"])).toEqual({ kept: true });
     expect(client.getQueryData(["search", {}])).toEqual({ kept: true });
     client.clear();
+  });
+});
+
+describe("agent workspace inbox", () => {
+  it("opens an agent workspace from Account and reads its inbox through the professional's own routes", async () => {
+    mockServer({
+      leads: { [PRO_X.id]: [lead(1, { name: "Agency Prospect" }), lead(2, { id: "third-party-lead", name: "Landlord Listing Prospect", listing: { ...LISTING_REF, title: "Landlord flat (marketed by Xcel)" } })] },
+      viewings: { [PRO_X.id]: [viewing(7, { id: "agent-viewing" })] },
+    });
+    signedIn();
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    const agentRow = await screen.findByTestId(`agent-${PRO_X.id}`, {}, { timeout: 5000 });
+    await act(async () => fireEvent.press(agentRow));
+
+    expect(await screen.findByLabelText("Enquiries, 2 enquiries")).toBeTruthy();
+    expect(screen.getByLabelText("Viewing requests, 1 viewing request")).toBeTruthy();
+    expect(screen.getByText("Brokerage · your role: Agent")).toBeTruthy();
+
+    await act(async () => fireEvent.press(screen.getByTestId("inbox-open-enquiries")));
+    expect(await screen.findByText("Landlord Listing Prospect")).toBeTruthy();
+    await act(async () => fireEvent.press(screen.getByTestId("enquiry-third-party-lead")));
+    expect(await screen.findByText("Is it still available? (2)")).toBeTruthy();
+    expect(screen.getByTestId("contact-call")).toBeTruthy();
+    expect(screen.queryByText(/internal note/)).toBeNull();
+
+    act(() => router.push(`/agent/${PRO_X.id}/viewing/agent-viewing`));
+    expect(await screen.findByText("Weekend works best")).toBeTruthy();
+
+    // Every call went to the professional's own routes with the bearer session, asked for the
+    // server's inbox shape, and never carried an organisation header.
+    expect(inboxCalls().length).toBeGreaterThan(0);
+    for (const call of inboxCalls()) {
+      expect(call.url.pathname.startsWith(`/api/marketplace-professionals/${PRO_X.id}/`)).toBe(true);
+      expect(call.url.searchParams.get("view")).toBe("inbox");
+      expect(header(call, "authorization")).toBe(`Bearer ${TOKEN}`);
+      expect(header(call, "x-organisation-id")).toBeUndefined();
+    }
+  });
+
+  it("refuses an agent workspace the account isn't a member of, without requesting it", async () => {
+    mockServer({ leads: { [PRO_Y]: [lead(1, { name: "Other Agency Prospect" })] }, viewings: {} });
+    signedIn();
+    renderRouter(APP_DIR, { initialUrl: `/agent/${PRO_Y}/inbox` });
+    expect(await screen.findByText("Workspace not available")).toBeTruthy();
+    act(() => router.push(`/agent/${PRO_Y}/enquiry/lead-1`));
+    expect(await screen.findByText("Workspace not available")).toBeTruthy();
+    expect(screen.queryByText("Other Agency Prospect")).toBeNull();
+    expect(calls.some((call) => call.url.pathname.includes(PRO_Y))).toBe(false);
+
+    // Removed from the agency since the list was loaded: the server's 403 is shown.
+    mockServer({ leads: { [PRO_X.id]: [lead(1)] }, viewings: {}, memberOf: [] });
+    renderRouter(APP_DIR, { initialUrl: `/agent/${PRO_X.id}` });
+    expect(await screen.findByText("Workspace not available")).toBeTruthy();
+  });
+
+  it("keeps an organisation's and an agency's enquiries apart when switching", async () => {
+    mockServer({ leads: { [ORG_A.id]: leads(1, "Org"), [PRO_X.id]: leads(1, "Agency") }, viewings: {} });
+    signedIn();
+    renderRouter(APP_DIR, { initialUrl: `/workspace/${ORG_A.id}/inbox?tab=enquiries` });
+    expect(await screen.findByText("Org Prospect 1")).toBeTruthy();
+
+    calls = [];
+    act(() => router.push(`/agent/${PRO_X.id}/inbox?tab=enquiries`));
+    expect(await screen.findByText("Agency Prospect 1")).toBeTruthy();
+    expect(screen.queryByText("Org Prospect 1")).toBeNull();
+    expect(inboxCalls().every((call) => call.url.pathname.startsWith(`/api/marketplace-professionals/${PRO_X.id}/`) && !header(call, "x-organisation-id"))).toBe(true);
+    // The organisation's lead id is not found through the agency.
+    act(() => router.push(`/agent/${PRO_X.id}/enquiry/Org-lead-1`));
+    expect(await screen.findByText("This enquiry isn’t available")).toBeTruthy();
   });
 });

@@ -1,16 +1,16 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useWorkspaceDashboard } from "@/api/account-queries";
 import { ApiError, NETWORK_ERROR } from "@/api/client";
-import { useInboxAccess, type SectionAccess } from "@/api/inbox-queries";
+import { useInboxAccess } from "@/api/inbox-queries";
 import { useApi } from "@/api/provider";
 import { AppText, Button, Card, Loading } from "@/components/ui";
 import { humanise } from "@/marketplace/format";
 import { colors, radii, spacing } from "@/theme/tokens";
+import { InboxEntry } from "@/workspace/inbox-entry";
 import { useWorkspaceGate } from "@/workspace/inbox-ui";
 
 /**
@@ -20,9 +20,9 @@ import { useWorkspaceGate } from "@/workspace/inbox-ui";
  */
 export default function WorkspaceScreen() {
   const params = useLocalSearchParams<{ organisationId: string }>();
-  const { gate, organisationId, organisation } = useWorkspaceGate(params.organisationId);
-  const dashboard = useWorkspaceDashboard(organisationId);
-  const inbox = useInboxAccess(organisationId);
+  const { gate, scope, organisation } = useWorkspaceGate("organisation", params.organisationId);
+  const dashboard = useWorkspaceDashboard(scope?.id ?? null);
+  const inbox = useInboxAccess(scope);
   const { apiUrl } = useApi();
   const insets = useSafeAreaInsets();
 
@@ -43,7 +43,7 @@ export default function WorkspaceScreen() {
           </AppText>
         </View>
 
-        <InboxEntry organisationId={organisationId!} enquiries={inbox.enquiries} viewings={inbox.viewings} onRetry={() => void inbox.retry()} />
+        <InboxEntry scope={scope!} access={inbox} />
 
         {dashboard.isPending ? (
           <Loading />
@@ -94,63 +94,6 @@ export default function WorkspaceScreen() {
   );
 }
 
-/**
- * "Enquiries & viewings", one row per section the server lets this person read (with the server's
- * own total). Hidden entirely when both are refused; independent of the property dashboard.
- */
-function InboxEntry({ organisationId, enquiries, viewings, onRetry }: { organisationId: string; enquiries: SectionAccess; viewings: SectionAccess; onRetry: () => void }) {
-  const sections = [
-    { kind: "enquiries" as const, access: enquiries, label: "Enquiries", icon: "chatbubbles-outline" as const, noun: ["enquiry", "enquiries"] },
-    { kind: "viewings" as const, access: viewings, label: "Viewing requests", icon: "calendar-outline" as const, noun: ["viewing request", "viewing requests"] },
-  ];
-  if (sections.every((section) => section.access.state === "denied")) return null;
-  const loading = sections.some((section) => section.access.state === "loading");
-  const failed = sections.find((section) => section.access.state === "error");
-  const allowed = sections.filter((section) => section.access.state === "allowed");
-
-  return (
-    <View style={styles.inbox} testID="inbox-entry">
-      <AppText variant="heading" accessibilityRole="header">
-        Enquiries & viewings
-      </AppText>
-      {loading ? (
-        <View style={styles.inboxLoading} accessibilityLabel="Checking enquiries and viewings">
-          <ActivityIndicator color={colors.brand} />
-        </View>
-      ) : failed ? (
-        <Card>
-          <AppText variant="label">{failed.access.state === "error" && failed.access.error instanceof ApiError && failed.access.error.code === NETWORK_ERROR ? "You’re offline" : "Couldn’t check enquiries and viewings"}</AppText>
-          <Button label="Try again" variant="secondary" onPress={onRetry} testID="inbox-entry-retry" />
-        </Card>
-      ) : (
-        <View style={styles.list}>
-          {allowed.map((section, index) => {
-            const total = section.access.state === "allowed" ? section.access.total : 0;
-            const detail = `${total} ${section.noun[total === 1 ? 0 : 1]}`;
-            return (
-              <Pressable
-                key={section.kind}
-                accessibilityRole="button"
-                accessibilityLabel={`${section.label}, ${detail}`}
-                testID={`inbox-open-${section.kind}`}
-                onPress={() => router.push({ pathname: "/workspace/[organisationId]/inbox", params: { organisationId, tab: section.kind } })}
-                style={({ pressed }) => [styles.row, index === allowed.length - 1 && styles.itemLast, pressed && styles.rowPressed]}
-              >
-                <Ionicons name={section.icon} size={22} color={colors.forest} />
-                <View style={styles.rowText}>
-                  <AppText variant="label">{section.label}</AppText>
-                  <AppText variant="caption">{detail}</AppText>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
-}
-
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <Card style={styles.stat} accessible accessibilityLabel={`${label}: ${value}`}>
@@ -170,9 +113,4 @@ const styles = StyleSheet.create({
   item: { padding: spacing.lg, gap: 2, borderBottomWidth: 1, borderBottomColor: colors.hairline },
   itemLast: { borderBottomWidth: 0 },
   center: { textAlign: "center" },
-  inbox: { gap: spacing.md },
-  inboxLoading: { paddingVertical: spacing.lg, alignItems: "center" },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.hairline },
-  rowPressed: { backgroundColor: colors.surface },
-  rowText: { flex: 1, gap: 2 },
 });

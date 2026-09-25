@@ -82,6 +82,10 @@ export default function RootLayout() {
                 <Stack.Screen name="workspace/[organisationId]/inbox" options={{ headerShown: true, title: "Enquiries & viewings", headerBackTitle: "Workspace" }} />
                 <Stack.Screen name="workspace/[organisationId]/enquiry/[leadId]" options={{ headerShown: true, title: "Enquiry", headerBackTitle: "Inbox" }} />
                 <Stack.Screen name="workspace/[organisationId]/viewing/[viewingId]" options={{ headerShown: true, title: "Viewing request", headerBackTitle: "Inbox" }} />
+                <Stack.Screen name="agent/[professionalId]/index" options={{ headerShown: true, title: "Agent workspace", headerBackTitle: "Account" }} />
+                <Stack.Screen name="agent/[professionalId]/inbox" options={{ headerShown: true, title: "Enquiries & viewings", headerBackTitle: "Workspace" }} />
+                <Stack.Screen name="agent/[professionalId]/enquiry/[leadId]" options={{ headerShown: true, title: "Enquiry", headerBackTitle: "Inbox" }} />
+                <Stack.Screen name="agent/[professionalId]/viewing/[viewingId]" options={{ headerShown: true, title: "Viewing request", headerBackTitle: "Inbox" }} />
               </Stack>
             </SavedProvider>
             </SessionProvider>

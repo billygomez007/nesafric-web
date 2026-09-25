@@ -1,11 +1,15 @@
 # Mobile workspace inbox (read-only enquiries & viewings)
 
-Inside a property-management workspace, a signed-in member can read the marketplace enquiries and
-viewing requests their organisation has received. It is **read-only**: no status changes, replies,
+Inside a property-management workspace **or an agent (marketplace professional) workspace**, a
+signed-in member can read the marketplace enquiries and viewing requests it has received. It is **read-only**: no status changes, replies,
 assignment or notifications. Those stay on nesafric.com (`/leasing/leads/:id`,
 `/leasing/viewings/:id`), linked from each detail screen.
 
-## APIs used (unchanged; no backend changes in this phase)
+## APIs used
+
+Every call adds `view=inbox` (see *Response shapes*).
+
+**Property-management organisations** (`/workspace/:organisationId/…` in the app):
 
 | Screen | Request | Server checks |
 | --- | --- | --- |
@@ -13,8 +17,59 @@ assignment or notifications. Those stay on nesafric.com (`/leasing/leads/:id`,
 | Lists | same routes, `page=N&pageSize=20`, newest first | same; rows filtered by organisation |
 | Details | `GET /api/marketplace-leads/:id`, `GET /api/viewing-requests/:id` | same; another organisation's id is `404` |
 
-The app sends `x-organisation-id` only for an organisation in the server's own `/api/workspaces`
-list, and only with the bearer session (`docs/mobile-auth.md`).
+**Agent workspaces** (`/agent/:professionalId/…` in the app) use the routes the website's agent
+CRM already uses. No `x-organisation-id` is sent:
+
+| Screen | Request | Server checks |
+| --- | --- | --- |
+| Section access + totals, lists | `GET /api/marketplace-professionals/:id/leads`, `…/:id/viewings` | session; **active** membership (any role) of a non-archived professional (403 / 404 otherwise) |
+| Details | `GET /api/marketplace-professionals/:id/leads/:leadId`, `…/:id/viewings/:viewingRequestId` (new, read-only) | same; an enquiry or viewing on another professional's listing is `404` |
+
+Rows are scoped by the **listing's professional** (`listing.marketplaceProfessionalId`), never by
+an organisation the client names. That includes listings an agency markets for a landlord, whose
+enquiries belong to the landlord's organisation. The landlord's team sees those through the
+organisation routes, and the agency's team through the professional routes.
+
+The app sends an organisation or professional id only if it is in the server's own
+`/api/workspaces` list, and only with the bearer session (`docs/mobile-auth.md`).
+
+## Who can see an agent workspace's enquiries
+
+- Every member whose membership is `ACTIVE`, in any role (AGENT, ADMIN, OWNER), sees all
+  enquiries and viewings on the professional's listings, assigned to them or not. This is the same
+  rule the website's agent CRM already applies.
+- `INVITED`, `SUSPENDED` and `REMOVED` members, members of other professionals, the landlord and
+  anyone else get `403`. Creating a profile grants nothing without an active membership.
+- An **archived** professional's inbox returns `404`, and it no longer appears in
+  `/api/workspaces`.
+- A **suspended** professional (profile status `SUSPENDED`) keeps read access, as on the website.
+  The app shows a notice on its workspace screen.
+- The app never uses an agency's backing organisation. It is not returned by `/api/workspaces`.
+  Sending it as `x-organisation-id` on the organisation routes only works for members of that same
+  professional, and then only returns that organisation's own rows.
+
+## Response shapes (server-enforced)
+
+All lead and viewing routes now return explicit shapes (`src/modules/listings/lead-responses.ts`),
+never raw database rows:
+
+- **Never returned by any view:**
+  - the duplicate-submission hashes (`idempotencyKeyHash`, `idempotencyFingerprint`);
+  - owning organisation and user ids;
+  - the enquirer's account record;
+  - actor ids and activity metadata;
+  - application tenant/lease/applicant ids;
+  - team members' email addresses.
+- **`full` (default, the website):** adds the staff-only `privateNotes`, `assigneeMemberId`,
+  activity entries and status-change notes. These are the fields the leasing CRM and agent CRM
+  edit and show.
+- **`view=inbox` (the app):** no private notes, no activities, no status-change notes. List rows
+  are only `id, name, status, createdAt, lastActivityAt, listing`, so the app never receives
+  contact details for a whole page of enquiries.
+- **List queries** fetch only what their shape needs; they no longer load history, activities or
+  full related records.
+- **PATCH and assign responses** use the `full` shape too. The website only reads their error
+  messages.
 
 ## Permissions
 
@@ -60,16 +115,13 @@ open shows an inline message.
 - **Sign-out / session expiry:** removed with all account data (`mobile/src/auth/session.tsx`).
 - **Workspace change:** opening a workspace screen removes every other workspace's inbox data
   (`clearOtherWorkspaces`). Queries are also garbage-collected 5 minutes after their screens close.
-- Fields the app doesn't show are not typed: `privateNotes`, activity metadata and the submission
-  hashes. They are still present in the API response (see gaps).
+- Private notes, activity metadata and the submission hashes are not sent to the app at all (see
+  *Response shapes*).
 
-## Known API gaps (not changed here)
+## Known gaps
 
-1. No endpoint lists a member's permissions per organisation (the probe above stands in).
-2. List items include full history, activities, applications and viewings — heavy on 3G. A
-   summary projection (and `pageSize` defaults for mobile) would cut payloads substantially.
-3. Responses include `privateNotes`, `idempotencyKeyHash` and `idempotencyFingerprint`. The app
-   ignores them; a server-side select list should drop the hashes at least.
-4. Marketplace professional (agent) workspaces are not reachable: `/api/workspaces` doesn't expose
-   their backing organisation, so this inbox covers property-management organisations only.
-5. No status filter in the app yet (the API supports one `status` at a time).
+1. No endpoint lists a member's permissions per organisation (the one-row probe stands in).
+2. No status filter in the app yet (the API supports one `status` at a time).
+3. Agent roles don't narrow visibility: an AGENT sees every enquiry of the agency, not only those
+   assigned to them. That matches the website today; restricting it is a product decision.
+4. A suspended professional's members can still read its inbox (website behaviour, unchanged).

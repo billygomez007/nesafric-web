@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import * as Linking from "expo-linking";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { useWorkspaces } from "@/api/account-queries";
@@ -13,19 +13,22 @@ import { AppText, Button, Loading, Notice, StateMessage } from "@/components/ui"
 import { humanise } from "@/marketplace/format";
 import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { usableEmail, usablePhone } from "./contact";
+import type { InboxScope } from "./scope";
 
 /**
- * Every workspace screen goes through this: signed out → sign-in prompt; organisation not in the
- * server's own workspace list → "not available" (and no request carrying its id is ever sent).
+ * Every workspace screen goes through this: signed out → sign-in prompt; a workspace that isn't in
+ * the server's own `/api/workspaces` list → "not available" (and no request for it is ever sent).
  * Entering a workspace drops cached inbox data of any other workspace.
  */
-export function useWorkspaceGate(organisationId: string | undefined) {
+export function useWorkspaceGate(kind: InboxScope["kind"], id: string | undefined) {
   const { status } = useSession();
   const workspaces = useWorkspaces();
-  const listed = isListedOrganisation(workspaces.data, organisationId);
-  const scopedId = listed && organisationId ? organisationId : null;
-  useActiveWorkspace(scopedId);
-  const organisation = workspaces.data?.propertyOsOrganisations.find((item) => item.id === organisationId);
+  const organisation = kind === "organisation" ? workspaces.data?.propertyOsOrganisations.find((item) => item.id === id) : undefined;
+  const professional = kind === "professional" ? workspaces.data?.marketplaceProfessionals.find((item) => item.id === id) : undefined;
+  const listed = kind === "organisation" ? isListedOrganisation(workspaces.data, id) : Boolean(professional);
+  const scopeId = listed && id ? id : null;
+  const scope = useMemo<InboxScope | null>(() => (scopeId ? { kind, id: scopeId } : null), [kind, scopeId]);
+  useActiveWorkspace(scope);
 
   let gate: ReactNode = null;
   if (status !== "signedIn") {
@@ -42,7 +45,7 @@ export function useWorkspaceGate(organisationId: string | undefined) {
       />
     );
   }
-  return { gate, organisationId: scopedId, organisation };
+  return { gate, scope, organisation, professional };
 }
 
 const STATUS_TONE: Record<string, string> = {

@@ -211,7 +211,6 @@ function WorkspaceList(props: {
   lastWorkspace: string | null;
   onOpenOrganisation: (organisationId: string) => void;
 }) {
-  const { apiUrl } = useApi();
   const { workspaces, isPending, error, onRetry, lastWorkspace, onOpenOrganisation } = props;
 
   if (isPending) {
@@ -258,8 +257,9 @@ function WorkspaceList(props: {
             key={professional.id}
             icon="briefcase-outline"
             label={professional.displayName}
-            detail={`${professionalLabel(professional)} · opens on nesafric.com`}
-            onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/pro/${professional.id}`)}
+            detail={professionalLabel(professional)}
+            onPress={() => router.push({ pathname: "/agent/[professionalId]", params: { professionalId: professional.id } })}
+            testID={`agent-${professional.id}`}
             last={index === workspaces.marketplaceProfessionals.length - 1}
           />
         ))}

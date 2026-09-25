@@ -1,26 +1,39 @@
-import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
+import type { Viewing } from "@/api/inbox";
 import { useInboxAccess, useViewing } from "@/api/inbox-queries";
 import { AppText } from "@/components/ui";
 import { humanise } from "@/marketplace/format";
 import { colors, spacing } from "@/theme/tokens";
 import { DetailFrame } from "@/workspace/detail-frame";
 import { ContactActions, Fact, formatDateTime, formatWindow, Section, StatusPill, Timeline, useWorkspaceGate } from "@/workspace/inbox-ui";
+import { enquiryRoute, webPath, type InboxScope } from "@/workspace/scope";
 
-/** Read-only viewing request. Data comes from `GET /api/viewing-requests/:id` for this workspace only. */
-export default function ViewingScreen() {
-  const params = useLocalSearchParams<{ organisationId: string; viewingId: string }>();
-  const { gate, organisationId } = useWorkspaceGate(params.organisationId);
-  const viewing = useViewing(organisationId, params.viewingId);
-  const access = useInboxAccess(organisationId);
+/** Read-only viewing request, fetched for this workspace only (`view=inbox`, re-checked by the server). */
+export function ViewingScreen({ kind, id, viewingId }: { kind: InboxScope["kind"]; id: string | undefined; viewingId: string | undefined }) {
+  const { gate, scope } = useWorkspaceGate(kind, id);
+  const viewing = useViewing(scope, viewingId);
+  const access = useInboxAccess(scope);
 
   if (gate) return <View style={styles.screen}>{gate}</View>;
-  const item = viewing.data;
+  // While the full detail loads, the list row (a summary) is shown as a header only.
+  const summary = viewing.data;
+  const item = viewing.isPlaceholderData ? null : (viewing.data as Viewing | undefined);
   const canOpenEnquiry = access.enquiries.state === "allowed";
 
   return (
-    <DetailFrame query={viewing} noun="viewing request" webPath={`/leasing/viewings/${params.viewingId}`}>
+    <DetailFrame query={viewing} noun="viewing request" webPath={webPath(scope!, { kind: "viewing", id: viewingId ?? "" })}>
+      {summary && !item ? (
+        <View style={styles.header}>
+          <StatusPill status={summary.status} />
+          <AppText variant="title" accessibilityRole="header">
+            {summary.lead.name}
+          </AppText>
+          <AppText>{summary.listing.title}</AppText>
+          <ActivityIndicator color={colors.brand} accessibilityLabel="Loading the rest of this viewing request" />
+        </View>
+      ) : null}
       {item ? (
         <>
           <View style={styles.header}>
@@ -66,7 +79,7 @@ export default function ViewingScreen() {
               <Pressable
                 accessibilityRole="button"
                 testID="open-enquiry"
-                onPress={() => router.push({ pathname: "/workspace/[organisationId]/enquiry/[leadId]", params: { organisationId: params.organisationId, leadId: item.lead.id } })}
+                onPress={() => router.push(enquiryRoute(scope!, item.lead.id))}
               >
                 <Fact label="Enquiry" value={`${item.lead.name} · ${humanise(item.lead.status)} ›`} />
               </Pressable>

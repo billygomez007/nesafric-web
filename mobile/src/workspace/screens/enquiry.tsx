@@ -1,26 +1,39 @@
-import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
+import type { Enquiry } from "@/api/inbox";
 import { useEnquiry, useInboxAccess } from "@/api/inbox-queries";
 import { AppText } from "@/components/ui";
 import { humanise } from "@/marketplace/format";
 import { colors, spacing } from "@/theme/tokens";
 import { DetailFrame } from "@/workspace/detail-frame";
 import { ContactActions, Fact, formatDateTime, Section, StatusPill, Timeline, useWorkspaceGate, viewingWhen } from "@/workspace/inbox-ui";
+import { viewingRoute, webPath, type InboxScope } from "@/workspace/scope";
 
-/** Read-only enquiry. Data comes from `GET /api/marketplace-leads/:id` for this workspace only. */
-export default function EnquiryScreen() {
-  const params = useLocalSearchParams<{ organisationId: string; leadId: string }>();
-  const { gate, organisationId } = useWorkspaceGate(params.organisationId);
-  const enquiry = useEnquiry(organisationId, params.leadId);
-  const access = useInboxAccess(organisationId);
+/** Read-only enquiry, fetched for this workspace only (`view=inbox`, re-checked by the server). */
+export function EnquiryScreen({ kind, id, leadId }: { kind: InboxScope["kind"]; id: string | undefined; leadId: string | undefined }) {
+  const { gate, scope } = useWorkspaceGate(kind, id);
+  const enquiry = useEnquiry(scope, leadId);
+  const access = useInboxAccess(scope);
 
   if (gate) return <View style={styles.screen}>{gate}</View>;
-  const lead = enquiry.data;
+  // While the full detail loads, the list row (a summary) is shown as a header only.
+  const summary = enquiry.data;
+  const lead = enquiry.isPlaceholderData ? null : (enquiry.data as Enquiry | undefined);
   const canOpenViewings = access.viewings.state === "allowed";
 
   return (
-    <DetailFrame query={enquiry} noun="enquiry" webPath={`/leasing/leads/${params.leadId}`}>
+    <DetailFrame query={enquiry} noun="enquiry" webPath={webPath(scope!, { kind: "enquiry", id: leadId ?? "" })}>
+      {summary && !lead ? (
+        <View style={styles.header}>
+          <StatusPill status={summary.status} />
+          <AppText variant="title" accessibilityRole="header">
+            {summary.name}
+          </AppText>
+          <AppText>{summary.listing.title}</AppText>
+          <ActivityIndicator color={colors.brand} accessibilityLabel="Loading the rest of this enquiry" />
+        </View>
+      ) : null}
       {lead ? (
         <>
           <View style={styles.header}>
@@ -64,7 +77,7 @@ export default function EnquiryScreen() {
                     key={viewing.id}
                     accessibilityRole="button"
                     style={styles.viewing}
-                    onPress={() => router.push({ pathname: "/workspace/[organisationId]/viewing/[viewingId]", params: { organisationId: params.organisationId, viewingId: viewing.id } })}
+                    onPress={() => router.push(viewingRoute(scope!, viewing.id))}
                   >
                     {content}
                   </Pressable>
