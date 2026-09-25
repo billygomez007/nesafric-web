@@ -230,18 +230,41 @@ export async function uploadMarketplaceListingMedia(
     "AGENT",
   );
 
-  const listing = await db.listing.findFirst({
+  const listing = await db.listing.findUnique({
     where: {
       id: listingId,
-      marketplaceProfessionalId,
     },
     select: {
       id: true,
       organisationId: true,
+      marketplaceProfessionalId: true,
     },
   });
 
-  if (!listing) throw notFound();
+  if (!listing) {
+    console.error("[marketplace-listing-media] listing not found", {
+      listingId,
+      marketplaceProfessionalId,
+    });
+    throw new AppError(
+      "MARKETPLACE_LISTING_NOT_FOUND",
+      404,
+      "The property listing could not be found for photo upload.",
+    );
+  }
+
+  if (listing.marketplaceProfessionalId !== marketplaceProfessionalId) {
+    console.error("[marketplace-listing-media] professional mismatch", {
+      listingId,
+      requestedProfessionalId: marketplaceProfessionalId,
+      listingProfessionalId: listing.marketplaceProfessionalId,
+    });
+    throw new AppError(
+      "MARKETPLACE_LISTING_PROFESSIONAL_MISMATCH",
+      409,
+      "The property listing is not attached to the active professional account.",
+    );
+  }
 
   const data = uploadDocumentSchema.parse({
     ...(input as object),
