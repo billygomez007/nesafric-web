@@ -15,7 +15,9 @@ import {
   platformSuspendSchema,
   updatePlanSchema,
 } from "@/modules/subscriptions/schemas";
-import { createFeatureFlagSchema, organisationListQuerySchema, platformAuditQuerySchema, setFlagOverrideSchema, updateFeatureFlagSchema } from "./schemas";
+import { createFeatureFlagSchema, listingPublishDecisionSchema, listingReturnDecisionSchema, organisationListQuerySchema, platformAuditQuerySchema, setFlagOverrideSchema, updateFeatureFlagSchema } from "./schemas";
+import { applyListingTransition, applyListingVerification } from "@/modules/listings/service";
+import { listingReadinessProblems } from "@/modules/listings/readiness";
 import { getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
 import { runDueJobs, runPendingJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
@@ -1326,19 +1328,32 @@ export async function getVerificationQueueForPlatform(
   const [listingQueue, professionalQueue, providerCount] =
     await Promise.all([
       db.listing.findMany({
-        where: { verificationStatus: "PENDING" },
+        // Everything a reviewer may need to decide: pending verification, and anything sitting in
+        // review (including legacy in-review listings whose verification was never submitted).
+        where: { OR: [{ verificationStatus: "PENDING" }, { status: "PENDING_REVIEW" }] },
         select: {
           id: true,
           title: true,
           listingType: true,
           category: true,
+          status: true,
           verificationStatus: true,
           evidenceReady: true,
           submittedAt: true,
           createdAt: true,
           updatedAt: true,
+          publicDescription: true,
+          askingAmountMinor: true,
+          rentAmountMinor: true,
+          currencyCode: true,
+          frequency: true,
           city: true,
+          district: true,
+          locality: true,
+          region: true,
+          publicLocationLabel: true,
           countryCode: true,
+          listingAuthority: true,
           organisation: {
             select: {
               id: true,
@@ -1352,6 +1367,14 @@ export async function getVerificationQueueForPlatform(
               slug: true,
               verificationStatus: true,
             },
+          },
+          media: {
+            select: { id: true, type: true, publicUrl: true, isCover: true, altText: true },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          },
+          verificationEvidence: {
+            select: { id: true, type: true, privateReference: true, createdAt: true, expiresAt: true },
+            orderBy: { createdAt: "asc" },
           },
           _count: {
             select: {
@@ -1405,10 +1428,28 @@ export async function getVerificationQueueForPlatform(
     },
   );
 
+  // Private evidence references are only shown to principals who can decide on them.
+  const canDecide = platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.listingsVerify);
+  const listings = listingQueue.map(({ publicDescription, media, verificationEvidence, ...listing }) => {
+    const photos = media.filter(({ type }) => type === "PHOTO");
+    const cover = photos.find(({ isCover }) => isCover) ?? photos[0] ?? null;
+    return {
+      ...listing,
+      askingAmountMinor: listing.askingAmountMinor?.toString() ?? null,
+      rentAmountMinor: listing.rentAmountMinor?.toString() ?? null,
+      updatedAt: listing.updatedAt.toISOString(),
+      cover: cover ? { publicUrl: cover.publicUrl, altText: cover.altText } : null,
+      photoCount: photos.length,
+      readinessProblems: listingReadinessProblems({ ...listing, publicDescription, media }),
+      evidence: canDecide ? verificationEvidence : verificationEvidence.map(({ privateReference: _hidden, ...evidence }) => evidence),
+    };
+  });
+
   return {
-    listings: listingQueue,
+    listings,
     professionals: professionalQueue,
     providerCount,
+    canDecideListings: canDecide,
   };
 }
 
@@ -2418,4 +2459,106 @@ export async function getPlatformSettingsSummary(
   );
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Listing review decisions (Verify & publish, Request changes, Reject)
+// ---------------------------------------------------------------------------
+
+type ListingReviewTx = Prisma.TransactionClient;
+
+/** Locks the listing row for the decision and refuses when it changed since the reviewer loaded it. */
+async function lockListingForReview(tx: ListingReviewTx, listingId: string, expectedUpdatedAt: Date) {
+  if (!isUuid(listingId)) throw notFound();
+  await tx.$queryRaw`SELECT id FROM "Listing" WHERE id = ${listingId}::uuid FOR UPDATE`;
+  const listing = await tx.listing.findUnique({
+    where: { id: listingId },
+    select: {
+      id: true, organisationId: true, marketplaceProfessionalId: true, status: true, verificationStatus: true, updatedAt: true,
+      title: true, publicDescription: true, listingType: true, askingAmountMinor: true, rentAmountMinor: true,
+      city: true, locality: true, publicLocationLabel: true,
+      media: { select: { type: true } },
+    },
+  });
+  if (!listing) throw notFound();
+  if (listing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+    throw new AppError("LISTING_CHANGED", 409, "This listing changed since you opened it. Reload and review it again.");
+  }
+  if (listing.status !== "PENDING_REVIEW") {
+    throw new AppError("LISTING_NOT_IN_REVIEW", 409, "Only a listing that is in review can be decided.");
+  }
+  return listing;
+}
+
+async function recordListingDecision(tx: ListingReviewTx, principal: PlatformPrincipal, action: string, listing: { id: string; organisationId: string; marketplaceProfessionalId: string | null }, metadata: Record<string, unknown>) {
+  await tx.platformAuditEvent.create({
+    data: { platformPrincipalId: principal.id, action, entityType: "listing", entityId: listing.id, organisationId: listing.organisationId, metadata: json({ marketplaceProfessionalId: listing.marketplaceProfessionalId, ...metadata }) },
+  });
+}
+
+/**
+ * Verify & publish: the one explicit platform action that makes a reviewed listing public. It
+ * verifies the listing (when verification is pending) and publishes it in the same transaction,
+ * through the listing lifecycle's own transition, so every publication rule — photo, asset
+ * availability, duplicate active listing — runs against the now-verified listing. If any rule
+ * fails the whole decision rolls back: a listing is never left verified-but-unpublished by this
+ * action.
+ */
+export async function verifyAndPublishListingForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
+  const data = listingPublishDecisionSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
+    if (listing.verificationStatus !== "PENDING" && listing.verificationStatus !== "VERIFIED") {
+      throw new AppError("LISTING_VERIFICATION_NOT_SUBMITTED", 409, "This listing's authority verification has not been submitted.");
+    }
+    const problems = listingReadinessProblems(listing);
+    if (problems.length) {
+      throw new AppError("LISTING_INCOMPLETE", 422, `This listing is not ready to publish: ${problems.map(({ message }) => message).join(" ")}`, { problems });
+    }
+    const via = { authority: "PLATFORM", via: "verify_and_publish" };
+    const verifiedNow = listing.verificationStatus === "PENDING";
+    if (verifiedNow) {
+      await applyListingVerification(tx, principal.userId, listing.organisationId, listing.id, { status: "VERIFIED", note: data.note }, via);
+    }
+    const published = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "PUBLISHED", note: data.note ?? "Verified and published by NesAfric." }, via);
+    await recordListingDecision(tx, principal, "platform_admin.listing_verified_and_published", listing, { verifiedNow, note: data.note ?? null });
+    return published;
+  });
+}
+
+/**
+ * Request changes: returns a listing in review to DRAFT so the professional can edit and resubmit
+ * it. The note is kept on the status history (shown to the professional) and in audit. Verification
+ * evidence is untouched; a still-pending verification rides along with the resubmission.
+ */
+export async function requestListingChangesForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
+  const data = listingReturnDecisionSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
+    const returned = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "DRAFT", note: data.note }, { authority: "PLATFORM", via: "request_changes" });
+    await recordListingDecision(tx, principal, "platform_admin.listing_changes_requested", listing, { note: data.note });
+    return returned;
+  });
+}
+
+/**
+ * Reject: the listing is not acceptable as submitted (e.g. the authority evidence does not check
+ * out). Listing → REJECTED and a pending verification → REJECTED, both with the note. Evidence is
+ * kept; the professional can still edit and resubmit, which re-opens verification.
+ */
+export async function rejectListingForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
+  const data = listingReturnDecisionSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
+    const via = { authority: "PLATFORM", via: "reject" };
+    if (listing.verificationStatus === "PENDING") {
+      await applyListingVerification(tx, principal.userId, listing.organisationId, listing.id, { status: "REJECTED", note: data.note }, via);
+    }
+    const rejected = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "REJECTED", note: data.note }, via);
+    await recordListingDecision(tx, principal, "platform_admin.listing_rejected", listing, { note: data.note });
+    return rejected;
+  });
 }
