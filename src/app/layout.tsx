@@ -29,9 +29,9 @@ const inter = localFont({
 
 const TITLE = `${BRAND.name} | ${BRAND.tagline}`;
 const DESCRIPTION =
-  "NesAfric is the operating system for real estate: properties, tenants, rent, maintenance and listings for property businesses in Ghana and across Africa.";
+  "NesAfric is a Ghana-first property marketplace — homes, land and commercial property to rent or buy — backed by an operating platform for landlords, managers, agents and developers.";
 const SOCIAL_DESCRIPTION =
-  "The operating system for real estate — for owners, managers, agents, brokers, developers and service professionals.";
+  "Find property to rent or buy across Ghana, on the operating system for real estate.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(BRAND.siteUrl),

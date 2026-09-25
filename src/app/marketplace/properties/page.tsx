@@ -1,7 +1,15 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
 import { PropertyMarketplaceSearch } from "@/components/property-marketplace-search";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { MarketplaceSubnav } from "@/components/marketplace-subnav";
+
+export const metadata: Metadata = {
+  title: "Homes and property to rent or buy in Ghana",
+  description: "Search houses, apartments, land and commercial property to rent or buy across Ghana, published by the owners, managers, agents and developers responsible for them.",
+  alternates: { canonical: "/marketplace/properties" },
+};
 
 export default function PropertyMarketplacePage() {
   return (
@@ -20,7 +28,9 @@ export default function PropertyMarketplacePage() {
             </p>
           </header>
           <div className="mt-8">
-            <PropertyMarketplaceSearch />
+            <Suspense fallback={<p className="text-sm text-muted" role="status">Loading properties…</p>}>
+              <PropertyMarketplaceSearch />
+            </Suspense>
           </div>
         </div>
       </main>

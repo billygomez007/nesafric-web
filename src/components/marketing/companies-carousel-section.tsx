@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CompaniesCarouselTrack, type CompanyCarouselItem } from "@/components/marketing/companies-carousel-track";
 
@@ -27,11 +28,16 @@ export function CompaniesCarouselSection() {
   if (!items || items.length === 0) return null;
 
   return (
-    <section aria-label="Companies and professionals on NesAfric" className="border-b border-slate-200 bg-white py-7 sm:py-9">
-      <div className="mx-auto max-w-7xl px-6 text-center sm:px-8">
-        <p className="text-xs font-semibold tracking-[0.22em] text-slate-500">PROFESSIONALS ON NESAFRIC</p>
+    <section aria-labelledby="companies-heading" className="border-y border-hairline bg-white py-12 sm:py-16">
+      <div className="mx-auto flex max-w-[1400px] flex-wrap items-end justify-between gap-4 px-5 sm:px-8">
+        <h2 className="text-2xl font-semibold tracking-[-0.015em] text-forest-deep sm:text-[28px]" id="companies-heading">
+          Companies and professionals on NesAfric
+        </h2>
+        <Link className="text-sm font-semibold text-forest hover:underline" href="/marketplace/professionals">
+          View all <span aria-hidden="true">→</span>
+        </Link>
       </div>
-      <div className="mt-5">
+      <div className="mt-6">
         <CompaniesCarouselTrack
           items={items.map((item) => ({
             slug: item.slug,

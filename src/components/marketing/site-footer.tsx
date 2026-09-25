@@ -4,29 +4,31 @@ import { BRAND } from "@/platform/brand";
 
 const COLUMNS = [
   {
-    title: "Platform",
+    title: "Marketplace",
     links: [
-      { href: "/#product", label: "Operating system" },
-      { href: "/for-property-owners", label: "Property management" },
-      { href: "/marketplace", label: "Marketplace" },
+      { href: "/marketplace/properties?listingType=RENT", label: "Property to rent" },
+      { href: "/marketplace/properties?listingType=SALE", label: "Property for sale" },
+      { href: "/marketplace/properties?category=LAND", label: "Land" },
+      { href: "/marketplace/professionals", label: "Agents and companies" },
+      { href: "/marketplace/services", label: "Service providers" },
+    ],
+  },
+  {
+    title: "For business",
+    links: [
+      { href: "/platform", label: "The NesAfric platform" },
+      { href: "/for-property-owners", label: "Property owners and managers" },
+      { href: "/for-professionals", label: "Agents and brokers" },
+      { href: "/for-developers", label: "Developers" },
       { href: "/pricing", label: "Pricing" },
     ],
   },
   {
-    title: "Solutions",
+    title: "Company",
     links: [
-      { href: "/for-professionals", label: "Professionals" },
-      { href: "/for-developers", label: "Developers" },
-      { href: "/for-property-owners", label: "Property owners" },
-    ],
-  },
-  {
-    title: "Explore",
-    links: [
-      { href: "/marketplace/properties", label: "Browse properties" },
-      { href: "/marketplace/professionals", label: "Find a professional" },
       { href: "/ghana", label: "Ghana launch" },
       { href: "/register", label: "Get started" },
+      { href: "/login", label: "Sign in" },
     ],
   },
   {
@@ -47,7 +49,7 @@ export function SiteFooter() {
           <div>
             <BrandLogo height={28} />
             <p className="mt-5 max-w-sm text-sm leading-6 text-white/65">
-              The operating system for real estate. Built in Accra for property businesses in Ghana and across Africa.
+              Find property across Ghana — on the operating system for real estate, built in Accra for property businesses in Ghana and across Africa.
             </p>
 
             <div className="mt-7 space-y-2 text-sm text-white/65">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { MarketplaceBanner } from "@/components/marketplace-banner";
 import { BrandLogo } from "@/components/brand-logo";
 
@@ -34,7 +35,12 @@ export function MarketplaceDirectory() {
   const [items, setItems] = useState<DirectoryItem[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [type, setType] = useState("");
+  const searchParams = useSearchParams();
+  // Deep links such as /marketplace/professionals?type=DEVELOPER open pre-filtered.
+  const [type, setType] = useState(() => {
+    const requested = searchParams?.get("type") ?? "";
+    return requested in TYPE_LABELS ? requested : "";
+  });
   const [query, setQuery] = useState("");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const pageSize = 20;
