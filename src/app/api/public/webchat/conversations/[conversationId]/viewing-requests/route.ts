@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { requestWebChatViewing } from "@/modules/conversations/service";
-import { errorResponse } from "@/platform/errors";
+import { assertPublicWriteAllowed, publicWriteErrorResponse } from "@/platform/security/public-write-limit";
 
 type Context = { params: Promise<{ conversationId: string }> };
 
 export async function POST(request: Request, { params }: Context) {
   try {
-    return NextResponse.json(await requestWebChatViewing((await params).conversationId, await request.json()), { status: 201 });
+    const viewing = await requestWebChatViewing((await params).conversationId, await request.json(), {
+      // Same per-IP / per-lead / per-listing viewing limits as the listing viewing endpoint.
+      beforeCreate: ({ listingId, leadId }) => assertPublicWriteAllowed(request.headers, { kind: "viewing", listingId, leadId }),
+    });
+    return NextResponse.json(viewing, { status: 201 });
   } catch (error) {
-    return errorResponse(error);
+    return publicWriteErrorResponse(error);
   }
 }

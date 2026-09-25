@@ -80,7 +80,10 @@ async function resolveWebChatContext(input: { listingId?: string; propertyId?: s
   return { organisationId: property.organisationId, propertyId: property.id, listingId: undefined, listingTitle: undefined };
 }
 
-export async function startWebChatConversation(input: unknown, context: { userId?: string } = {}) {
+/** Optional guard run just before a public web chat creates a marketplace lead (e.g. rate limiting). */
+export type WebChatLeadGuard = (target: { listingId: string; email?: string; phone?: string }) => Promise<void>;
+
+export async function startWebChatConversation(input: unknown, context: { userId?: string; beforeLeadCreate?: WebChatLeadGuard } = {}) {
   const data = startWebChatConversationSchema.parse(input);
   const target = await resolveWebChatContext(data);
   const identity = await resolveTenantIdentity(target.organisationId, {
@@ -90,6 +93,8 @@ export async function startWebChatConversation(input: unknown, context: { userId
   });
   let marketplaceLeadId: string | undefined;
   if (target.listingId && (data.visitorEmail || data.visitorPhone) && identity.level !== "VERIFIED") {
+    // Outside the lead's own error swallowing below: a rate-limit rejection must reach the caller.
+    await context.beforeLeadCreate?.({ listingId: target.listingId, email: data.visitorEmail, phone: data.visitorPhone });
     const lead = await createMarketplaceLead(target.listingId, context.userId, {
       name: data.visitorName ?? "Website visitor",
       email: data.visitorEmail,
@@ -172,12 +177,18 @@ export async function postWebChatMessage(conversationId: string, input: unknown,
   return getWebChatConversation(conversationId, data.chatToken);
 }
 
-export async function requestWebChatViewing(conversationId: string, input: unknown) {
+export async function requestWebChatViewing(
+  conversationId: string,
+  input: unknown,
+  options: { beforeCreate?: (target: { listingId: string; leadId: string }) => Promise<void> } = {},
+) {
   const data = webChatViewingRequestSchema.parse(input);
   const conversation = await requireWebChatConversation(conversationId, data.chatToken);
   if (!conversation.listingId || !conversation.marketplaceLeadId) {
     throw new AppError("VIEWING_REQUEST_UNAVAILABLE", 409, "A listing enquiry is required before requesting a viewing.");
   }
+  // Runs only after the chat token is verified, so strangers can't spend a lead's viewing budget.
+  await options.beforeCreate?.({ listingId: conversation.listingId, leadId: conversation.marketplaceLeadId });
   const viewing = await createViewingRequest(conversation.listingId, undefined, {
     leadId: conversation.marketplaceLeadId,
     preferredTimes: data.preferredTimes,
