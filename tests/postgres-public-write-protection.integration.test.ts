@@ -14,7 +14,7 @@ import { registerUser } from "@/modules/identity/service";
 import { createListing, transitionListing, updateListingVerification } from "@/modules/listings/service";
 import { createOrganisation } from "@/modules/organisations/service";
 import { db } from "@/platform/database/client";
-import { assertPublicWriteAllowed, PublicWriteRateLimitError } from "@/platform/security/public-write-limit";
+import { reservePublicWrite, PublicWriteRateLimitError } from "@/platform/security/public-write-limit";
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner", "PublicWriteCounter", "PublicIdempotencyRecord" CASCADE');
@@ -89,7 +89,7 @@ describe("public enquiry / viewing abuse protection", () => {
     process.env.PUBLIC_WRITE_LIMITS = JSON.stringify({ "enquiry.ip.10m": 10 });
     const attempts = await Promise.allSettled(
       Array.from({ length: 60 }, (_, n) =>
-        assertPublicWriteAllowed(new Headers({ "x-real-ip": "41.66.1.20" }), { kind: "enquiry", listingId: `listing-${n}`, contact: { phone: `024${1000000 + n}` } }),
+        reservePublicWrite(new Headers({ "x-real-ip": "41.66.1.20" }), { kind: "enquiry", listingId: `listing-${n}`, contact: { phone: `024${1000000 + n}` } }),
       ),
     );
     expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(10);
@@ -120,14 +120,14 @@ describe("public enquiry / viewing abuse protection", () => {
     const headers = new Headers({ "x-real-ip": "102.176.0.1" });
     for (let n = 0; n < 30; n++) {
       await expect(
-        assertPublicWriteAllowed(headers, { kind: "enquiry", listingId: `listing-${n}`, contact: { phone: `+23355${1000000 + n}` } }),
-      ).resolves.toBeUndefined();
+        reservePublicWrite(headers, { kind: "enquiry", listingId: `listing-${n}`, contact: { phone: `+23355${1000000 + n}` } }),
+      ).resolves.toBeDefined();
     }
     // The 31st in the same 10 minutes hits the (adjustable) IP ceiling…
-    await expect(assertPublicWriteAllowed(headers, { kind: "enquiry", listingId: "listing-x", contact: { phone: "+233551999999" } })).rejects.toBeInstanceOf(PublicWriteRateLimitError);
-    // …and raising it via PUBLIC_WRITE_LIMITS takes effect without a deploy.
+    await expect(reservePublicWrite(headers, { kind: "enquiry", listingId: "listing-x", contact: { phone: "+233551999999" } })).rejects.toBeInstanceOf(PublicWriteRateLimitError);
+    // …and raising it via PUBLIC_WRITE_LIMITS (an env var: on Vercel, applied at the next deploy) lifts it.
     const env = { ...process.env, PUBLIC_WRITE_LIMITS: JSON.stringify({ "enquiry.ip.10m": 100 }) };
-    await expect(assertPublicWriteAllowed(headers, { kind: "enquiry", listingId: "listing-y", contact: { phone: "+233551888888" } }, { env })).resolves.toBeUndefined();
+    await expect(reservePublicWrite(headers, { kind: "enquiry", listingId: "listing-y", contact: { phone: "+233551888888" } }, { env })).resolves.toBeDefined();
   });
 
   it("treats phone formatting variants as one contact", async () => {

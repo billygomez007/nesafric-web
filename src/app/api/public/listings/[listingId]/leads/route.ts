@@ -3,9 +3,12 @@ import { createMarketplaceLead } from "@/modules/listings/service";
 import { createMarketplaceLeadSchema, listingIdSchema } from "@/modules/listings/schemas";
 import { getOptionalUser } from "@/platform/auth/session";
 import { fingerprintOf, readIdempotencyKey, runIdempotent } from "@/platform/security/idempotency";
-import { assertPublicWriteAllowed, publicWriteErrorResponse } from "@/platform/security/public-write-limit";
+import { publicWriteErrorResponse, withPublicWriteReservation } from "@/platform/security/public-write-limit";
 
 /** Guest (or signed-in) enquiry on a public listing. Rate-limited and idempotent (`Idempotency-Key`). */
+/** Bounds how long a request can hold an idempotency claim (see STALE_PENDING_MS). */
+export const maxDuration = 30;
+
 export async function POST(request: Request, { params }: { params: Promise<{ listingId: string }> }) {
   try {
     const listingId = listingIdSchema.parse((await params).listingId);
@@ -14,10 +17,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ lis
     const data = createMarketplaceLeadSchema.parse(await request.json().catch(() => null));
     const result = await runIdempotent(
       { scope: `lead:${listingId}`, key: readIdempotencyKey(request.headers), fingerprint: fingerprintOf({ listingId, userId: userId ?? null, data }) },
-      async () => {
-        await assertPublicWriteAllowed(request.headers, { kind: "enquiry", listingId, contact: data });
-        return { status: 201, body: await createMarketplaceLead(listingId, userId, data) };
-      },
+      // Slots are refunded if creation fails (e.g. listing no longer available), so failures cost nothing.
+      () => withPublicWriteReservation(request.headers, { kind: "enquiry", listingId, contact: data }, async () => ({ status: 201, body: await createMarketplaceLead(listingId, userId, data) })),
     );
     return NextResponse.json(result.body, {
       status: result.status,

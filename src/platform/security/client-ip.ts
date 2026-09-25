@@ -10,6 +10,7 @@ import { BlockList, isIP } from "net";
  *   vercel.com/docs/headers/request-headers). That connecting address is the "peer".
  * - Elsewhere, an operator may name one header their own proxy overwrites via
  *   `TRUSTED_CLIENT_IP_HEADER`. With neither, there is no trustworthy identity (`ip: null`).
+ * - See docs/guest-write-protection.md for the evidence required before trusting Cloudflare.
  * - `cf-connecting-ip` is only honoured when `TRUST_CLOUDFLARE_CLIENT_IP=true` AND the peer is inside
  *   Cloudflare's published ranges — i.e. the request demonstrably came through Cloudflare, which
  *   overwrites that header. Off by default: if Cloudflare is not proxying the domain, trusting it

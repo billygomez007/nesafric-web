@@ -17,8 +17,11 @@ import { AppError } from "@/platform/errors";
 
 const KEY_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const RECORD_TTL_MS = 24 * 60 * 60 * 1000;
-/** A PENDING claim older than this is treated as abandoned (crashed request) and may be retaken. */
-const STALE_PENDING_MS = 2 * 60 * 1000;
+/**
+ * A PENDING claim older than this is treated as abandoned (crashed or timed-out request) and may be
+ * retaken. The public write routes set `maxDuration = 30`, so no live request can still be running.
+ */
+export const STALE_PENDING_MS = 2 * 60 * 1000;
 
 export type IdempotentResult = { status: number; body: unknown; replayed: boolean };
 
@@ -102,16 +105,25 @@ export async function runIdempotent(
     }
   }
 
+  let result: { status: number; body: unknown };
   try {
-    const result = await work();
+    result = await work();
+  } catch (error) {
+    // The work failed, so nothing was created: release the claim so the same submission can be
+    // retried (validation, 404, 429, transient database error…).
+    await db.publicIdempotencyRecord.deleteMany({ where: { scope: input.scope, keyHash, status: "PENDING" } }).catch(() => undefined);
+    throw error;
+  }
+  try {
     await db.publicIdempotencyRecord.update({
       where,
       data: { status: "COMPLETED", responseStatus: result.status, responseBody: JSON.parse(JSON.stringify(result.body)), completedAt: new Date() },
     });
-    return { ...result, replayed: false };
-  } catch (error) {
-    // Release the claim so the same submission can be retried after a failure (validation, 404, 429…).
-    await db.publicIdempotencyRecord.deleteMany({ where: { scope: input.scope, keyHash, status: "PENDING" } }).catch(() => undefined);
-    throw error;
+  } catch {
+    // The work DID succeed; keep the PENDING claim rather than releasing it, so an immediate retry
+    // gets 409 instead of creating a duplicate. It becomes reclaimable after STALE_PENDING_MS.
+    // Logged without the key, scope contents or submission data.
+    console.error("Idempotency record could not be marked completed; claim left pending.");
   }
+  return { ...result, replayed: false };
 }

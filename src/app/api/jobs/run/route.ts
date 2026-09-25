@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 import { errorResponse, AppError } from "@/platform/errors";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
+import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
+
+/** Drains due jobs, then prunes expired guest-write rate-limit and idempotency rows (never fails the run). */
+async function runScheduledWork() {
+  await runDueJobs(jobHandlers);
+  await sweepExpiredPublicWriteRecords().catch(() => console.error("Public write record sweep failed."));
+}
 
 function safeEqual(expected: string, actual: string) {
   const a = Buffer.from(expected);
@@ -60,7 +67,7 @@ function assertAuthorized(request: Request) {
 export async function POST(request: Request) {
   try {
     assertAuthorized(request);
-    await runDueJobs(jobHandlers);
+    await runScheduledWork();
     return NextResponse.json({ ranAt: new Date().toISOString() });
   } catch (error) {
     return errorResponse(error);
@@ -70,7 +77,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     assertAuthorized(request);
-    await runDueJobs(jobHandlers);
+    await runScheduledWork();
     return NextResponse.json({ ranAt: new Date().toISOString() });
   } catch (error) {
     return errorResponse(error);
