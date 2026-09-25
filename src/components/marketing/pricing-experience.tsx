@@ -222,7 +222,7 @@ function PlanCard({
           className={
             plan.featured
               ? "mb-5 w-fit rounded-full bg-gold px-3 py-1 text-[11px] font-bold uppercase tracking-[0.13em] text-forest-deep"
-              : "mb-5 w-fit rounded-full bg-cream px-3 py-1 text-[11px] font-bold uppercase tracking-[0.13em] text-gold"
+              : "mb-5 w-fit rounded-full bg-cream px-3 py-1 text-[11px] font-bold uppercase tracking-[0.13em] text-gold-ink"
           }
         >
           {plan.badge}
@@ -251,7 +251,7 @@ function PlanCard({
         </div>
 
         {amount > 0 && billingCycle === "annual" && (
-          <p className={plan.featured ? "mt-2 text-xs text-gold-soft" : "mt-2 text-xs text-teal"}>
+          <p className={plan.featured ? "mt-2 text-xs text-gold-soft" : "mt-2 text-xs text-emerald"}>
             Equivalent to 10 months of monthly billing.
           </p>
         )}
@@ -270,7 +270,7 @@ function PlanCard({
               className={
                 plan.featured
                   ? "mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal/20 text-xs text-teal-light"
-                  : "mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal/10 text-xs text-teal"
+                  : "mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal/10 text-xs text-emerald"
               }
             >
               ✓
@@ -302,12 +302,13 @@ function BillingToggle({
   onChange: (cycle: BillingCycle) => void;
 }) {
   return (
-    <div className="inline-flex rounded-2xl border border-hairline bg-white p-1 shadow-sm">
+    <div className="inline-flex rounded-panel border border-hairline bg-white p-1" role="group" aria-label="Billing cycle">
       <button
+        aria-pressed={billingCycle === "monthly"}
         className={
           billingCycle === "monthly"
-            ? "rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white"
-            : "rounded-xl px-5 py-2.5 text-sm font-semibold text-muted hover:text-forest"
+            ? "min-h-10 rounded-media bg-forest px-5 py-2 text-sm font-semibold text-white"
+            : "min-h-10 rounded-media px-5 py-2 text-sm font-semibold text-slate-600 hover:text-forest"
         }
         onClick={() => onChange("monthly")}
         type="button"
@@ -315,16 +316,17 @@ function BillingToggle({
         Monthly
       </button>
       <button
+        aria-pressed={billingCycle === "annual"}
         className={
           billingCycle === "annual"
-            ? "rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white"
-            : "rounded-xl px-5 py-2.5 text-sm font-semibold text-muted hover:text-forest"
+            ? "min-h-10 rounded-media bg-forest px-5 py-2 text-sm font-semibold text-white"
+            : "min-h-10 rounded-media px-5 py-2 text-sm font-semibold text-slate-600 hover:text-forest"
         }
         onClick={() => onChange("annual")}
         type="button"
       >
         Annual
-        <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gold">
+        <span className={`ml-2 text-[10px] font-bold uppercase tracking-[0.12em] ${billingCycle === "annual" ? "text-gold-soft" : "text-gold-ink"}`}>
           2 months free
         </span>
       </button>
@@ -367,7 +369,7 @@ function ComparisonTable({
                     index === 0
                       ? "px-5 py-4 text-sm font-medium text-ink"
                       : cell === "Included"
-                        ? "px-5 py-4 text-center text-sm font-semibold text-teal"
+                        ? "px-5 py-4 text-center text-sm font-semibold text-emerald"
                         : cell === "—"
                           ? "px-5 py-4 text-center text-sm text-muted/45"
                           : "px-5 py-4 text-center text-sm text-muted"
@@ -392,7 +394,7 @@ export function PricingExperience() {
     <>
       <section className="bg-warm-white pb-16 pt-20 sm:pb-20 sm:pt-28">
         <div className="mx-auto max-w-4xl px-6 text-center sm:px-8">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-gold">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-gold-ink">
             NESAFRIC PRICING
           </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight text-forest sm:text-5xl lg:text-6xl">
@@ -424,11 +426,11 @@ export function PricingExperience() {
       <section className="bg-cream py-20 sm:py-28" id="property-management">
         <div className="mx-auto max-w-[1280px] px-6 sm:px-8">
           <div className="max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold">PROPERTY MANAGEMENT</p>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-ink">PROPERTY MANAGEMENT</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-forest sm:text-4xl">
               Plans for landlords and property-management teams.
             </h2>
-            <p className="mt-4 text-base leading-7 text-muted">
+            <p className="mt-4 text-base leading-7 text-slate-600">
               Every plan includes the core NesAfric property operating system. Higher tiers expand portfolio
               limits, team capacity, automation, AI and voice capabilities.
             </p>
@@ -440,7 +442,7 @@ export function PricingExperience() {
             ))}
           </div>
 
-          <p className="mt-5 text-xs leading-5 text-muted">
+          <p className="mt-5 text-xs leading-5 text-slate-600">
             Prices shown in Ghana cedis (GHS). Annual plans are priced at the equivalent of 10 monthly payments.
           </p>
         </div>
@@ -449,7 +451,7 @@ export function PricingExperience() {
       <section className="bg-warm-white py-20 sm:py-28" id="professional-marketplace">
         <div className="mx-auto max-w-[1400px] px-6 sm:px-8">
           <div className="max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold">PROFESSIONAL MARKETPLACE</p>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-ink">PROFESSIONAL MARKETPLACE</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-forest sm:text-4xl">
               Plans for agents, brokerages, real-estate companies and developers.
             </h2>
@@ -499,11 +501,11 @@ export function PricingExperience() {
       <section className="bg-cream py-20 sm:py-28" id="compare-plans">
         <div className="mx-auto max-w-[1280px] px-6 sm:px-8">
           <div className="max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold">DETAILED COMPARISON</p>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-ink">DETAILED COMPARISON</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-forest sm:text-4xl">
               See exactly what changes from plan to plan.
             </h2>
-            <p className="mt-4 text-base leading-7 text-muted">
+            <p className="mt-4 text-base leading-7 text-slate-600">
               The tables below focus on the limits and advanced capabilities that differ between tiers.
             </p>
           </div>
@@ -531,7 +533,7 @@ export function PricingExperience() {
           <div className="rounded-3xl border border-hairline bg-white p-8 shadow-sm sm:p-10">
             <div className="grid gap-8 lg:grid-cols-[1fr_0.9fr] lg:items-center">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold">NOT SURE WHERE TO START?</p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-ink">NOT SURE WHERE TO START?</p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-tight text-forest">
                   Start with the workspace that matches your business today.
                 </h2>

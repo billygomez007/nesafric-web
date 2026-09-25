@@ -21,9 +21,9 @@ export default function DashboardPage() {
           </Link>
         </div>
       }
-      description="Monitor your portfolio, rent performance, tenants and operations from one place."
+      description="Rent, properties, maintenance and your team for this organisation."
       eyebrow="PROPERTY MANAGEMENT"
-      title="Portfolio command centre"
+      title="Portfolio"
     >
       <DashboardContent />
     </AppShell>

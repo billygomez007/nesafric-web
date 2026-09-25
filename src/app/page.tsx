@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/marketing/site-footer";
 import { HeroSection } from "@/components/marketing/hero-section";
 import { CompaniesCarouselSection } from "@/components/marketing/companies-carousel-section";
 import { BRAND } from "@/platform/brand";
+import { buttonClass } from "@/components/ui/button-styles";
 
 const WORKFLOWS = [
   {
@@ -43,6 +44,16 @@ const WORKFLOWS = [
   },
 ];
 
+const LIFECYCLE = [
+  ["Vacant", "Availability and condition recorded on the unit."],
+  ["Listed", "Published to the marketplace with photos and a price."],
+  ["Viewing", "Enquiries become leads; viewings are booked and confirmed."],
+  ["Let", "Lease signed, deposit and advance rent recorded."],
+  ["Rent", "Charges, payments and receipts on one ledger."],
+  ["Maintenance", "Requests, approvals and the provider who did the work."],
+  ["Renewal", "Renew, or move out and return the unit to vacant."],
+];
+
 const AUDIENCES = [
   ["Property owners", "Operate properties and collections with a clearer view of performance.", "/for-property-owners"],
   ["Professionals", "Build visibility, manage listings and turn enquiries into active opportunities.", "/for-professionals"],
@@ -76,8 +87,8 @@ export default function Home() {
           <div className="mx-auto max-w-[1400px]">
             <div className="grid gap-10 border-b border-hairline pb-12 lg:grid-cols-[0.72fr_1.28fr] lg:items-end">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">ONE OPERATING SYSTEM</p>
-                <h2 className="mt-5 max-w-xl text-4xl font-semibold leading-[1.02] tracking-[-0.035em] text-forest-deep sm:text-5xl">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold-ink">One operating system</p>
+                <h2 className="mt-4 max-w-xl text-3xl font-semibold leading-[1.08] tracking-[-0.025em] text-forest-deep sm:text-[40px]">
                   Workflows that follow the property, not the software.
                 </h2>
               </div>
@@ -90,10 +101,10 @@ export default function Home() {
             <div className="divide-y divide-hairline">
               {WORKFLOWS.map((workflow, index) => (
                 <article className="grid gap-6 py-9 lg:grid-cols-[90px_0.8fr_1.2fr] lg:items-start" key={workflow.title}>
-                  <span className="text-sm font-semibold tabular-nums text-gold">0{index + 1}</span>
+                  <span className="text-sm font-semibold tabular-nums text-gold-ink">0{index + 1}</span>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{workflow.eyebrow}</p>
-                    <h3 className="mt-2 text-2xl font-semibold tracking-tight text-forest-deep">{workflow.title}</h3>
+                    <h3 className="font-display text-2xl font-semibold tracking-[-0.015em] text-forest-deep">{workflow.title}</h3>
+                    <p className="mt-1 text-sm text-muted">{workflow.eyebrow}</p>
                   </div>
                   <div className="lg:pl-10">
                     <p className="max-w-2xl text-sm leading-6 text-muted">{workflow.description}</p>
@@ -111,13 +122,12 @@ export default function Home() {
           <div className="mx-auto max-w-[1400px]">
             <div className="grid gap-10 lg:grid-cols-[0.68fr_1.32fr] lg:items-end">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold-soft">PRODUCT WORKSPACE</p>
-                <h2 className="mt-5 max-w-xl text-4xl font-semibold leading-[1.03] tracking-[-0.035em] sm:text-5xl">
+                <h2 className="max-w-xl text-3xl font-semibold leading-[1.08] tracking-[-0.025em] sm:text-[40px]">
                   See the work, the money and the next action.
                 </h2>
-                <p className="mt-6 max-w-xl text-base leading-7 text-white/64">
-                  The workspace is structured around actual property operations: occupancy, rent collection,
-                  lease events, maintenance and follow-up. No decorative dashboard metrics that do not lead anywhere.
+                <p className="mt-5 max-w-xl text-base leading-7 text-white/70">
+                  The workspace is organised around the week&apos;s real work: who has paid, which leases are ending, what
+                  is broken and who is coming to view. Every number opens the records behind it.
                 </p>
               </div>
               <div className="flex justify-start lg:justify-end">
@@ -127,7 +137,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mt-12 overflow-hidden rounded-[18px] border border-white/10 bg-[#0f1f1d] shadow-[0_28px_80px_rgba(0,0,0,0.24)]">
+            <div className="mt-12 overflow-hidden rounded-[var(--radius-panel)] border border-white/10 bg-[#0f1f1d]">
               <div className="grid min-h-[560px] lg:grid-cols-[210px_1fr]">
                 <aside className="hidden border-r border-white/10 bg-[#0a1716] p-5 lg:block">
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold-soft">NESAFRIC</p>
@@ -159,7 +169,7 @@ export default function Home() {
                       {[
                         ["24","Units"],
                         ["21","Occupied"],
-                        ["GHS 68.4k","Collected this month"],
+                        ["GH₵68,400","Collected this month"],
                         ["2","Open maintenance jobs"],
                       ].map(([value,label]) => (
                         <div className="bg-white p-5" key={label}>
@@ -180,9 +190,9 @@ export default function Home() {
                         </div>
                         <div className="divide-y divide-slate-100">
                           {[
-                            ["Cantonments Court","Cantonments, Accra","8 / 8","GHS 31,200","Healthy"],
-                            ["Ridge House","North Ridge, Accra","7 / 8","GHS 22,400","1 available"],
-                            ["Airport Residence","Airport Residential","6 / 8","GHS 14,800","2 due soon"],
+                            ["Cantonments Court","Cantonments, Accra","8 / 8","GH₵31,200","Healthy"],
+                            ["Ridge House","North Ridge, Accra","7 / 8","GH₵22,400","1 available"],
+                            ["Airport Residence","Airport Residential","6 / 8","GH₵14,800","2 due soon"],
                           ].map(([name,location,occupancy,rent,status]) => (
                             <div className="grid gap-3 px-5 py-4 sm:grid-cols-[1.35fr_0.6fr_0.7fr_0.7fr] sm:items-center" key={name}>
                               <div><p className="text-sm font-semibold text-slate-900">{name}</p><p className="mt-1 text-xs text-slate-500">{location}</p></div>
@@ -202,7 +212,7 @@ export default function Home() {
                         <div className="divide-y divide-slate-100">
                           {[
                             ["Lease renewal","Unit B4 · Ridge House","Review by 25 Sep"],
-                            ["Rent follow-up","Unit C2 · Airport Residence","GHS 2,400 overdue"],
+                            ["Rent follow-up","Unit C2 · Airport Residence","GH₵2,400 overdue"],
                             ["Maintenance","Unit A7 · Cantonments Court","Plumber assigned"],
                             ["Viewing","Unit B8 · Ridge House","Tomorrow · 14:00"],
                           ].map(([title,detail,state]) => (
@@ -227,44 +237,37 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-warm-white px-5 py-20 sm:px-8 sm:py-28">
+        <section className="bg-warm-white px-5 py-16 sm:px-8 sm:py-24">
           <div className="mx-auto max-w-[1400px]">
-            <div className="grid gap-12 lg:grid-cols-[0.72fr_1.28fr]">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">BUILT AROUND REAL WORK</p>
-                <h2 className="mt-5 text-4xl font-semibold leading-[1.04] tracking-[-0.035em] text-forest-deep sm:text-5xl">
-                  The record follows the work.
-                </h2>
-                <p className="mt-6 max-w-xl text-base leading-7 text-muted">
-                  Every important action should leave a useful trail: who occupies a unit, what is owed, what was paid,
-                  what broke, who was assigned and what document closed the loop.
-                </p>
-              </div>
-              <div className="border-t border-hairline">
-                {[
-                  ["01","Property record","Buildings, units, availability and operational history stay together."],
-                  ["02","Tenant & lease","The tenant relationship is connected to the exact unit and active lease."],
-                  ["03","Money trail","Obligations, payments, receipts and recurring charges share one financial history."],
-                  ["04","Maintenance trail","Request, approval, assignment, cost and completion stay on the same job."],
-                  ["05","Market trail","Listings, enquiries, viewings and applications flow into the operating system."],
-                ].map(([number,title,description]) => (
-                  <div className="grid gap-4 border-b border-hairline py-6 sm:grid-cols-[70px_0.7fr_1.3fr]" key={number}>
-                    <span className="text-xs font-semibold text-gold">{number}</span>
-                    <p className="text-sm font-semibold text-forest-deep">{title}</p>
-                    <p className="text-sm leading-6 text-muted">{description}</p>
-                  </div>
-                ))}
-              </div>
+            <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr] lg:items-end">
+              <h2 className="max-w-xl text-3xl font-semibold leading-[1.08] tracking-[-0.025em] text-forest-deep sm:text-[40px]">
+                One record, from vacant to renewed.
+              </h2>
+              <p className="max-w-2xl text-base leading-7 text-muted lg:justify-self-end">
+                A unit moves through the same stages again and again. NesAfric keeps each stage on the same record, so
+                the viewing, the lease, every payment and every repair are there when the unit comes round again.
+              </p>
             </div>
+
+            {/* Lifecycle rail: the NesAfric signature for "where is this unit now". */}
+            <ol aria-label="Property lifecycle" className="mt-12 grid border-t border-forest/25 sm:grid-cols-2 lg:grid-cols-7">
+              {LIFECYCLE.map(([stage, detail], index) => (
+                <li className="relative border-b border-hairline py-5 pr-5 lg:border-b-0 lg:border-l lg:py-0 lg:pl-5 lg:pt-6 lg:first:border-l-0 lg:first:pl-0" key={stage}>
+                  <span aria-hidden="true" className="absolute -top-[5px] left-0 h-[9px] w-[9px] rounded-full border-2 border-warm-white bg-forest lg:left-5 lg:first:left-0" />
+                  <span className="text-xs font-semibold tabular-nums text-gold-ink">0{index + 1}</span>
+                  <p className="mt-2 font-display text-[15px] font-semibold text-forest-deep">{stage}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted">{detail}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
 
-        <section className="bg-white px-5 py-20 sm:px-8 sm:py-28">
+        <section className="bg-white px-5 py-16 sm:px-8 sm:py-24">
           <div className="mx-auto max-w-[1400px]">
             <div className="flex flex-col justify-between gap-6 border-b border-hairline pb-10 lg:flex-row lg:items-end">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold">BUILT FOR THE ECOSYSTEM</p>
-                <h2 className="mt-5 max-w-2xl text-4xl font-semibold leading-[1.04] tracking-[-0.035em] text-forest-deep sm:text-5xl">
+                <h2 className="max-w-2xl text-3xl font-semibold leading-[1.08] tracking-[-0.025em] text-forest-deep sm:text-[40px]">
                   Different businesses. One property language.
                 </h2>
               </div>
@@ -276,8 +279,8 @@ export default function Home() {
             <div className="divide-y divide-hairline">
               {AUDIENCES.map(([title, description, href], index) => (
                 <Link className="group grid gap-4 py-8 sm:grid-cols-[80px_0.8fr_1.2fr_40px] sm:items-center" href={href} key={title}>
-                  <span className="text-xs font-semibold text-gold">0{index + 1}</span>
-                  <h3 className="text-xl font-semibold text-forest-deep">{title}</h3>
+                  <span className="text-xs font-semibold tabular-nums text-gold-ink">0{index + 1}</span>
+                  <h3 className="font-display text-xl font-semibold text-forest-deep">{title}</h3>
                   <p className="max-w-2xl text-sm leading-6 text-muted">{description}</p>
                   <span className="text-xl text-forest transition group-hover:translate-x-1" aria-hidden="true">→</span>
                 </Link>
@@ -286,23 +289,22 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="bg-forest-deep px-5 py-20 text-white sm:px-8 sm:py-24">
-          <div className="mx-auto flex max-w-[1400px] flex-col gap-8 rounded-[30px] border border-white/10 bg-white/[0.04] p-8 sm:p-12 lg:flex-row lg:items-end lg:justify-between">
+        <section className="bg-forest-deep px-5 py-16 text-white sm:px-8 sm:py-20">
+          <div className="mx-auto flex max-w-[1400px] flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold-soft">READY WHEN YOU ARE</p>
-              <h2 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
-                Put your property business on one operating system.
+              <h2 className="max-w-3xl text-3xl font-semibold leading-[1.08] tracking-[-0.025em] sm:text-[40px]">
+                Bring your properties onto one record.
               </h2>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-white/65">
-                Bring your properties, people, payments and opportunities into a clearer way of working.
+              <p className="mt-4 max-w-2xl text-base leading-7 text-white/70">
+                Start with one building or your whole portfolio. Add tenants, leases and rent as you go.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link className="rounded-xl bg-gold px-6 py-3.5 text-sm font-semibold text-forest-deep transition hover:bg-gold-soft" href="/register">
-                Get started →
+              <Link className={buttonClass("primaryOnDark")} href="/register">
+                Start with NesAfric
               </Link>
-              <Link className="rounded-xl border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10" href="/marketplace/properties">
-                Explore properties
+              <Link className={buttonClass("secondaryOnDark")} href="/marketplace/properties">
+                Browse properties
               </Link>
             </div>
           </div>
