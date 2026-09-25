@@ -16,6 +16,7 @@ import {
   transitionMaintenanceSchema,
   updateWorkOrderSchema,
 } from "./schemas";
+import { toTenantMaintenanceView } from "./tenant-view";
 
 type Tx = Prisma.TransactionClient;
 type RequestRecord = { id: string; organisationId: string; propertyId: string; unitId: string | null; status: MaintenanceStatus };
@@ -69,9 +70,11 @@ async function isTenantUser(userId: string, organisationId: string, tenantOrgani
   });
 }
 
+// Returns "internal" for staff holding maintenance.read, or "tenant" for the linked tenant user,
+// who only ever receives the tenant-safe view.
 async function requireRequestRead(userId: string, organisationId: string, tenantOrganisationId: string | null) {
-  if (await hasPermission(userId, organisationId, PERMISSIONS.maintenanceRead)) return;
-  if (tenantOrganisationId && await isTenantUser(userId, organisationId, tenantOrganisationId)) return;
+  if (await hasPermission(userId, organisationId, PERMISSIONS.maintenanceRead)) return "internal" as const;
+  if (tenantOrganisationId && await isTenantUser(userId, organisationId, tenantOrganisationId)) return "tenant" as const;
   throw forbidden();
 }
 
@@ -342,7 +345,8 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
         payload: { propertyId: request.propertyId, unitId: request.unitId, tenantOrganisationId: request.tenantOrganisationId, priority: request.priority },
       },
     });
-    return tx.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id }, include: requestInclude() });
+    const created = await tx.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id }, include: requestInclude() });
+    return internal ? created : toTenantMaintenanceView(created);
   });
 }
 
@@ -367,8 +371,8 @@ export async function getMaintenanceRequest(userId: string, organisationId: stri
     include: requestInclude(),
   });
   if (!request) throw notFound();
-  await requireRequestRead(userId, organisationId, request.tenantOrganisationId);
-  return request;
+  const access = await requireRequestRead(userId, organisationId, request.tenantOrganisationId);
+  return access === "internal" ? request : toTenantMaintenanceView(request);
 }
 
 export async function addMaintenanceNote(userId: string, organisationId: string, requestId: string, input: unknown) {
@@ -681,11 +685,12 @@ export async function getTenantMaintenanceHistory(userId: string, organisationId
   if (!internal && !await isTenantUser(userId, organisationId, tenantOrganisationId)) throw forbidden();
   const tenant = await db.tenantOrganisation.findFirst({ where: { id: tenantOrganisationId, organisationId, archivedAt: null } });
   if (!tenant) throw notFound();
-  return db.maintenanceRequest.findMany({
+  const requests = await db.maintenanceRequest.findMany({
     where: { organisationId, tenantOrganisationId },
     include: requestInclude(),
     orderBy: { createdAt: "desc" },
   });
+  return internal ? requests : requests.map(toTenantMaintenanceView);
 }
 
 export async function getPropertyMaintenanceHistory(userId: string, organisationId: string, propertyId: string) {
