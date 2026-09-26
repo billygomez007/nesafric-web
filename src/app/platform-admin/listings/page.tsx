@@ -325,7 +325,8 @@ function ListingsContent() {
                   <th className="px-5 py-4">Verification</th>
                   <th className="px-5 py-4">Evidence</th>
                   <th className="px-5 py-4">Engagement</th>
-                  <th className="px-5 py-4">Actions</th>
+                  {/* Pinned right so the review action is reachable without scrolling the wide table. */}
+                  <th className="sticky right-0 bg-warm-white px-5 py-4 shadow-[-8px_0_12px_-10px_rgba(0,47,43,0.25)]">Actions</th>
                 </tr>
               </thead>
 
@@ -397,7 +398,7 @@ function ListingsContent() {
                       {listing._count.viewingRequests} viewings
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td className="sticky right-0 bg-white px-5 py-4 shadow-[-8px_0_12px_-10px_rgba(0,47,43,0.25)]">
                       <ListingAction listing={listing} />
                     </td>
                   </tr>
