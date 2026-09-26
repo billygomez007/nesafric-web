@@ -154,7 +154,21 @@ describe("PostgreSQL listing review workflow", () => {
 
     // A legacy listing that reached review without verification is never published directly.
     const legacy = await createMarketplaceNativeListing(owner.id, professional.id, nativeInput({ title: "Legacy in review" }));
-    await db.listing.update({ where: { id: legacy.id }, data: { status: "PENDING_REVIEW" } });
+    await db.$transaction(async (tx) => {
+      await tx.listingStatusHistory.create({
+        data: {
+          listingId: legacy.id,
+          actorUserId: owner.id,
+          fromStatus: "DRAFT",
+          toStatus: "PENDING_REVIEW",
+          note: "Legacy review state fixture without verification submission.",
+        },
+      });
+      await tx.listing.update({
+        where: { id: legacy.id },
+        data: { status: "PENDING_REVIEW" },
+      });
+    });
     const legacyNow = await fresh(legacy.id);
     await expect(verifyAndPublishListingForPlatform(admin, legacy.id, { expectedUpdatedAt: legacyNow.updatedAt })).rejects.toMatchObject({ code: "LISTING_VERIFICATION_NOT_SUBMITTED" });
     expect(await fresh(legacy.id)).toMatchObject({ status: "PENDING_REVIEW", verificationStatus: "UNVERIFIED" });

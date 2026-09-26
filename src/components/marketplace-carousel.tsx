@@ -77,7 +77,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
 
   if (!banners || banners.length === 0) {
     if (!fallback) return null;
-    return banners ? <>{fallback}</> : <div aria-busy="true" aria-label="Loading featured content" className="h-64 bg-forest-deep sm:h-72 lg:h-80" role="status" />;
+    return banners ? <>{fallback}</> : <div aria-busy="true" aria-label="Loading featured content" className="h-36 bg-forest-deep sm:h-40 lg:h-44" role="status" />;
   }
 
   const multi = banners.length > 1;
@@ -116,7 +116,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
         <a
           aria-label={`Promoted: ${active.headline}`}
           aria-roledescription="slide"
-          className="group relative block h-64 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-gold-soft sm:h-72 lg:h-80"
+          className="group relative block h-36 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-gold-soft sm:h-40 lg:h-44"
           href={active.destinationUrl}
           key={active.id}
           onClick={() => void fetch(`/api/public/campaigns/${active.id}/click`, { method: "POST" })}
@@ -130,11 +130,11 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
             <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-forest-deep/95 via-forest-deep/60 to-transparent" />
-          <div className={`relative flex h-full max-w-xl flex-col justify-end gap-2 pb-10 pt-6 sm:justify-center sm:pb-8 ${multi ? "pl-6 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-10"}`}>
+          <div className={`relative flex h-full max-w-xl flex-col justify-center gap-1.5 py-4 ${multi ? "pl-5 pr-12 sm:pl-12 sm:pr-14" : "px-5 sm:px-8"}`}>
             <span className="w-fit text-xs font-semibold text-gold-soft">
               Promoted
             </span>
-            <h3 className="font-display text-xl font-semibold leading-tight text-white sm:text-[28px]">{active.headline}</h3>
+            <h3 className="font-display text-lg font-semibold leading-tight text-white sm:text-xl">{active.headline}</h3>
             {active.supportingText && <p className="line-clamp-2 max-w-md text-sm leading-6 text-white/80">{active.supportingText}</p>}
             {active.ctaLabel && <span className="mt-2 inline-flex min-h-10 w-fit items-center rounded-[var(--radius-control)] bg-gold px-4 text-sm font-semibold text-forest-deep transition-colors group-hover:bg-gold-soft">{active.ctaLabel}</span>}
           </div>

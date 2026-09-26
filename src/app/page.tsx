@@ -5,6 +5,7 @@ import { HeroSearch } from "@/components/marketplace-home/hero-search";
 import { MarketplaceCarousel } from "@/components/marketplace-carousel";
 import { PlatformBanner } from "@/components/marketplace-home/platform-banner";
 import { MarketplaceHome } from "@/components/marketplace-home/marketplace-home";
+import { CompaniesCarouselSection } from "@/components/marketing/companies-carousel-section";
 import { BRAND } from "@/platform/brand";
 
 const TITLE = "Property to rent and buy in Ghana";
@@ -62,26 +63,35 @@ export default function Home() {
       <SiteNav />
       <main className="bg-warm-white">
         <section className="marketing-grid bg-forest-deep">
-          <div className="mx-auto max-w-[1400px] px-5 pb-12 pt-12 sm:px-8 sm:pb-16 sm:pt-16 lg:pt-20">
+          <div className="mx-auto max-w-[1400px] px-5 pb-6 pt-6 sm:px-8 sm:pb-8 sm:pt-8 lg:pt-9">
             <div className="max-w-3xl text-white">
-              <p className="text-sm font-medium text-gold-soft">The NesAfric marketplace</p>
-              <h1 className="mt-3 text-[clamp(2.25rem,5vw,3.75rem)] font-semibold leading-[1.04] tracking-[-0.03em]">
-                Find property across Ghana.
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-soft">The NesAfric marketplace</p>
+              <h1 className="mt-2 text-[clamp(2rem,4vw,3rem)] font-semibold leading-[1.02] tracking-[-0.035em]">
+                Find your property
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-white/75 sm:text-[17px]">
-                Homes, land and commercial space to rent or buy — listed by the owners, managers, agents and developers responsible for them.
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">
+                Search homes, apartments, land and commercial property across Ghana.
               </p>
             </div>
-            {/* The advertising slot is always present: live campaigns when there are any,
-                otherwise NesAfric's own banner. */}
-            <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
-              <MarketplaceCarousel fallback={<PlatformBanner />} placement="MARKETPLACE_PRIMARY" />
-            </div>
-            <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
+
+            <div className="mt-4">
               <HeroSearch />
+            </div>
+
+            {/* Advertising stays directly below search and property categories:
+                real campaigns when available, otherwise NesAfric's own banner. */}
+            <div className="mt-4 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
+              <MarketplaceCarousel fallback={<PlatformBanner />} placement="MARKETPLACE_PRIMARY" />
             </div>
           </div>
         </section>
+
+        <CompaniesCarouselSection
+          compact
+          emptyState
+          title="Trusted by leading companies"
+        />
+
         <MarketplaceHome />
       </main>
       <SiteFooter />

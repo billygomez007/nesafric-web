@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 /**
- * Homepage order: hero copy → promoted carousel → search → company logos → properties → places →
- * professionals → service providers → business gateway. The ad area and company section always
+ * Homepage order: hero copy → search/categories → promoted carousel → trusted companies →
+ * properties → places → professionals → service providers → business gateway. The ad area and company section always
  * stay in place, with honest NesAfric-owned content when there is nothing real to show.
  */
 
@@ -53,19 +53,28 @@ function order(container: HTMLElement) {
 }
 
 describe("marketplace homepage order", () => {
-  it("renders hero, ads, search, companies, properties, places, professionals, services, gateway, footer in order", async () => {
+  it("renders hero, search, ads, trusted companies, properties, places, professionals, services, gateway, footer in order", async () => {
     mockApi({ banners: [BANNER], companies: [COMPANY] });
     const { container } = render(<Home />);
     await screen.findByText("New homes at Airport Hills");
-    await screen.findByText("Companies and professionals on NesAfric");
+    await screen.findByText("Trusted by leading companies");
     const marks = order(container);
     const index = (label: string) => marks.findIndex((mark) => mark === label || mark.startsWith(label));
-    const sequence = ["nav", "hero", "ads", "search", "Companies and professionals", "Properties on NesAfric", "Where people are listing", "Agents, brokerages and developers", "Offer property services?", "footer"];
+    const sequence = ["nav", "hero", "search", "ads", "Trusted by leading companies", "Properties on NesAfric", "Where people are listing", "Agents, brokerages and developers", "Offer property services?", "footer"];
     const positions = sequence.map(index);
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(index("Run property on NesAfric")).toBeGreaterThan(index("Offer property services?"));
     expect(index("Run property on NesAfric")).toBeLessThan(index("footer"));
+  });
+
+  it("shows the eight locked property discovery categories directly below the search", async () => {
+    mockApi({ banners: [], companies: [] });
+    render(<Home />);
+
+    for (const label of ["Rent", "Buy", "Land", "Commercial", "Houses", "Apartments", "Townhouses", "Villa"]) {
+      expect(screen.getByRole("link", { name: label })).toBeTruthy();
+    }
   });
 
   it("keeps the ad area with NesAfric's own banner when no campaign is running", async () => {
@@ -77,9 +86,9 @@ describe("marketplace homepage order", () => {
     expect(banner.textContent).not.toMatch(/Promoted/);
     expect(screen.getByRole("link", { name: "List a property" }).getAttribute("href")).toBe("/for-professionals");
     expect(container.querySelector("[aria-roledescription='carousel']")).toBeNull();
-    // The banner sits above the search.
+    // Search and quick property discovery sit above the banner.
     const search = container.querySelector("form[aria-label='Search property']")!;
-    expect(banner.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(search.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("keeps the ad area when campaigns can't be loaded", async () => {
@@ -102,7 +111,7 @@ describe("marketplace homepage order", () => {
     mockApi({ banners: [], companies: [] });
     const { container } = render(<Home />);
     const empty = await screen.findByTestId("companies-empty");
-    expect(screen.getByText("Companies and professionals on NesAfric")).toBeTruthy();
+    expect(screen.getByText("Trusted by leading companies")).toBeTruthy();
     expect(empty.textContent).toContain("Verified companies will appear here");
     expect(screen.getByRole("link", { name: "Get verified" }).getAttribute("href")).toBe("/for-professionals");
     // No logos, no company chips, no "View all" into an empty directory.
@@ -119,13 +128,13 @@ describe("marketplace homepage order", () => {
     expect(screen.queryByTestId("companies-empty")).toBeNull();
   });
 
-  it("keeps the empty-state order: hero, NesAfric banner, search, companies, properties", async () => {
+  it("keeps the empty-state order: hero, search, NesAfric banner, trusted companies, properties", async () => {
     mockApi({ banners: [], companies: [], listings: [] });
     const { container } = render(<Home />);
     await screen.findByTestId("platform-banner");
     await screen.findByTestId("companies-empty");
     await screen.findByText(/Listings appear here as soon as/);
-    const nodes = ["h1", "[data-testid='platform-banner']", "form[aria-label='Search property']", "#companies-heading", "#discover-heading"].map((selector) => container.querySelector(selector)!);
+    const nodes = ["h1", "form[aria-label='Search property']", "[data-testid='platform-banner']", "#companies-heading", "#discover-heading"].map((selector) => container.querySelector(selector)!);
     nodes.forEach((node) => expect(node).not.toBeNull());
     for (let i = 1; i < nodes.length; i += 1) expect(nodes[i - 1].compareDocumentPosition(nodes[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

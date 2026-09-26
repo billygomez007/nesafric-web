@@ -939,7 +939,7 @@ export function MarketplaceListingForm({
       </section>
 
       <button
-        className="rounded-xl bg-forest px-5 py-3 font-semibold text-white disabled:opacity-60"
+        className="rounded-xl bg-forest px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
         disabled={busy}
       >
         {busy ? (editing ? "Saving changes…" : "Creating property…") : editing ? "Save changes" : "Create draft property"}
