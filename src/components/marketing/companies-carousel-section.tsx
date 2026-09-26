@@ -26,7 +26,7 @@ export function CompaniesCarouselSection({
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/public/marketplace-directory?page=1&pageSize=16&verifiedOnly=true", { signal: controller.signal })
+    fetch("/api/public/homepage-companies", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) { if (emptyState) setItems([]); return; }
         const body = await response.json();

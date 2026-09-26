@@ -835,6 +835,8 @@ model User {
   maintenanceDispatchAttemptsCreated MaintenanceDispatchAttempt[]               @relation("MaintenanceDispatchAttemptCreator")
   campaignsCreated                   Campaign[]                                 @relation("CampaignCreator")
   campaignsReviewed                  Campaign[]                                 @relation("CampaignReviewer")
+  homepageCompanyLogosCreated        HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoCreator")
+  homepageCompanyLogosUpdated        HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoUpdater")
   voiceCallsInitiated                VoiceCall[]                                @relation("VoiceCallInitiator")
 }
 
@@ -4871,6 +4873,7 @@ model MarketplaceProfessional {
   aiEmployeeActivities AIEmployeeActivity[]
   aiEmployeeHandoffs   AIEmployeeHandoff[]
   campaigns            Campaign[]
+  homepageCompanyLogos HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoProfessional")
 
   @@index([type, status])
   @@index([verificationStatus])
@@ -5602,4 +5605,28 @@ model MediaStreamSession {
   @@index([callId])
   @@index([organisationId, status])
   @@index([status, tokenExpiresAt])
+}
+
+/// Super Admin-managed company/logo rail displayed on the public NesAfric homepage.
+///
+/// Every rail item references a real MarketplaceProfessional. The professional's
+/// verified company identity and logo remain the source of truth; sample companies,
+/// fabricated partner logos, and presentation overrides are deliberately unsupported.
+///
+/// `isPublished` controls public visibility and `sortOrder` controls the sliding order.
+model HomepageCompanyLogo {
+  id                        String   @id @default(uuid()) @db.Uuid
+  marketplaceProfessionalId String   @unique @db.Uuid
+  isPublished               Boolean  @default(false)
+  sortOrder                 Int      @default(0)
+  createdByUserId           String   @db.Uuid
+  updatedByUserId           String   @db.Uuid
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  marketplaceProfessional MarketplaceProfessional @relation("HomepageCompanyLogoProfessional", fields: [marketplaceProfessionalId], references: [id], onDelete: Cascade)
+  createdBy               User                    @relation("HomepageCompanyLogoCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy               User                    @relation("HomepageCompanyLogoUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([isPublished, sortOrder])
 }

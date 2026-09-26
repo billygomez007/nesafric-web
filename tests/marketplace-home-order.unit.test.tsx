@@ -25,7 +25,8 @@ function mockApi({ banners, companies, listings = [LISTING] }: { banners: unknow
     if (url.pathname === "/api/public/campaigns") return json({ banners });
     if (url.pathname.startsWith("/api/public/campaigns/")) return json({});
     if (url.pathname === "/api/public/listings") return json({ items: listings, pagination: { total: listings.length } });
-    if (url.pathname === "/api/public/marketplace-directory") return json({ items: url.searchParams.get("pageSize") ? companies : [], total: companies.length });
+    if (url.pathname === "/api/public/homepage-companies") return json({ items: companies });
+    if (url.pathname === "/api/public/marketplace-directory") return json({ items: [], total: companies.length });
     if (url.pathname === "/api/public/marketplace/categories") return json([]);
     if (url.pathname === "/api/public/marketplace/providers") return json({ items: [], pagination: { total: 0 } });
     return { ok: false, json: async () => ({}) } as Response;

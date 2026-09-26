@@ -28,6 +28,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { href: "/platform-admin/marketplace", label: "Marketplace" },
       { href: "/platform-admin/listings", label: "Listings" },
       { href: "/platform-admin/campaigns", label: "Campaigns" },
+      { href: "/platform-admin/homepage-media", label: "Homepage Media" },
     ],
   },
   {
