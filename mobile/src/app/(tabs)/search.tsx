@@ -16,13 +16,14 @@ export default function SearchScreen() {
   const params = useLocalSearchParams();
   // Home chips and "See all" navigate here with new params: remount with those as the start state.
   const paramsKey = JSON.stringify(params);
-  return <SearchView key={paramsKey} initial={filtersFromParams(params)} />;
+  // Home's "Advanced search" arrives with `advanced` set: open the filter sheet straight away.
+  return <SearchView key={paramsKey} initial={filtersFromParams(params)} openFilters={typeof params.advanced === "string"} />;
 }
 
-function SearchView({ initial }: { initial: SearchFilters }) {
+function SearchView({ initial, openFilters = false }: { initial: SearchFilters; openFilters?: boolean }) {
   const [filters, setFilters] = useState<SearchFilters>(initial);
   const [q, setQ] = useState(initial.q ?? "");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(openFilters);
 
   const search = useListingSearch(filters);
   const items = search.data?.pages.flatMap((page) => page.items) ?? [];

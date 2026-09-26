@@ -274,7 +274,7 @@ describe("workspace inbox", () => {
     renderRouter(APP_DIR, { initialUrl: `/workspace/${ORG_A.id}/inbox` });
     expect(await screen.findByText("Sign in to see this workspace")).toBeTruthy();
     renderRouter(APP_DIR, { initialUrl: "/" });
-    expect((await screen.findAllByText("GH₵8,500/month")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
     expect(inboxCalls()).toHaveLength(0);
     expect(calls.every((call) => !header(call, "authorization"))).toBe(true);
   });

@@ -53,12 +53,10 @@ describe("signed-out marketplace", () => {
     renderRouter(APP_DIR, { initialUrl: "/" });
 
     expect(await screen.findByText("Find your perfect property")).toBeTruthy();
-    expect((await screen.findAllByText("GH₵8,500/month")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Newly listed")).toBeTruthy();
-    expect(await screen.findByText("Land opportunities")).toBeTruthy();
-    expect(await screen.findByText("Popular in Accra")).toBeTruthy();
-    // Empty shelves are hidden rather than padded with placeholder data.
-    expect(screen.queryByText("Commercial properties")).toBeNull();
+    // With no campaigns the featured carousel shows real published listings.
+    expect(await screen.findByText("4 Bedroom House")).toBeTruthy();
+    expect(screen.getByText("Search properties")).toBeTruthy();
+    expect(screen.getByLabelText("Advanced search")).toBeTruthy();
     expect(screen.queryByText(/sign in to continue/i)).toBeNull();
     // Every request is to a public endpoint, with no credentials.
     expect(calls.every((call) => call.url.startsWith("https://api.test/api/public/") && call.init.credentials === "omit")).toBe(true);

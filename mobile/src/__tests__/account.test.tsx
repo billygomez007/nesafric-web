@@ -108,7 +108,7 @@ describe("optional account access", () => {
     expect(screen.getByText(/work without an account/)).toBeTruthy();
 
     renderRouter(APP_DIR, { initialUrl: "/" });
-    expect((await screen.findAllByText("GH₵8,500/month")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
     expect(calls.every((call) => !header(call, "authorization"))).toBe(true);
   });
 
@@ -131,7 +131,7 @@ describe("optional account access", () => {
     }
 
     renderRouter(APP_DIR, { initialUrl: "/" });
-    expect((await screen.findAllByText("GH₵8,500/month")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
     expect(callsTo("/api/public/listings").every((call) => !header(call, "authorization"))).toBe(true);
   });
 
@@ -174,7 +174,7 @@ describe("optional account access", () => {
     await waitFor(() => expect(secureStore.has(SESSION_KEY)).toBe(false));
 
     renderRouter(APP_DIR, { initialUrl: "/" });
-    expect((await screen.findAllByText("GH₵8,500/month")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
   });
 
   it("signs out on this device at once and reports server revocation only once the server confirms it", async () => {
