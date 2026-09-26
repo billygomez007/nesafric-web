@@ -408,7 +408,7 @@ function ProfessionalsContent() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1320px] text-left text-sm">
+            <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="border-b border-hairline bg-warm-white text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th className="px-5 py-4 font-semibold">Professional</th>
@@ -416,8 +416,6 @@ function ProfessionalsContent() {
                   <th className="px-5 py-4 font-semibold">Status</th>
                   <th className="px-5 py-4 font-semibold">Team</th>
                   <th className="px-5 py-4 font-semibold">Marketplace</th>
-                  <th className="px-5 py-4 font-semibold">Plan</th>
-                  <th className="px-5 py-4 font-semibold">Created</th>
                   <th className="px-5 py-4 font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -527,29 +525,16 @@ function ProfessionalsContent() {
                         </span>{" "}
                         campaigns
                       </p>
+                      <p className="mt-2 text-muted">
+                        {professional.subscription
+                          ? `${professional.subscription.plan.name} · ${humanize(professional.subscription.status).toLowerCase()}`
+                          : "No plan"}
+                      </p>
+                      <p className="mt-1 text-muted">Joined {formatDate(professional.createdAt)}</p>
                     </td>
 
                     <td className="px-5 py-4">
-                      {professional.subscription ? (
-                        <>
-                          <p className="text-xs font-semibold text-forest">
-                            {professional.subscription.plan.name}
-                          </p>
-                          <p className="mt-1 text-xs text-muted">
-                            {humanize(professional.subscription.status)}
-                          </p>
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted">No plan</span>
-                      )}
-                    </td>
-
-                    <td className="px-5 py-4 text-xs text-muted">
-                      {formatDate(professional.createdAt)}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div className="flex w-64 flex-wrap gap-2">
+                      <div className="flex w-56 flex-wrap gap-2">
                         <LifecycleActionButtons
                           actions={actionsFor(professional)}
                           disabled={busyId === professional.id}

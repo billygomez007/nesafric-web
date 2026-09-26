@@ -228,8 +228,13 @@ describe("PostgreSQL Phase 20 platform administration (independent of organisati
     const orgA = await createOrganisation(ownerA.id, { name: "Analytics Platform Org A", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
     const orgB = await createOrganisation(ownerB.id, { name: "Analytics Platform Org B", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
 
+    // A marketplace professional's hidden backing organisation is not a PropertyOS customer.
+    const { createMarketplaceProfessional } = await import("@/modules/marketplace-professionals/service");
+    await createMarketplaceProfessional(ownerA.id, { type: "BROKERAGE", displayName: "Analytics Brokerage", countryCode: "GH" });
+
     const baseline = await getCommercialAnalytics(principal);
-    expect(baseline.totalOrganisations).toBeGreaterThanOrEqual(2);
+    expect(baseline.totalOrganisations).toBe(2);
+    expect(baseline.recentSignups30d).toBe(2);
     expect(baseline.mrrByCurrency).toEqual({}); // both organisations are still trialing — never fabricate revenue for non-paying accounts.
 
     await recordSubscriptionPaymentSuccess(orgA.id, { amountMinor: "25000", currencyCode: "GHS", billingProviderKey: "test" }); // starter, monthly.

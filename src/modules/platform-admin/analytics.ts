@@ -23,8 +23,9 @@ export async function getCommercialAnalytics(principal: PlatformPrincipal) {
 
   const [statusGroups, totalOrganisations, recentSignups, planGroups] = await Promise.all([
     db.organisationSubscription.groupBy({ by: ["status"], _count: { _all: true } }),
-    db.organisation.count({ where: { archivedAt: null } }),
-    db.organisation.count({ where: { archivedAt: null, createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
+    // Marketplace professionals' hidden backing organisations are not PropertyOS customers.
+    db.organisation.count({ where: { archivedAt: null, marketplaceProfessional: null } }),
+    db.organisation.count({ where: { archivedAt: null, marketplaceProfessional: null, createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
     db.organisationSubscription.groupBy({ by: ["planId"], _count: { _all: true } }),
   ]);
 

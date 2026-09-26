@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TYPE_LABELS } from "@/components/marketplace-directory";
 import { useEffect, useMemo, useState } from "react";
 import {
   DashboardIcon,
@@ -19,6 +20,7 @@ type Detail = {
   verificationStatus: string;
   description: string | null;
   websiteUrl: string | null;
+  logoUrl: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
   slug: string;
@@ -335,7 +337,7 @@ export function MarketplaceProfileDashboard({
 
         <DashboardStat
           href={`/pro/${professionalId}/developments`}
-          helper={`${metrics?.teamMembers ?? detail.members.length} team members`}
+          helper={`${metrics?.teamMembers ?? detail.members.length} team ${(metrics?.teamMembers ?? detail.members.length) === 1 ? "member" : "members"}`}
           icon={<DashboardIcon name="building" />}
           label="Developments"
           tone="teal"
@@ -465,15 +467,32 @@ export function MarketplaceProfileDashboard({
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <DashboardPanel
+          action={
+            <Link className="text-xs font-semibold text-teal hover:underline" href={`/pro/${professionalId}/profile`}>
+              Edit profile →
+            </Link>
+          }
           description="Your public business information."
           title="Professional profile"
         >
           <div className="space-y-4 p-5 sm:p-6">
-            <div>
-              <p className="text-xs text-muted">Business type</p>
-              <p className="mt-1 text-sm font-semibold text-ink">
-                {detail.type.replaceAll("_", " ")}
-              </p>
+            <div className="flex items-center gap-4">
+              {detail.logoUrl ? (
+                <span className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-control)] border border-hairline bg-white p-1.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img alt={`${detail.displayName} logo`} className="max-h-full max-w-full object-contain" src={detail.logoUrl} />
+                </span>
+              ) : (
+                <Link className="flex h-14 w-20 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-dashed border-hairline bg-surface text-center text-[11px] font-semibold leading-tight text-forest hover:border-forest/40" href={`/pro/${professionalId}/profile`}>
+                  Add logo
+                </Link>
+              )}
+              <div>
+                <p className="text-xs text-muted">Business type</p>
+                <p className="mt-1 text-sm font-semibold text-ink">
+                  {TYPE_LABELS[detail.type] ?? detail.type.replaceAll("_", " ")}
+                </p>
+              </div>
             </div>
 
             {detail.contactEmail && (
