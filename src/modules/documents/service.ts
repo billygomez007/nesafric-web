@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Prisma } from "@/platform/database/generated/client";
+import { Prisma, type PlatformPrincipal } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { membershipHasPermission } from "@/platform/authorization/policy";
@@ -20,12 +20,14 @@ import { formatMegabytes, MAX_LISTING_PHOTOS, MAX_LISTING_PHOTO_UPLOAD_BYTES } f
 import { ensureListingCover, lockListingMedia } from "@/modules/listings/cover";
 import { PLACEMENT_CREATIVE_SPECS, aspectRatioLabel, dimensionMismatch } from "@/modules/campaigns/creative-spec";
 import { getUploadDescriptor } from "./targets";
+import { isUuid } from "@/platform/validation/uuid";
 import { archiveStorageObjectSchema, documentCenterQuerySchema, listingMediaOrderSchema, uploadDocumentSchema } from "./schemas";
 import { recordIntegrationOutcome } from "@/modules/integrations/service";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { assertWritableMarketplaceProfessional } from "@/modules/marketplace-professionals/entitlements";
+import { clearMarketplaceProfessionalLogo, MARKETPLACE_PROFESSIONAL_LOGO_TARGET, MAX_LOGO_BYTES } from "@/modules/marketplace-professionals/logo";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -41,6 +43,7 @@ const UPLOAD_TARGET_NAMESPACES: Record<string, string> = {
   MOVE_OUT_INSPECTION_MEDIA: "move-out-inspections",
   APPLICATION_DOCUMENT: "application-documents",
   ORGANISATION_LOGO: "organisations/branding",
+  MARKETPLACE_PROFESSIONAL_LOGO: "marketplace-professionals/branding",
 };
 const GENERATED_DOCUMENT_TYPES = ["RECEIPT", "TENANT_STATEMENT", "MOVE_OUT_STATEMENT", "LEASE_AGREEMENT"] as const;
 
@@ -78,7 +81,11 @@ async function record(tx: Tx, organisationId: string | null, actorUserId: string
  * NOT_FOUND — so those uploads are checked against the professional's `MarketplaceSubscription`.
  * Only `uploadMarketplaceListingMedia`, after its own role and ownership checks, passes this.
  */
-type UploadEntitlementScope = { kind: "organisation" } | { kind: "marketplace"; marketplaceProfessionalId: string };
+type UploadEntitlementScope =
+  | { kind: "organisation" }
+  | { kind: "marketplace"; marketplaceProfessionalId: string }
+  /** Platform-admin action on a customer's behalf: never limited by the customer's plan. */
+  | { kind: "platform" };
 
 async function performUpload(params: {
   userId: string;
@@ -104,6 +111,8 @@ async function performUpload(params: {
   const entitlementScope = params.entitlementScope ?? { kind: "organisation" };
   if (entitlementScope.kind === "marketplace") {
     await assertWritableMarketplaceProfessional(entitlementScope.marketplaceProfessionalId);
+  } else if (entitlementScope.kind === "platform") {
+    // Deliberately unmetered — see UploadEntitlementScope.
   } else if (params.organisationId) {
     await assertOperational(params.organisationId, ENTITLEMENTS.storageBytesMax.key, bytes.length);
   }
@@ -111,6 +120,9 @@ async function performUpload(params: {
   if (!sniffed) throw new AppError("UNSUPPORTED_FILE_TYPE", 422, "The file's contents are not a supported, recognisable file type.");
   if (!descriptor.allowedMimeTypes.includes(sniffed.mimeType)) {
     throw new AppError("UNSUPPORTED_FILE_TYPE", 422, `Files of type '${sniffed.mimeType}' are not accepted for this upload target.`);
+  }
+  if (targetType === MARKETPLACE_PROFESSIONAL_LOGO_TARGET && bytes.length > MAX_LOGO_BYTES) {
+    throw new AppError("LOGO_TOO_LARGE", 413, `This logo is ${formatMegabytes(bytes.length)}. Logos must be ${formatMegabytes(MAX_LOGO_BYTES)} or smaller.`);
   }
   if (targetType === "LISTING_MEDIA") {
     // Explicit, JSON-reported photo limit. Anything much larger never reaches this code on Vercel
@@ -246,6 +258,92 @@ export async function uploadOrganisationDocument(userId: string, organisationId:
     targetType: data.targetType,
     input: data,
   });
+}
+
+async function logoTarget(marketplaceProfessionalId: string) {
+  if (!isUuid(marketplaceProfessionalId)) throw notFound();
+  const professional = await db.marketplaceProfessional.findFirst({
+    where: { id: marketplaceProfessionalId, archivedAt: null },
+    select: { id: true, backingOrganisationId: true, logoUrl: true },
+  });
+  if (!professional) throw notFound();
+  return professional;
+}
+
+function logoUploadInput(marketplaceProfessionalId: string, input: unknown) {
+  const raw = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
+  return uploadDocumentSchema.parse({
+    fileName: raw.fileName,
+    contentType: raw.contentType,
+    dataBase64: raw.dataBase64,
+    targetType: MARKETPLACE_PROFESSIONAL_LOGO_TARGET,
+    targetId: marketplaceProfessionalId,
+    classification: "PUBLIC",
+  });
+}
+
+/** Business self-service: an OWNER or ADMIN of this professional uploads or replaces its logo. */
+export async function uploadMarketplaceProfessionalLogo(userId: string, marketplaceProfessionalId: string, input: unknown) {
+  await requireMarketplaceRole(userId, marketplaceProfessionalId, "ADMIN");
+  const professional = await logoTarget(marketplaceProfessionalId);
+  const result = await performUpload({
+    userId,
+    organisationId: professional.backingOrganisationId,
+    targetType: MARKETPLACE_PROFESSIONAL_LOGO_TARGET,
+    input: logoUploadInput(marketplaceProfessionalId, input),
+    entitlementScope: { kind: "marketplace", marketplaceProfessionalId },
+  });
+  return result.attached;
+}
+
+export async function removeMarketplaceProfessionalLogo(userId: string, marketplaceProfessionalId: string) {
+  await requireMarketplaceRole(userId, marketplaceProfessionalId, "ADMIN");
+  const professional = await logoTarget(marketplaceProfessionalId);
+  await db.$transaction((tx) => clearMarketplaceProfessionalLogo(tx, professional, userId));
+  return { id: professional.id, logoUrl: null };
+}
+
+/** Platform-admin path: requires `marketplaceVerify` (checked here, and again by the upload
+ * target inside the transaction). Also recorded in the platform audit log. */
+function requireLogoPlatformPermission(principal: PlatformPrincipal) {
+  if (principal.status !== "ACTIVE" || !platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.marketplaceVerify)) throw forbidden();
+}
+
+export async function uploadMarketplaceProfessionalLogoAsPlatform(principal: PlatformPrincipal, marketplaceProfessionalId: string, input: unknown) {
+  requireLogoPlatformPermission(principal);
+  const professional = await logoTarget(marketplaceProfessionalId);
+  const result = await performUpload({
+    userId: principal.userId,
+    organisationId: professional.backingOrganisationId,
+    targetType: MARKETPLACE_PROFESSIONAL_LOGO_TARGET,
+    input: logoUploadInput(marketplaceProfessionalId, input),
+    entitlementScope: { kind: "platform" },
+  });
+  await db.platformAuditEvent.create({
+    data: {
+      platformPrincipalId: principal.id, action: "marketplace_professional.logo_updated", entityType: "marketplace_professional",
+      entityId: marketplaceProfessionalId, organisationId: professional.backingOrganisationId,
+      metadata: json({ storageObjectId: result.storageObject.id, actorUserId: principal.userId }),
+    },
+  });
+  return result.attached;
+}
+
+export async function removeMarketplaceProfessionalLogoAsPlatform(principal: PlatformPrincipal, marketplaceProfessionalId: string) {
+  requireLogoPlatformPermission(principal);
+  const professional = await logoTarget(marketplaceProfessionalId);
+  await db.$transaction(async (tx) => {
+    const removed = await clearMarketplaceProfessionalLogo(tx, professional, principal.userId);
+    if (!removed) return;
+    await tx.platformAuditEvent.create({
+      data: {
+        platformPrincipalId: principal.id, action: "marketplace_professional.logo_removed", entityType: "marketplace_professional",
+        entityId: marketplaceProfessionalId, organisationId: professional.backingOrganisationId,
+        metadata: json({ previousLogoUrl: professional.logoUrl, actorUserId: principal.userId }),
+      },
+    });
+  });
+  return { id: professional.id, logoUrl: null };
 }
 
 /** Same cap the listing form and `createListingSchema.mediaUrls` already state to users. */

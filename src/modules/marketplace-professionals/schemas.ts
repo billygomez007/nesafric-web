@@ -21,7 +21,9 @@ export const createMarketplaceProfessionalSchema = z.object({
 export const updateMarketplaceProfessionalSchema = z.object({
   displayName: text(200).optional(),
   legalName: text(300).nullable().optional(),
-  logoUrl: z.string().trim().url().max(2000).nullable().optional(),
+  /** Only `null` (remove the logo). A new logo is always uploaded to NesAfric storage through the
+   * logo endpoint, never set from an arbitrary external URL. */
+  logoUrl: z.null().optional(),
   description: z.string().trim().max(5000).nullable().optional(),
   websiteUrl: z.string().trim().url().max(2000).nullable().optional(),
   contactEmail: z.string().trim().email().max(320).nullable().optional(),

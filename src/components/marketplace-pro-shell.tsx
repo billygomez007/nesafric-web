@@ -15,6 +15,7 @@ type ProIcon =
   | "team"
   | "promotions"
   | "voice"
+  | "profile"
   | "settings";
 
 function Icon({ name }: { name: ProIcon }) {
@@ -63,6 +64,13 @@ function Icon({ name }: { name: ProIcon }) {
       <>
         <rect x="9" y="3" width="6" height="12" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+      </>
+    ),
+    profile: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <circle cx="9" cy="11" r="2.5" />
+        <path d="M5.5 17c.6-1.8 1.9-2.7 3.5-2.7s2.9.9 3.5 2.7M15 10h3M15 13h3" />
       </>
     ),
     settings: (
@@ -227,6 +235,7 @@ export function MarketplaceProShell({
 
   const links: ProLink[] = [
     { href: base, label: "Dashboard", icon: "dashboard" },
+    { href: `${base}/profile`, label: "Business Profile", icon: "profile" },
     { href: `${base}/listings`, label: "Listings", icon: "listing" },
     { href: `${base}/leads`, label: "Leads", icon: "leads" },
     {

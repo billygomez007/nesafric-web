@@ -105,13 +105,17 @@ describe("Homepage Media inside the Platform Admin shell", () => {
     render(<HomepageMediaPage />);
     const table = await screen.findByRole("table");
     const row = (name: string) => within(table).getByText(name).closest("tr")!;
-    const buttons = (name: string) => within(row(name)).queryAllByRole("button").map((button) => button.textContent);
+    const actionsCell = (name: string) => row(name).querySelector("td:last-child") as HTMLElement;
+    const buttons = (name: string) => within(actionsCell(name)).queryAllByRole("button").map((button) => button.textContent);
 
     expect(buttons("Unverified Co")).toEqual(["Verify", "Reject", "Suspend account"]);
     expect(buttons("Verified Co")).toEqual(["Add to homepage", "Suspend verification", "Suspend account"]);
     expect(buttons("Suspended Co")).toEqual(["Reactivate account", "Suspend verification"]);
     expect(buttons("Archived Co")).toEqual([]);
     expect(within(row("Archived Co")).getByText("Archived profiles are read-only.")).toBeTruthy();
+    // Logo editing lives with the company identity, and never on archived profiles.
+    expect(within(row("Unverified Co")).getByRole("button", { name: "Upload logo" })).toBeTruthy();
+    expect(within(row("Archived Co")).queryByRole("button", { name: /Upload logo|Change logo/ })).toBeNull();
   });
 
   it("verifies an unverified company from Add company logo, then adds it without reloading the page", async () => {

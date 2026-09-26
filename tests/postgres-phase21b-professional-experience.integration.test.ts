@@ -134,9 +134,13 @@ describe("PostgreSQL Phase 21B professional experience", () => {
     expect(baseline.plan?.key).toBe("marketplace_free");
     const baselineCompleteness = baseline.profileCompletenessPercent;
 
-    // Improving the profile increases completeness.
+    // Improving the profile increases completeness. The logo is uploaded to NesAfric storage (the
+    // profile PATCH no longer accepts an external logo URL).
+    const { uploadMarketplaceProfessionalLogo } = await import("@/modules/documents/service");
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    await uploadMarketplaceProfessionalLogo(owner.id, professional.id, { fileName: "logo.png", contentType: "image/png", dataBase64: png });
     await updateMarketplaceProfessional(owner.id, professional.id, {
-      description: "A full-service brokerage.", logoUrl: "https://cdn.example.com/logo.png", websiteUrl: "https://metrics-brokerage.example",
+      description: "A full-service brokerage.", websiteUrl: "https://metrics-brokerage.example",
       contactEmail: "hello@metrics-brokerage.example", contactPhone: "+233240000000",
       specialities: ["Residential"], serviceAreas: ["Accra"],
     });

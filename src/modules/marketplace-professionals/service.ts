@@ -28,6 +28,7 @@ import {
   verificationReasonRequired,
 } from "./admin-lifecycle";
 import { isUuid } from "@/platform/validation/uuid";
+import { clearMarketplaceProfessionalLogo } from "./logo";
 import { enqueueOnboardingCompleteEmail } from "@/modules/account-emails/service";
 import type { User } from "@/platform/database/generated/client";
 
@@ -138,7 +139,7 @@ export async function listUserWorkspaces(userId: string) {
 }
 
 export async function getMarketplaceProfessional(userId: string, marketplaceProfessionalId: string) {
-  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const membership = await requireMarketplaceMember(userId, marketplaceProfessionalId);
   const professional = await db.marketplaceProfessional.findFirst({
     where: { id: marketplaceProfessionalId, archivedAt: null },
     include: {
@@ -148,15 +149,36 @@ export async function getMarketplaceProfessional(userId: string, marketplaceProf
     },
   });
   if (!professional) throw notFound();
-  return professional;
+  return { ...professional, myRole: membership.role };
 }
 
+/** Business self-service profile edit (OWNER/ADMIN only). Only the fields sent are changed;
+ * professional type and country are not editable here. `logoUrl: null` removes the logo through
+ * the same path as the logo endpoint, so the stored object is archived and the removal audited. */
 export async function updateMarketplaceProfessional(userId: string, marketplaceProfessionalId: string, input: unknown) {
   await requireMarketplaceRole(userId, marketplaceProfessionalId, "ADMIN");
-  const data = updateMarketplaceProfessionalSchema.parse(input);
-  const professional = await db.marketplaceProfessional.update({ where: { id: marketplaceProfessionalId }, data });
-  await recordProfessionalAudit(professional.id, userId, "marketplace_professional.updated");
-  return professional;
+  const { logoUrl, ...fields } = updateMarketplaceProfessionalSchema.parse(input);
+  const existing = await db.marketplaceProfessional.findFirst({
+    where: { id: marketplaceProfessionalId, archivedAt: null },
+    select: { id: true, backingOrganisationId: true, logoUrl: true },
+  });
+  if (!existing) throw notFound();
+  return db.$transaction(async (tx) => {
+    if (logoUrl === null) await clearMarketplaceProfessionalLogo(tx, existing, userId);
+    const changedFields = Object.keys(fields);
+    const professional = changedFields.length
+      ? await tx.marketplaceProfessional.update({ where: { id: marketplaceProfessionalId }, data: fields })
+      : await tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
+    if (changedFields.length) {
+      await tx.auditEvent.create({
+        data: {
+          organisationId: existing.backingOrganisationId, actorUserId: userId, action: "marketplace_professional.updated",
+          entityType: "marketplace_professional", entityId: marketplaceProfessionalId, metadata: { fields: changedFields },
+        },
+      });
+    }
+    return professional;
+  });
 }
 
 async function recordProfessionalAudit(marketplaceProfessionalId: string, actorUserId: string | undefined, action: string, metadata?: Record<string, unknown>) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminShell } from "@/components/platform-admin/shell";
 import { buttonClass } from "@/components/ui/button-styles";
+import { MarketplaceLogoUploader } from "@/components/marketplace-logo-uploader";
 import {
   AccountBadge,
   HomepageBadge,
@@ -640,6 +641,29 @@ function ProfessionalsContent() {
                       </span>
                     </div>
                   </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-sm font-semibold text-forest">Branding</h4>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  The company&apos;s own profile logo. The business can also change it from its
+                  workspace; both edit the same logo, used on the public profile and homepage rail.
+                </p>
+                <div className="mt-3 rounded-xl border border-hairline p-5">
+                  <MarketplaceLogoUploader
+                    canEdit={permissions.canVerify && !isArchived(selected)}
+                    endpoint={`/api/platform-admin/professionals/${selected.id}/logo`}
+                    logoUrl={selected.logoUrl}
+                    name={selected.displayName}
+                    onChange={(logoUrl) =>
+                      setProfessionals((current) =>
+                        current.map((professional) =>
+                          professional.id === selected.id ? { ...professional, logoUrl } : professional,
+                        ),
+                      )
+                    }
+                  />
                 </div>
               </section>
 

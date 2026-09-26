@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import { MarketplaceLogoUploader } from "@/components/marketplace-logo-uploader";
 import { buttonClass } from "@/components/ui/button-styles";
 import { controlClass, fieldLabelClass, textareaClass } from "@/components/ui/field-styles";
 import { ErrorState, LoadingState, SuccessNotice } from "@/components/ui/states";
@@ -99,6 +100,7 @@ export function HomepageMediaContent() {
   const [addOpen, setAddOpen] = useState(false);
   const [lifecycle, setLifecycle] = useState<{ company: Company; action: LifecycleAction } | null>(null);
   const [removing, setRemoving] = useState<RailItem | null>(null);
+  const [logoCompany, setLogoCompany] = useState<Company | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<CompanyFilter>("ALL");
 
@@ -308,7 +310,12 @@ export function HomepageMediaContent() {
                       {blocked && item.isPublished && (
                         <p className="mt-2 text-xs font-medium text-warning-ink">Not shown publicly: {blocked}</p>
                       )}
-                      {!company.logoUrl && <p className="mt-2 text-xs text-muted">No logo uploaded. The rail shows the company name until the company adds a logo to its marketplace profile.</p>}
+                      {!company.logoUrl && (
+                        <p className="mt-2 text-xs text-muted">
+                          No logo uploaded. The rail shows the company name until a logo is added.{" "}
+                          {permissions.canVerify && <button className="font-semibold text-forest underline-offset-4 hover:underline" onClick={() => setLogoCompany(company)} type="button">Upload logo</button>}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -395,6 +402,11 @@ export function HomepageMediaContent() {
                             <p className="font-semibold text-ink">{company.displayName}</p>
                             <Link className="text-xs text-muted hover:text-forest hover:underline" href={`/marketplace/professionals/${company.slug}`} target="_blank">/{company.slug} ↗</Link>
                             {!company.logoUrl && <p className="mt-1 text-xs text-warning-ink">No logo uploaded</p>}
+                            {permissions.canVerify && !isArchived(company) && (
+                              <button className="mt-1 block text-xs font-semibold text-forest underline-offset-4 hover:underline" onClick={() => setLogoCompany(company)} type="button">
+                                {company.logoUrl ? "Change logo" : "Upload logo"}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -461,6 +473,26 @@ export function HomepageMediaContent() {
           onDone={(message) => lifecycleDone(message)}
           professional={lifecycle.company}
         />
+      )}
+
+      {logoCompany && (
+        <Dialog
+          description="This is the company's own profile logo. It updates the public profile and, if featured, the homepage rail. The business can also change it from its workspace."
+          footer={<button className={buttonClass("secondary")} onClick={() => setLogoCompany(null)} type="button">Done</button>}
+          onClose={() => setLogoCompany(null)}
+          title={`Logo: ${logoCompany.displayName}`}
+        >
+          <MarketplaceLogoUploader
+            canEdit
+            endpoint={`/api/platform-admin/professionals/${logoCompany.id}/logo`}
+            logoUrl={logoCompany.logoUrl ?? null}
+            name={logoCompany.displayName}
+            onChange={(logoUrl) => {
+              setLogoCompany((current) => (current ? { ...current, logoUrl } : current));
+              void reload();
+            }}
+          />
+        </Dialog>
       )}
 
       {removing && (

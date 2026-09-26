@@ -6,6 +6,7 @@ import { AppError, forbidden, notFound } from "@/platform/errors";
 import { ownsProvider } from "@/modules/providers/service";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/platform-admin/permissions";
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
+import { archivePreviousLogos, LOGO_MIME_TYPES } from "@/modules/marketplace-professionals/logo";
 import { DOCUMENT_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, getObjectStorageAdapter, buildInternalPublicMediaUrl } from "@/platform/storage";
 import type { z } from "zod";
 import { MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
@@ -284,6 +285,49 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
           logoStorageObjectId: true,
         },
       });
+    },
+  },
+
+  /** A marketplace company's logo. Two separately-authorized callers reach this target: the
+   * business itself (OWNER/ADMIN membership, via `uploadMarketplaceProfessionalLogo`) and a
+   * platform admin (via `uploadMarketplaceProfessionalLogoAsPlatform`). Each entry point enforces
+   * its own path before uploading; this check re-verifies inside the transaction that the actor is
+   * one of the two. Always PUBLIC, and always written to `MarketplaceProfessional.logoUrl` — the
+   * only logo record — so the homepage rail picks it up without being re-added. */
+  MARKETPLACE_PROFESSIONAL_LOGO: {
+    allowedMimeTypes: LOGO_MIME_TYPES,
+    allowedClassifications: ["PUBLIC"],
+    authorize: async (tx, { userId, targetId }) => {
+      const professional = await tx.marketplaceProfessional.findFirst({ where: { id: targetId, archivedAt: null }, select: { backingOrganisationId: true } });
+      if (!professional) throw notFound();
+      const member = await tx.marketplaceProfessionalMember.findUnique({ where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId: targetId, userId } } });
+      const isBusinessAdmin = member?.status === "ACTIVE" && (member.role === "OWNER" || member.role === "ADMIN");
+      if (!isBusinessAdmin) {
+        const principal = await tx.platformPrincipal.findUnique({ where: { userId } });
+        if (!principal || principal.status !== "ACTIVE" || !platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.marketplaceVerify)) throw forbidden();
+      }
+      return { organisationId: professional.backingOrganisationId };
+    },
+    attach: async (tx, { targetId, storageObject, uploadedByUserId }) => {
+      const adapter = getObjectStorageAdapter();
+      const publicUrl = adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey);
+      const replaced = await archivePreviousLogos(tx, targetId, uploadedByUserId, "Replaced by a new logo.", storageObject.id);
+      const professional = await tx.marketplaceProfessional.update({
+        where: { id: targetId },
+        data: { logoUrl: publicUrl },
+        select: { id: true, displayName: true, logoUrl: true, backingOrganisationId: true },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organisationId: professional.backingOrganisationId,
+          actorUserId: uploadedByUserId,
+          action: "marketplace_professional.logo_updated",
+          entityType: "marketplace_professional",
+          entityId: targetId,
+          metadata: { storageObjectId: storageObject.id, replacedObjects: replaced },
+        },
+      });
+      return { id: professional.id, displayName: professional.displayName, logoUrl: professional.logoUrl };
     },
   },
 
