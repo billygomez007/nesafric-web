@@ -28,8 +28,8 @@ export function DevelopersCapabilitiesSection() {
     <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-navy">TWO SIDES, ONE ACCOUNT</p>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+          <p className="text-sm font-medium text-gold-ink">Two sides, one account</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em] text-forest-deep sm:text-[40px] sm:leading-[1.1]">
             Sell a development. Manage a portfolio. Use either — or both.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-600">
@@ -41,13 +41,13 @@ export function DevelopersCapabilitiesSection() {
 
         <div className="mt-14 grid gap-6 lg:grid-cols-2">
           {TRACKS.map((track) => (
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm" key={track.title}>
+            <div className="border-t-2 border-forest pt-6" key={track.title}>
               <p className="text-xs font-semibold tracking-[0.18em] text-navy">{track.kicker}</p>
-              <h3 className="mt-3 text-xl font-semibold text-slate-950">{track.title}</h3>
+              <h3 className="mt-3 font-display text-xl font-semibold text-forest-deep">{track.title}</h3>
               <ul className="mt-5 space-y-3">
                 {track.items.map((item) => (
                   <li className="flex items-start gap-3 text-sm leading-6 text-slate-600" key={item}>
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+                    <span className="mt-2.5 h-px w-2.5 shrink-0 bg-gold" />
                     {item}
                   </li>
                 ))}

@@ -1,58 +1,53 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+/**
+ * One figure in a summary row: label, value, a short explanation, and a link to the records
+ * behind it. No icon tile — the number and what it means carry the weight. `icon` and `tone`
+ * are still accepted so existing call sites compile; `tone="red"` marks the figure as needing
+ * attention.
+ */
 export function DashboardStat({
   label,
   value,
   helper,
-  icon,
   href,
   tone = "teal",
 }: {
   label: string;
   value: ReactNode;
   helper?: ReactNode;
-  icon: ReactNode;
+  icon?: ReactNode;
   href?: string;
   tone?: "teal" | "gold" | "forest" | "red";
 }) {
-  const toneClasses = {
-    teal: "bg-teal/8 text-teal",
-    gold: "bg-gold/10 text-amber-700",
-    forest: "bg-forest/8 text-forest",
-    red: "bg-red-50 text-red-700",
-  };
-
   const body = (
-    <div className="group h-full border-t border-hairline bg-transparent px-0 py-5 transition-colors duration-200 hover:border-teal/40">
-      <div className="flex items-start justify-between gap-4">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-[10px] ${toneClasses[tone]}`}>
-          {icon}
-        </div>
-        {href && (
-          <span className="text-xs font-semibold text-muted transition group-hover:text-teal">
-            View →
-          </span>
-        )}
-      </div>
-
-      <p className="mt-5 text-xs font-semibold uppercase tracking-[0.11em] text-muted">
-        {label}
-      </p>
-
-      <div className="mt-2 text-[30px] font-semibold tracking-[-0.045em] text-ink">
+    <div
+      className={`group h-full border-t py-4 transition-colors duration-150 ${
+        tone === "red" ? "border-danger" : "border-forest/25 group-hover:border-forest"
+      }`}
+    >
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <div className={`mt-1.5 text-[26px] font-semibold leading-tight tracking-[-0.02em] tabular-nums ${tone === "red" ? "text-danger-ink" : "text-ink"}`}>
         {value}
       </div>
-
-      {helper && (
-        <div className="mt-2 text-xs leading-5 text-muted">
-          {helper}
-        </div>
+      {helper && <div className="mt-1 text-xs leading-5 text-muted">{helper}</div>}
+      {href && (
+        <span className="mt-2 inline-block text-xs font-semibold text-forest group-hover:underline">
+          View <span className="sr-only">{label.toLowerCase()}</span>
+          <span aria-hidden="true"> →</span>
+        </span>
       )}
     </div>
   );
 
-  return href ? <Link href={href}>{body}</Link> : body;
+  return href ? (
+    <Link className="group block rounded-[2px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-strong" href={href}>
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
 
 export function DashboardPanel({
@@ -70,11 +65,11 @@ export function DashboardPanel({
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-[14px] border border-hairline bg-white ${className}`}
+      className={`overflow-hidden rounded-[var(--radius-panel)] border border-hairline bg-white ${className}`}
     >
       <div className="flex items-start justify-between gap-4 border-b border-hairline px-5 py-5 sm:px-6">
         <div>
-          <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
+          <h2 className="font-sans text-[15px] font-semibold text-ink">
             {title}
           </h2>
           {description && (
@@ -101,9 +96,9 @@ export function ProgressBar({
   const safe = Math.max(0, Math.min(100, value));
 
   return (
-    <div className={`h-1.5 overflow-hidden rounded-full bg-cream ${className}`}>
+    <div className={`h-1.5 overflow-hidden rounded-[1px] bg-cream ${className}`}>
       <div
-        className="h-full rounded-full bg-teal transition-all duration-500"
+        className="h-full bg-forest transition-[width] duration-500"
         style={{ width: `${safe}%` }}
       />
     </div>
@@ -118,15 +113,15 @@ export function StatusBadge({
   tone?: "neutral" | "success" | "warning" | "danger" | "gold";
 }) {
   const tones = {
-    neutral: "bg-surface text-muted",
-    success: "bg-teal/10 text-teal",
-    warning: "bg-amber-50 text-amber-800",
-    danger: "bg-red-50 text-red-800",
-    gold: "bg-gold/15 text-amber-800",
+    neutral: "bg-surface text-slate-600",
+    success: "bg-success-tint text-success",
+    warning: "bg-warning-tint text-warning-ink",
+    danger: "bg-danger-tint text-danger-ink",
+    gold: "bg-gold/15 text-gold-ink",
   };
 
   return (
-    <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.09em] ${tones[tone]}`}>
+    <span className={`inline-flex items-center rounded-[3px] px-2 py-0.5 text-[11px] font-semibold ${tones[tone]}`}>
       {children}
     </span>
   );

@@ -626,15 +626,26 @@ export async function getCrmDashboard(userId: string, organisationId: string) {
     db.marketplaceLead.groupBy({ by: ["status"], where: { organisationId }, orderBy: { status: "asc" }, _count: { id: true } }),
     db.viewingRequest.groupBy({ by: ["status"], where: { organisationId }, orderBy: { status: "asc" }, _count: { id: true } }),
     db.rentalApplication.groupBy({ by: ["status"], where: { organisationId }, orderBy: { status: "asc" }, _count: { id: true } }),
+    // Explicit selects: only what the leasing dashboard shows. Never whole User rows (password
+    // hash, account email), lead private notes, application details or applicant personal data.
     db.marketplaceLead.findMany({
       where: { organisationId },
-      include: { listing: { select: { id: true, title: true } }, assignee: { include: { user: true } } },
+      select: {
+        id: true, name: true, email: true, phone: true, status: true, lastActivityAt: true,
+        listing: { select: { id: true, title: true } },
+        assignee: { select: { id: true, user: { select: { displayName: true } } } },
+      },
       orderBy: { lastActivityAt: "desc" },
       take: 20,
     }),
     db.rentalApplication.findMany({
       where: { organisationId },
-      include: { applicant: true, listing: { select: { id: true, title: true } }, assignee: { include: { user: true } } },
+      select: {
+        id: true, status: true, lastActivityAt: true,
+        applicant: { select: { id: true, legalName: true } },
+        listing: { select: { id: true, title: true } },
+        assignee: { select: { id: true, user: { select: { displayName: true } } } },
+      },
       orderBy: { lastActivityAt: "desc" },
       take: 20,
     }),

@@ -1,40 +1,16 @@
-"use client";
-
-import Link from "next/link";
-import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
+import { AudienceHero } from "@/components/marketing/audience-hero";
+import { DevelopmentInventoryFragment } from "@/components/marketing/product-fragments";
 
 export function DevelopersHero() {
   return (
-    <section className="marketing-grid relative overflow-hidden bg-navy pt-20 pb-24 sm:pt-28 sm:pb-32">
-      <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
-        <p className="text-xs font-semibold tracking-[0.22em] text-brand">FOR PROPERTY DEVELOPERS</p>
-        <h1 className="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
-          From development to deal — run it on NesAfric.
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-          Showcase your developments, manage unit inventory and availability, sell through the NesAfric
-          Marketplace — and bring delivered units into full property management, if and when you need it.
-        </p>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            className="rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
-            href="/register"
-            onClick={() => trackCampaignEvent("join_free_click", { placement: "developers_hero" })}
-          >
-            Start Free
-          </Link>
-          <Link
-            className="rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
-            href="/marketplace/properties"
-            onClick={() => trackCampaignEvent("marketplace_visit_click", { placement: "developers_hero" })}
-          >
-            Explore the Marketplace
-          </Link>
-        </div>
-        <p className="mt-8 text-xs font-medium tracking-[0.14em] text-slate-500">
-          FREE FOR MARKETPLACE PROFESSIONALS DURING THE GHANA LAUNCH
-        </p>
-      </div>
-    </section>
+    <AudienceHero
+      audience="For property developers"
+      fragment={<DevelopmentInventoryFragment />}
+      lede="Show each development and its units, keep availability current floor by floor, sell through the NesAfric marketplace — and move delivered units straight into property management when you're ready."
+      note="Free for marketplace professionals during the Ghana launch."
+      primary={{ label: "Join free", href: "/register", event: "join_free_click", placement: "developers_hero" }}
+      secondary={{ label: "Browse the marketplace", href: "/marketplace/properties", event: "marketplace_visit_click", placement: "developers_hero" }}
+      title="Sell every unit, floor by floor."
+    />
   );
 }

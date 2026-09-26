@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 type Banner = {
   id: string;
@@ -21,8 +21,12 @@ const AUTO_ROTATE_MS = 7000;
  * controls for a one-item carousel would be pointless chrome; only shows the full carousel UI for
  * two or more. Auto-rotation is restrained, pauses on hover/focus/touch, and is skipped entirely
  * under `prefers-reduced-motion`, per item 25's accessibility requirements.
+ *
+ * `fallback` (opt-in, e.g. the homepage's platform-owned banner) is shown instead of nothing when
+ * no campaign is eligible or campaigns can't be loaded; until the answer is known a same-height
+ * placeholder holds the space, so a real campaign never flashes behind the fallback.
  */
-export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number }) {
+export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallback }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; fallback?: ReactNode }) {
   const [banners, setBanners] = useState<Banner[] | null>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -42,10 +46,11 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
     if (countryCode) params.set("countryCode", countryCode);
     let cancelled = false;
     fetch(`/api/public/campaigns?${params}`).then(async (response) => {
-      if (!response.ok || cancelled) return;
+      if (cancelled) return;
+      if (!response.ok) { setBanners([]); return; }
       const body = await response.json();
       setBanners(Array.isArray(body.banners) ? body.banners : []);
-    });
+    }).catch(() => { if (!cancelled) setBanners([]); });
     return () => { cancelled = true; };
   }, [placement, countryCode, limit]);
 
@@ -70,7 +75,10 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
     return () => clearInterval(timer);
   }, [canRotate, paused, reducedMotion, banners]);
 
-  if (!banners || banners.length === 0) return null;
+  if (!banners || banners.length === 0) {
+    if (!fallback) return null;
+    return banners ? <>{fallback}</> : <div aria-busy="true" aria-label="Loading featured content" className="h-64 bg-forest-deep sm:h-72 lg:h-80" role="status" />;
+  }
 
   const multi = banners.length > 1;
 
@@ -94,7 +102,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
     <div
       aria-label="Featured marketplace campaigns"
       aria-roledescription="carousel"
-      className="relative overflow-hidden rounded-3xl border border-forest/20 bg-forest-deep shadow-sm"
+      className="relative overflow-hidden rounded-[var(--radius-panel)] bg-forest-deep"
       onBlur={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onKeyDown={onKeyDown}
@@ -108,7 +116,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
         <a
           aria-label={`Promoted: ${active.headline}`}
           aria-roledescription="slide"
-          className="group relative block h-56 sm:h-56"
+          className="group relative block h-64 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-gold-soft sm:h-72 lg:h-80"
           href={active.destinationUrl}
           key={active.id}
           onClick={() => void fetch(`/api/public/campaigns/${active.id}/click`, { method: "POST" })}
@@ -121,14 +129,14 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
           {(active.mobileMediaUrl ?? active.desktopMediaUrl) && (
             <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
           )}
-          <div className="absolute inset-0 bg-gradient-to-r from-forest-deep via-forest-deep/70 to-transparent" />
-          <div className={`relative flex h-full max-w-lg flex-col justify-center gap-2 py-6 sm:py-8 ${multi ? "pl-14 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-8"}`}>
-            <span className="w-fit rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-gold-soft backdrop-blur">
+          <div className="absolute inset-0 bg-gradient-to-r from-forest-deep/95 via-forest-deep/60 to-transparent" />
+          <div className={`relative flex h-full max-w-xl flex-col justify-end gap-2 pb-10 pt-6 sm:justify-center sm:pb-8 ${multi ? "pl-6 pr-14 sm:pl-16 sm:pr-16" : "px-6 sm:px-10"}`}>
+            <span className="w-fit text-xs font-semibold text-gold-soft">
               Promoted
             </span>
-            <h3 className="text-lg font-semibold text-white sm:text-xl">{active.headline}</h3>
-            {active.supportingText && <p className="line-clamp-1 text-sm text-slate-300">{active.supportingText}</p>}
-            {active.ctaLabel && <span className="mt-1 w-fit rounded-xl bg-teal px-3.5 py-2 text-sm font-semibold text-white">{active.ctaLabel}</span>}
+            <h3 className="font-display text-xl font-semibold leading-tight text-white sm:text-[28px]">{active.headline}</h3>
+            {active.supportingText && <p className="line-clamp-2 max-w-md text-sm leading-6 text-white/80">{active.supportingText}</p>}
+            {active.ctaLabel && <span className="mt-2 inline-flex min-h-10 w-fit items-center rounded-[var(--radius-control)] bg-gold px-4 text-sm font-semibold text-forest-deep transition-colors group-hover:bg-gold-soft">{active.ctaLabel}</span>}
           </div>
         </a>
       )}
@@ -137,7 +145,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
         <>
           <button
             aria-label="Previous campaign"
-            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white outline-offset-2 transition hover:bg-black/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-[var(--radius-control)] bg-forest-deep/60 text-white outline-offset-2 transition hover:bg-forest-deep/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft max-sm:hidden"
             onClick={() => goTo(index - 1)}
             type="button"
           >
@@ -145,22 +153,24 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6 }: { pla
           </button>
           <button
             aria-label="Next campaign"
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white outline-offset-2 transition hover:bg-black/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-[var(--radius-control)] bg-forest-deep/60 text-white outline-offset-2 transition hover:bg-forest-deep/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft max-sm:hidden"
             onClick={() => goTo(index + 1)}
             type="button"
           >
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+          <div className="absolute bottom-3 left-6 flex gap-1.5 sm:left-1/2 sm:-translate-x-1/2">
             {banners.map((banner, slideIndex) => (
               <button
                 aria-current={slideIndex === index ? "true" : undefined}
                 aria-label={`Show campaign ${slideIndex + 1} of ${banners.length}: ${banner.headline}`}
-                className={`h-1.5 rounded-full outline-offset-2 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${slideIndex === index ? "w-5 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"}`}
+                className="group/dot flex h-6 items-center px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft"
                 key={banner.id}
                 onClick={() => goTo(slideIndex)}
                 type="button"
-              />
+              >
+                <span aria-hidden="true" className={`block h-1 transition-all ${slideIndex === index ? "w-6 bg-gold" : "w-3 bg-white/45 group-hover/dot:bg-white/75"}`} />
+              </button>
             ))}
           </div>
         </>
