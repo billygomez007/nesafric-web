@@ -81,7 +81,7 @@ describe("mobile bearer sessions", () => {
     expect((await me.json()).email).toBe("ama@mobile-auth.test");
     const spaces = await workspaces();
     expect(spaces.status).toBe(200);
-    expect(await spaces.json()).toEqual({ propertyOsOrganisations: [], marketplaceProfessionals: [] });
+    expect(await spaces.json()).toEqual({ propertyOsOrganisations: [], marketplaceProfessionals: [], serviceProviders: [] });
   });
 
   it("gives the same answer for a wrong password and an unknown email, and rejects malformed bodies", async () => {

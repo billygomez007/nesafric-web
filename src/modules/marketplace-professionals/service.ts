@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 import { createOrganisation, listUserOrganisations } from "@/modules/organisations/service";
+import { listOwnedProviders } from "@/modules/providers/service";
 import { updateMarketplaceProfessionalLead } from "@/modules/listings/service";
 import { requirePlatformPrincipal, PLATFORM_PERMISSIONS } from "@/platform/platform-admin/auth";
 import {
@@ -117,14 +118,16 @@ export async function listUserMarketplaceProfessionals(userId: string) {
 }
 
 /** Dual-workspace readiness (item 7): the complete set of workspaces one user identity can act
- * within — zero or more PropertyOS management organisations, and zero or more Marketplace
- * professional profiles — kept as two clearly separate collections, never merged. */
+ * within — zero or more PropertyOS management organisations, zero or more Marketplace
+ * professional profiles, and zero or more service-provider profiles they own — kept as clearly
+ * separate collections, never merged. */
 export async function listUserWorkspaces(userId: string) {
-  const [propertyOsOrganisations, marketplaceProfessionals] = await Promise.all([
+  const [propertyOsOrganisations, marketplaceProfessionals, serviceProviders] = await Promise.all([
     listUserOrganisations(userId),
     listUserMarketplaceProfessionals(userId),
+    listOwnedProviders(userId),
   ]);
-  return { propertyOsOrganisations, marketplaceProfessionals };
+  return { propertyOsOrganisations, marketplaceProfessionals, serviceProviders };
 }
 
 export async function getMarketplaceProfessional(userId: string, marketplaceProfessionalId: string) {
