@@ -1,8 +1,9 @@
 /// <reference types="node" />
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 import path from "path";
 import * as WebBrowser from "expo-web-browser";
+import { Animated } from "react-native";
 
 import type { CampaignBanner } from "@/api/home";
 import { buildFeaturedSlides, resolveDestination } from "@/home/featured";
@@ -150,6 +151,54 @@ describe("marketplace home", () => {
     const before = searchCalls().length;
     fireEvent.press(screen.getByText("Try again"));
     await waitFor(() => expect(searchCalls().length).toBeGreaterThan(before));
+  });
+
+  // Regression: the logo rail used to drift by calling scrollTo every frame. On a real iPhone each
+  // of those scroll events let the Home ScrollView take over any touch in progress, so chips,
+  // "View property" and property cards stopped responding. The rail must drift by transform only.
+  async function loopingRail() {
+    const rail = await screen.findByTestId("company-rail-placeholder");
+    act(() => fireEvent(rail, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 58 } } }));
+  }
+
+  it("the logo rail drifts with a native transform, not by scrolling", async () => {
+    const timing = jest.spyOn(Animated, "timing");
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await loopingRail();
+    const setWidth = 6 * (92 + 10);
+    await waitFor(() => expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ toValue: -setWidth, useNativeDriver: true, isInteraction: false })));
+    const row = screen.getByTestId("logo-rail-row");
+    expect(JSON.stringify(row.props.style)).toContain("translateX");
+    timing.mockRestore();
+  });
+
+  it.each([
+    ["Rent", "listingType", "RENT"],
+    ["Houses", "category", "HOUSE"],
+    ["Apartments", "category", "APARTMENT"],
+  ])("with the logo rail moving, the %s chip still opens filtered Search", async (label, key, value) => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await loopingRail();
+    fireEvent.press(await screen.findByText(label));
+    await waitFor(() => expect(searchCalls().some((params) => params.get(key) === value && params.get("pageSize") === "20")).toBe(true));
+  });
+
+  it("with the logo rail moving, featured View property still opens the listing", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await loopingRail();
+    fireEvent.press(await screen.findByText("View property"));
+    expect(await screen.findByText("Verified property")).toBeTruthy();
+  });
+
+  it("with the logo rail moving, a Properties on NesAfric card still opens the listing", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await loopingRail();
+    fireEvent.press(await screen.findByLabelText(/^4 Bedroom House, For rent/));
+    expect(await screen.findByText("Verified property")).toBeTruthy();
   });
 
   it("Advanced search opens the existing filter sheet", async () => {
