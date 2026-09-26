@@ -836,6 +836,7 @@ model User {
   campaignsCreated                   Campaign[]                                 @relation("CampaignCreator")
   campaignsReviewed                  Campaign[]                                 @relation("CampaignReviewer")
   voiceCallsInitiated                VoiceCall[]                                @relation("VoiceCallInitiator")
+  savedListings                      SavedListing[]
 }
 
 model Session {
@@ -3075,6 +3076,7 @@ model Listing {
   rentalApplications          RentalApplication[]
   conversations               Conversation[]
   attributionHistory          ListingAttributionHistory[]
+  savedBy                     SavedListing[]
 
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
@@ -5602,4 +5604,20 @@ model MediaStreamSession {
   @@index([callId])
   @@index([organisationId, status])
   @@index([status, tokenExpiresAt])
+}
+
+/// A listing a user has saved ("favourited"). Per user, one row per listing. Only public-eligible
+/// listings can be saved; a saved listing that later leaves the marketplace is reported as
+/// unavailable without exposing its data. See docs/saved-listings-api.md.
+model SavedListing {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  listingId String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([userId, createdAt])
+  @@index([listingId])
 }
