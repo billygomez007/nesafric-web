@@ -184,6 +184,8 @@ export function OnboardingForm() {
         <div className="flex items-start gap-4">
           <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-hairline bg-white">
             {logoPreview ? (
+              // Local blob preview of the file being uploaded; next/image cannot optimise it.
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 alt="Company logo preview"
                 className="h-full w-full object-contain p-2"

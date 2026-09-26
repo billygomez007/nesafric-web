@@ -966,8 +966,18 @@ export async function updateListingVerification(
   listingId = listingIdSchema.parse(listingId);
   const data = listingVerificationSchema.parse(input);
   const professional = await db.marketplaceProfessional.findUnique({ where: { backingOrganisationId: organisationId }, select: { id: true } });
-  if (professional && data.status === "PENDING") await requireMarketplaceMember(userId, professional.id);
-  else await requirePermission(userId, organisationId, data.status === "PENDING" ? PERMISSIONS.listingManage : PERMISSIONS.listingVerify);
+  if (professional) {
+    // A marketplace professional's members hold PropertyOS permissions on its hidden backing
+    // organisation, so the organisation check below would let a business verify its own
+    // listing. For marketplace listings only submitting (PENDING) is theirs; every verification
+    // decision is NesAfric's, made through the platform-admin review actions.
+    if (data.status !== "PENDING") {
+      throw new AppError("LISTING_VERIFICATION_PLATFORM_ONLY", 403, "Marketplace listing verification is decided by NesAfric. Submit the listing for review instead.");
+    }
+    await requireMarketplaceMember(userId, professional.id);
+  } else {
+    await requirePermission(userId, organisationId, data.status === "PENDING" ? PERMISSIONS.listingManage : PERMISSIONS.listingVerify);
+  }
   return db.$transaction((tx) => applyListingVerification(tx, userId, organisationId, listingId, data));
 }
 

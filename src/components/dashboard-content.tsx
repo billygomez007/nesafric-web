@@ -287,6 +287,8 @@ export function DashboardContent() {
             <div className="mt-2 flex items-center gap-3">
               {data.organisation.logoUrl ? (
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-control)] border border-white/15 bg-white p-1.5">
+                  {/* User-uploaded logo from object storage; not a next/image candidate. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     alt={`${data.organisation.name} logo`}
                     className="h-full w-full object-contain"

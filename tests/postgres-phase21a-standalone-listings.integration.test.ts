@@ -1,12 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/platform/database/client";
+import { verifyListingAsNesAfric } from "./helpers/nesafric-review";
 import { registerUser } from "@/modules/identity/service";
 import { createMarketplaceProfessional, addMarketplaceMember } from "@/modules/marketplace-professionals/service";
 import { createDevelopment, createDevelopmentUnit } from "@/modules/developments/service";
 import {
   createMarketplaceNativeListing, createMarketplaceLead, createViewingRequest, getPublicListing,
   searchPublicListings, submitMarketplaceProfessionalListingVerification, transitionMarketplaceProfessionalListing,
-  updateListingVerification, updateMarketplaceListingAttribution,
+  updateMarketplaceListingAttribution,
 } from "@/modules/listings/service";
 import { listUserOrganisations } from "@/modules/organisations/service";
 import { getPublicMarketplaceProfessionalProfile, searchMarketplaceDirectory } from "@/modules/marketplace-professionals/service";
@@ -58,7 +59,7 @@ describe("PostgreSQL standalone marketplace listings", () => {
     const professional = await createMarketplaceProfessional(owner.id, { type: "BROKERAGE", displayName: "Suspendable Brokerage", countryCode: "GH" });
     const listing = await createMarketplaceNativeListing(owner.id, professional.id, standaloneInput());
     await submitMarketplaceProfessionalListingVerification(owner.id, professional.id, listing.id, { status: "PENDING", evidence: [{ type: "marketing_authority", privateReference: "private/auth.pdf" }] });
-    await updateListingVerification(owner.id, professional.backingOrganisationId, listing.id, { status: "VERIFIED" });
+    await verifyListingAsNesAfric(listing.id);
     await transitionMarketplaceProfessionalListing(owner.id, professional.id, listing.id, { status: "PENDING_REVIEW" });
     await transitionMarketplaceProfessionalListing(owner.id, professional.id, listing.id, { status: "PUBLISHED" });
 
@@ -94,7 +95,7 @@ describe("PostgreSQL standalone marketplace listings", () => {
     const listing = await createMarketplaceNativeListing(developer.id, professional.id, input);
     expect(listing.developmentUnitId).toBe(unit.id);
     await submitMarketplaceProfessionalListingVerification(developer.id, professional.id, listing.id, { status: "PENDING", evidence: [{ type: "marketing_authority", privateReference: "private/dev-unit-a1.pdf" }] });
-    await updateListingVerification(developer.id, professional.backingOrganisationId, listing.id, { status: "VERIFIED" });
+    await verifyListingAsNesAfric(listing.id);
     await transitionMarketplaceProfessionalListing(developer.id, professional.id, listing.id, { status: "PENDING_REVIEW" });
     await transitionMarketplaceProfessionalListing(developer.id, professional.id, listing.id, { status: "PUBLISHED" });
 

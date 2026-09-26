@@ -3,6 +3,7 @@ import { db } from "@/platform/database/client";
 import { registerUser } from "@/modules/identity/service";
 import { addMarketplaceMember, createMarketplaceProfessional } from "@/modules/marketplace-professionals/service";
 import {
+  updateListingVerification,
   createMarketplaceNativeListing, getPublicListing, searchPublicListings, submitMarketplaceListingForReview,
   transitionMarketplaceProfessionalListing, updateMarketplaceNativeListing,
 } from "@/modules/listings/service";
@@ -183,6 +184,16 @@ describe("PostgreSQL listing review workflow", () => {
       await expect(requestListingChangesForPlatform(principal, listing.id, { expectedUpdatedAt: listing.updatedAt, note: "No." })).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(rejectListingForPlatform(principal, listing.id, { expectedUpdatedAt: listing.updatedAt, note: "No." })).rejects.toMatchObject({ code: "FORBIDDEN" });
     }
+    expect(await fresh(listing.id)).toMatchObject({ status: "PENDING_REVIEW", verificationStatus: "PENDING" });
+  });
+
+  it("does not let a business verify its own listing through its backing organisation", async () => {
+    const { owner, professional, listing } = await submitted();
+    for (const status of ["VERIFIED", "REJECTED", "SUSPENDED"] as const) {
+      await expect(updateListingVerification(owner.id, professional.backingOrganisationId, listing.id, { status, note: "Self-approved." }))
+        .rejects.toMatchObject({ code: "LISTING_VERIFICATION_PLATFORM_ONLY", status: 403 });
+    }
+    await expect(transitionMarketplaceProfessionalListing(owner.id, professional.id, listing.id, { status: "PUBLISHED" })).rejects.toMatchObject({ code: "LISTING_NOT_VERIFIED" });
     expect(await fresh(listing.id)).toMatchObject({ status: "PENDING_REVIEW", verificationStatus: "PENDING" });
   });
 

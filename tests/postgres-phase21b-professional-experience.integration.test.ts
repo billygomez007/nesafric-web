@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/platform/database/client";
+import { verifyListingAsNesAfric } from "./helpers/nesafric-review";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
 import { createProperty } from "@/modules/assets/service";
@@ -74,7 +75,7 @@ async function publishListing(userId: string, organisationId: string, listingId:
     status: "PENDING",
     evidence: [{ type: "OWNERSHIP_OR_AUTHORITY", privateReference: "private/evidence/title-deed.pdf" }],
   });
-  await updateListingVerification(userId, organisationId, listingId, { status: "VERIFIED", note: "Authority checked." });
+  await verifyListingAsNesAfric(listingId);
   await transitionListing(userId, organisationId, listingId, { status: "PENDING_REVIEW" });
   return transitionListing(userId, organisationId, listingId, { status: "PUBLISHED" });
 }
