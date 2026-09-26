@@ -285,6 +285,18 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
   const verified = listing.verification.status === "VERIFIED";
   const lister = listing.attribution.professional?.displayName ?? listing.attribution.listedBy;
 
+  const listingBadgeClass =
+    listing.listingType === "RENT"
+      ? "border-market-rent/35 bg-market-rent-tint text-market-rent"
+      : "border-market-sale/35 bg-market-sale-tint text-market-sale";
+
+  const categoryBadgeClass =
+    listing.category === "LAND"
+      ? "border-market-land/35 bg-market-land-tint text-market-land"
+      : listing.category === "COMMERCIAL"
+        ? "border-market-commercial/35 bg-market-commercial-tint text-market-commercial"
+        : null;
+
   return (
     <Link
       className="group block rounded-[var(--radius-media)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-strong"
@@ -303,9 +315,16 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted">Photos coming soon</div>
         )}
-        <span className="absolute left-3 top-3 rounded-[var(--radius-media)] bg-white/95 px-2 py-1 text-xs font-semibold text-forest-deep">
-          {listingTypeLabel(listing.listingType)}
-        </span>
+        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm ${listingBadgeClass}`}>
+            {listingTypeLabel(listing.listingType)}
+          </span>
+          {categoryBadgeClass && (
+            <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm ${categoryBadgeClass}`}>
+              {humanize(listing.category)}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="pt-4">
@@ -323,7 +342,7 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
 
         <p className="mt-2 flex items-center gap-2 text-xs text-muted">
           {verified && (
-            <span className="inline-flex items-center gap-1 font-semibold text-gold-ink">
+            <span className="inline-flex items-center gap-1 rounded-full border border-market-verified/35 bg-market-verified-tint px-2 py-1 font-semibold text-market-verified">
               <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
               Verified
             </span>
