@@ -24,10 +24,10 @@ export const webCssVariables = {
   "--color-success": "#047857",
   "--color-warning": "#d97706",
   "--color-danger": "#dc2626",
-  "--radius-control": "8px",
-  "--radius-field": "10px",
-  "--radius-panel": "14px",
-  "--radius-shell": "18px",
+  "--radius-control": "6px",
+  "--radius-field": "6px",
+  "--radius-panel": "8px",
+  "--radius-shell": "10px",
 } as const;
 
 const css = webCssVariables;
