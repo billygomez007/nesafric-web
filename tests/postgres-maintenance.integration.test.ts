@@ -129,7 +129,8 @@ describe("PostgreSQL Phase 6 maintenance and work orders", () => {
       priority: "URGENT",
       attachments: [{ fileKey: "maintenance/leak.jpg", fileName: "leak.jpg", contentType: "image/jpeg", sizeBytes: 3210 }],
     });
-    expect(request).toMatchObject({ status: "REPORTED", reportedByUserId: reporter.id });
+    expect(request).toMatchObject({ status: "REPORTED" });
+    expect((await db.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id } })).reportedByUserId).toBe(reporter.id);
     expect(request.attachments).toHaveLength(1);
     expect((await getTenantMaintenanceHistory(reporter.id, organisation.id, tenant.relationship.id))[0].id).toBe(request.id);
 
@@ -179,6 +180,7 @@ describe("PostgreSQL Phase 6 maintenance and work orders", () => {
     await transitionMaintenanceRequest(owner.id, organisation.id, request.id, { status: "CLOSED", note: "Tenant confirmed" });
 
     const detail = await getMaintenanceRequest(owner.id, organisation.id, request.id);
+    if (!("history" in detail)) throw new Error("Staff must receive the internal maintenance view.");
     expect(detail.status).toBe("CLOSED");
     expect(detail.workOrders[0].actualCostAmountMinor?.toString()).toBe("76000");
     expect(detail.history.map(({ toStatus }) => toStatus).filter(Boolean)).toEqual(expect.arrayContaining(["REPORTED", "TRIAGED", "AWAITING_APPROVAL", "APPROVED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CLOSED"]));
