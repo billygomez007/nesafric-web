@@ -1,13 +1,15 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import * as Linking from "expo-linking";
-import { useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { providerWorkspaces } from "@/api/account";
 import { useWorkspaces } from "@/api/account-queries";
 import type { PreferredTime } from "@/api/inbox";
 import { useActiveWorkspace } from "@/api/inbox-queries";
-import { useSession } from "@/auth/session";
+import { ACCOUNT_QUERY_KEY, useSession } from "@/auth/session";
 import { isListedOrganisation } from "@/auth/workspaces";
 import { AppText, Button, Loading, Notice, StateMessage } from "@/components/ui";
 import { humanise } from "@/marketplace/format";
@@ -15,20 +17,33 @@ import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { usableEmail, usablePhone } from "./contact";
 import type { InboxScope } from "./scope";
 
+export type GateKind = InboxScope["kind"] | "provider";
+
+/** Cache key for a workspace's own data: `["account", userId, "ws", "org:…" | "pro:…" | "prv:…", …]`. */
+export const workspaceCacheKey = (kind: GateKind, id: string) => `${kind === "organisation" ? "org" : kind === "professional" ? "pro" : "prv"}:${id}`;
+
 /**
  * Every workspace screen goes through this: signed out → sign-in prompt; a workspace that isn't in
  * the server's own `/api/workspaces` list → "not available" (and no request for it is ever sent).
- * Entering a workspace drops cached inbox data of any other workspace.
+ * Entering a workspace drops cached data of every other workspace (inbox and workspace screens).
  */
-export function useWorkspaceGate(kind: InboxScope["kind"], id: string | undefined) {
+export function useWorkspaceGate(kind: GateKind, id: string | undefined) {
   const { status } = useSession();
   const workspaces = useWorkspaces();
+  const queryClient = useQueryClient();
   const organisation = kind === "organisation" ? workspaces.data?.propertyOsOrganisations.find((item) => item.id === id) : undefined;
   const professional = kind === "professional" ? workspaces.data?.marketplaceProfessionals.find((item) => item.id === id) : undefined;
-  const listed = kind === "organisation" ? isListedOrganisation(workspaces.data, id) : Boolean(professional);
-  const scopeId = listed && id ? id : null;
-  const scope = useMemo<InboxScope | null>(() => (scopeId ? { kind, id: scopeId } : null), [kind, scopeId]);
+  const provider = kind === "provider" ? providerWorkspaces(workspaces.data).find((item) => item.id === id) : undefined;
+  const listed = kind === "organisation" ? isListedOrganisation(workspaces.data, id) : Boolean(professional ?? provider);
+  const allowedId = listed && id ? id : null;
+  const scope = useMemo<InboxScope | null>(() => (allowedId && kind !== "provider" ? { kind, id: allowedId } : null), [kind, allowedId]);
   useActiveWorkspace(scope);
+
+  const current = allowedId ? workspaceCacheKey(kind, allowedId) : null;
+  useEffect(() => {
+    if (!current) return;
+    queryClient.removeQueries({ queryKey: ACCOUNT_QUERY_KEY, predicate: (query) => query.queryKey[2] === "ws" && query.queryKey[3] !== current });
+  }, [queryClient, current]);
 
   let gate: ReactNode = null;
   if (status !== "signedIn") {
@@ -41,11 +56,11 @@ export function useWorkspaceGate(kind: InboxScope["kind"], id: string | undefine
         title="Workspace not available"
         message="You’re not a member of this workspace, or it’s no longer available to you."
         actionLabel="Back to Account"
-        onAction={() => (router.canGoBack() ? router.back() : router.replace("/account"))}
+        onAction={() => router.replace("/account")}
       />
     );
   }
-  return { gate, scope, organisation, professional };
+  return { gate, scope, organisation, professional, provider, workspaceId: allowedId };
 }
 
 const STATUS_TONE: Record<string, string> = {

@@ -78,14 +78,11 @@ export default function RootLayout() {
                 <Stack.Screen name="listing/[id]/index" options={{ headerShown: true, title: "", headerBackTitle: "Back" }} />
                 <Stack.Screen name="listing/[id]/enquire" options={{ headerShown: true, presentation: "modal", title: "Contact" }} />
                 <Stack.Screen name="sign-in" options={{ headerShown: true, presentation: "modal", title: "Sign in" }} />
-                <Stack.Screen name="workspace/[organisationId]/index" options={{ headerShown: true, title: "Workspace", headerBackTitle: "Account" }} />
-                <Stack.Screen name="workspace/[organisationId]/inbox" options={{ headerShown: true, title: "Enquiries & viewings", headerBackTitle: "Workspace" }} />
-                <Stack.Screen name="workspace/[organisationId]/enquiry/[leadId]" options={{ headerShown: true, title: "Enquiry", headerBackTitle: "Inbox" }} />
-                <Stack.Screen name="workspace/[organisationId]/viewing/[viewingId]" options={{ headerShown: true, title: "Viewing request", headerBackTitle: "Inbox" }} />
-                <Stack.Screen name="agent/[professionalId]/index" options={{ headerShown: true, title: "Agent workspace", headerBackTitle: "Account" }} />
-                <Stack.Screen name="agent/[professionalId]/inbox" options={{ headerShown: true, title: "Enquiries & viewings", headerBackTitle: "Workspace" }} />
-                <Stack.Screen name="agent/[professionalId]/enquiry/[leadId]" options={{ headerShown: true, title: "Enquiry", headerBackTitle: "Inbox" }} />
-                <Stack.Screen name="agent/[professionalId]/viewing/[viewingId]" options={{ headerShown: true, title: "Viewing request", headerBackTitle: "Inbox" }} />
+                {/* Workspaces bring their own tabs and headers; each is gated on the server's workspace list. */}
+                <Stack.Screen name="workspace/[organisationId]" />
+                <Stack.Screen name="agent/[professionalId]" />
+                <Stack.Screen name="provider/[providerId]" />
+                <Stack.Screen name="switch-workspace" options={{ headerShown: true, presentation: "modal", title: "Switch workspace" }} />
                 <Stack.Screen name="home/[tenancyId]/index" options={{ headerShown: true, title: "Your home", headerBackTitle: "Account" }} />
                 <Stack.Screen name="home/[tenancyId]/report" options={{ headerShown: true, presentation: "modal", title: "Report a problem" }} />
                 <Stack.Screen name="home/[tenancyId]/request/[requestId]" options={{ headerShown: true, title: "Repair request", headerBackTitle: "Home" }} />

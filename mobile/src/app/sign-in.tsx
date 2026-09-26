@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, type TextInput } from "react-native";
@@ -9,11 +9,14 @@ import { signInErrorMessage } from "@/auth/errors";
 import { useSession } from "@/auth/session";
 import { AppText, Button, Notice, TextField } from "@/components/ui";
 import { colors, spacing } from "@/theme/tokens";
+import { parseIntent, WORKSPACE_KIND_LABEL } from "@/workspace/resolve";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignInScreen() {
   const { signIn } = useSession();
+  // Only changes the wording; what the account can open is decided by the server after sign-in.
+  const intent = parseIntent(useLocalSearchParams<{ intent?: string }>().intent);
   const { apiUrl } = useApi();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
@@ -51,6 +54,11 @@ export default function SignInScreen() {
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + insets.bottom }]} keyboardShouldPersistTaps="handled">
         <AppText variant="title">Sign in to NesAfric</AppText>
+        {intent ? (
+          <AppText variant="label" testID="sign-in-intent">
+            {`${WORKSPACE_KIND_LABEL[intent]}: sign in to open your workspace, or to set one up.`}
+          </AppText>
+        ) : null}
         <AppText variant="caption">
           Use the same NesAfric account as the website. You can keep browsing properties without signing in.
         </AppText>

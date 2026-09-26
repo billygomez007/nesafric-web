@@ -14,6 +14,7 @@ import {
   type LocalClearResult,
   type StoredUser,
 } from "./token-store";
+import { clearLastWorkspaces } from "./workspaces";
 
 /**
  * Optional sign-in. The marketplace never waits for or depends on this: guests browse, save and
@@ -79,6 +80,8 @@ export function SessionProvider({ apiUrl, children }: { apiUrl: string; children
     setStatus("signedOut");
     void queryClient.cancelQueries({ queryKey: ACCOUNT_QUERY_KEY });
     queryClient.removeQueries({ queryKey: ACCOUNT_QUERY_KEY });
+    // Which workspace was open last is nobody else's business on a shared phone.
+    void clearLastWorkspaces();
     return generationRef.current;
   }, [queryClient]);
 

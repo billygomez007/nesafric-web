@@ -1,27 +1,37 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useEffect, useState, type ComponentProps } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { ProfessionalWorkspace, Workspaces } from "@/api/account";
 import { useProfile, useWorkspaces } from "@/api/account-queries";
 import { ApiError, NETWORK_ERROR } from "@/api/client";
 import { useApi } from "@/api/provider";
 import type { Tenancy } from "@/api/tenant";
 import { useTenancies } from "@/api/tenant-queries";
 import { useSession, type SessionNotice } from "@/auth/session";
-import { loadLastWorkspace, rememberWorkspace } from "@/auth/workspaces";
+import { loadLastWorkspace } from "@/auth/workspaces";
 import { BRAND } from "@/brand";
+import { GatewayCard } from "@/components/gateway-card";
+import { ListRow, RowGroup, type IconName } from "@/components/list-row";
 import { AppText, Button, Card, Notice } from "@/components/ui";
-import { humanise } from "@/marketplace/format";
 import { leaseLabel } from "@/tenant/maintenance";
-import { colors, radii, spacing } from "@/theme/tokens";
-
-type IconName = ComponentProps<typeof Ionicons>["name"];
+import { colors, fonts, spacing } from "@/theme/tokens";
+import { setWorkspaceIntent, useWorkspaceIntent } from "@/workspace/intent";
+import {
+  hasWorkspaceKind,
+  resolveAvailableWorkspaces,
+  resolveInitialWorkspace,
+  sameWorkspace,
+  WORKSPACE_KIND_LABEL,
+  type AvailableWorkspace,
+  type WorkspaceIntent,
+  type WorkspaceKind,
+  type WorkspaceRef,
+} from "@/workspace/resolve";
+import { openSwitcher } from "@/workspace/shell";
 
 /**
  * Account entry point (brief §6). Signing in is optional: guests keep browsing, saving and
@@ -31,11 +41,15 @@ type IconName = ComponentProps<typeof Ionicons>["name"];
 export default function AccountScreen() {
   const { apiUrl } = useApi();
   const { status, notice } = useSession();
+  const workspaces = useWorkspaces();
   const version = Constants.expoConfig?.version ?? "";
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={status === "signedIn" ? <RefreshControl refreshing={workspaces.isRefetching} onRefresh={() => void workspaces.refetch()} tintColor={colors.brand} /> : undefined}
+      >
         <AppText variant="title" accessibilityRole="header">
           Account
         </AppText>
@@ -51,12 +65,12 @@ export default function AccountScreen() {
           <SignedOutAccount apiUrl={apiUrl} />
         )}
 
-        <View style={styles.group}>
-          <Row icon="help-buoy-outline" label="Help & support" detail={BRAND.contact.support} onPress={() => Linking.openURL(`mailto:${BRAND.contact.support}`)} />
-          <Row icon="call-outline" label="Call us" detail={BRAND.contact.phoneDisplay} onPress={() => Linking.openURL(`tel:${BRAND.contact.phoneTel}`)} />
-          <Row icon="shield-checkmark-outline" label="Privacy policy" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/privacy`)} />
-          <Row icon="document-text-outline" label="Terms of service" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/terms`)} last />
-        </View>
+        <RowGroup>
+          <ListRow icon="help-buoy-outline" title="Help & support" detail={BRAND.contact.support} onPress={() => Linking.openURL(`mailto:${BRAND.contact.support}`)} />
+          <ListRow icon="call-outline" title="Call us" detail={BRAND.contact.phoneDisplay} onPress={() => Linking.openURL(`tel:${BRAND.contact.phoneTel}`)} />
+          <ListRow icon="shield-checkmark-outline" title="Privacy policy" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/privacy`)} />
+          <ListRow icon="document-text-outline" title="Terms of service" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/terms`)} last />
+        </RowGroup>
 
         <AppText variant="caption" style={styles.version}>
           NesAfric {version}
@@ -131,31 +145,80 @@ function SignOutNotice({ notice }: { notice: NonNullable<SessionNotice> }) {
   );
 }
 
+const GATEWAY: { intent: WorkspaceIntent; icon: IconName; title: string; description: string }[] = [
+  { intent: "property_management", icon: "business-outline", title: "Landlord & Property Manager", description: "Manage properties, tenants and maintenance." },
+  { intent: "professional", icon: "briefcase-outline", title: "Real Estate Professional", description: "Manage your listings, leads and viewings." },
+  { intent: "service_provider", icon: "construct-outline", title: "Service Provider", description: "See the property jobs assigned to you." },
+];
+
+/** Marketplace first: property seekers sign in only if they want to; the cards below are for people who manage on NesAfric. */
 function SignedOutAccount({ apiUrl }: { apiUrl: string }) {
+  const intent = useWorkspaceIntent();
   return (
-    <Card style={styles.intro}>
-      <AppText variant="heading">Sign in to NesAfric</AppText>
-      <AppText variant="caption">
-        Browsing, saving properties on this device and contacting listers work without an account. Sign in with your NesAfric account to see
-        your workspaces.
-      </AppText>
-      <Button label="Sign in" onPress={() => router.push("/sign-in")} testID="open-sign-in" />
-      <Button label="Create an account on nesafric.com" variant="secondary" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/register`)} />
-    </Card>
+    <>
+      <Card style={styles.intro} testID="gateway-seeker">
+        <AppText variant="heading" accessibilityRole="header">
+          Looking for property?
+        </AppText>
+        <AppText variant="caption">
+          Browsing, saving properties on this device and contacting listers work without an account. Sign in to use your NesAfric account.
+        </AppText>
+        <Button label="Sign in or create account" onPress={() => { setWorkspaceIntent(null); router.push("/sign-in"); }} testID="open-sign-in" />
+        <Button label="Create an account on nesafric.com" variant="secondary" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/register`)} />
+      </Card>
+
+      <View style={styles.section}>
+        <AppText style={styles.eyebrow} accessibilityRole="header">
+          MANAGE ON NESAFRIC
+        </AppText>
+        {GATEWAY.map((card) => (
+          <GatewayCard
+            key={card.intent}
+            icon={card.icon}
+            title={card.title}
+            description={card.description}
+            highlighted={intent === card.intent}
+            testID={`gateway-${card.intent}`}
+            onPress={() => {
+              // Intent only: what the account can actually open is decided by the server after sign-in.
+              setWorkspaceIntent(card.intent);
+              router.push({ pathname: "/sign-in", params: { intent: card.intent } });
+            }}
+          />
+        ))}
+      </View>
+    </>
   );
 }
 
+const OFFERS: Record<WorkspaceIntent, { title: string; detail: string; path: string; icon: IconName }> = {
+  property_management: { title: "Set up Property Management", detail: "For landlords, property managers and developers", path: "/onboarding", icon: "business-outline" },
+  professional: { title: "Register as a Real Estate Professional", detail: "For agents, brokers and developers marketing property", path: "/pro/new", icon: "briefcase-outline" },
+  service_provider: { title: "Register as a Service Provider", detail: "For artisans, contractors and service businesses", path: "/onboarding", icon: "construct-outline" },
+};
+
+const ICONS: Record<WorkspaceKind, IconName> = {
+  marketplace: "storefront-outline",
+  property_management: "business-outline",
+  professional: "briefcase-outline",
+  service_provider: "construct-outline",
+};
+
+const ROW_TEST_ID: Record<WorkspaceKind, string> = { marketplace: "workspace-marketplace", property_management: "workspace", professional: "agent", service_provider: "provider" };
+
 function SignedInAccount() {
-  const { user, signOut } = useSession();
+  const { user, status, signOut } = useSession();
+  const { apiUrl } = useApi();
   const profile = useProfile();
   const workspaces = useWorkspaces();
   const tenancies = useTenancies();
-  const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
+  const intent = useWorkspaceIntent();
+  const [lastWorkspace, setLastWorkspace] = useState<WorkspaceRef | null>(null);
 
   useEffect(() => {
     if (!user || !workspaces.data) return;
     let cancelled = false;
-    void loadLastWorkspace(user.id, workspaces.data).then((id) => !cancelled && setLastWorkspace(id));
+    void loadLastWorkspace(user.id, workspaces.data).then((ref) => !cancelled && setLastWorkspace(ref));
     return () => {
       cancelled = true;
     };
@@ -163,6 +226,18 @@ function SignedInAccount() {
 
   const displayName = profile.data?.displayName ?? user?.displayName ?? "";
   const email = profile.data?.email ?? user?.email ?? "";
+  const session = { status, workspaces: workspaces.data };
+  const available = resolveAvailableWorkspaces(session);
+  const continueIn = resolveInitialWorkspace(session, lastWorkspace);
+  const missing = (Object.keys(OFFERS) as WorkspaceIntent[]).filter((kind) => !hasWorkspaceKind(available, kind));
+  // The tapped card only reorders and highlights; it never adds a workspace.
+  const offers = intent && missing.includes(intent) ? [intent, ...missing.filter((kind) => kind !== intent)] : missing;
+
+  async function openOffer(kind: WorkspaceIntent) {
+    await WebBrowser.openBrowserAsync(`${apiUrl}${OFFERS[kind].path}`);
+    // Back from the website: pick up a workspace that was just set up.
+    void workspaces.refetch();
+  }
 
   return (
     <>
@@ -178,46 +253,98 @@ function SignedInAccount() {
         </View>
       </Card>
 
+      {intent && workspaces.data ? <IntentNotice intent={intent} available={available} /> : null}
+
+      {workspaces.data ? (
+        <View style={styles.section} testID="current-workspace">
+          <AppText variant="heading" accessibilityRole="header">
+            Current workspace
+          </AppText>
+          <RowGroup>
+            {continueIn.kind !== "marketplace" ? (
+              <ListRow icon={ICONS[continueIn.kind]} title={`Continue in ${continueIn.name}`} detail={continueIn.subtitle} onPress={() => router.push(continueIn.route)} testID="continue-workspace" />
+            ) : (
+              <ListRow icon="storefront-outline" title="Marketplace" detail="You’re browsing the marketplace" />
+            )}
+            <ListRow icon="swap-horizontal-outline" title="Switch workspace" detail={available.length > 1 ? `${available.length} workspaces available` : "Marketplace only"} onPress={() => openSwitcher("marketplace", null)} testID="open-switcher" last />
+          </RowGroup>
+        </View>
+      ) : null}
+
       <HomesSection tenancies={tenancies.data} error={tenancies.error} onRetry={() => tenancies.refetch()} />
 
       <View style={styles.section}>
         <AppText variant="heading" accessibilityRole="header">
           Your workspaces
         </AppText>
-        <WorkspaceList
-          workspaces={workspaces.data}
-          isPending={workspaces.isPending}
-          error={workspaces.error}
-          onRetry={() => workspaces.refetch()}
-          lastWorkspace={lastWorkspace}
-          onOpenOrganisation={(organisationId) => {
-            if (user) void rememberWorkspace(user.id, organisationId);
-            setLastWorkspace(organisationId);
-            router.push({ pathname: "/workspace/[organisationId]", params: { organisationId } });
-          }}
-        />
+        <WorkspaceList available={workspaces.data ? available : undefined} isPending={workspaces.isPending} error={workspaces.error} onRetry={() => workspaces.refetch()} lastWorkspace={lastWorkspace} intent={intent} />
       </View>
+
+      {workspaces.data && offers.length ? (
+        <View style={styles.section} testID="offers">
+          <AppText variant="heading" accessibilityRole="header">
+            Grow on NesAfric
+          </AppText>
+          <RowGroup>
+            {offers.map((kind, index) => (
+              <ListRow
+                key={kind}
+                icon={OFFERS[kind].icon}
+                title={OFFERS[kind].title}
+                detail={OFFERS[kind].detail}
+                highlighted={intent === kind}
+                accessibilityHint="Opens nesafric.com"
+                onPress={() => void openOffer(kind)}
+                testID={`offer-${kind}`}
+                last={index === offers.length - 1}
+              />
+            ))}
+          </RowGroup>
+          <AppText variant="caption">These open nesafric.com. Sign in there with the same account; your new workspace appears here when you come back.</AppText>
+        </View>
+      ) : null}
 
       <Button
         label="Sign out"
         variant="secondary"
         testID="sign-out"
         // Local sign-out is immediate; server revocation continues in the background.
-        onPress={() => void signOut()}
+        onPress={() => {
+          setWorkspaceIntent(null);
+          void signOut();
+        }}
       />
     </>
   );
 }
 
+function IntentNotice({ intent, available }: { intent: WorkspaceIntent; available: AvailableWorkspace[] }) {
+  const matching = available.filter((workspace) => workspace.kind === intent);
+  const label = WORKSPACE_KIND_LABEL[intent].toLowerCase();
+  return (
+    <View style={styles.notices} testID="intent-notice">
+      {matching.length ? (
+        <>
+          <Notice tone="info" message={matching.length === 1 ? `Your ${label} workspace is ready.` : `You have ${matching.length} ${label} workspaces.`} />
+          {matching.length === 1 ? <Button label={`Open ${matching[0].name}`} onPress={() => router.push(matching[0].route)} testID="intent-open" /> : null}
+        </>
+      ) : (
+        <Notice tone="info" message={`This account doesn’t have a ${label} workspace yet. You can set one up below.`} />
+      )}
+      <Button label="Dismiss" variant="secondary" onPress={() => setWorkspaceIntent(null)} testID="intent-dismiss" />
+    </View>
+  );
+}
+
 function WorkspaceList(props: {
-  workspaces: Workspaces | undefined;
+  available: AvailableWorkspace[] | undefined;
   isPending: boolean;
   error: unknown;
   onRetry: () => void;
-  lastWorkspace: string | null;
-  onOpenOrganisation: (organisationId: string) => void;
+  lastWorkspace: WorkspaceRef | null;
+  intent: WorkspaceIntent | null;
 }) {
-  const { workspaces, isPending, error, onRetry, lastWorkspace, onOpenOrganisation } = props;
+  const { available, isPending, error, onRetry, lastWorkspace, intent } = props;
 
   if (isPending) {
     return (
@@ -226,7 +353,7 @@ function WorkspaceList(props: {
       </View>
     );
   }
-  if (!workspaces) {
+  if (!available) {
     const offline = error instanceof ApiError && error.code === NETWORK_ERROR;
     return (
       <Card>
@@ -239,41 +366,24 @@ function WorkspaceList(props: {
 
   return (
     <View>
-      <View style={styles.group}>
-        <Row
-          icon="home-outline"
-          label="Personal"
-          detail="Browse, save and enquire about properties"
-          onPress={() => router.navigate("/")}
-          last={workspaces.propertyOsOrganisations.length === 0 && workspaces.marketplaceProfessionals.length === 0}
-        />
-        {workspaces.propertyOsOrganisations.map((organisation, index) => (
-          <Row
-            key={organisation.id}
-            icon="business-outline"
-            label={organisation.name}
-            detail={organisation.id === lastWorkspace ? "Property management · last opened" : "Property management"}
-            onPress={() => onOpenOrganisation(organisation.id)}
-            testID={`workspace-${organisation.id}`}
-            last={index === workspaces.propertyOsOrganisations.length - 1 && workspaces.marketplaceProfessionals.length === 0}
+      <RowGroup>
+        {available.map((workspace, index) => (
+          <ListRow
+            key={`${workspace.kind}:${workspace.id ?? ""}`}
+            icon={ICONS[workspace.kind]}
+            title={workspace.name}
+            detail={sameWorkspace(workspace, lastWorkspace) ? `${workspace.subtitle} · last opened` : workspace.subtitle}
+            highlighted={workspace.kind === intent}
+            onPress={() => (workspace.kind === "marketplace" ? router.navigate("/") : router.push(workspace.route))}
+            testID={workspace.id ? `${ROW_TEST_ID[workspace.kind]}-${workspace.id}` : ROW_TEST_ID.marketplace}
+            last={index === available.length - 1}
           />
         ))}
-        {workspaces.marketplaceProfessionals.map((professional, index) => (
-          <Row
-            key={professional.id}
-            icon="briefcase-outline"
-            label={professional.displayName}
-            detail={professionalLabel(professional)}
-            onPress={() => router.push({ pathname: "/agent/[professionalId]", params: { professionalId: professional.id } })}
-            testID={`agent-${professional.id}`}
-            last={index === workspaces.marketplaceProfessionals.length - 1}
-          />
-        ))}
-      </View>
-      {workspaces.propertyOsOrganisations.length === 0 && workspaces.marketplaceProfessionals.length === 0 ? (
+      </RowGroup>
+      {available.length === 1 ? (
         <AppText variant="caption" style={styles.hint}>
-          You’re not a member of a landlord, property management or professional workspace yet. When someone invites you, or you set one up on
-          nesafric.com, it will appear here.
+          You’re not a member of a landlord, property management, professional or service provider workspace yet. When someone invites you, or you set one up
+          on nesafric.com, it will appear here.
         </AppText>
       ) : null}
     </View>
@@ -300,49 +410,26 @@ function HomesSection({ tenancies, error, onRetry }: { tenancies: Tenancy[] | un
       <AppText variant="heading" accessibilityRole="header">
         Your homes
       </AppText>
-      <View style={styles.group}>
+      <RowGroup>
         {tenancies.map((tenancy, index) => (
-          <Row
+          <ListRow
             key={tenancy.tenantOrganisationId}
             icon="key-outline"
-            label={tenancy.leases.length ? tenancy.leases.map(leaseLabel).join(", ") : tenancy.organisation.name}
+            title={tenancy.leases.length ? tenancy.leases.map(leaseLabel).join(", ") : tenancy.organisation.name}
             detail={tenancy.leases.length ? `Rented through ${tenancy.organisation.name}` : "No current lease"}
             onPress={() => router.push({ pathname: "/home/[tenancyId]", params: { tenancyId: tenancy.tenantOrganisationId } })}
             testID={`home-${tenancy.tenantOrganisationId}`}
             last={index === tenancies.length - 1}
           />
         ))}
-      </View>
+      </RowGroup>
     </View>
   );
-}
-
-function professionalLabel(professional: ProfessionalWorkspace) {
-  return `${humanise(professional.type)} · ${humanise(professional.myRole)}`;
 }
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "N";
-}
-
-function Row({ icon, label, detail, onPress, last = false, testID }: { icon: IconName; label: string; detail?: string; onPress: () => void; last?: boolean; testID?: string }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={detail ? `${label}, ${detail}` : label}
-      onPress={onPress}
-      testID={testID}
-      style={({ pressed }) => [styles.row, last && styles.rowLast, pressed && styles.rowPressed]}
-    >
-      <Ionicons name={icon} size={22} color={colors.forest} />
-      <View style={styles.rowText}>
-        <AppText variant="label">{label}</AppText>
-        {detail ? <AppText variant="caption">{detail}</AppText> : null}
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-    </Pressable>
-  );
 }
 
 const styles = StyleSheet.create({
@@ -359,10 +446,6 @@ const styles = StyleSheet.create({
   section: { gap: spacing.md },
   hint: { marginTop: spacing.sm },
   homesError: { gap: spacing.sm },
-  group: { borderRadius: radii.panel, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.elevated, overflow: "hidden" },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.hairline, minHeight: 56 },
-  rowLast: { borderBottomWidth: 0 },
-  rowPressed: { backgroundColor: colors.surface },
-  rowText: { flex: 1, gap: 2 },
+  eyebrow: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, letterSpacing: 1.6, color: colors.gold },
   version: { textAlign: "center" },
 });

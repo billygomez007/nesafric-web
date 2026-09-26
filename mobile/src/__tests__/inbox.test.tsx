@@ -315,7 +315,7 @@ describe("workspace inbox", () => {
     act(() => router.push("/account"));
     const signOut = await screen.findByTestId("sign-out", {}, { timeout: 5000 });
     await act(async () => fireEvent.press(signOut));
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
 
     const before = inboxCalls().length;
     act(() => router.push(`/workspace/${ORG_A.id}/enquiry/lead-1`));

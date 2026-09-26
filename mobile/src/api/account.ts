@@ -22,8 +22,29 @@ export type ProfessionalWorkspace = {
   myRole: string;
 };
 
-/** `listUserWorkspaces`: only workspaces the user is an active member of, decided by the server. */
-export type Workspaces = { propertyOsOrganisations: OrganisationWorkspace[]; marketplaceProfessionals: ProfessionalWorkspace[] };
+/** A service-provider profile the user owns (status fields only). */
+export type ServiceProviderWorkspace = {
+  id: string;
+  displayName: string;
+  type: string;
+  slug: string | null;
+  verificationStatus: string;
+  availabilityStatus: string;
+  suspended: boolean;
+};
+
+/**
+ * `listUserWorkspaces`: only workspaces the user is an active member (or provider owner) of,
+ * decided by the server. `serviceProviders` is missing on servers that predate it: read it through
+ * `providerWorkspaces()`.
+ */
+export type Workspaces = {
+  propertyOsOrganisations: OrganisationWorkspace[];
+  marketplaceProfessionals: ProfessionalWorkspace[];
+  serviceProviders?: ServiceProviderWorkspace[];
+};
+
+export const providerWorkspaces = (workspaces: Workspaces | undefined) => workspaces?.serviceProviders ?? [];
 
 export type WorkspaceDashboard = {
   organisation: { id: string; name: string; logoUrl: string | null };

@@ -104,7 +104,7 @@ describe("optional account access", () => {
   it("keeps the marketplace and Account usable as a guest, with no credentials sent", async () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/account" });
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
     expect(screen.getByText(/work without an account/)).toBeTruthy();
 
     renderRouter(APP_DIR, { initialUrl: "/" });
@@ -124,7 +124,7 @@ describe("optional account access", () => {
     renderRouter(APP_DIR, { initialUrl: "/account" });
     expect(await screen.findByLabelText("Signed in as Ama Mensah")).toBeTruthy();
     expect(await screen.findByText(ORG.name)).toBeTruthy();
-    expect(screen.getByText("Personal")).toBeTruthy();
+    expect(screen.getByTestId("workspace-marketplace")).toHaveTextContent(/Marketplace/);
     for (const call of [...callsTo("/api/account/profile"), ...callsTo("/api/workspaces")]) {
       expect(header(call, "authorization")).toBe(`Bearer ${TOKEN}`);
       expect(header(call, "x-organisation-id")).toBeUndefined();
@@ -161,7 +161,7 @@ describe("optional account access", () => {
     setActiveToken(null);
     storeSession(new Date(Date.now() - 1000).toISOString());
     renderRouter(APP_DIR, { initialUrl: "/account" });
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
     expect(secureStore.has(SESSION_KEY)).toBe(false);
   });
 
@@ -170,7 +170,7 @@ describe("optional account access", () => {
     storeSession();
     renderRouter(APP_DIR, { initialUrl: "/account" });
     expect(await screen.findByText(/signed out because your session ended/)).toBeTruthy();
-    expect(screen.getByText("Sign in to NesAfric")).toBeTruthy();
+    expect(screen.getByText("Looking for property?")).toBeTruthy();
     await waitFor(() => expect(secureStore.has(SESSION_KEY)).toBe(false));
 
     renderRouter(APP_DIR, { initialUrl: "/" });
@@ -186,7 +186,7 @@ describe("optional account access", () => {
     await tapSignOut();
 
     // The server hasn't answered yet, but the device is already signed out.
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
     expect(screen.getByTestId("notice-server-pending")).toBeTruthy();
     expect(screen.queryByTestId("notice-server-ended")).toBeNull();
     expect(secureStore.has(SESSION_KEY)).toBe(false);
@@ -216,7 +216,7 @@ describe("optional account access", () => {
     expect(await screen.findByTestId("notice-server-not-confirmed")).toBeTruthy();
     expect(screen.getByText(/couldn’t reach NesAfric to end the session there\. It stays valid on our servers until 9 October 2026/)).toBeTruthy();
     expect(screen.queryByTestId("notice-server-ended")).toBeNull();
-    expect(screen.getByText("Sign in to NesAfric")).toBeTruthy();
+    expect(screen.getByText("Looking for property?")).toBeTruthy();
     expect(secureStore.has(SESSION_KEY)).toBe(false);
     expect(await asyncStorageHoldsToken()).toBe(false);
 
@@ -228,7 +228,7 @@ describe("optional account access", () => {
 
     // Restarting doesn't bring the session back.
     restartApp();
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
     expect(callsTo("/api/account/profile")).toHaveLength(0);
   });
 
@@ -244,7 +244,7 @@ describe("optional account access", () => {
 
     // The credential really is still in secure storage, and the app says so.
     expect(await screen.findByTestId("notice-device-pending")).toBeTruthy();
-    expect(screen.getByText("Sign in to NesAfric")).toBeTruthy();
+    expect(screen.getByText("Looking for property?")).toBeTruthy();
     expect(secureStore.get(SESSION_KEY)).toContain(TOKEN);
     expect(await AsyncStorage.getItem(SIGNED_OUT_FLAG)).toBe("1");
     expect(await asyncStorageHoldsToken()).toBe(false);
@@ -253,7 +253,7 @@ describe("optional account access", () => {
     deleteItem.mockClear();
     const before = calls.length;
     restartApp();
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
     await waitFor(() => expect(secureStore.has(SESSION_KEY)).toBe(false));
     expect(deleteItem).toHaveBeenCalledWith(SESSION_KEY, expect.anything());
     await waitFor(async () => expect(await AsyncStorage.getItem(SIGNED_OUT_FLAG)).toBeNull());
@@ -270,13 +270,13 @@ describe("optional account access", () => {
     await tapSignOut();
 
     expect(await screen.findByTestId("notice-device-failed")).toBeTruthy();
-    expect(screen.getByText("Sign in to NesAfric")).toBeTruthy();
+    expect(screen.getByText("Looking for property?")).toBeTruthy();
 
     await act(async () => fireEvent.press(screen.getByTestId("retry-sign-out")));
     await waitFor(() => expect(screen.queryByTestId("notice-device-failed")).toBeNull());
     expect(secureStore.has(SESSION_KEY)).toBe(false);
     restartApp();
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
   });
 
   it("ignores account responses that arrive after sign-out", async () => {
@@ -285,7 +285,7 @@ describe("optional account access", () => {
     storeSession();
     renderRouter(APP_DIR, { initialUrl: "/account" });
     await tapSignOut();
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
 
     // A request sent before sign-out comes back 401: that's not a "session ended" surprise.
     await act(async () => workspaces.respond(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } }));
@@ -300,7 +300,7 @@ describe("optional account access", () => {
     storeSession();
     renderRouter(APP_DIR, { initialUrl: "/account" });
     await tapSignOut();
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
 
     const NEW_TOKEN = "tok_NEWsession_ZyXwVuTsRqPoNmLkJi";
     mockApi({
@@ -328,7 +328,9 @@ describe("optional account access", () => {
     const dashboardCalls = callsTo("/api/dashboard");
     expect(dashboardCalls.map((call) => header(call, "x-organisation-id"))).toEqual([ORG.id]);
     expect(header(dashboardCalls[0], "authorization")).toBe(`Bearer ${TOKEN}`);
-    expect(await AsyncStorage.getItem("nesafric.last-workspace.v1:u1")).toBe(ORG.id);
+    // Remembered as navigation state only (v2 `{ kind, id }`); the stale v1 value is gone.
+    await waitFor(async () => expect(JSON.parse((await AsyncStorage.getItem("nesafric.last-workspace.v2:u1")) ?? "null")).toEqual({ kind: "property_management", id: ORG.id }));
+    expect(await AsyncStorage.getItem("nesafric.last-workspace.v1:u1")).toBeNull();
 
     // An organisation the user isn't a member of is refused without ever sending its id.
     calls = [];

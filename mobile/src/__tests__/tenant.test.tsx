@@ -173,7 +173,7 @@ describe("tenant homes and maintenance", () => {
   it("makes no tenant calls as a guest", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/account" });
-    expect(await screen.findByText("Sign in to NesAfric")).toBeTruthy();
+    expect(await screen.findByText("Looking for property?")).toBeTruthy();
     expect(calls.some((call) => call.url.pathname === "/api/account/tenancies" || call.url.pathname.startsWith("/api/maintenance/"))).toBe(false);
   });
 
