@@ -36,6 +36,7 @@ const campaignFields = {
   destinationUrl: safeHttpUrl(2000),
   desktopMediaUrl: safeHttpUrl(2000).optional(),
   mobileMediaUrl: safeHttpUrl(2000).optional(),
+  nativeAppMediaUrl: safeHttpUrl(2000).optional(),
   countryCode: z.string().length(2).toUpperCase().optional(),
   region: text(120).optional(),
 };

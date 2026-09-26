@@ -5,7 +5,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 type Campaign = {
   id: string; name: string; placement: string; type: string | null; status: string; priority: number;
   headline: string; supportingText: string | null; ctaLabel: string | null; destinationUrl: string;
-  desktopMediaUrl: string | null; mobileMediaUrl: string | null;
+  desktopMediaUrl: string | null; mobileMediaUrl: string | null; nativeAppMediaUrl: string | null;
   isPlatformOwned: boolean; impressionCount: number; clickCount: number;
   advertiser: { displayName: string; slug: string } | null;
   advertiserProvider: { displayName: string; slug: string; verificationStatus: string } | null;
@@ -60,19 +60,25 @@ const CAMPAIGN_TYPES = Object.keys(TYPE_LABELS);
 const SERVICE_PROVIDER_TYPES = new Set(["PROPERTY_SERVICE_PROFESSIONAL", "PROPERTY_SERVICE_COMPANY"]);
 
 /**
- * Canonical creative dimensions per placement, measured from the actual public
- * `MarketplaceCarousel` component (fixed 224px slide height inside a `max-w-7xl` container at
- * every breakpoint) — see `src/modules/campaigns/creative-spec.ts` for the full measurement
- * rationale. Duplicated here as plain data (rather than imported) because this file is a client
- * component and the source module is typed against generated Prisma enums not meant for the
- * client bundle; kept in sync by hand since placements rarely change.
+ * Campaign-admin upload canvases.
+ *
+ * Current recommended artwork sizes:
+ *   - Desktop web: 1600 x 220
+ *   - Mobile web: 800 x 320
+ *   - Native mobile app: 1200 x 792
+ *
+ * The web carousel is responsive and uses cover-style cropping, so important
+ * visual content should remain inside a safe central area.
+ *
+ * Keep these client-side values synchronized with
+ * `src/modules/campaigns/creative-spec.ts`.
  */
-const CREATIVE_SPECS: Record<string, { desktop: { width: number; height: number }; mobile: { width: number; height: number }; measured: boolean }> = {
-  MARKETPLACE_PRIMARY: { desktop: { width: 1600, height: 290 }, mobile: { width: 800, height: 500 }, measured: true },
-  MARKETPLACE_INLINE: { desktop: { width: 1600, height: 290 }, mobile: { width: 800, height: 500 }, measured: true },
-  DEVELOPMENT_FEATURED: { desktop: { width: 1600, height: 290 }, mobile: { width: 800, height: 500 }, measured: false },
-  PROFESSIONAL_FEATURED: { desktop: { width: 1600, height: 290 }, mobile: { width: 800, height: 500 }, measured: false },
-  SEARCH_FEATURED: { desktop: { width: 1600, height: 290 }, mobile: { width: 800, height: 500 }, measured: false },
+const CREATIVE_SPECS: Record<string, { desktop: { width: number; height: number }; mobile: { width: number; height: number }; nativeApp: { width: number; height: number }; measured: boolean }> = {
+  MARKETPLACE_PRIMARY: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: true },
+  MARKETPLACE_INLINE: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: true },
+  DEVELOPMENT_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: false },
+  PROFESSIONAL_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: false },
+  SEARCH_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: false },
 };
 
 function ratioLabel(dim: { width: number; height: number }) {
@@ -134,14 +140,24 @@ const emptyDraft = {
  * show something proportionally honest to how the public carousel actually renders — not just an
  * arbitrary decorative box. */
 function CampaignPreview({
-  placement, headline, supportingText, ctaLabel, desktopMediaUrl, mobileMediaUrl, device,
+  placement, headline, supportingText, ctaLabel, desktopMediaUrl, mobileMediaUrl, nativeAppMediaUrl, device,
 }: {
   placement: string; headline: string; supportingText: string; ctaLabel: string;
-  desktopMediaUrl: string | null; mobileMediaUrl: string | null; device: "desktop" | "mobile";
+  desktopMediaUrl: string | null; mobileMediaUrl: string | null; nativeAppMediaUrl: string | null; device: "desktop" | "mobile" | "nativeApp";
 }) {
   const spec = CREATIVE_SPECS[placement];
-  const dim = device === "mobile" ? (spec?.mobile ?? { width: 800, height: 500 }) : (spec?.desktop ?? { width: 1600, height: 290 });
-  const mediaUrl = device === "mobile" ? (mobileMediaUrl ?? desktopMediaUrl) : desktopMediaUrl;
+  const dim =
+    device === "nativeApp"
+      ? (spec?.nativeApp ?? { width: 1200, height: 792 })
+      : device === "mobile"
+        ? (spec?.mobile ?? { width: 800, height: 320 })
+        : (spec?.desktop ?? { width: 1600, height: 220 });
+  const mediaUrl =
+    device === "nativeApp"
+      ? (nativeAppMediaUrl ?? mobileMediaUrl ?? desktopMediaUrl)
+      : device === "mobile"
+        ? (mobileMediaUrl ?? desktopMediaUrl)
+        : desktopMediaUrl;
 
   if (placement === "HOMEPAGE_ANNOUNCEMENT") {
     return (
@@ -214,13 +230,13 @@ export function CampaignsAdminContent() {
   const [notice, setNotice] = useState("");
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
   const [previewCampaign, setPreviewCampaign] = useState<Campaign | null>(null);
-  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile" | "nativeApp">("desktop");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyDraft);
-  const [draftDevice, setDraftDevice] = useState<"desktop" | "mobile">("desktop");
+  const [draftDevice, setDraftDevice] = useState<"desktop" | "mobile" | "nativeApp">("desktop");
   const [saving, setSaving] = useState(false);
 
   const [providerQuery, setProviderQuery] = useState("");
@@ -229,31 +245,39 @@ export function CampaignsAdminContent() {
 
   const [stagedDesktop, setStagedDesktop] = useState<File | null>(null);
   const [stagedMobile, setStagedMobile] = useState<File | null>(null);
+  const [stagedNativeApp, setStagedNativeApp] = useState<File | null>(null);
   const [stagedDesktopPreview, setStagedDesktopPreview] = useState<string | null>(null);
   const [stagedMobilePreview, setStagedMobilePreview] = useState<string | null>(null);
+  const [stagedNativeAppPreview, setStagedNativeAppPreview] = useState<string | null>(null);
 
   /** Selects a file for a campaign that doesn't exist yet — held client-side (with an instant
    * local object-URL preview) until the campaign is actually created, since the upload endpoint
    * requires a real campaign id. Superseded object URLs are revoked immediately to avoid leaking
    * memory across repeated selections. */
-  function stageFile(slot: "desktop" | "mobile", file: File) {
+  function stageFile(slot: "desktop" | "mobile" | "nativeApp", file: File) {
     const url = URL.createObjectURL(file);
     if (slot === "desktop") {
       setStagedDesktop(file);
       setStagedDesktopPreview((previous) => { if (previous) URL.revokeObjectURL(previous); return url; });
-    } else {
+    } else if (slot === "mobile") {
       setStagedMobile(file);
       setStagedMobilePreview((previous) => { if (previous) URL.revokeObjectURL(previous); return url; });
+    } else {
+      setStagedNativeApp(file);
+      setStagedNativeAppPreview((previous) => { if (previous) URL.revokeObjectURL(previous); return url; });
     }
   }
 
-  function clearStaged(slot: "desktop" | "mobile") {
+  function clearStaged(slot: "desktop" | "mobile" | "nativeApp") {
     if (slot === "desktop") {
       setStagedDesktopPreview((previous) => { if (previous) URL.revokeObjectURL(previous); return null; });
       setStagedDesktop(null);
-    } else {
+    } else if (slot === "mobile") {
       setStagedMobilePreview((previous) => { if (previous) URL.revokeObjectURL(previous); return null; });
       setStagedMobile(null);
+    } else {
+      setStagedNativeAppPreview((previous) => { if (previous) URL.revokeObjectURL(previous); return null; });
+      setStagedNativeApp(null);
     }
   }
 
@@ -309,13 +333,13 @@ export function CampaignsAdminContent() {
   const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
 
   function openCreatePanel() {
-    clearStaged("desktop"); clearStaged("mobile");
+    clearStaged("desktop"); clearStaged("mobile"); clearStaged("nativeApp");
     setEditingId(null); setDraft(emptyDraft); setSelectedProvider(null); setProviderQuery(""); setDraftDevice("desktop");
     setPanelOpen(true); setError(""); setNotice("");
   }
 
   function openEditPanel(campaign: Campaign) {
-    clearStaged("desktop"); clearStaged("mobile");
+    clearStaged("desktop"); clearStaged("mobile"); clearStaged("nativeApp");
     setEditingId(campaign.id);
     setDraft({
       name: campaign.name, type: campaign.type ?? "GENERAL", placement: campaign.placement,
@@ -371,7 +395,8 @@ export function CampaignsAdminContent() {
         let uploadFailed = false;
         if (stagedDesktop) uploadFailed = !(await uploadCreative(newId, "desktop", stagedDesktop, { silent: true })) || uploadFailed;
         if (!uploadFailed && stagedMobile) uploadFailed = !(await uploadCreative(newId, "mobile", stagedMobile, { silent: true })) || uploadFailed;
-        clearStaged("desktop"); clearStaged("mobile");
+        if (!uploadFailed && stagedNativeApp) uploadFailed = !(await uploadCreative(newId, "nativeApp", stagedNativeApp, { silent: true })) || uploadFailed;
+        clearStaged("desktop"); clearStaged("mobile"); clearStaged("nativeApp");
 
         if (uploadFailed) {
           setError("Campaign was saved as a draft, but the creative could not be uploaded. Please retry the image upload.");
@@ -398,7 +423,7 @@ export function CampaignsAdminContent() {
     }
   }
 
-  async function uploadCreative(campaignId: string, slot: "desktop" | "mobile", file: File, options?: { silent?: boolean }) {
+  async function uploadCreative(campaignId: string, slot: "desktop" | "mobile" | "nativeApp", file: File, options?: { silent?: boolean }) {
     if (!options?.silent) { setError(""); setNotice(""); }
     const reader = new FileReader();
     const dataBase64: string = await new Promise((resolve, reject) => {
@@ -416,18 +441,18 @@ export function CampaignsAdminContent() {
       return false;
     }
     if (!options?.silent) {
-      setNotice(body.dimensionWarning ? `${slot === "desktop" ? "Desktop" : "Mobile"} creative uploaded. ${body.dimensionWarning}` : `${slot === "desktop" ? "Desktop" : "Mobile"} creative uploaded.`);
+      setNotice(body.dimensionWarning ? `${slot === "desktop" ? "Desktop" : slot === "mobile" ? "Mobile web" : "Native app"} creative uploaded. ${body.dimensionWarning}` : `${slot === "desktop" ? "Desktop" : slot === "mobile" ? "Mobile web" : "Native app"} creative uploaded.`);
       await load();
     }
     return true;
   }
 
-  async function removeCreative(campaignId: string, slot: "desktop" | "mobile") {
+  async function removeCreative(campaignId: string, slot: "desktop" | "mobile" | "nativeApp") {
     setError(""); setNotice("");
     const response = await fetch(`/api/platform-admin/campaigns/${campaignId}/creative?slot=${slot}`, { method: "DELETE" });
     const body = await response.json();
     if (!response.ok) return setError(body.error?.message ?? "Unable to remove that image.");
-    setNotice(`${slot === "desktop" ? "Desktop" : "Mobile"} creative removed.`);
+    setNotice(`${slot === "desktop" ? "Desktop" : slot === "mobile" ? "Mobile web" : "Native app"} creative removed.`);
     await load();
   }
 
@@ -770,6 +795,7 @@ export function CampaignsAdminContent() {
             <div className="mt-3 flex gap-2">
               <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${previewDevice === "desktop" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setPreviewDevice("desktop")} type="button">Desktop</button>
               <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${previewDevice === "mobile" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setPreviewDevice("mobile")} type="button">Mobile</button>
+              <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${previewDevice === "nativeApp" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setPreviewDevice("nativeApp")} type="button">Native App</button>
             </div>
             <div className="mt-3">
               <CampaignPreview
@@ -778,6 +804,7 @@ export function CampaignsAdminContent() {
                 device={previewDevice}
                 headline={previewCampaign.headline}
                 mobileMediaUrl={previewCampaign.mobileMediaUrl}
+                nativeAppMediaUrl={previewCampaign.nativeAppMediaUrl}
                 placement={previewCampaign.placement}
                 supportingText={previewCampaign.supportingText ?? ""}
               />
@@ -901,6 +928,7 @@ export function CampaignsAdminContent() {
                   <div className="flex gap-1.5">
                     <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "desktop" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setDraftDevice("desktop")} type="button">Desktop</button>
                     <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "mobile" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setDraftDevice("mobile")} type="button">Mobile</button>
+                    <button className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${draftDevice === "nativeApp" ? "border-forest bg-forest text-white" : "border-hairline text-muted"}`} onClick={() => setDraftDevice("nativeApp")} type="button">Native App</button>
                   </div>
                 </div>
                 <div className="mt-2">
@@ -910,6 +938,7 @@ export function CampaignsAdminContent() {
                     device={draftDevice}
                     headline={draft.headline}
                     mobileMediaUrl={stagedMobilePreview ?? editingCampaign?.mobileMediaUrl ?? null}
+                    nativeAppMediaUrl={stagedNativeAppPreview ?? editingCampaign?.nativeAppMediaUrl ?? null}
                     placement={draft.placement}
                     supportingText={draft.supportingText}
                   />
@@ -943,7 +972,8 @@ export function CampaignsAdminContent() {
                 <div className="rounded-lg border border-dashed p-3">
                   <p className="text-xs font-semibold text-ink">Creative specification</p>
                   <p className="mt-1 text-xs text-muted">Desktop: <span className="font-semibold text-forest">{draftSpec.desktop.width} × {draftSpec.desktop.height}px</span> ({ratioLabel(draftSpec.desktop)})</p>
-                  <p className="text-xs text-muted">Mobile: <span className="font-semibold text-forest">{draftSpec.mobile.width} × {draftSpec.mobile.height}px</span> ({ratioLabel(draftSpec.mobile)})</p>
+                  <p className="text-xs text-muted">Mobile web: <span className="font-semibold text-forest">{draftSpec.mobile.width} × {draftSpec.mobile.height}px</span> ({ratioLabel(draftSpec.mobile)})</p>
+                  <p className="text-xs text-muted">Native app: <span className="font-semibold text-forest">{draftSpec.nativeApp.width} × {draftSpec.nativeApp.height}px</span> ({ratioLabel(draftSpec.nativeApp)})</p>
                   {!draftSpec.measured && <p className="mt-1 text-[11px] text-ink">This placement has no live public page yet — this spec is a provisional default.</p>}
                 </div>
               )}
@@ -952,7 +982,7 @@ export function CampaignsAdminContent() {
               <div className="grid gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">4. Promotional creative</p>
-                  <p className="mt-1 text-xs text-muted">Upload placement-specific artwork. Mobile creative is optional and falls back to the desktop image.</p>
+                  <p className="mt-1 text-xs text-muted">Upload placement-specific artwork for desktop web, mobile web and the native mobile app. Mobile web falls back to desktop; native app falls back to mobile web and then desktop.</p>
                 </div>
                 {editingId ? (
                   <>
@@ -961,14 +991,21 @@ export function CampaignsAdminContent() {
                       onRemove={() => void removeCreative(editingId, "desktop")}
                       onSelect={(file) => void uploadCreative(editingId, "desktop", file)}
                       previewUrl={editingCampaign?.desktopMediaUrl ?? null}
-                      spec={draftSpec?.desktop ?? { width: 1600, height: 290 }}
+                      spec={draftSpec?.desktop ?? { width: 1600, height: 220 }}
                     />
                     <ImageSlot
                       label="Mobile carousel image (optional — falls back to desktop image)"
                       onRemove={() => void removeCreative(editingId, "mobile")}
                       onSelect={(file) => void uploadCreative(editingId, "mobile", file)}
                       previewUrl={editingCampaign?.mobileMediaUrl ?? null}
-                      spec={draftSpec?.mobile ?? { width: 800, height: 500 }}
+                      spec={draftSpec?.mobile ?? { width: 800, height: 320 }}
+                    />
+                    <ImageSlot
+                      label="Native app carousel image (optional — falls back to mobile web, then desktop)"
+                      onRemove={() => void removeCreative(editingId, "nativeApp")}
+                      onSelect={(file) => void uploadCreative(editingId, "nativeApp", file)}
+                      previewUrl={editingCampaign?.nativeAppMediaUrl ?? null}
+                      spec={draftSpec?.nativeApp ?? { width: 1200, height: 792 }}
                     />
                   </>
                 ) : (
@@ -978,14 +1015,21 @@ export function CampaignsAdminContent() {
                       onRemove={() => clearStaged("desktop")}
                       onSelect={(file) => stageFile("desktop", file)}
                       previewUrl={stagedDesktopPreview}
-                      spec={draftSpec?.desktop ?? { width: 1600, height: 290 }}
+                      spec={draftSpec?.desktop ?? { width: 1600, height: 220 }}
                     />
                     <ImageSlot
                       label="Mobile carousel image (optional — falls back to desktop image)"
                       onRemove={() => clearStaged("mobile")}
                       onSelect={(file) => stageFile("mobile", file)}
                       previewUrl={stagedMobilePreview}
-                      spec={draftSpec?.mobile ?? { width: 800, height: 500 }}
+                      spec={draftSpec?.mobile ?? { width: 800, height: 320 }}
+                    />
+                    <ImageSlot
+                      label="Native app carousel image (optional — falls back to mobile web, then desktop)"
+                      onRemove={() => clearStaged("nativeApp")}
+                      onSelect={(file) => stageFile("nativeApp", file)}
+                      previewUrl={stagedNativeAppPreview}
+                      spec={draftSpec?.nativeApp ?? { width: 1200, height: 792 }}
                     />
                   </>
                 )}
@@ -1005,7 +1049,7 @@ export function CampaignsAdminContent() {
 }
 
 /**
- * A single desktop/mobile creative slot — used identically whether the campaign already exists
+ * A single desktop/mobile/native-app creative slot — used identically whether the campaign already exists
  * (`onSelect` uploads over the network immediately) or doesn't yet (`onSelect` just stages the
  * file client-side; see `stageFile` above) — the component itself has no opinion on which, so the
  * create and edit workflows share one implementation and one visual result.

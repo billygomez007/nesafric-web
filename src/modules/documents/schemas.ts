@@ -35,7 +35,7 @@ export const uploadDocumentSchema = z.object({
   ]).optional(),
   evidenceExpiresAt: z.coerce.date().optional(),
   areaId: id.optional(),
-  mediaSlot: z.enum(["desktop", "mobile"]).optional(),
+  mediaSlot: z.enum(["desktop", "mobile", "nativeApp"]).optional(),
 }).strict().superRefine((value, context) => {
   if (value.targetType === "LISTING_MEDIA" && !value.mediaType) {
     context.addIssue({ code: "custom", path: ["mediaType"], message: "mediaType is required for listing media uploads." });
@@ -47,7 +47,7 @@ export const uploadDocumentSchema = z.object({
     context.addIssue({ code: "custom", path: ["evidenceType"], message: "evidenceType is required for provider evidence uploads." });
   }
   if (value.targetType === "CAMPAIGN_CREATIVE" && !value.mediaSlot) {
-    context.addIssue({ code: "custom", path: ["mediaSlot"], message: "mediaSlot ('desktop' or 'mobile') is required for campaign creative uploads." });
+    context.addIssue({ code: "custom", path: ["mediaSlot"], message: "mediaSlot ('desktop', 'mobile', or 'nativeApp') is required for campaign creative uploads." });
   }
   if (value.targetType === "MOVE_IN_INSPECTION_MEDIA" && !value.areaId) {
     context.addIssue({ code: "custom", path: ["areaId"], message: "areaId is required for move-in inspection media uploads." });

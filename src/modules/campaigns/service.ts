@@ -35,7 +35,7 @@ const PLACEMENT_ENTITLEMENT: Record<string, string> = {
 
 const safePublicFields = {
   id: true, placement: true, headline: true, supportingText: true, ctaLabel: true, destinationUrl: true,
-  desktopMediaUrl: true, mobileMediaUrl: true,
+  desktopMediaUrl: true, mobileMediaUrl: true, nativeAppMediaUrl: true,
 } as const;
 
 function isLive(campaign: { status: string; startAt: Date | null; endAt: Date | null }, now = new Date()) {
@@ -106,12 +106,17 @@ export async function updatePlatformCampaign(principal: PlatformPrincipal, campa
 /** Clears one creative slot (Phase 25 "Remove image") without deleting the campaign or touching
  * anything else about it — a campaign with its creative removed simply falls back to a plain
  * navy/gradient slide with no background image, exactly like one that never had creative uploaded. */
-export async function removeCampaignCreative(principal: PlatformPrincipal, campaignId: string, slot: "desktop" | "mobile") {
+export async function removeCampaignCreative(principal: PlatformPrincipal, campaignId: string, slot: "desktop" | "mobile" | "nativeApp") {
   requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) throw notFound();
   if (!campaign.isPlatformOwned) throw new AppError("FORBIDDEN", 403, "Only platform-owned campaigns may be edited here.");
-  const field = slot === "mobile" ? "mobileMediaUrl" : "desktopMediaUrl";
+  const field =
+    slot === "nativeApp"
+      ? "nativeAppMediaUrl"
+      : slot === "mobile"
+        ? "mobileMediaUrl"
+        : "desktopMediaUrl";
   const updated = await db.campaign.update({ where: { id: campaignId }, data: { [field]: null } });
   await recordPlatformAudit(principal, "platform_admin.campaign_edited", "campaign", campaignId, undefined, { fields: [field], removed: true });
   return updated;
@@ -135,6 +140,7 @@ export async function duplicateCampaign(principal: PlatformPrincipal, campaignId
       destinationUrl: source.destinationUrl,
       desktopMediaUrl: source.desktopMediaUrl,
       mobileMediaUrl: source.mobileMediaUrl,
+      nativeAppMediaUrl: source.nativeAppMediaUrl,
       countryCode: source.countryCode,
       region: source.region,
       isPlatformOwned: source.isPlatformOwned,

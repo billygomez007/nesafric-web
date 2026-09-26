@@ -300,7 +300,12 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
     attach: (tx, { targetId, storageObject, input }) => {
       const adapter = getObjectStorageAdapter();
       const publicUrl = adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey);
-      const field = input.mediaSlot === "mobile" ? "mobileMediaUrl" : "desktopMediaUrl";
+      const field =
+        input.mediaSlot === "nativeApp"
+          ? "nativeAppMediaUrl"
+          : input.mediaSlot === "mobile"
+            ? "mobileMediaUrl"
+            : "desktopMediaUrl";
       return tx.campaign.update({ where: { id: targetId }, data: { [field]: publicUrl } });
     },
   },

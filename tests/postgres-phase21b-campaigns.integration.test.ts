@@ -357,13 +357,21 @@ describe("PostgreSQL Phase 21B campaigns & promotions", () => {
     const campaign = await createPlatformCampaign(principal, { name: "Creative removal", placement: "MARKETPLACE_INLINE", ...requestFields });
     await uploadCampaignCreative(principal.userId, campaign.id, { fileName: "desktop.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "desktop" });
     await uploadCampaignCreative(principal.userId, campaign.id, { fileName: "mobile.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "mobile" });
+    await uploadCampaignCreative(principal.userId, campaign.id, { fileName: "native-app.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES), mediaSlot: "nativeApp" });
     const beforeRemoval = await getCampaignForPlatform(principal, campaign.id);
     expect(beforeRemoval.desktopMediaUrl).toBeTruthy();
     expect(beforeRemoval.mobileMediaUrl).toBeTruthy();
+    expect(beforeRemoval.nativeAppMediaUrl).toBeTruthy();
 
     const afterRemoval = await removeCampaignCreative(principal, campaign.id, "mobile");
     expect(afterRemoval.mobileMediaUrl).toBeNull();
     expect(afterRemoval.desktopMediaUrl).toBeTruthy();
+    expect(afterRemoval.nativeAppMediaUrl).toBeTruthy();
+
+    await removeCampaignCreative(principal, campaign.id, "nativeApp");
+    const afterNativeRemoval = await getCampaignForPlatform(principal, campaign.id);
+    expect(afterNativeRemoval.nativeAppMediaUrl).toBeNull();
+    expect(afterNativeRemoval.desktopMediaUrl).toBeTruthy();
     expect(afterRemoval.headline).toBe(campaign.headline);
   });
 });

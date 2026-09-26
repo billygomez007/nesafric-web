@@ -133,7 +133,13 @@ async function performUpload(params: {
     if (dimensions) {
       const campaign = await db.campaign.findUnique({ where: { id: input.targetId }, select: { placement: true } });
       const spec = campaign ? PLACEMENT_CREATIVE_SPECS[campaign.placement] : undefined;
-      const recommended = spec ? (input.mediaSlot === "mobile" ? spec.mobile : spec.desktop) : undefined;
+      const recommended = spec
+        ? input.mediaSlot === "nativeApp"
+          ? spec.nativeApp
+          : input.mediaSlot === "mobile"
+            ? spec.mobile
+            : spec.desktop
+        : undefined;
       if (recommended && dimensionMismatch(dimensions, recommended)) {
         creativeDimensionWarning = `Uploaded image is ${dimensions.width} × ${dimensions.height}px (${aspectRatioLabel(dimensions)}); recommended is ${recommended.width} × ${recommended.height}px (${aspectRatioLabel(recommended)}). It will display cropped to fit rather than stretched.`;
       }

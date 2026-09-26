@@ -5175,6 +5175,9 @@ model Campaign {
   destinationUrl                      String
   desktopMediaUrl                     String?
   mobileMediaUrl                      String?
+  /// Dedicated creative for the native iOS/Android app. This is intentionally
+  /// separate from mobileMediaUrl, which remains the responsive mobile-web asset.
+  nativeAppMediaUrl                   String?
   countryCode                         String?           @db.Char(2)
   region                              String?
   startAt                             DateTime?

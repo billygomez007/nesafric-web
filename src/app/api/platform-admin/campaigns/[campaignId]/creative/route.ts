@@ -24,7 +24,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cam
 export async function DELETE(request: Request, { params }: { params: Promise<{ campaignId: string }> }) {
   try {
     const principal = await requirePlatformPrincipal(await requireUser());
-    const slot = new URL(request.url).searchParams.get("slot") === "mobile" ? "mobile" : "desktop";
+    const requestedSlot = new URL(request.url).searchParams.get("slot");
+    const slot: "desktop" | "mobile" | "nativeApp" =
+      requestedSlot === "nativeApp"
+        ? "nativeApp"
+        : requestedSlot === "mobile"
+          ? "mobile"
+          : "desktop";
     return NextResponse.json(await removeCampaignCreative(principal, (await params).campaignId, slot));
   } catch (error) {
     return errorResponse(error);
