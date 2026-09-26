@@ -9,8 +9,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * (unless `busy`), focuses the first field on open and returns focus to whatever opened it.
  * Sheets up from the bottom on phones, centred on larger screens.
  */
-export function Dialog({ title, description, onClose, busy = false, children, footer }: {
+export function Dialog({ title, description, onClose, busy = false, children, footer, size = "md" }: {
   title: string;
+  /** `lg` widens the panel for list-style content (pickers); `md` suits forms and confirmations. */
+  size?: "md" | "lg";
   description?: ReactNode;
   onClose: () => void;
   busy?: boolean;
@@ -48,7 +50,7 @@ export function Dialog({ title, description, onClose, busy = false, children, fo
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[var(--radius-panel)] bg-white shadow-xl outline-none sm:rounded-[var(--radius-panel)]"
+        className={`max-h-[92vh] w-full ${size === "lg" ? "max-w-2xl" : "max-w-lg"} overflow-y-auto rounded-t-[var(--radius-panel)] bg-white shadow-xl outline-none sm:rounded-[var(--radius-panel)]`}
         onClick={(event) => event.stopPropagation()}
         ref={panel}
         role="dialog"

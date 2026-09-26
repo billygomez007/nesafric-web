@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
 import { buttonClass } from "@/components/ui/button-styles";
+import { platformRoleHasPermission, type PlatformPermission, type PlatformRoleValue } from "@/platform/platform-admin/permissions";
 
-type WhoAmI = { isPlatformPrincipal: boolean; role?: string };
+type WhoAmI = { isPlatformPrincipal: boolean; role?: PlatformRoleValue };
 
 type NavItem = { href: string; label: string };
 
@@ -67,6 +68,15 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
 
 const NAV = NAV_GROUPS.flatMap((group) => group.items);
 
+const PlatformAdminContext = createContext<{ role?: PlatformRoleValue }>({});
+
+/** Whether the signed-in principal's role grants `permission`. Presentation only — used to hide
+ * actions the API would refuse; every API still enforces the permission server-side. */
+export function usePlatformPermission(permission: PlatformPermission) {
+  const { role } = useContext(PlatformAdminContext);
+  return role ? platformRoleHasPermission(role, permission) : false;
+}
+
 function active(pathname: string, href: string) {
   return href === "/platform-admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -78,7 +88,7 @@ function active(pathname: string, href: string) {
 export function PlatformAdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [status, setStatus] = useState<"loading" | "signed-out" | "denied" | "error" | "allowed">("loading");
-  const [role, setRole] = useState<string | undefined>();
+  const [role, setRole] = useState<PlatformRoleValue | undefined>();
   const [pendingProviders, setPendingProviders] = useState<number | null>(null);
 
   useEffect(() => {
@@ -168,7 +178,7 @@ export function PlatformAdminShell({ children }: { children: ReactNode }) {
           {role && <span className="text-xs font-semibold text-forest">{role.replaceAll("_", " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())}</span>}
         </div>
       </header>
-      <div className="w-full px-5 py-7 sm:px-8 sm:py-9">{children}</div>
+      <div className="w-full px-5 py-7 sm:px-8 sm:py-9"><PlatformAdminContext.Provider value={{ role }}>{children}</PlatformAdminContext.Provider></div>
     </main>
   </div>;
 }

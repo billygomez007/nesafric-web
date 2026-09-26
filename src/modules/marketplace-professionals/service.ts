@@ -11,12 +11,23 @@ import {
   updateMarketplaceMemberSchema,
   submitMarketplaceVerificationSchema,
   reviewMarketplaceVerificationSchema,
+  platformAccountStatusSchema,
   changeMarketplacePlanSchema,
   directorySearchSchema,
 } from "./schemas";
 import { requireMarketplaceMember, requireMarketplaceRole } from "./permissions";
 import { assertMarketplaceOperational } from "./entitlements";
 import { MARKETPLACE_ENTITLEMENTS } from "./catalog";
+import {
+  accountAuditAction,
+  accountReasonRequired,
+  canTransitionAccount,
+  canTransitionVerification,
+  isArchived,
+  verificationAuditAction,
+  verificationReasonRequired,
+} from "./admin-lifecycle";
+import { isUuid } from "@/platform/validation/uuid";
 import { enqueueOnboardingCompleteEmail } from "@/modules/account-emails/service";
 import type { User } from "@/platform/database/generated/client";
 
@@ -235,19 +246,80 @@ export async function submitMarketplaceVerification(userId: string, marketplaceP
 
 /** Verification review is a NesAfric platform-administration action (reusing Phase 20's
  * `PlatformPrincipal` RBAC — item 11's "PropertyOS/Marketplace workspace separation" applies
- * symmetrically: platform trust decisions are never delegated to the professional's own team). */
+ * symmetrically: platform trust decisions are never delegated to the professional's own team).
+ *
+ * An admin may decide directly on an UNVERIFIED profile — a pending evidence submission is not a
+ * prerequisite. Allowed transitions live in `VERIFICATION_TRANSITIONS`; rejection and suspension
+ * require a reason. Every decision writes a verification event and a platform audit event in the
+ * same transaction as the status change, and the change is conditional on the status the decision
+ * was made from, so two admins deciding at once cannot silently overwrite each other. */
 export async function reviewMarketplaceVerification(platformUser: User, marketplaceProfessionalId: string, input: unknown) {
   const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.marketplaceVerify);
   const data = reviewMarketplaceVerificationSchema.parse(input);
-  const professional = await db.marketplaceProfessional.findFirst({ where: { id: marketplaceProfessionalId } });
+  if (!isUuid(marketplaceProfessionalId)) throw notFound();
+  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId } });
   if (!professional) throw notFound();
-  if (professional.verificationStatus !== "PENDING" && data.status !== "SUSPENDED") throw new AppError("INVALID_VERIFICATION_STATE", 409, "Only a pending verification may be approved or rejected.");
+  if (isArchived(professional)) throw new AppError("PROFESSIONAL_ARCHIVED", 409, "Archived profiles cannot be changed.");
+  const from = professional.verificationStatus;
+  if (data.expectedStatus && data.expectedStatus !== from) throw verificationChanged();
+  if (!canTransitionVerification(from, data.status)) {
+    throw new AppError("INVALID_VERIFICATION_TRANSITION", 409, `A ${from.toLowerCase()} profile cannot be moved to ${data.status.toLowerCase()}.`);
+  }
+  if (verificationReasonRequired(data.status) && !data.reason) {
+    throw new AppError("REASON_REQUIRED", 422, data.status === "REJECTED" ? "Enter a reason for rejecting this verification." : "Enter a reason for suspending this verification.");
+  }
   return db.$transaction(async (tx) => {
-    const updated = await tx.marketplaceProfessional.update({ where: { id: marketplaceProfessionalId }, data: { verificationStatus: data.status } });
-    await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: professional.verificationStatus, toStatus: data.status, actorUserId: principal.userId, reason: data.reason } });
-    return updated;
+    const changed = await tx.marketplaceProfessional.updateMany({ where: { id: marketplaceProfessionalId, verificationStatus: from }, data: { verificationStatus: data.status } });
+    if (changed.count !== 1) throw verificationChanged();
+    await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: from, toStatus: data.status, actorUserId: principal.userId, reason: data.reason } });
+    await tx.platformAuditEvent.create({
+      data: {
+        platformPrincipalId: principal.id, action: verificationAuditAction(from, data.status), entityType: "marketplace_professional",
+        entityId: marketplaceProfessionalId, organisationId: professional.backingOrganisationId,
+        metadata: { fromStatus: from, toStatus: data.status, reason: data.reason ?? null, actorUserId: principal.userId },
+      },
+    });
+    return tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
   });
 }
+
+const verificationChanged = () =>
+  new AppError("VERIFICATION_CHANGED", 409, "This profile's verification changed since you opened it. Reload and try again.");
+
+/** Platform-admin account lifecycle (ACTIVE <-> SUSPENDED), deliberately separate from the
+ * verification decision above: suspending an account takes it off the marketplace without
+ * changing its trust status, and reactivating it does not verify it. ARCHIVED is protected. */
+export async function setMarketplaceProfessionalAccountStatus(platformUser: User, marketplaceProfessionalId: string, input: unknown) {
+  const principal = await requirePlatformPrincipal(platformUser, PLATFORM_PERMISSIONS.marketplaceVerify);
+  const data = platformAccountStatusSchema.parse(input);
+  if (!isUuid(marketplaceProfessionalId)) throw notFound();
+  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId } });
+  if (!professional) throw notFound();
+  if (isArchived(professional)) throw new AppError("PROFESSIONAL_ARCHIVED", 409, "Archived profiles cannot be changed.");
+  const from = professional.status;
+  if (data.expectedStatus && data.expectedStatus !== from) throw accountChanged();
+  if (!canTransitionAccount(from, data.status)) {
+    throw new AppError("INVALID_ACCOUNT_TRANSITION", 409, `The account is already ${from.toLowerCase()}.`);
+  }
+  if (accountReasonRequired(data.status) && !data.reason) {
+    throw new AppError("REASON_REQUIRED", 422, "Enter a reason for suspending this account.");
+  }
+  return db.$transaction(async (tx) => {
+    const changed = await tx.marketplaceProfessional.updateMany({ where: { id: marketplaceProfessionalId, status: from, archivedAt: null }, data: { status: data.status } });
+    if (changed.count !== 1) throw accountChanged();
+    await tx.platformAuditEvent.create({
+      data: {
+        platformPrincipalId: principal.id, action: accountAuditAction(data.status), entityType: "marketplace_professional",
+        entityId: marketplaceProfessionalId, organisationId: professional.backingOrganisationId,
+        metadata: { fromStatus: from, toStatus: data.status, reason: data.reason ?? null, actorUserId: principal.userId },
+      },
+    });
+    return tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
+  });
+}
+
+const accountChanged = () =>
+  new AppError("ACCOUNT_STATUS_CHANGED", 409, "This account's status changed since you opened it. Reload and try again.");
 
 export async function changeMarketplacePlan(userId: string, marketplaceProfessionalId: string, input: unknown) {
   await requireMarketplaceRole(userId, marketplaceProfessionalId, "OWNER");

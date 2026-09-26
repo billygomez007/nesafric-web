@@ -589,6 +589,7 @@ export async function listMarketplaceProfessionalsForPlatform(
       verificationStatus: true,
       createdAt: true,
       archivedAt: true,
+      homepageCompanyLogos: { select: { id: true, isPublished: true, sortOrder: true } },
       subscription: {
         select: {
           status: true,

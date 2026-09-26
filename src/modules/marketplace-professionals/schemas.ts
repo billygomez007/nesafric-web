@@ -45,9 +45,19 @@ export const submitMarketplaceVerificationSchema = z.object({
   evidenceReferences: z.array(text(500)).min(1).max(20),
 });
 
+const verificationStatus = z.enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED", "SUSPENDED"]);
+
 export const reviewMarketplaceVerificationSchema = z.object({
   status: z.enum(["VERIFIED", "REJECTED", "SUSPENDED"]),
   reason: z.string().trim().max(2000).optional(),
+  /** Optional optimistic-concurrency guard: the status the admin saw when deciding. */
+  expectedStatus: verificationStatus.optional(),
+});
+
+export const platformAccountStatusSchema = z.object({
+  status: z.enum(["ACTIVE", "SUSPENDED"]),
+  reason: z.string().trim().max(2000).optional(),
+  expectedStatus: z.enum(["ACTIVE", "SUSPENDED", "ARCHIVED"]).optional(),
 });
 
 export const changeMarketplacePlanSchema = z.object({

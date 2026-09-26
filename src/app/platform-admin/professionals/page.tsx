@@ -3,6 +3,24 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminShell } from "@/components/platform-admin/shell";
+import { buttonClass } from "@/components/ui/button-styles";
+import {
+  AccountBadge,
+  HomepageBadge,
+  LifecycleActionButtons,
+  LifecycleDialog,
+  performLifecycleAction,
+  successMessage,
+  useLifecyclePermissions,
+  VerificationBadge,
+} from "@/components/platform-admin/professional-lifecycle";
+import {
+  homepageIneligibilityReason,
+  isArchived,
+  isHomepageCompanyType,
+  professionalLifecycleActions,
+  type LifecycleAction,
+} from "@/modules/marketplace-professionals/admin-lifecycle";
 
 type ProfessionalRow = {
   id: string;
@@ -21,6 +39,7 @@ type ProfessionalRow = {
   verificationStatus: string;
   createdAt: string;
   archivedAt: string | null;
+  homepageCompanyLogos: Array<{ id: string; isPublished: boolean; sortOrder: number }>;
   subscription: {
     status: string;
     currentPeriodStart: string;
@@ -49,21 +68,12 @@ type ProfessionalRow = {
   };
 };
 
-type DirectoryFilter = "TOTAL" | "VERIFIED" | "PENDING" | "SUSPENDED";
-type ReviewStatus = "VERIFIED" | "REJECTED" | "SUSPENDED";
+type DirectoryFilter = "TOTAL" | "UNVERIFIED" | "VERIFIED" | "PENDING" | "SUSPENDED";
 
-function verificationStyle(status: string) {
-  switch (status) {
-    case "VERIFIED":
-      return "bg-emerald/10 text-emerald";
-    case "PENDING":
-      return "bg-gold/15 text-forest";
-    case "REJECTED":
-    case "SUSPENDED":
-      return "bg-red-50 text-red-800";
-    default:
-      return "bg-slate-100 text-slate-700";
-  }
+function homepageState(professional: ProfessionalRow) {
+  const item = professional.homepageCompanyLogos?.[0];
+  if (!item) return "none" as const;
+  return item.isPublished ? ("published" as const) : ("hidden" as const);
 }
 
 function humanize(value: string) {
@@ -86,10 +96,12 @@ function ProfessionalsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [selected, setSelected] = useState<ProfessionalRow | null>(null);
-  const [reviewStatus, setReviewStatus] = useState<ReviewStatus | null>(null);
-  const [reviewReason, setReviewReason] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ professional: ProfessionalRow; action: LifecycleAction } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const permissions = useLifecyclePermissions();
+  // Derived from the list so the drawer always reflects the latest reload.
+  const selected = professionals.find((professional) => professional.id === selectedId) ?? null;
 
   const loadProfessionals = useCallback(
     async (signal?: AbortSignal) => {
@@ -154,6 +166,10 @@ function ProfessionalsContent() {
     setActiveSearch(search);
   }
 
+  const unverified = professionals.filter(
+    (professional) => professional.verificationStatus === "UNVERIFIED",
+  ).length;
+
   const verified = professionals.filter(
     (professional) => professional.verificationStatus === "VERIFIED",
   ).length;
@@ -170,6 +186,10 @@ function ProfessionalsContent() {
 
   const visibleProfessionals = useMemo(() => {
     switch (filter) {
+      case "UNVERIFIED":
+        return professionals.filter(
+          (professional) => professional.verificationStatus === "UNVERIFIED",
+        );
       case "VERIFIED":
         return professionals.filter(
           (professional) => professional.verificationStatus === "VERIFIED",
@@ -195,100 +215,58 @@ function ProfessionalsContent() {
     count: number;
   }> = [
     { key: "TOTAL", label: "Total", count: professionals.length },
+    { key: "UNVERIFIED", label: "Unverified", count: unverified },
     { key: "VERIFIED", label: "Verified", count: verified },
     { key: "PENDING", label: "Pending", count: pending },
     { key: "SUSPENDED", label: "Suspended", count: suspended },
   ];
 
   function openReview(professional: ProfessionalRow) {
-    setSelected(professional);
-    setReviewStatus(null);
-    setReviewReason("");
+    setSelectedId(professional.id);
     setError("");
     setSuccess("");
   }
 
   function closeReview() {
-    if (saving) return;
-    setSelected(null);
-    setReviewStatus(null);
-    setReviewReason("");
+    if (pendingAction) return;
+    setSelectedId(null);
   }
 
-  async function confirmReview() {
-    if (!selected || !reviewStatus) return;
-
-    if (
-      (reviewStatus === "REJECTED" || reviewStatus === "SUSPENDED") &&
-      !reviewReason.trim()
-    ) {
-      setError(
-        reviewStatus === "REJECTED"
-          ? "Enter a reason for rejecting this verification."
-          : "Enter a reason for suspending this professional.",
-      );
-      return;
-    }
-
-    setSaving(true);
+  /** Homepage additions need no reason, so they run directly; every status change opens the
+   * confirmation dialog first. */
+  async function selectAction(professional: ProfessionalRow, action: LifecycleAction) {
     setError("");
     setSuccess("");
-
+    if (action.kind !== "add_to_homepage") {
+      setPendingAction({ professional, action });
+      return;
+    }
+    setBusyId(professional.id);
     try {
-      const response = await fetch(
-        `/api/platform-admin/professionals/${selected.id}/verification`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            status: reviewStatus,
-            ...(reviewReason.trim() ? { reason: reviewReason.trim() } : {}),
-          }),
-        },
-      );
-
-      const body = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          body.error?.message ?? "Unable to update verification status.",
-        );
-      }
-
-      const updatedStatus = body.verificationStatus ?? reviewStatus;
-
-      setProfessionals((current) =>
-        current.map((professional) =>
-          professional.id === selected.id
-            ? { ...professional, verificationStatus: updatedStatus }
-            : professional,
-        ),
-      );
-
-      setSelected((current) =>
-        current
-          ? { ...current, verificationStatus: updatedStatus }
-          : current,
-      );
-
-      setReviewStatus(null);
-      setReviewReason("");
-      setSuccess(
-        `${selected.displayName} verification status changed to ${humanize(
-          updatedStatus,
-        )}.`,
-      );
-
+      await performLifecycleAction(professional, action, "");
+      setSuccess(successMessage(professional, action));
       await loadProfessionals();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to update verification status.",
-      );
+      setError(caught instanceof Error ? caught.message : "Unable to add this company to the homepage.");
     } finally {
-      setSaving(false);
+      setBusyId(null);
     }
+  }
+
+  async function actionDone(message: string) {
+    setPendingAction(null);
+    setSuccess(message);
+    try {
+      await loadProfessionals();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to reload Marketplace Professionals.");
+    }
+  }
+
+  function actionsFor(professional: ProfessionalRow) {
+    return professionalLifecycleActions(professional, permissions, {
+      onHomepage: homepageState(professional) !== "none",
+    });
   }
 
   return (
@@ -311,7 +289,7 @@ function ProfessionalsContent() {
 
       <section
         aria-label="Professional directory filters"
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        className="grid gap-3 sm:grid-cols-3 xl:grid-cols-5"
       >
         {cards.map((card) => {
           const active = filter === card.key;
@@ -429,17 +407,17 @@ function ProfessionalsContent() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] text-left text-sm">
+            <table className="w-full min-w-[1320px] text-left text-sm">
               <thead className="border-b border-hairline bg-warm-white text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th className="px-5 py-4 font-semibold">Professional</th>
                   <th className="px-5 py-4 font-semibold">Type</th>
-                  <th className="px-5 py-4 font-semibold">Verification</th>
+                  <th className="px-5 py-4 font-semibold">Status</th>
                   <th className="px-5 py-4 font-semibold">Team</th>
                   <th className="px-5 py-4 font-semibold">Marketplace</th>
                   <th className="px-5 py-4 font-semibold">Plan</th>
                   <th className="px-5 py-4 font-semibold">Created</th>
-                  <th className="px-5 py-4 font-semibold">Action</th>
+                  <th className="px-5 py-4 font-semibold">Actions</th>
                 </tr>
               </thead>
 
@@ -505,17 +483,13 @@ function ProfessionalsContent() {
                     </td>
 
                     <td className="px-5 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${verificationStyle(
-                          professional.verificationStatus,
-                        )}`}
-                      >
-                        {humanize(professional.verificationStatus)}
-                      </span>
-
-                      <p className="mt-2 text-xs text-muted">
-                        Account: {humanize(professional.status)}
-                      </p>
+                      <div className="flex flex-col items-start gap-1.5">
+                        <AccountBadge status={professional.archivedAt ? "ARCHIVED" : professional.status} />
+                        <VerificationBadge status={professional.verificationStatus} />
+                        {isHomepageCompanyType(professional.type) && (
+                          <HomepageBadge state={homepageState(professional)} />
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-5 py-4">
@@ -574,13 +548,20 @@ function ProfessionalsContent() {
                     </td>
 
                     <td className="px-5 py-4">
-                      <button
-                        className="rounded-lg border border-hairline bg-white px-3 py-2 text-xs font-semibold text-forest transition hover:border-teal hover:text-teal focus:outline-none focus:ring-2 focus:ring-teal/20"
-                        onClick={() => openReview(professional)}
-                        type="button"
-                      >
-                        Review
-                      </button>
+                      <div className="flex w-64 flex-wrap gap-2">
+                        <LifecycleActionButtons
+                          actions={actionsFor(professional)}
+                          disabled={busyId === professional.id}
+                          onSelect={(action) => void selectAction(professional, action)}
+                        />
+                        <button
+                          className={buttonClass("tertiary")}
+                          onClick={() => openReview(professional)}
+                          type="button"
+                        >
+                          View
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -600,7 +581,7 @@ function ProfessionalsContent() {
           <button
             aria-label="Close professional review"
             className="absolute inset-0 cursor-default"
-            disabled={saving}
+            disabled={Boolean(pendingAction)}
             onClick={closeReview}
             type="button"
           />
@@ -618,7 +599,7 @@ function ProfessionalsContent() {
 
               <button
                 className="rounded-lg border border-hairline px-3 py-2 text-sm font-semibold text-forest"
-                disabled={saving}
+                disabled={Boolean(pendingAction)}
                 onClick={closeReview}
                 type="button"
               >
@@ -652,14 +633,9 @@ function ProfessionalsContent() {
                       </p>
                     )}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${verificationStyle(
-                          selected.verificationStatus,
-                        )}`}
-                      >
-                        {humanize(selected.verificationStatus)}
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                      <AccountBadge status={selected.archivedAt ? "ARCHIVED" : selected.status} />
+                      <VerificationBadge status={selected.verificationStatus} />
+                      <span className="rounded-full border border-hairline bg-surface px-2 py-0.5 text-[11px] font-semibold text-ink">
                         {humanize(selected.type)}
                       </span>
                     </div>
@@ -751,129 +727,48 @@ function ProfessionalsContent() {
               </section>
 
               <section>
-                <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-forest">Trust and account</h4>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  Verification and account status are separate. Rejecting or suspending needs a
+                  reason; every change is recorded in the verification history and audit log.
+                </p>
+                <dl className="mt-3 grid gap-3 rounded-xl border border-hairline p-4 sm:grid-cols-3">
                   <div>
-                    <h4 className="text-sm font-semibold text-forest">
-                      Verification decision
-                    </h4>
-                    <p className="mt-1 text-xs leading-5 text-muted">
-                      Approval and rejection are available for pending submissions.
-                      Suspension is available as a platform trust action.
-                    </p>
+                    <dt className="text-xs text-muted">Account status</dt>
+                    <dd className="mt-1"><AccountBadge status={selected.archivedAt ? "ARCHIVED" : selected.status} /></dd>
                   </div>
+                  <div>
+                    <dt className="text-xs text-muted">Verification status</dt>
+                    <dd className="mt-1"><VerificationBadge status={selected.verificationStatus} /></dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted">Homepage</dt>
+                    <dd className="mt-1">
+                      {isHomepageCompanyType(selected.type)
+                        ? <HomepageBadge state={homepageState(selected)} />
+                        : <span className="text-xs text-muted">Not eligible (not a company)</span>}
+                    </dd>
+                  </div>
+                </dl>
+                {isHomepageCompanyType(selected.type) && homepageState(selected) === "none" && homepageIneligibilityReason(selected) && (
+                  <p className="mt-2 text-xs text-muted">
+                    Homepage: {homepageIneligibilityReason(selected)}
+                  </p>
+                )}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {isArchived(selected) ? (
+                    <p className="text-sm text-muted">Archived profiles are read-only. Restoring an archived profile is not supported.</p>
+                  ) : actionsFor(selected).length === 0 ? (
+                    <p className="text-sm text-muted">Your platform role cannot change this profile.</p>
+                  ) : (
+                    <LifecycleActionButtons
+                      actions={actionsFor(selected)}
+                      disabled={busyId === selected.id}
+                      onSelect={(action) => void selectAction(selected, action)}
+                      size="md"
+                    />
+                  )}
                 </div>
-
-                {selected.verificationStatus === "PENDING" ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <button
-                      className="rounded-lg bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald"
-                      disabled={saving}
-                      onClick={() => {
-                        setReviewStatus("VERIFIED");
-                        setReviewReason("");
-                      }}
-                      type="button"
-                    >
-                      Verify
-                    </button>
-
-                    <button
-                      className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-800 transition hover:bg-red-50"
-                      disabled={saving}
-                      onClick={() => {
-                        setReviewStatus("REJECTED");
-                        setReviewReason("");
-                      }}
-                      type="button"
-                    >
-                      Reject
-                    </button>
-
-                    <button
-                      className="rounded-lg border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-forest transition hover:border-red-200 hover:text-red-800"
-                      disabled={saving}
-                      onClick={() => {
-                        setReviewStatus("SUSPENDED");
-                        setReviewReason("");
-                      }}
-                      type="button"
-                    >
-                      Suspend
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-4">
-                    <button
-                      className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-800 transition hover:bg-red-50"
-                      disabled={saving}
-                      onClick={() => {
-                        setReviewStatus("SUSPENDED");
-                        setReviewReason("");
-                      }}
-                      type="button"
-                    >
-                      Suspend professional
-                    </button>
-                  </div>
-                )}
-
-                {reviewStatus && (
-                  <div className="mt-4 rounded-xl border border-gold/30 bg-gold/5 p-4">
-                    <p className="text-sm font-semibold text-forest">
-                      Confirm verification change
-                    </p>
-                    <p className="mt-2 text-sm text-muted">
-                      {humanize(selected.verificationStatus)} →{" "}
-                      <span className="font-semibold text-forest">
-                        {humanize(reviewStatus)}
-                      </span>
-                    </p>
-
-                    <label className="mt-4 block">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted">
-                        Reason
-                        {(reviewStatus === "REJECTED" ||
-                          reviewStatus === "SUSPENDED") &&
-                          " · required"}
-                      </span>
-                      <textarea
-                        className="mt-2 min-h-24 w-full rounded-lg border border-hairline px-3 py-2 text-sm outline-none focus:border-teal focus:ring-2 focus:ring-teal/10"
-                        disabled={saving}
-                        maxLength={2000}
-                        onChange={(event) => setReviewReason(event.target.value)}
-                        placeholder={
-                          reviewStatus === "VERIFIED"
-                            ? "Optional review note"
-                            : "Explain this decision"
-                        }
-                        value={reviewReason}
-                      />
-                    </label>
-
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        className="rounded-lg bg-forest px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                        disabled={saving}
-                        onClick={confirmReview}
-                        type="button"
-                      >
-                        {saving ? "Saving…" : `Confirm ${humanize(reviewStatus)}`}
-                      </button>
-
-                      <button
-                        className="rounded-lg border border-hairline px-4 py-2 text-sm font-semibold text-forest"
-                        disabled={saving}
-                        onClick={() => {
-                          setReviewStatus(null);
-                          setReviewReason("");
-                        }}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
               </section>
 
               <section className="flex flex-wrap items-center gap-3 border-t border-hairline pt-5">
@@ -892,6 +787,15 @@ function ProfessionalsContent() {
             </div>
           </aside>
         </div>
+      )}
+
+      {pendingAction && (
+        <LifecycleDialog
+          action={pendingAction.action}
+          onClose={() => setPendingAction(null)}
+          onDone={(message) => actionDone(message)}
+          professional={pendingAction.professional}
+        />
       )}
     </div>
   );
