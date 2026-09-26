@@ -11,10 +11,10 @@ import { SectionHeading } from "./section-heading";
 type IconName = keyof typeof Ionicons.glyphMap;
 
 export const SEARCH_CARDS: { id: string; label: string; description: string; icon: IconName; filters: SearchFilters }[] = [
-  { id: "houses", label: "Houses", description: "Family homes and villas", icon: "home-outline", filters: { category: "HOUSE" } },
+  { id: "houses", label: "Houses", description: "Homes and villas", icon: "home-outline", filters: { category: "HOUSE" } },
   { id: "apartments", label: "Apartments", description: "Flats and studios", icon: "business-outline", filters: { category: "APARTMENT" } },
   { id: "land", label: "Land", description: "Plots and acreage", icon: "map-outline", filters: { category: "LAND" } },
-  { id: "commercial", label: "Commercial", description: "Offices, shops and more", icon: "storefront-outline", filters: { category: "COMMERCIAL" } },
+  { id: "commercial", label: "Commercial", description: "Offices and shops", icon: "storefront-outline", filters: { category: "COMMERCIAL" } },
 ];
 
 /** "Search properties": four entry points into the Search tab, each with its live listing count. */
@@ -44,11 +44,11 @@ export function PropertyTypeCard({ label, description, icon, filters, id }: (typ
       <View style={styles.icon}><Ionicons name={icon} size={22} color={colors.forest} /></View>
       <View style={styles.cardCopy}>
         <AppText style={styles.label} numberOfLines={1}>{label}</AppText>
-        <AppText variant="caption" numberOfLines={2}>{description}</AppText>
+        <AppText variant="caption" numberOfLines={1}>{description}</AppText>
       </View>
       <View style={styles.footer}>
         <AppText style={styles.count} numberOfLines={1}>{countText}</AppText>
-        <Ionicons name="arrow-forward" size={16} color={colors.forest} />
+        <Ionicons name="chevron-forward" size={18} color={colors.forest} />
       </View>
     </Pressable>
   );
@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   card: {
     flexBasis: "47%",
     flexGrow: 1,
-    minHeight: 156,
+    minHeight: 148,
     padding: spacing.lg,
     gap: spacing.sm,
     borderRadius: radii.panel,

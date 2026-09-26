@@ -73,9 +73,9 @@ describe("marketplace home", () => {
     mockApi();
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
     await screen.findByText("4 Bedroom House");
-    await screen.findByText("Verified companies will appear here");
+    await screen.findByText("Verified companies appear here");
     const texts = flatten(view.toJSON() as Node);
-    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "4 Bedroom House", "Trusted companies on NesAfric", "Search properties", "Family homes and villas", "Flats and studios", "Plots and acreage", "Offices, shops and more", "Advanced search"];
+    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "4 Bedroom House", "Trusted companies on NesAfric", "Search properties", "Homes and villas", "Flats and studios", "Plots and acreage", "Offices and shops", "Advanced search"];
     const positions = order.map((text) => texts.indexOf(text));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -111,7 +111,7 @@ describe("marketplace home", () => {
     mockApi({ search: (url) => (url.searchParams.get("category") === "LAND" ? [] : [house]) });
     renderRouter(APP_DIR, { initialUrl: "/" });
     expect(await screen.findByLabelText(/^Land\. Plots and acreage\. No listings yet$/)).toBeTruthy();
-    fireEvent.press(await screen.findByLabelText(/^Houses\. Family homes and villas\. 1 property$/));
+    fireEvent.press(await screen.findByLabelText(/^Houses\. Homes and villas\. 1 property$/));
     await waitFor(() => expect(searchCalls().some((params) => params.get("category") === "HOUSE" && params.get("pageSize") === "20")).toBe(true));
   });
 

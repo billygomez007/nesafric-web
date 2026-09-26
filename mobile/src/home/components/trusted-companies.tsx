@@ -39,8 +39,8 @@ export function TrustedCompanies() {
         >
           <View style={styles.emptyIcon}><Ionicons name="shield-checkmark-outline" size={20} color={colors.gold} /></View>
           <View style={styles.emptyCopy}>
-            <AppText style={styles.emptyTitle}>Verified companies will appear here</AppText>
-            <AppText variant="caption">Are you an agency or developer? Get verified</AppText>
+            <AppText style={styles.emptyTitle}>Verified companies appear here</AppText>
+            <AppText variant="caption">Agency or developer? Get verified</AppText>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
