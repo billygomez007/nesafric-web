@@ -7,14 +7,46 @@ import { buttonClass } from "@/components/ui/button-styles";
 import { controlClass } from "@/components/ui/field-styles";
 
 const QUICK_LINKS = [
-  { label: "Rent", href: "/marketplace/properties?listingType=RENT" },
-  { label: "Buy", href: "/marketplace/properties?listingType=SALE" },
-  { label: "Land", href: "/marketplace/properties?category=LAND" },
-  { label: "Commercial", href: "/marketplace/properties?category=COMMERCIAL" },
-  { label: "Houses", href: "/marketplace/properties?category=HOUSE" },
-  { label: "Apartments", href: "/marketplace/properties?category=APARTMENT" },
-  { label: "Townhouses", href: "/marketplace/properties?category=TOWNHOUSE" },
-  { label: "Villa", href: "/marketplace/properties?category=VILLA" },
+  {
+    label: "Rent",
+    href: "/marketplace/properties?listingType=RENT",
+    tone: "border-market-rent/45 bg-market-rent-tint text-market-rent hover:border-market-rent hover:bg-market-rent-tint",
+  },
+  {
+    label: "Buy",
+    href: "/marketplace/properties?listingType=SALE",
+    tone: "border-market-sale/45 bg-market-sale-tint text-market-sale hover:border-market-sale hover:bg-market-sale-tint",
+  },
+  {
+    label: "Land",
+    href: "/marketplace/properties?category=LAND",
+    tone: "border-market-land/45 bg-market-land-tint text-market-land hover:border-market-land hover:bg-market-land-tint",
+  },
+  {
+    label: "Commercial",
+    href: "/marketplace/properties?category=COMMERCIAL",
+    tone: "border-market-commercial/45 bg-market-commercial-tint text-market-commercial hover:border-market-commercial hover:bg-market-commercial-tint",
+  },
+  {
+    label: "Houses",
+    href: "/marketplace/properties?category=HOUSE",
+    tone: "border-market-verified/35 bg-market-verified-tint text-market-verified hover:border-market-verified",
+  },
+  {
+    label: "Apartments",
+    href: "/marketplace/properties?category=APARTMENT",
+    tone: "border-market-verified/35 bg-market-verified-tint text-market-verified hover:border-market-verified",
+  },
+  {
+    label: "Townhouses",
+    href: "/marketplace/properties?category=TOWNHOUSE",
+    tone: "border-market-verified/35 bg-market-verified-tint text-market-verified hover:border-market-verified",
+  },
+  {
+    label: "Villa",
+    href: "/marketplace/properties?category=VILLA",
+    tone: "border-market-verified/35 bg-market-verified-tint text-market-verified hover:border-market-verified",
+  },
 ] as const;
 
 export function HeroSearch() {
@@ -69,7 +101,7 @@ export function HeroSearch() {
       >
         {QUICK_LINKS.map((item) => (
           <Link
-            className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:border-gold-soft/60 hover:bg-white/15 hover:text-gold-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-soft"
+            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-5 text-sm font-semibold shadow-sm transition hover:-translate-y-px hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${item.tone}`}
             href={item.href}
             key={item.label}
           >
