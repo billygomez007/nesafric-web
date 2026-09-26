@@ -6,6 +6,8 @@
  * authenticated call reports the session as lost via `onUnauthenticated`. The error envelope
  * `{ error: { code, message, details?, issues? } }` is normalised, and cookies are never sent.
  */
+import { previewBypassSecret } from "@/config";
+
 export type ApiIssue = { path: string; message: string };
 
 export class ApiError extends Error {
@@ -61,8 +63,10 @@ export function buildQuery(query: RequestOptions["query"]) {
 export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl, getToken, onUnauthenticated }: ClientOptions) {
   // Resolved per call (not captured at creation) so a replaced global fetch is always honoured.
   const doFetch: typeof fetch = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
+  const bypass = previewBypassSecret(baseUrl);
   async function request<T>(path: string, { method = "GET", query, body, headers: extraHeaders, signal, auth = false, organisationId, token: explicitToken, timeoutMs: requestTimeoutMs = timeoutMs }: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = { accept: "application/json", ...extraHeaders };
+    if (bypass) headers["x-vercel-protection-bypass"] = bypass;
     if (auth) {
       const token = explicitToken ?? getToken?.();
       if (!token) throw new ApiError(401, UNAUTHENTICATED, "Please sign in to continue.");

@@ -1,6 +1,7 @@
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 import { Pressable, StyleSheet, View } from "react-native";
+import { websiteUrl } from "@/config";
 
 import type { DirectoryCompany } from "@/api/home";
 import { useVerifiedCompanies } from "@/api/home-queries";
@@ -35,14 +36,14 @@ export function TrustedCompanies() {
   const companies = useVerifiedCompanies();
   const items = railCompanies(companies.data?.items ?? []);
   const openProfile = (company: DirectoryCompany) =>
-    void WebBrowser.openBrowserAsync(`${apiUrl}/marketplace/professionals/${encodeURIComponent(company.slug)}`);
+    void WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/marketplace/professionals/${encodeURIComponent(company.slug)}`));
 
   return (
     <View style={styles.section}>
       <SectionHeading
         size="small"
         title="Trusted by leading companies"
-        action={items.length ? { label: "See all", onPress: () => void WebBrowser.openBrowserAsync(`${apiUrl}/marketplace/professionals`) } : undefined}
+        action={items.length ? { label: "See all", onPress: () => void WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/marketplace/professionals`)) } : undefined}
       />
       {items.length ? (
         <LogoRail

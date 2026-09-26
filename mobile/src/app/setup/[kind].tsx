@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { websiteUrl } from "@/config";
 
 import { useWorkspaces } from "@/api/account-queries";
 import { useApi } from "@/api/provider";
@@ -56,7 +57,7 @@ export default function SetupScreen() {
   const ready = resolveAvailableWorkspaces({ status, workspaces: workspaces.data }).filter((workspace) => workspace.kind === kind);
 
   async function setUp() {
-    await WebBrowser.openBrowserAsync(`${apiUrl}${SETUP_PATH[kind!]}`);
+    await WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${SETUP_PATH[kind!]}`));
     // Back from the website: a workspace set up there shows up once the server lists it.
     void workspaces.refetch();
   }

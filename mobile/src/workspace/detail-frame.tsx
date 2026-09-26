@@ -2,6 +2,7 @@ import * as WebBrowser from "expo-web-browser";
 import type { ReactNode } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { websiteUrl } from "@/config";
 
 import { ApiError, NETWORK_ERROR } from "@/api/client";
 import { useApi } from "@/api/provider";
@@ -47,7 +48,7 @@ export function DetailFrame({ query, noun, webPath, children }: { query: { data:
         <AppText variant="caption" style={styles.center}>
           This is a read-only view. To reply, assign or update the status, use nesafric.com.
         </AppText>
-        <Button label="Open on nesafric.com" variant="secondary" onPress={() => void WebBrowser.openBrowserAsync(`${apiUrl}${webPath}`)} />
+        <Button label="Open on nesafric.com" variant="secondary" onPress={() => void WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${webPath}`))} />
       </View>
     </ScrollView>
   );

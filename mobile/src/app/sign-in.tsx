@@ -3,6 +3,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, type TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { websiteUrl } from "@/config";
 
 import { useApi } from "@/api/provider";
 import { signInErrorMessage } from "@/auth/errors";
@@ -132,7 +133,7 @@ export default function SignInScreen() {
           variant="secondary"
           accessibilityHint="Opens nesafric.com"
           testID="sign-in-register"
-          onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}${registerPath(intent ?? "customer")}`)}
+          onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${registerPath(intent ?? "customer")}`))}
         />
         <AppText variant="caption" style={styles.center}>
           Registration opens nesafric.com. Come back and sign in here with the same account.

@@ -5,6 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { websiteUrl } from "@/config";
 
 import { useProfile, useWorkspaces } from "@/api/account-queries";
 import { ApiError, NETWORK_ERROR } from "@/api/client";
@@ -69,8 +70,8 @@ export default function AccountScreen() {
         <RowGroup>
           <ListRow icon="help-buoy-outline" title="Help & support" detail={BRAND.contact.support} onPress={() => Linking.openURL(`mailto:${BRAND.contact.support}`)} />
           <ListRow icon="call-outline" title="Call us" detail={BRAND.contact.phoneDisplay} onPress={() => Linking.openURL(`tel:${BRAND.contact.phoneTel}`)} />
-          <ListRow icon="shield-checkmark-outline" title="Privacy policy" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/privacy`)} />
-          <ListRow icon="document-text-outline" title="Terms of service" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/terms`)} last />
+          <ListRow icon="shield-checkmark-outline" title="Privacy policy" onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/privacy`))} />
+          <ListRow icon="document-text-outline" title="Terms of service" onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/terms`))} last />
         </RowGroup>
 
         <AppText variant="caption" style={styles.version}>
@@ -239,7 +240,7 @@ function SignedInAccount() {
   const offers = intent && missing.includes(intent) ? [intent, ...missing.filter((kind) => kind !== intent)] : missing;
 
   async function openOffer(kind: WorkspaceIntent) {
-    await WebBrowser.openBrowserAsync(`${apiUrl}${OFFERS[kind].path}`);
+    await WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${OFFERS[kind].path}`));
     // Back from the website: pick up a workspace that was just set up.
     void workspaces.refetch();
   }
@@ -273,7 +274,7 @@ function SignedInAccount() {
             )}
             <ListRow icon="swap-horizontal-outline" title="Switch workspace" detail={available.length > 1 ? `${available.length} workspaces available` : "Marketplace only"} onPress={() => openSwitcher("marketplace", null)} testID="open-switcher" />
             <ListRow icon="search-outline" title="Browse Marketplace" onPress={() => router.navigate("/")} testID="browse-marketplace" />
-            <ListRow icon="settings-outline" title="Account settings" detail="Name, email and password on nesafric.com" accessibilityHint="Opens nesafric.com" onPress={() => void WebBrowser.openBrowserAsync(`${apiUrl}/settings`)} testID="account-settings" last />
+            <ListRow icon="settings-outline" title="Account settings" detail="Name, email and password on nesafric.com" accessibilityHint="Opens nesafric.com" onPress={() => void WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/settings`))} testID="account-settings" last />
           </RowGroup>
         </View>
       ) : null}

@@ -34,3 +34,29 @@ export function parseApiUrl(raw: string | undefined): string {
 export function loadConfig(): AppConfig {
   return { apiUrl: parseApiUrl(process.env.EXPO_PUBLIC_API_URL) };
 }
+
+/**
+ * Acceptance testing against a protected Vercel *preview* only. Vercel Authentication blocks a
+ * phone from a preview URL, so a tester may set `EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS` to the
+ * project's automation-bypass secret. It is honoured only when the API host is a
+ * `*.vercel.app` preview, never for nesafric.com, so it can't reach a production build's traffic.
+ */
+export function previewBypassSecret(apiUrl: string): string | null {
+  const secret = process.env.EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS?.trim();
+  if (!secret) return null;
+  try {
+    return new URL(apiUrl).hostname.endsWith(".vercel.app") ? secret : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A page on the website (opened in the in-app browser); carries the preview bypass when set. */
+export function websiteUrl(apiUrl: string, path: string): string {
+  const secret = previewBypassSecret(apiUrl);
+  if (!secret) return `${apiUrl}${path}`;
+  const url = new URL(`${apiUrl}${path}`);
+  url.searchParams.set("x-vercel-protection-bypass", secret);
+  url.searchParams.set("x-vercel-set-bypass-cookie", "samesitenone");
+  return url.toString();
+}

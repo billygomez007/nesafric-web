@@ -1,5 +1,5 @@
 import { ApiError, buildQuery, createApiClient, NETWORK_ERROR } from "@/api/client";
-import { ConfigError, parseApiUrl } from "@/config";
+import { ConfigError, parseApiUrl, previewBypassSecret, websiteUrl } from "@/config";
 
 describe("parseApiUrl", () => {
   it("has no default and rejects insecure or invalid URLs", () => {
@@ -73,5 +73,37 @@ describe("api client", () => {
     const api = createApiClient({ baseUrl: "https://api.test", fetchImpl, getToken: () => null });
     await expect(api.request("/api/workspaces", { auth: true })).rejects.toMatchObject({ status: 401, code: "UNAUTHENTICATED" });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("Vercel preview protection bypass (acceptance testing only)", () => {
+  const original = process.env.EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS;
+  afterEach(() => {
+    process.env.EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS = original;
+  });
+
+  it("is ignored unless set, and never applies to nesafric.com", () => {
+    delete process.env.EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS;
+    expect(previewBypassSecret("https://preview-abc.vercel.app")).toBeNull();
+    process.env.EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS = "bypass-secret";
+    expect(previewBypassSecret("https://www.nesafric.com")).toBeNull();
+    expect(websiteUrl("https://www.nesafric.com", "/register?returnTo=%2Fpro%2Fnew")).toBe("https://www.nesafric.com/register?returnTo=%2Fpro%2Fnew");
+    expect(previewBypassSecret("https://preview-abc.vercel.app")).toBe("bypass-secret");
+  });
+
+  it("adds the header to API calls and the query to website pages on a preview host", async () => {
+    process.env.EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS = "bypass-secret";
+    const url = new URL(websiteUrl("https://preview-abc.vercel.app", "/register?returnTo=%2Fpro%2Fnew"));
+    expect(url.pathname).toBe("/register");
+    expect(url.searchParams.get("returnTo")).toBe("/pro/new");
+    expect(url.searchParams.get("x-vercel-protection-bypass")).toBe("bypass-secret");
+
+    const fetchImpl = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }) as Response);
+    await createApiClient({ baseUrl: "https://preview-abc.vercel.app", fetchImpl }).request("/api/health");
+    expect((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toMatchObject({ "x-vercel-protection-bypass": "bypass-secret" });
+
+    fetchImpl.mockClear();
+    await createApiClient({ baseUrl: "https://www.nesafric.com", fetchImpl }).request("/api/health");
+    expect((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].headers).not.toHaveProperty("x-vercel-protection-bypass");
   });
 });

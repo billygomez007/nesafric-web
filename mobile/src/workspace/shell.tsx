@@ -6,6 +6,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useEffect, type ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { websiteUrl } from "@/config";
 
 import { ApiError, NETWORK_ERROR } from "@/api/client";
 import { useApi } from "@/api/provider";
@@ -183,7 +184,7 @@ export function WorkspaceMore({ kind, webPath, webOnly, children }: { kind: Gate
       <RowGroup>
         <ListRow icon="swap-horizontal-outline" title="Switch workspace" detail="Move to another workspace you belong to" onPress={() => openSwitcher(GATE_TO_KIND[kind], workspaceId)} testID="more-switch" />
         <ListRow icon="storefront-outline" title="Switch to Marketplace" detail="Browse, save and enquire about properties" onPress={() => router.navigate("/")} testID="more-marketplace" />
-        <ListRow icon="open-outline" title="Manage on nesafric.com" detail="Opens the website (sign in there with the same account)" onPress={() => void WebBrowser.openBrowserAsync(`${apiUrl}${webPath}`)} testID="more-web" last />
+        <ListRow icon="open-outline" title="Manage on nesafric.com" detail="Opens the website (sign in there with the same account)" onPress={() => void WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${webPath}`))} testID="more-web" last />
       </RowGroup>
       <AppText variant="caption" style={styles.center}>
         {webOnly}
