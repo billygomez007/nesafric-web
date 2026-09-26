@@ -2,8 +2,7 @@
 
 :root {
   /*
-   * NesAfric Design System
-   * Reference: design/reference/nesafric-approved-reference.png
+   * NesAfric Design System — "a surveyor's precision, a brochure's warmth, a ledger's honesty."
    *
    * Deep forest + emerald/teal form the primary identity.
    * Gold is a restrained premium accent.
@@ -31,11 +30,14 @@
   --color-teal: #009b8c;
   --color-teal-light: #35bdaa;
 
-  /* Premium accent */
+  /* Premium accent — gold means money or verification, nothing else.
+     --color-gold is a fill/rule colour; on light surfaces it is only 2.56:1 as text, so gold
+     *text* on light backgrounds uses --color-gold-ink (5.34:1 on white). */
   --color-premium: #c99a45;
   --color-gold: #c99a45;
   --color-gold-soft: #d9b76c;
   --color-gold-light: #e6ce9b;
+  --color-gold-ink: #8a6424;
 
   /* Surfaces */
   --color-surface: #f8f5ef;
@@ -48,19 +50,36 @@
   --color-muted: #61706d;
   --color-hairline: #e5e6e1;
 
-  /* Semantic states */
+  /* Semantic states (fill colours; *-ink variants are the AA text colours, *-tint the washes) */
   --color-success: #047857;
+  --color-success-tint: #e8f3ee;
   --color-warning: #d97706;
+  --color-warning-ink: #92400e;
+  --color-warning-tint: #fbf3e4;
   --color-danger: #dc2626;
+  --color-danger-ink: #991b1b;
+  --color-danger-tint: #fbeceb;
   --color-info: #2563eb;
 
-  /* Premium product system */
-  --radius-control: 8px;
-  --radius-field: 10px;
-  --radius-panel: 14px;
-  --radius-shell: 18px;
+  /*
+   * Surveyor's precision: near-square geometry.
+   * control 6px (buttons, inputs) · panel 8px (content surfaces) · media 4px (photographs).
+   * Pills (rounded-full) are reserved for filter chips, status dots and avatars.
+   */
+  --radius-media: 4px;
+  --radius-control: 6px;
+  --radius-field: 6px;
+  --radius-panel: 8px;
+  --radius-shell: 10px;
+
+  /* Content panels use hairline borders, not shadows. Shadows are for things that float. */
   --shadow-float: 0 18px 50px rgba(16, 45, 42, 0.12);
   --shadow-popover: 0 12px 32px rgba(16, 45, 42, 0.10);
+
+  /* Spacing rhythm for page sections (desktop / mobile) */
+  --section-y: 6rem;
+  --section-y-compact: 4rem;
+  --section-y-mobile: 3.5rem;
   --duration-fast: 140ms;
   --duration-base: 200ms;
   --ease-product: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -74,8 +93,55 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-montserrat);
-  --font-mono: var(--font-geist-mono);
+  /* Text face is the default; `font-display` opts into the Montserrat brand face. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-montserrat), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-gold-ink: var(--color-gold-ink);
+  --color-success-tint: var(--color-success-tint);
+  --color-warning-ink: var(--color-warning-ink);
+  --color-warning-tint: var(--color-warning-tint);
+  --color-danger-ink: var(--color-danger-ink);
+  --color-danger-tint: var(--color-danger-tint);
+
+  /*
+   * Radius scale, re-based on the NesAfric geometry so the ~1,500 existing rounded-* classes
+   * follow the system without a risky search/replace through workflow components.
+   * (Tailwind defaults were lg 8 · xl 12 · 2xl 16 · 3xl 24.)
+   */
+  --radius-media: var(--radius-media);
+  --radius-control: var(--radius-control);
+  --radius-panel: var(--radius-panel);
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 10px;
+
+  /* shadow-sm was used as a default "card" lift on content panels; content now sits on hairline
+     borders, so it is reduced to an almost-imperceptible edge. shadow-card was referenced but
+     never defined — it is now explicitly nothing. Floating UI keeps shadow-md and above. */
+  --shadow-sm: 0 1px 0 rgba(16, 45, 42, 0.03);
+  --shadow-card: 0 0 #0000;
+  --shadow-float: var(--shadow-float);
+  --shadow-popover: var(--shadow-popover);
+
+  /*
+   * Slate is re-tinted toward the forest ink so legacy slate-* utilities read as NesAfric warm
+   * neutrals instead of cool SaaS grey. Every text step keeps (or exceeds) slate's contrast on
+   * white: 500 5.35:1, 600 7.95:1, 700 10.8:1.
+   */
+  --color-slate-50: #f8f8f5;
+  --color-slate-100: #f1f2ed;
+  --color-slate-200: #e3e5df;
+  --color-slate-300: #ccd1ca;
+  --color-slate-400: #929d98;
+  --color-slate-500: #5f6e6a;
+  --color-slate-600: #46544f;
+  --color-slate-700: #33403c;
+  --color-slate-800: #1f2c29;
+  --color-slate-900: #11201d;
+  --color-slate-950: #081411;
 
   --color-brand: var(--color-brand);
   --color-brand-hover: var(--color-brand-hover);
@@ -120,7 +186,40 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-montserrat), Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  /* Never fake a weight or slant: every weight in use ships in the variable fonts. */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* Element defaults live in the base layer so Tailwind utilities (e.g. font-sans on a small h2)
+   can still override them. */
+@layer base {
+/* Brand/display typography: page titles and major headings use Montserrat everywhere. Smaller
+   section headings (h3+) stay in the text face so dense operational screens remain calm. */
+h1,
+h2,
+.font-display {
+  font-family: var(--font-montserrat), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "kern", "liga";
+}
+
+/* Money and counts line up in columns. */
+table,
+.tabular,
+[data-money] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Long words and emails wrap instead of pushing mobile layouts sideways. */
+h1,
+h2,
+h3,
+p,
+dd,
+td {
+  overflow-wrap: break-word;
+}
 }
 
 /* Marketing homepage only: a faint structural grid used behind hero/dark sections to suggest

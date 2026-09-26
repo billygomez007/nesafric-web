@@ -75,7 +75,8 @@ export function fileToBase64(file: File): Promise<string> {
 
 export async function uploadListingImages(params: {
   listingId: string;
-  organisationId: string;
+  organisationId?: string;
+  professionalId?: string;
   title: string;
   images: SelectedListingImage[];
 }) {
@@ -87,15 +88,31 @@ export async function uploadListingImages(params: {
     const image = params.images[index];
     const dataBase64 = await fileToBase64(image.file);
 
-    const response = await fetch("/api/documents/uploads", {
+    const marketplaceUrl = params.professionalId
+      ? `/api/marketplace-professionals/${params.professionalId}/listings/${params.listingId}/media`
+      : "/api/documents/uploads";
+
+    if (!params.professionalId && !params.organisationId) {
+      throw new Error(
+        "An organisation is required for PropertyOS image uploads.",
+      );
+    }
+
+    const response = await fetch(marketplaceUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-organisation-id": params.organisationId,
+        ...(!params.professionalId && params.organisationId
+          ? { "x-organisation-id": params.organisationId }
+          : {}),
       },
       body: JSON.stringify({
-        targetType: "LISTING_MEDIA",
-        targetId: params.listingId,
+        ...(params.professionalId
+          ? {}
+          : {
+              targetType: "LISTING_MEDIA",
+              targetId: params.listingId,
+            }),
         fileName: image.file.name,
         contentType: image.file.type,
         dataBase64,
