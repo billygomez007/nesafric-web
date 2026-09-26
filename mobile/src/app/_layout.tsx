@@ -86,6 +86,9 @@ export default function RootLayout() {
                 <Stack.Screen name="agent/[professionalId]/inbox" options={{ headerShown: true, title: "Enquiries & viewings", headerBackTitle: "Workspace" }} />
                 <Stack.Screen name="agent/[professionalId]/enquiry/[leadId]" options={{ headerShown: true, title: "Enquiry", headerBackTitle: "Inbox" }} />
                 <Stack.Screen name="agent/[professionalId]/viewing/[viewingId]" options={{ headerShown: true, title: "Viewing request", headerBackTitle: "Inbox" }} />
+                <Stack.Screen name="home/[tenancyId]/index" options={{ headerShown: true, title: "Your home", headerBackTitle: "Account" }} />
+                <Stack.Screen name="home/[tenancyId]/report" options={{ headerShown: true, presentation: "modal", title: "Report a problem" }} />
+                <Stack.Screen name="home/[tenancyId]/request/[requestId]" options={{ headerShown: true, title: "Repair request", headerBackTitle: "Home" }} />
               </Stack>
             </SavedProvider>
             </SessionProvider>

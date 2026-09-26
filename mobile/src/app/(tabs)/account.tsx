@@ -11,11 +11,14 @@ import type { ProfessionalWorkspace, Workspaces } from "@/api/account";
 import { useProfile, useWorkspaces } from "@/api/account-queries";
 import { ApiError, NETWORK_ERROR } from "@/api/client";
 import { useApi } from "@/api/provider";
+import type { Tenancy } from "@/api/tenant";
+import { useTenancies } from "@/api/tenant-queries";
 import { useSession, type SessionNotice } from "@/auth/session";
 import { loadLastWorkspace, rememberWorkspace } from "@/auth/workspaces";
 import { BRAND } from "@/brand";
 import { AppText, Button, Card, Notice } from "@/components/ui";
 import { humanise } from "@/marketplace/format";
+import { leaseLabel } from "@/tenant/maintenance";
 import { colors, radii, spacing } from "@/theme/tokens";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
@@ -146,6 +149,7 @@ function SignedInAccount() {
   const { user, signOut } = useSession();
   const profile = useProfile();
   const workspaces = useWorkspaces();
+  const tenancies = useTenancies();
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
 
   useEffect(() => {
@@ -173,6 +177,8 @@ function SignedInAccount() {
           <AppText variant="caption">{email}</AppText>
         </View>
       </Card>
+
+      <HomesSection tenancies={tenancies.data} error={tenancies.error} onRetry={() => tenancies.refetch()} />
 
       <View style={styles.section}>
         <AppText variant="heading" accessibilityRole="header">
@@ -274,6 +280,43 @@ function WorkspaceList(props: {
   );
 }
 
+/**
+ * Homes the user rents, as linked to their account by the landlord or property manager (server
+ * list). Hidden when there are none; a failed check never blocks the rest of the account screen.
+ */
+function HomesSection({ tenancies, error, onRetry }: { tenancies: Tenancy[] | undefined; error: unknown; onRetry: () => void }) {
+  if (!tenancies) {
+    if (!error) return null;
+    return (
+      <Card style={styles.homesError}>
+        <AppText variant="caption">Couldn’t check for homes you rent.</AppText>
+        <Button label="Try again" variant="secondary" onPress={onRetry} testID="homes-retry" />
+      </Card>
+    );
+  }
+  if (!tenancies.length) return null;
+  return (
+    <View style={styles.section}>
+      <AppText variant="heading" accessibilityRole="header">
+        Your homes
+      </AppText>
+      <View style={styles.group}>
+        {tenancies.map((tenancy, index) => (
+          <Row
+            key={tenancy.tenantOrganisationId}
+            icon="key-outline"
+            label={tenancy.leases.length ? tenancy.leases.map(leaseLabel).join(", ") : tenancy.organisation.name}
+            detail={tenancy.leases.length ? `Rented through ${tenancy.organisation.name}` : "No current lease"}
+            onPress={() => router.push({ pathname: "/home/[tenancyId]", params: { tenancyId: tenancy.tenantOrganisationId } })}
+            testID={`home-${tenancy.tenantOrganisationId}`}
+            last={index === tenancies.length - 1}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function professionalLabel(professional: ProfessionalWorkspace) {
   return `${humanise(professional.type)} · ${humanise(professional.myRole)}`;
 }
@@ -315,6 +358,7 @@ const styles = StyleSheet.create({
   profileText: { flex: 1, gap: 2 },
   section: { gap: spacing.md },
   hint: { marginTop: spacing.sm },
+  homesError: { gap: spacing.sm },
   group: { borderRadius: radii.panel, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.elevated, overflow: "hidden" },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.hairline, minHeight: 56 },
   rowLast: { borderBottomWidth: 0 },
