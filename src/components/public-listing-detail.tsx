@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { photosCoverFirst } from "@/lib/listing-cover";
 import { FormEvent, useEffect, useState } from "react";
 import type { PublicListing } from "@/components/property-marketplace-search";
 import { ErrorState, Skeleton, SuccessNotice } from "@/components/ui/states";
@@ -72,7 +73,7 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
   }
   const amount = listing.pricing.rentAmountMinor ?? listing.pricing.askingAmountMinor;
   const suffix = listing.listingType === "RENT" ? frequencySuffix(listing.pricing.frequency) : "";
-  const photos = listing.media.filter((media) => media.type === "PHOTO");
+  const photos = photosCoverFirst(listing.media);
   const floorPlans = listing.media.filter((media) => media.type === "FLOOR_PLAN");
   const videos = listing.media.filter((media) => media.type === "VIDEO");
   const [cover, ...morePhotos] = photos;

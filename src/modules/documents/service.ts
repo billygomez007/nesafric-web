@@ -16,6 +16,8 @@ import {
   buildInternalPublicMediaUrl,
   type StorageClassificationValue,
 } from "@/platform/storage";
+import { formatMegabytes, MAX_LISTING_PHOTOS, MAX_LISTING_PHOTO_UPLOAD_BYTES } from "@/lib/listing-media-rules";
+import { ensureListingCover, lockListingMedia } from "@/modules/listings/cover";
 import { PLACEMENT_CREATIVE_SPECS, aspectRatioLabel, dimensionMismatch } from "@/modules/campaigns/creative-spec";
 import { getUploadDescriptor } from "./targets";
 import { archiveStorageObjectSchema, documentCenterQuerySchema, listingMediaOrderSchema, uploadDocumentSchema } from "./schemas";
@@ -111,6 +113,11 @@ async function performUpload(params: {
     throw new AppError("UNSUPPORTED_FILE_TYPE", 422, `Files of type '${sniffed.mimeType}' are not accepted for this upload target.`);
   }
   if (targetType === "LISTING_MEDIA") {
+    // Explicit, JSON-reported photo limit. Anything much larger never reaches this code on Vercel
+    // (the platform rejects the request body first), so the browser compresses photos below it.
+    if (sniffed.kind === "IMAGE" && bytes.length > MAX_LISTING_PHOTO_UPLOAD_BYTES) {
+      throw new AppError("PHOTO_TOO_LARGE", 413, `This photo is ${formatMegabytes(bytes.length)}. Property photos must be ${formatMegabytes(MAX_LISTING_PHOTO_UPLOAD_BYTES)} or smaller after compression.`);
+    }
     const mediaType = input.mediaType ?? "PHOTO";
     if (mediaType === "VIDEO" && sniffed.kind !== "VIDEO") throw new AppError("MEDIA_TYPE_MISMATCH", 422, "A video media type requires a video file.");
     if (mediaType !== "VIDEO" && sniffed.kind === "VIDEO") throw new AppError("MEDIA_TYPE_MISMATCH", 422, "Photo/floor plan media cannot be a video file.");
@@ -236,7 +243,7 @@ export async function uploadOrganisationDocument(userId: string, organisationId:
 }
 
 /** Same cap the listing form and `createListingSchema.mediaUrls` already state to users. */
-const MAX_MARKETPLACE_LISTING_MEDIA = 12;
+const MAX_MARKETPLACE_LISTING_MEDIA = MAX_LISTING_PHOTOS;
 
 export async function uploadMarketplaceListingMedia(
   userId: string,
@@ -356,17 +363,21 @@ export async function reorderListingMedia(userId: string, organisationId: string
   return db.$transaction(async (tx) => {
     const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId } });
     if (!listing) throw notFound();
+    await lockListingMedia(tx, listing.id);
     const media = await tx.listingMedia.findMany({ where: { listingId } });
     const mediaIds = new Set(media.map(({ id }) => id));
     for (const item of data.order) {
       if (!mediaIds.has(item.mediaId)) throw new AppError("INVALID_LISTING_MEDIA", 422, "Every reordered item must belong to this listing.");
     }
     if (data.coverMediaId && !mediaIds.has(data.coverMediaId)) throw new AppError("INVALID_LISTING_MEDIA", 422, "The cover image must belong to this listing.");
+    if (data.coverMediaId && media.find(({ id }) => id === data.coverMediaId)?.type !== "PHOTO") throw new AppError("COVER_MUST_BE_PHOTO", 422, "Only a photo can be the cover image.");
     await Promise.all(data.order.map((item) => tx.listingMedia.update({ where: { id: item.mediaId }, data: { sortOrder: item.sortOrder } })));
     if (data.coverMediaId !== undefined) {
       await tx.listingMedia.updateMany({ where: { listingId }, data: { isCover: false } });
       if (data.coverMediaId) await tx.listingMedia.update({ where: { id: data.coverMediaId }, data: { isCover: true } });
     }
+    // A listing with photos always keeps exactly one cover, even if the request cleared it.
+    await ensureListingCover(tx, listingId);
     await record(tx, organisationId, userId, "listing.media_reordered", "listing", listingId, { coverMediaId: data.coverMediaId });
     return tx.listingMedia.findMany({ where: { listingId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
   });

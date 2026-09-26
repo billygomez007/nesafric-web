@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { ensureListingCover, lockListingMedia } from "./cover";
 import { listingReadinessProblems } from "./readiness";
 import {
   ListingStatus,
@@ -451,21 +452,20 @@ async function editableProfessionalListing(tx: Tx, marketplaceProfessionalId: st
   return listing;
 }
 
-/** Remove one photo from a professional's editable listing. The next photo becomes the cover when
- * the cover is removed. The stored object is archived and deleted from storage best-effort. */
+/** Remove one photo from a professional's editable listing. Removing the cover promotes the next
+ * photo in gallery order; removing the last photo leaves no cover. The stored object is archived
+ * and deleted from storage best-effort. */
 export async function removeMarketplaceListingMedia(userId: string, marketplaceProfessionalId: string, listingId: string, mediaId: string) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);
   listingId = listingIdSchema.parse(listingId);
   mediaId = listingIdSchema.parse(mediaId);
   const removed = await db.$transaction(async (tx) => {
     const listing = await editableProfessionalListing(tx, marketplaceProfessionalId, listingId);
+    await lockListingMedia(tx, listing.id);
     const media = await tx.listingMedia.findFirst({ where: { id: mediaId, listingId: listing.id } });
     if (!media) throw notFound();
     await tx.listingMedia.delete({ where: { id: media.id } });
-    const remaining = await tx.listingMedia.findMany({ where: { listingId: listing.id }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, isCover: true } });
-    if (remaining.length && !remaining.some((item) => item.isCover)) {
-      await tx.listingMedia.update({ where: { id: remaining[0].id }, data: { isCover: true } });
-    }
+    await ensureListingCover(tx, listing.id);
     if (media.storageKey) {
       await tx.storageObject.updateMany({ where: { storageKey: media.storageKey, targetType: "LISTING_MEDIA", targetId: listing.id, archivedAt: null }, data: { archivedAt: new Date() } });
     }
@@ -485,6 +485,7 @@ export async function setMarketplaceListingCoverMedia(userId: string, marketplac
   mediaId = listingIdSchema.parse(mediaId);
   await db.$transaction(async (tx) => {
     const listing = await editableProfessionalListing(tx, marketplaceProfessionalId, listingId);
+    await lockListingMedia(tx, listing.id);
     const media = await tx.listingMedia.findMany({ where: { listingId: listing.id }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, type: true } });
     const chosen = media.find((item) => item.id === mediaId);
     if (!chosen) throw notFound();

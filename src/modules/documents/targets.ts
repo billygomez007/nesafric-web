@@ -8,6 +8,8 @@ import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/plat
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { DOCUMENT_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, getObjectStorageAdapter, buildInternalPublicMediaUrl } from "@/platform/storage";
 import type { z } from "zod";
+import { MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
+import { ensureListingCover, lockListingMedia } from "@/modules/listings/cover";
 import type { uploadDocumentSchema } from "./schemas";
 
 type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
@@ -95,8 +97,13 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
       const isPublic = input.classification === "PUBLIC";
       const adapter = getObjectStorageAdapter();
       const publicUrl = isPublic ? (adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey)) : "private:pending-signed-url";
+      // Under the listing lock: the photo limit and the cover can't be raced by parallel uploads.
+      await lockListingMedia(tx, targetId);
+      if (await tx.listingMedia.count({ where: { listingId: targetId } }) >= MAX_LISTING_PHOTOS) {
+        throw new AppError("LISTING_MEDIA_LIMIT_REACHED", 422, `A property listing can contain up to ${MAX_LISTING_PHOTOS} images.`);
+      }
       const highestSortOrder = await tx.listingMedia.aggregate({ where: { listingId: targetId }, _max: { sortOrder: true } });
-      return tx.listingMedia.create({
+      const created = await tx.listingMedia.create({
         data: {
           listingId: targetId,
           type: mediaType,
@@ -109,9 +116,12 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
           sortOrder: (highestSortOrder._max.sortOrder ?? -1) + 1,
           fileSizeBytes: sizeBytes,
           checksum,
-          isCover: highestSortOrder._max.sortOrder == null,
+          isCover: false,
         },
       });
+      // The first photo becomes the cover; later uploads keep the cover the professional chose.
+      const coverId = await ensureListingCover(tx, targetId);
+      return coverId === created.id ? { ...created, isCover: true } : created;
     },
   },
 

@@ -37,8 +37,13 @@ vi.mock("@/platform/database/client", () => {
     storageObject: { create: mocks.storageObjectCreate },
     listingMedia: {
       aggregate: vi.fn(async () => ({ _max: { sortOrder: null } })),
+      count: vi.fn(async () => 0),
       create: mocks.mediaCreate,
+      // The cover rule reads the listing's photos back after the insert.
+      findMany: vi.fn(async () => mocks.mediaCreate.mock.results.length ? [{ id: "media-1", type: "PHOTO", isCover: false }] : []),
+      update: vi.fn(async () => ({})),
     },
+    $queryRaw: vi.fn(async () => []),
     auditEvent: { create: vi.fn(async () => ({})) },
     domainEvent: { create: vi.fn(async () => ({})) },
   };
@@ -87,9 +92,10 @@ describe("uploadMarketplaceListingMedia", () => {
     const media = mocks.mediaCreate.mock.calls[0][0].data;
     expect(media.listingId).toBe(LISTING_ID);
     expect(media.type).toBe("PHOTO");
-    expect(media.isCover).toBe(true);
     expect(media.storageKey).toBe(stored.storageKey);
     expect(result.attached.id).toBe("media-1");
+    // The listing's first photo becomes its cover (set by the single-cover rule after insert).
+    expect(result.attached.isCover).toBe(true);
   });
 
   it("still requires the professional role before anything else", async () => {
