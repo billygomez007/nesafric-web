@@ -164,7 +164,7 @@ describe("Homepage Media manager", () => {
         },
       ),
     ).rejects.toThrow(
-      "Only active, verified marketplace professionals can be featured on the homepage.",
+      "Only active, verified marketplace companies can be featured on the homepage.",
     );
   });
 
@@ -197,7 +197,7 @@ describe("Homepage Media manager", () => {
         },
       ),
     ).rejects.toThrow(
-      "Only active, verified marketplace professionals can be featured on the homepage.",
+      "Only active, verified marketplace companies can be featured on the homepage.",
     );
   });
 
@@ -230,8 +230,59 @@ describe("Homepage Media manager", () => {
         },
       ),
     ).rejects.toThrow(
-      "Only active, verified marketplace professionals can be featured on the homepage.",
+      "Only active, verified marketplace companies can be featured on the homepage.",
     );
+  });
+
+  it("rejects verified non-company professional types", async () => {
+    const admin = await makePrincipal(
+      "homepage-non-company-admin@example.com",
+    );
+
+    const excludedTypes = [
+      "INDIVIDUAL_AGENT",
+      "BROKER",
+      "OTHER",
+    ] as const;
+
+    for (const [index, type] of excludedTypes.entries()) {
+      const { professional } = await makeProfessional(
+        `homepage-excluded-${index}@example.com`,
+        `Excluded Professional ${index}`,
+      );
+
+      await db.marketplaceProfessional.update({
+        where: { id: professional.id },
+        data: {
+          verificationStatus: "VERIFIED",
+          type,
+        },
+      });
+
+      await expect(
+        createHomepageCompanyLogo(
+          admin.principal,
+          admin.user.id,
+          {
+            marketplaceProfessionalId: professional.id,
+            isPublished: true,
+            sortOrder: index,
+          },
+        ),
+      ).rejects.toThrow(
+        "Only active, verified marketplace companies can be featured on the homepage.",
+      );
+    }
+
+    const media = await listHomepageMediaForPlatform(admin.principal);
+
+    expect(
+      media.eligibleProfessionals.some((entry) =>
+        excludedTypes.includes(
+          entry.type as (typeof excludedTypes)[number],
+        ),
+      ),
+    ).toBe(false);
   });
 
   it("rejects adding the same professional twice", async () => {
