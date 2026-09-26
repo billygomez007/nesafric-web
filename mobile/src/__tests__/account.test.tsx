@@ -105,7 +105,7 @@ describe("optional account access", () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/account" });
     expect(await screen.findByText("Looking for property?")).toBeTruthy();
-    expect(screen.getByText(/work without an account/)).toBeTruthy();
+    expect(screen.getByText("Sign in to save properties, manage enquiries and keep track of viewings.")).toBeTruthy();
 
     renderRouter(APP_DIR, { initialUrl: "/" });
     expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);

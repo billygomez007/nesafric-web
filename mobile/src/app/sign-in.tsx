@@ -9,7 +9,36 @@ import { signInErrorMessage } from "@/auth/errors";
 import { useSession } from "@/auth/session";
 import { AppText, Button, Notice, TextField } from "@/components/ui";
 import { colors, spacing } from "@/theme/tokens";
-import { parseIntent, WORKSPACE_KIND_LABEL } from "@/workspace/resolve";
+import { requestPostSignInRouting } from "@/workspace/navigator";
+import { parseIntent, type WorkspaceIntent } from "@/workspace/resolve";
+import { registerPath } from "@/workspace/routing";
+
+/**
+ * Wording for each entry point. The card a person tapped changes only this text and where the app
+ * goes next; what the account may open is decided by the server after sign-in.
+ */
+const ENTRY: Record<WorkspaceIntent | "customer", { title: string; lead: string; register: string }> = {
+  customer: {
+    title: "Sign in to NesAfric",
+    lead: "Save properties, manage your enquiries and keep track of viewings.",
+    register: "Create an account",
+  },
+  property_management: {
+    title: "Continue as Landlord / Property Manager",
+    lead: "Sign in to open your property management workspace, or set one up.",
+    register: "Create / Set up property management account",
+  },
+  professional: {
+    title: "Continue as Real Estate Professional",
+    lead: "Sign in to open your professional workspace, or register your business.",
+    register: "Register as a Real Estate Professional",
+  },
+  service_provider: {
+    title: "Continue as Service Provider",
+    lead: "Sign in to open your service provider workspace, or register your business.",
+    register: "Register as a Service Provider",
+  },
+};
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,6 +54,7 @@ export default function SignInScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const passwordRef = useRef<TextInput>(null);
+  const entry = ENTRY[intent ?? "customer"];
 
   async function submit() {
     if (submitting) return;
@@ -37,6 +67,9 @@ export default function SignInScreen() {
     setFormError(null);
     if (errors.email || errors.password) return;
     setSubmitting(true);
+    // Decided before the session exists so the navigator sees it as soon as the account's
+    // workspaces load; cleared again if sign-in fails.
+    requestPostSignInRouting(intent ?? "customer");
     try {
       await signIn({ email: trimmed, password });
       setPassword("");
@@ -44,6 +77,7 @@ export default function SignInScreen() {
       if (router.canGoBack()) router.back();
       else router.replace("/account");
     } catch (error) {
+      requestPostSignInRouting(null);
       setFormError(signInErrorMessage(error));
     } finally {
       setSubmitting(false);
@@ -53,12 +87,12 @@ export default function SignInScreen() {
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + insets.bottom }]} keyboardShouldPersistTaps="handled">
-        <AppText variant="title">Sign in to NesAfric</AppText>
-        {intent ? (
-          <AppText variant="label" testID="sign-in-intent">
-            {`${WORKSPACE_KIND_LABEL[intent]}: sign in to open your workspace, or to set one up.`}
-          </AppText>
-        ) : null}
+        <AppText variant="title" accessibilityRole="header" testID="sign-in-title">
+          {entry.title}
+        </AppText>
+        <AppText variant="label" testID="sign-in-intent">
+          {entry.lead}
+        </AppText>
         <AppText variant="caption">
           Use the same NesAfric account as the website. You can keep browsing properties without signing in.
         </AppText>
@@ -93,7 +127,16 @@ export default function SignInScreen() {
         <AppText variant="caption" style={styles.center}>
           New to NesAfric?
         </AppText>
-        <Button label="Create an account on nesafric.com" variant="secondary" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/register`)} />
+        <Button
+          label={entry.register}
+          variant="secondary"
+          accessibilityHint="Opens nesafric.com"
+          testID="sign-in-register"
+          onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}${registerPath(intent ?? "customer")}`)}
+        />
+        <AppText variant="caption" style={styles.center}>
+          Registration opens nesafric.com. Come back and sign in here with the same account.
+        </AppText>
       </ScrollView>
     </KeyboardAvoidingView>
   );

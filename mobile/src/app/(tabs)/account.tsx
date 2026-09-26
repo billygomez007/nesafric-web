@@ -12,7 +12,7 @@ import { useApi } from "@/api/provider";
 import type { Tenancy } from "@/api/tenant";
 import { useTenancies } from "@/api/tenant-queries";
 import { useSession, type SessionNotice } from "@/auth/session";
-import { loadLastWorkspace } from "@/auth/workspaces";
+import { loadLastWorkspace, rememberWorkspace } from "@/auth/workspaces";
 import { BRAND } from "@/brand";
 import { GatewayCard } from "@/components/gateway-card";
 import { ListRow, RowGroup, type IconName } from "@/components/list-row";
@@ -31,6 +31,7 @@ import {
   type WorkspaceKind,
   type WorkspaceRef,
 } from "@/workspace/resolve";
+import { SETUP_PATH } from "@/workspace/routing";
 import { openSwitcher } from "@/workspace/shell";
 
 /**
@@ -62,7 +63,7 @@ export default function AccountScreen() {
         ) : status === "signedIn" ? (
           <SignedInAccount />
         ) : (
-          <SignedOutAccount apiUrl={apiUrl} />
+          <SignedOutAccount />
         )}
 
         <RowGroup>
@@ -146,13 +147,18 @@ function SignOutNotice({ notice }: { notice: NonNullable<SessionNotice> }) {
 }
 
 const GATEWAY: { intent: WorkspaceIntent; icon: IconName; title: string; description: string }[] = [
-  { intent: "property_management", icon: "business-outline", title: "Landlord & Property Manager", description: "Manage properties, tenants and maintenance." },
-  { intent: "professional", icon: "briefcase-outline", title: "Real Estate Professional", description: "Manage your listings, leads and viewings." },
-  { intent: "service_provider", icon: "construct-outline", title: "Service Provider", description: "See the property jobs assigned to you." },
+  { intent: "property_management", icon: "business-outline", title: "Landlord & Property Manager", description: "Manage properties, units, tenants, leases, rent and maintenance." },
+  {
+    intent: "professional",
+    icon: "briefcase-outline",
+    title: "Real Estate Professional",
+    description: "For agents, agencies, developers and property companies. Manage listings, leads, enquiries and your marketplace presence.",
+  },
+  { intent: "service_provider", icon: "construct-outline", title: "Service Provider", description: "Manage services, jobs, requests, customers and your business profile." },
 ];
 
 /** Marketplace first: property seekers sign in only if they want to; the cards below are for people who manage on NesAfric. */
-function SignedOutAccount({ apiUrl }: { apiUrl: string }) {
+function SignedOutAccount() {
   const intent = useWorkspaceIntent();
   return (
     <>
@@ -160,11 +166,8 @@ function SignedOutAccount({ apiUrl }: { apiUrl: string }) {
         <AppText variant="heading" accessibilityRole="header">
           Looking for property?
         </AppText>
-        <AppText variant="caption">
-          Browsing, saving properties on this device and contacting listers work without an account. Sign in to use your NesAfric account.
-        </AppText>
-        <Button label="Sign in or create account" onPress={() => { setWorkspaceIntent(null); router.push("/sign-in"); }} testID="open-sign-in" />
-        <Button label="Create an account on nesafric.com" variant="secondary" onPress={() => WebBrowser.openBrowserAsync(`${apiUrl}/register`)} />
+        <AppText variant="caption">Sign in to save properties, manage enquiries and keep track of viewings.</AppText>
+        <Button label="Sign in / Create account" onPress={() => { setWorkspaceIntent(null); router.push("/sign-in"); }} testID="open-sign-in" />
       </Card>
 
       <View style={styles.section}>
@@ -191,10 +194,12 @@ function SignedOutAccount({ apiUrl }: { apiUrl: string }) {
   );
 }
 
+// Onboarding offers, not access: each opens set-up on the website; a workspace appears only once
+// the server lists it.
 const OFFERS: Record<WorkspaceIntent, { title: string; detail: string; path: string; icon: IconName }> = {
-  property_management: { title: "Set up Property Management", detail: "For landlords, property managers and developers", path: "/onboarding", icon: "business-outline" },
-  professional: { title: "Register as a Real Estate Professional", detail: "For agents, brokers and developers marketing property", path: "/pro/new", icon: "briefcase-outline" },
-  service_provider: { title: "Register as a Service Provider", detail: "For artisans, contractors and service businesses", path: "/onboarding", icon: "construct-outline" },
+  property_management: { title: "Set up Property Management", detail: "For landlords, property managers and property companies", path: SETUP_PATH.property_management, icon: "business-outline" },
+  professional: { title: "Register as a Real Estate Professional", detail: "For agents, agencies, developers and property companies", path: SETUP_PATH.professional, icon: "briefcase-outline" },
+  service_provider: { title: "Register as a Service Provider", detail: "For artisans, contractors and service businesses", path: SETUP_PATH.service_provider, icon: "construct-outline" },
 };
 
 const ICONS: Record<WorkspaceKind, IconName> = {
@@ -266,7 +271,9 @@ function SignedInAccount() {
             ) : (
               <ListRow icon="storefront-outline" title="Marketplace" detail="You’re browsing the marketplace" />
             )}
-            <ListRow icon="swap-horizontal-outline" title="Switch workspace" detail={available.length > 1 ? `${available.length} workspaces available` : "Marketplace only"} onPress={() => openSwitcher("marketplace", null)} testID="open-switcher" last />
+            <ListRow icon="swap-horizontal-outline" title="Switch workspace" detail={available.length > 1 ? `${available.length} workspaces available` : "Marketplace only"} onPress={() => openSwitcher("marketplace", null)} testID="open-switcher" />
+            <ListRow icon="search-outline" title="Browse Marketplace" onPress={() => router.navigate("/")} testID="browse-marketplace" />
+            <ListRow icon="settings-outline" title="Account settings" detail="Name, email and password on nesafric.com" accessibilityHint="Opens nesafric.com" onPress={() => void WebBrowser.openBrowserAsync(`${apiUrl}/settings`)} testID="account-settings" last />
           </RowGroup>
         </View>
       ) : null}
@@ -283,7 +290,7 @@ function SignedInAccount() {
       {workspaces.data && offers.length ? (
         <View style={styles.section} testID="offers">
           <AppText variant="heading" accessibilityRole="header">
-            Grow on NesAfric
+            Manage on NesAfric
           </AppText>
           <RowGroup>
             {offers.map((kind, index) => (
@@ -345,6 +352,7 @@ function WorkspaceList(props: {
   intent: WorkspaceIntent | null;
 }) {
   const { available, isPending, error, onRetry, lastWorkspace, intent } = props;
+  const userId = useSession().user?.id;
 
   if (isPending) {
     return (
@@ -374,7 +382,12 @@ function WorkspaceList(props: {
             title={workspace.name}
             detail={sameWorkspace(workspace, lastWorkspace) ? `${workspace.subtitle} · last opened` : workspace.subtitle}
             highlighted={workspace.kind === intent}
-            onPress={() => (workspace.kind === "marketplace" ? router.navigate("/") : router.push(workspace.route))}
+            onPress={() => {
+              if (workspace.kind !== "marketplace") return router.push(workspace.route);
+              // Choosing the marketplace is a choice too: the next launch opens it, not a workspace.
+              if (userId) void rememberWorkspace(userId, workspace);
+              router.navigate("/");
+            }}
             testID={workspace.id ? `${ROW_TEST_ID[workspace.kind]}-${workspace.id}` : ROW_TEST_ID.marketplace}
             last={index === available.length - 1}
           />

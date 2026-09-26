@@ -37,6 +37,11 @@ export default function ProfessionalDashboard() {
               <Stat label="New leads" value={data.newLeads} />
               <Stat label="Upcoming viewings" value={data.upcomingViewings} />
             </StatRow>
+            <StatRow>
+              <Stat label="Drafts" value={data.listings.draft} />
+              <Stat label="In review" value={data.listings.pendingReview} />
+              <Stat label="Paused" value={data.listings.paused} />
+            </StatRow>
             <AppText variant="caption" testID="listing-breakdown">
               {`${data.listings.total} listings in total · ${data.listings.draft} draft · ${data.listings.pendingReview} in review · ${data.listings.paused} paused`}
             </AppText>
@@ -45,7 +50,7 @@ export default function ProfessionalDashboard() {
         )}
       </QuerySection>
 
-      <Heading>Leads</Heading>
+      <Heading>Enquiries and viewings</Heading>
       <InboxEntry scope={scope} access={inbox} />
     </WorkspaceScroll>
   );

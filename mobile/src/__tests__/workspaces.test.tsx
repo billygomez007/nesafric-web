@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import * as SecureStore from "expo-secure-store";
 import { router } from "expo-router";
 import { renderRouter } from "expo-router/testing-library";
@@ -10,6 +10,7 @@ import path from "path";
 import type { Workspaces } from "@/api/account";
 import { setActiveToken } from "@/auth/token-store";
 import { setWorkspaceIntent } from "@/workspace/intent";
+import { resetWorkspaceNavigator } from "@/workspace/navigator";
 import { listing } from "@/test-utils/fixtures";
 
 jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn(async () => ({ type: "dismiss" })) }));
@@ -140,6 +141,7 @@ beforeEach(async () => {
   await AsyncStorage.clear();
   setActiveToken(null);
   setWorkspaceIntent(null);
+  resetWorkspaceNavigator();
   jest.clearAllMocks();
 });
 
@@ -156,13 +158,17 @@ describe("signed out: marketplace first, with a gateway for people who manage", 
       expect(card).toHaveProp("accessibilityLabel", title);
       expect(card.props.accessibilityHint).toMatch(/Opens sign in\./);
     }
+    expect(screen.getByText("Sign in to save properties, manage enquiries and keep track of viewings.")).toBeTruthy();
+    expect(screen.getByTestId("open-sign-in")).toHaveProp("accessibilityLabel", "Sign in / Create account");
+    expect(screen.getByText("Manage properties, units, tenants, leases, rent and maintenance.")).toBeTruthy();
+    expect(screen.getByText("For agents, agencies, developers and property companies. Manage listings, leads, enquiries and your marketplace presence.")).toBeTruthy();
+    expect(screen.getByText("Manage services, jobs, requests, customers and your business profile.")).toBeTruthy();
     expect(calls.some((call) => /^\/api\/(workspaces|account|dashboard)/.test(call.url.pathname))).toBe(false);
     expect(calls.every((call) => !header(call, "authorization"))).toBe(true);
   });
 
-  it("never blocks the marketplace with a role screen: the app opens on Home", async () => {
+  it("never blocks the marketplace with a role screen: signed out, the app opens on Home", async () => {
     mockServer({ workspaces: ALL });
-    signedIn();
     await AsyncStorage.setItem("nesafric.last-workspace.v2:u1", JSON.stringify({ kind: "property_management", id: ORG.id }));
     const app = renderRouter(APP_DIR, { initialUrl: "/" });
     expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
@@ -176,12 +182,17 @@ describe("signed out: marketplace first, with a gateway for people who manage", 
     const app = renderRouter(APP_DIR, { initialUrl: "/account" });
     fireEvent.press(await screen.findByTestId("gateway-service_provider"));
     await waitFor(() => expect(app.getPathname()).toBe("/sign-in"));
-    expect(await screen.findByTestId("sign-in-intent")).toHaveTextContent(/Service provider/);
+    expect(await screen.findByTestId("sign-in-title")).toHaveTextContent("Continue as Service Provider");
+    await act(async () => fireEvent.press(screen.getByTestId("sign-in-register")));
+    expect(screen.getByTestId("sign-in-register")).toHaveProp("accessibilityLabel", "Register as a Service Provider");
+    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith(`https://api.test/register?returnTo=${encodeURIComponent("/onboarding?start=services")}`);
 
     act(() => router.back());
     fireEvent.press(await screen.findByTestId("open-sign-in"));
     await waitFor(() => expect(app.getPathname()).toBe("/sign-in"));
-    expect(screen.queryByTestId("sign-in-intent")).toBeNull();
+    expect(await screen.findByTestId("sign-in-title")).toHaveTextContent("Sign in to NesAfric");
+    await act(async () => fireEvent.press(screen.getByTestId("sign-in-register")));
+    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith("https://api.test/register");
   });
 });
 
@@ -201,7 +212,7 @@ describe("customer (no workspaces)", () => {
     // Back from the website: the workspace list is asked for again.
     await waitFor(() => expect(callsTo("/api/workspaces").length).toBeGreaterThanOrEqual(2));
     await act(async () => fireEvent.press(screen.getByTestId("offer-property_management")));
-    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith("https://api.test/onboarding");
+    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith("https://api.test/onboarding?start=manage");
 
     fireEvent.press(screen.getByTestId("open-switcher"));
     expect(await screen.findByTestId("switch-marketplace")).toHaveTextContent(/Switch to Marketplace/);
@@ -322,16 +333,27 @@ describe("service provider", () => {
     }
   });
 
-  it("after tapping the Service Provider card and signing in, highlights the provider workspace", async () => {
+  it("after tapping the Service Provider card and signing in, opens the provider workspace", async () => {
     mockServer({ workspaces: PROVIDER_ONLY });
-    renderRouter(APP_DIR, { initialUrl: "/account" });
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
     fireEvent.press(await screen.findByTestId("gateway-service_provider"));
     await signInThroughUi();
 
-    const notice = await screen.findByTestId("intent-notice");
-    expect(within(notice).getByText(/Your service provider workspace is ready/)).toBeTruthy();
-    fireEvent.press(within(notice).getByTestId("intent-open"));
+    await waitFor(() => expect(app.getPathname()).toBe(`/provider/${PROVIDER.id}`));
     expect(await screen.findByLabelText("Assigned: 6")).toBeTruthy();
+  });
+
+  it("a new provider (no provider identity) lands on Service Provider registration", async () => {
+    mockServer({ workspaces: PRO_ONLY });
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
+    fireEvent.press(await screen.findByTestId("gateway-service_provider"));
+    await signInThroughUi();
+
+    await waitFor(() => expect(app.getPathname()).toBe("/setup/service_provider"));
+    expect(await screen.findByTestId("setup-needed")).toBeTruthy();
+    await act(async () => fireEvent.press(screen.getByTestId("setup-open-web")));
+    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith("https://api.test/onboarding?start=services");
+    expect(calls.some((call) => /^\/api\/providers/.test(call.url.pathname))).toBe(false);
   });
 });
 
@@ -365,6 +387,108 @@ describe("multi-role", () => {
   });
 });
 
+describe("sign-in by intent", () => {
+  it.each([
+    ["property_management", PM_ONLY, `/workspace/${ORG.id}`, "Units: 12"],
+    ["professional", PRO_ONLY, `/agent/${PRO.id}`, "Live listings: 4"],
+  ] as const)("%s card + authorised account opens that dashboard", async (intent, workspaces, pathname, stat) => {
+    mockServer({ workspaces });
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
+    fireEvent.press(await screen.findByTestId(`gateway-${intent}`));
+    await signInThroughUi();
+    await waitFor(() => expect(app.getPathname()).toBe(pathname));
+    expect(await screen.findByLabelText(stat)).toBeTruthy();
+  });
+
+  it("professional card + account without a business lands on professional registration", async () => {
+    mockServer({ workspaces: PM_ONLY });
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
+    fireEvent.press(await screen.findByTestId("gateway-professional"));
+    await signInThroughUi();
+    await waitFor(() => expect(app.getPathname()).toBe("/setup/professional"));
+    await act(async () => fireEvent.press(await screen.findByTestId("setup-open-web")));
+    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith("https://api.test/pro/new");
+    expect(calls.some((call) => /^\/api\/marketplace-professionals/.test(call.url.pathname))).toBe(false);
+  });
+
+  it("a customer who signs in stays in the marketplace, even with business workspaces", async () => {
+    mockServer({ workspaces: ALL });
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
+    fireEvent.press(await screen.findByTestId("open-sign-in"));
+    await signInThroughUi();
+    expect(await screen.findByLabelText("Signed in as Ama Mensah")).toBeTruthy();
+    expect(app.getPathname()).toBe("/account");
+    expect(workspaceCalls()).toHaveLength(0);
+  });
+});
+
+describe("launch: resume the last workspace only while the server lists it", () => {
+  it.each([
+    ["property manager", { kind: "property_management", id: ORG.id }, `/workspace/${ORG.id}`, "Units: 12"],
+    ["professional", { kind: "professional", id: PRO.id }, `/agent/${PRO.id}`, "Live listings: 4"],
+    ["service provider", { kind: "service_provider", id: PROVIDER.id }, `/provider/${PROVIDER.id}`, "Assigned: 6"],
+  ] as const)("a returning %s reopens their workspace", async (_who, ref, pathname, stat) => {
+    mockServer({ workspaces: ALL });
+    signedIn();
+    await AsyncStorage.setItem("nesafric.last-workspace.v2:u1", JSON.stringify(ref));
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    await waitFor(() => expect(app.getPathname()).toBe(pathname));
+    expect(await screen.findByLabelText(stat)).toBeTruthy();
+    // Marketplace is still one tap away, without signing out.
+    fireEvent.press(screen.getByTestId("workspace-switch"));
+    fireEvent.press(await screen.findByTestId("switch-marketplace"));
+    await waitFor(() => expect(app.getPathname()).toBe("/"));
+  });
+
+  it("a signed-in customer opens on the marketplace", async () => {
+    mockServer({ workspaces: NONE });
+    signedIn();
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
+    await waitFor(() => expect(callsTo("/api/workspaces").length).toBeGreaterThan(0));
+    expect(app.getPathname()).toBe("/");
+    expect(workspaceCalls()).toHaveLength(0);
+  });
+
+  it("falls back to the marketplace when access was removed, and forgets the stale workspace", async () => {
+    mockServer({ workspaces: PRO_ONLY });
+    signedIn();
+    await AsyncStorage.setItem("nesafric.last-workspace.v2:u1", JSON.stringify({ kind: "property_management", id: ORG.id }));
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    await waitFor(async () => expect(await AsyncStorage.getItem("nesafric.last-workspace.v2:u1")).toBeNull());
+    expect(app.getPathname()).toBe("/");
+    expect(calls.some((call) => header(call, "x-organisation-id") === ORG.id)).toBe(false);
+  });
+
+  it("a hand-edited last workspace (someone else's organisation) cannot open it", async () => {
+    mockServer({ workspaces: PM_ONLY });
+    signedIn();
+    await AsyncStorage.setItem("nesafric.last-workspace.v2:u1", JSON.stringify({ kind: "property_management", id: FOREIGN_ORG }));
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    await waitFor(async () => expect(await AsyncStorage.getItem("nesafric.last-workspace.v2:u1")).toBeNull());
+    expect(app.getPathname()).toBe("/");
+    expect(calls.some((call) => header(call, "x-organisation-id") === FOREIGN_ORG)).toBe(false);
+  });
+
+  it("a deep link at launch is respected instead of jumping to the workspace", async () => {
+    mockServer({ workspaces: ALL });
+    signedIn();
+    await AsyncStorage.setItem("nesafric.last-workspace.v2:u1", JSON.stringify({ kind: "property_management", id: ORG.id }));
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
+    expect(await screen.findByTestId(`workspace-${ORG.id}`)).toBeTruthy();
+    expect(app.getPathname()).toBe("/account");
+  });
+
+  it("choosing the marketplace is remembered, so the next launch opens it", async () => {
+    mockServer({ workspaces: PM_ONLY });
+    signedIn();
+    await AsyncStorage.setItem("nesafric.last-workspace.v2:u1", JSON.stringify({ kind: "property_management", id: ORG.id }));
+    renderRouter(APP_DIR, { initialUrl: "/account" });
+    fireEvent.press(await screen.findByTestId("workspace-marketplace"));
+    await waitFor(async () => expect(await AsyncStorage.getItem("nesafric.last-workspace.v2:u1")).toBeNull());
+  });
+});
+
 describe("security", () => {
   it("an intent never grants a workspace: the offer is shown instead", async () => {
     mockServer({ workspaces: NONE });
@@ -372,10 +496,10 @@ describe("security", () => {
     fireEvent.press(await screen.findByTestId("gateway-property_management"));
     await signInThroughUi();
 
-    const notice = await screen.findByTestId("intent-notice");
-    expect(within(notice).getByText(/doesn’t have a property management workspace yet/)).toBeTruthy();
-    expect(within(notice).queryByTestId("intent-open")).toBeNull();
-    expect(screen.getByTestId("offer-property_management")).toBeTruthy();
+    // Straight to set-up, never into a workspace, and nothing private is requested.
+    expect(await screen.findByTestId("setup-needed")).toBeTruthy();
+    expect(screen.getByText(/doesn’t have a property management workspace yet/)).toBeTruthy();
+    expect(screen.queryByTestId("setup-ready")).toBeNull();
     expect(workspaceCalls()).toHaveLength(0);
   });
 

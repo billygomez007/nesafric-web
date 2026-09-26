@@ -14,17 +14,19 @@ type ButtonProps = {
   loading?: boolean;
   disabled?: boolean;
   testID?: string;
+  accessibilityHint?: string;
 };
 
 /** Pill buttons matching the web `buttonStyles`: primary is teal with ink text (never white, for
  * contrast), secondary is white with a hairline border, dark is forest with white text. */
-export function Button({ label, onPress, variant = "primary", loading = false, disabled = false, testID }: ButtonProps) {
+export function Button({ label, onPress, variant = "primary", loading = false, disabled = false, testID, accessibilityHint }: ButtonProps) {
   const inactive = disabled || loading;
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       onPress={onPress}

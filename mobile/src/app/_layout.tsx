@@ -12,6 +12,7 @@ import { SessionProvider } from "@/auth/session";
 import { StateMessage } from "@/components/ui";
 import { ConfigError, loadConfig, type AppConfig } from "@/config";
 import { SavedProvider } from "@/marketplace/saved";
+import { hideSplashOnce, WorkspaceNavigator } from "@/workspace/navigator";
 import { colors, fonts } from "@/theme/tokens";
 
 void SplashScreen.preventAutoHideAsync();
@@ -45,9 +46,11 @@ export default function RootLayout() {
   const [configResult] = useState(readConfig);
   const ready = fontsLoaded || Boolean(fontError);
 
+  // With a valid config the splash is hidden by WorkspaceNavigator, once it knows whether a
+  // returning user resumes a workspace (bounded wait). Otherwise hide it as soon as we can render.
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
-  }, [ready]);
+    if (ready && "error" in configResult) hideSplashOnce();
+  }, [ready, configResult]);
 
   if (!ready) return null;
 
@@ -83,10 +86,12 @@ export default function RootLayout() {
                 <Stack.Screen name="agent/[professionalId]" />
                 <Stack.Screen name="provider/[providerId]" />
                 <Stack.Screen name="switch-workspace" options={{ headerShown: true, presentation: "modal", title: "Switch workspace" }} />
+                <Stack.Screen name="setup/[kind]" options={{ headerShown: true, title: "", headerBackTitle: "Back" }} />
                 <Stack.Screen name="home/[tenancyId]/index" options={{ headerShown: true, title: "Your home", headerBackTitle: "Account" }} />
                 <Stack.Screen name="home/[tenancyId]/report" options={{ headerShown: true, presentation: "modal", title: "Report a problem" }} />
                 <Stack.Screen name="home/[tenancyId]/request/[requestId]" options={{ headerShown: true, title: "Repair request", headerBackTitle: "Home" }} />
               </Stack>
+              <WorkspaceNavigator />
             </SavedProvider>
             </SessionProvider>
           </ApiProvider>
