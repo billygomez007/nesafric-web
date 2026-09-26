@@ -16,9 +16,11 @@ import { buttonClass } from "@/components/ui/button-styles";
 export function CompaniesCarouselSection({
   emptyState = false,
   title = "Companies and professionals on NesAfric",
+  compact = false,
 }: {
   emptyState?: boolean;
   title?: string;
+  compact?: boolean;
 }) {
   const [items, setItems] = useState<CompanyCarouselItem[] | null>(null);
 
@@ -38,9 +40,15 @@ export function CompaniesCarouselSection({
   const hasItems = !!items && items.length > 0;
 
   return (
-    <section aria-labelledby="companies-heading" className="border-y border-hairline bg-white py-12 sm:py-16">
+    <section
+      aria-labelledby="companies-heading"
+      className={`border-y border-hairline bg-white ${compact ? "py-5 sm:py-6" : "py-12 sm:py-16"}`}
+    >
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-end justify-between gap-4 px-5 sm:px-8">
-        <h2 className="text-2xl font-semibold tracking-[-0.015em] text-forest-deep sm:text-[28px]" id="companies-heading">
+        <h2
+          className={`${compact ? "text-lg sm:text-xl" : "text-2xl sm:text-[28px]"} font-semibold tracking-[-0.015em] text-forest-deep`}
+          id="companies-heading"
+        >
           {title}
         </h2>
         {hasItems && (
@@ -49,7 +57,7 @@ export function CompaniesCarouselSection({
           </Link>
         )}
       </div>
-      <div className="mt-6">
+      <div className={compact ? "mt-3" : "mt-6"}>
         {hasItems ? (
           <CompaniesCarouselTrack
             items={items.map((item) => ({

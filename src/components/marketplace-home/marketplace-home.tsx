@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CompaniesCarouselSection } from "@/components/marketing/companies-carousel-section";
 import { ListingCard, type PublicListing } from "@/components/property-marketplace-search";
 import { buttonClass } from "@/components/ui/button-styles";
 
@@ -337,7 +336,6 @@ export function MarketplaceHome() {
   const listings = useJson<ListingsResult>(`/api/public/listings?page=1&pageSize=${LISTING_SAMPLE_SIZE}`, NO_LISTINGS);
   return (
     <>
-      <CompaniesCarouselSection emptyState title="Trusted by leading companies" />
       <PropertyDiscovery result={listings} />
       <PopularLocations result={listings} />
       <ProfessionalDiscovery />
