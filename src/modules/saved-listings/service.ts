@@ -7,6 +7,17 @@ import { importSavedListingsSchema, savedListingIdSchema, savedListingsQuerySche
 /** Per-user ceiling: keeps the list useful and bounds storage if a client misbehaves. */
 export const MAX_SAVED_LISTINGS = 500;
 
+type Tx = Prisma.TransactionClient;
+
+/**
+ * Serialises one user's saves and imports (a transaction-scoped Postgres advisory lock keyed on the
+ * user id), so the per-user limit holds even when several requests arrive at once. Other users
+ * are never blocked.
+ */
+async function lockUser(tx: Tx, userId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`;
+}
+
 const limitReached = () =>
   new AppError("SAVED_LISTINGS_LIMIT", 422, `You can save up to ${MAX_SAVED_LISTINGS} properties. Remove some to save more.`, { limit: MAX_SAVED_LISTINGS });
 
@@ -53,16 +64,15 @@ export async function saveListing(userId: string, listingId: unknown) {
   const existing = await db.savedListing.findUnique({ where: { userId_listingId: { userId, listingId: id } } });
   if (existing) return { listingId: id, savedAt: existing.createdAt, created: false };
   if (!(await getPublicListingsByIds([id])).has(id)) throw notFound();
-  if ((await db.savedListing.count({ where: { userId } })) >= MAX_SAVED_LISTINGS) throw limitReached();
-  try {
-    const saved = await db.savedListing.create({ data: { userId, listingId: id } });
+  return db.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    // Re-checked under the lock: a concurrent save of the same listing may have just landed.
+    const raced = await tx.savedListing.findUnique({ where: { userId_listingId: { userId, listingId: id } } });
+    if (raced) return { listingId: id, savedAt: raced.createdAt, created: false };
+    if ((await tx.savedListing.count({ where: { userId } })) >= MAX_SAVED_LISTINGS) throw limitReached();
+    const saved = await tx.savedListing.create({ data: { userId, listingId: id } });
     return { listingId: id, savedAt: saved.createdAt, created: true };
-  } catch (error) {
-    // A concurrent save of the same listing won the unique (userId, listingId) race: same outcome.
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
-    const saved = await db.savedListing.findUniqueOrThrow({ where: { userId_listingId: { userId, listingId: id } } });
-    return { listingId: id, savedAt: saved.createdAt, created: false };
-  }
+  });
 }
 
 /** Removes one of the caller's saves. Idempotent, and can only ever touch the caller's rows. */
@@ -83,13 +93,18 @@ export async function importSavedListings(userId: string, input: unknown) {
     (await db.savedListing.findMany({ where: { userId, listingId: { in: unique } }, select: { listingId: true } })).map((row) => row.listingId),
   );
   const eligible = await getPublicListingsByIds(unique.filter((id) => !already.has(id)));
-  const room = Math.max(0, MAX_SAVED_LISTINGS - (await db.savedListing.count({ where: { userId } })));
-  // The device list is newest first: give the oldest the earliest timestamp so order is kept.
-  const toAdd = unique.filter((id) => eligible.has(id)).slice(0, room).reverse();
-  const now = Date.now();
-  const { count: imported } = await db.savedListing.createMany({
-    data: toAdd.map((listingId, index) => ({ userId, listingId, createdAt: new Date(now + index) })),
-    skipDuplicates: true,
+  return db.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    // Under the lock: re-read what is saved now, so concurrent writes can't push past the limit.
+    const saved = new Set((await tx.savedListing.findMany({ where: { userId }, select: { listingId: true } })).map((row) => row.listingId));
+    const room = Math.max(0, MAX_SAVED_LISTINGS - saved.size);
+    // The device list is newest first: give the oldest the earliest timestamp so order is kept.
+    const toAdd = unique.filter((id) => eligible.has(id) && !saved.has(id)).slice(0, room).reverse();
+    const now = Date.now();
+    const { count: imported } = await tx.savedListing.createMany({
+      data: toAdd.map((listingId, index) => ({ userId, listingId, createdAt: new Date(now + index) })),
+      skipDuplicates: true,
+    });
+    return { imported, skipped: listingIds.length - imported, total: saved.size + imported };
   });
-  return { imported, skipped: listingIds.length - imported, total: await db.savedListing.count({ where: { userId } }) };
 }

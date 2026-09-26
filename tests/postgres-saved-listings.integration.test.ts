@@ -233,5 +233,15 @@ describe("saved listings API", () => {
 
     expect((await remove(filler)).status).toBe(204);
     expect(await (await importIds({ listingIds: [extra, another] })).json()).toEqual({ imported: 1, skipped: 1, total: MAX_SAVED_LISTINGS });
+
+    // One slot left, several writes at once: the limit still holds exactly.
+    expect((await remove(extra)).status).toBe(204);
+    const results = await Promise.all([save(extra), save(another), importIds({ listingIds: [another, extra] })]);
+    const statuses = results.slice(0, 2).map((response) => response.status).sort();
+    const importBody = await results[2].json();
+    expect(await db.savedListing.count({ where: { userId: ama.id } })).toBe(MAX_SAVED_LISTINGS);
+    const added = statuses.filter((status) => status === 201).length + importBody.imported;
+    expect(added).toBe(1);
+    expect(statuses.includes(422) || importBody.imported === 0).toBe(true);
   });
 });
