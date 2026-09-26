@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SubmitForReviewDialog } from "@/components/listing-submit-review-dialog";
+import { buttonClass } from "@/components/ui/button-styles";
+import { listingReadinessProblems } from "@/modules/listings/readiness";
 
 type Listing = {
   id: string; title: string; status: string; verificationStatus: string; listingType: string;
@@ -12,7 +15,22 @@ type Listing = {
   locality?: string | null; district?: string | null; region?: string | null; publicLocationLabel?: string | null;
   bedrooms?: number | null; bathrooms?: string | number | null; sizeSqm?: string | number | null;
   media?: { id: string; type: string; publicUrl: string; isCover: boolean; altText: string | null }[];
+  statusHistory?: { fromStatus: string | null; toStatus: string; note: string | null; createdAt: string }[];
+  verificationEvidence?: { id: string }[];
 };
+
+/** Verification states that need (re)submitted authority evidence before review. */
+const NEEDS_EVIDENCE = ["UNVERIFIED", "REJECTED", "SUSPENDED"];
+const SUBMITTABLE = ["DRAFT", "REJECTED"];
+
+/** The reviewer's note when NesAfric returned or declined this listing, if that is its latest step. */
+function reviewerNote(item: Listing): { title: string; note: string } | null {
+  const latest = item.statusHistory?.at(-1);
+  if (!latest?.note) return null;
+  if (item.status === "DRAFT" && latest.fromStatus === "PENDING_REVIEW" && latest.toStatus === "DRAFT") return { title: "NesAfric asked for changes", note: latest.note };
+  if (item.status === "REJECTED" && latest.toStatus === "REJECTED") return { title: "Not approved by NesAfric", note: latest.note };
+  return null;
+}
 
 const EDITABLE_STATUSES = ["DRAFT", "REJECTED", "PAUSED"];
 const FREQUENCY_SUFFIX: Record<string, string> = { MONTHLY: "month", QUARTERLY: "quarter", ANNUAL: "year" };
@@ -125,6 +143,10 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [previewing, setPreviewing] = useState<Listing | null>(null);
+  const [submitting, setSubmitting] = useState("");
+  const [evidenceFor, setEvidenceFor] = useState<Listing | null>(null);
+  const [dialogError, setDialogError] = useState("");
+  const [cardMessage, setCardMessage] = useState<{ id: string; text: string } | null>(null);
 
   const load = async () => {
     const query = new URLSearchParams({ page: String(page), pageSize: "25" });
@@ -149,12 +171,44 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
     const body = await response.json();
     if (!response.ok) setError(body.error?.message ?? "Unable to update listing."); else await load();
   }
-  async function submitVerification(listingId: string) {
-    const privateReference = window.prompt("Private authority evidence reference");
-    if (!privateReference) return;
-    const response = await fetch(`/api/marketplace-professionals/${professionalId}/listings/${listingId}/verification`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "PENDING", evidence: [{ type: "listing_authority", privateReference }] }) });
-    const body = await response.json();
-    if (!response.ok) setError(body.error?.message ?? "Unable to submit verification."); else await load();
+
+  /** One action for the professional: checks the listing, collects authority evidence only when
+   * NesAfric doesn't already have it, and sends the listing (and its verification) for review. */
+  function startSubmit(item: Listing) {
+    setError("");
+    setCardMessage(null);
+    const problems = listingReadinessProblems({ ...item, publicDescription: item.publicDescription ?? "" });
+    if (problems.length) {
+      setCardMessage({ id: item.id, text: `Before submitting: ${problems.map(({ message }) => message).join(" ")}` });
+      return;
+    }
+    if (NEEDS_EVIDENCE.includes(item.verificationStatus)) {
+      setDialogError("");
+      setEvidenceFor(item);
+      return;
+    }
+    void submitForReview(item, null);
+  }
+
+  async function submitForReview(item: Listing, evidence: { type: string; reference: string } | null) {
+    setSubmitting(item.id);
+    setDialogError("");
+    try {
+      const response = await fetch(`/api/marketplace-professionals/${professionalId}/listings/${item.id}/submit`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(evidence ? { evidence } : {}),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = body.error?.message ?? "Unable to submit this listing for review.";
+        if (evidenceFor) setDialogError(message); else setCardMessage({ id: item.id, text: message });
+        return;
+      }
+      setEvidenceFor(null);
+      setCardMessage({ id: item.id, text: "Submitted. NesAfric will review the listing and its authority evidence before it goes live." });
+      await load();
+    } finally {
+      setSubmitting("");
+    }
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
@@ -172,7 +226,7 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {["", "DRAFT", "PENDING_REVIEW", "PUBLISHED", "PAUSED", "ARCHIVED"].map((status) => (
+        {["", "DRAFT", "PENDING_REVIEW", "REJECTED", "PUBLISHED", "PAUSED", "ARCHIVED"].map((status) => (
           <button
             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${statusFilter === status ? "border-slate-950 bg-forest text-white" : "border-hairline text-muted hover:border-hairline"}`}
             key={status || "all"}
@@ -198,7 +252,7 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold">
                       <span className="text-forest">{item.listingType === "RENT" ? "For rent" : item.listingType === "SALE" ? "For sale" : humanize(item.listingType)}</span>
                       <span className={`rounded-full px-2 py-0.5 ${STATUS_STYLES[item.status] ?? "bg-surface text-muted"}`}>{humanize(item.status)}</span>
-                      {item.verificationStatus === "VERIFIED" && <span className="text-amber-800">Verified</span>}
+                      {item.verificationStatus === "VERIFIED" && <span className="text-gold-ink">Verified</span>}
                     </p>
                     <h2 className="mt-1.5 truncate text-lg font-semibold text-ink" title={item.title}>{item.title}</h2>
                     <p className="mt-0.5 truncate text-sm text-muted">{locationLine(item)}</p>
@@ -206,6 +260,19 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
                     <p className="mt-1 text-xs text-muted">
                       {[...specs(item), item.marketplaceAssetId ? "Marketplace listing" : "From a managed property", `verification ${item.verificationStatus.toLowerCase()}`, ...(item.listingRepresentativeUserId ? ["has a representative"] : [])].join(" · ")}
                     </p>
+                    {item.status === "PENDING_REVIEW" && (
+                      <p className="mt-2 text-sm text-muted">With NesAfric for review. It goes live once the listing and its authority evidence are verified.</p>
+                    )}
+                    {(() => {
+                      const returned = reviewerNote(item);
+                      return returned ? (
+                        <div className="mt-3 rounded-[var(--radius-control)] border border-gold/40 bg-gold/10 p-3 text-sm">
+                          <p className="font-semibold text-ink">{returned.title}</p>
+                          <p className="mt-1 whitespace-pre-wrap text-ink">{returned.note}</p>
+                        </div>
+                      ) : null;
+                    })()}
+                    {cardMessage?.id === item.id && <p aria-live="polite" className="mt-2 text-sm text-ink" role="status">{cardMessage.text}</p>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 md:max-w-[340px] md:justify-end">
                     {item.marketplaceAssetId && (EDITABLE_STATUSES.includes(item.status) ? (
@@ -222,8 +289,11 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
                     ) : (
                       <button className="rounded-md border px-3 py-2 text-sm font-medium hover:border-forest/40" onClick={() => setPreviewing(item)} type="button">Preview</button>
                     )}
-                    {item.verificationStatus === "UNVERIFIED" && <button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void submitVerification(item.id)} type="button">Submit verification</button>}
-                    {item.status === "DRAFT" && <button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void transition(item.id, "PENDING_REVIEW")} type="button">Submit for review</button>}
+                    {SUBMITTABLE.includes(item.status) && (
+                      <button className={buttonClass("primary", "sm")} disabled={submitting === item.id} onClick={() => startSubmit(item)} type="button">
+                        {submitting === item.id ? "Submitting…" : "Submit for review"}
+                      </button>
+                    )}
                     {item.status === "PUBLISHED" && <button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void transition(item.id, "PAUSED")} type="button">Pause</button>}
                     {item.status === "PAUSED" && <button className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void transition(item.id, "PUBLISHED")} type="button">Publish</button>}
                   </div>
@@ -235,6 +305,16 @@ export function MarketplaceListingsDashboard({ professionalId }: { professionalI
       )}
 
       {previewing && <ListingPreview item={previewing} onClose={() => setPreviewing(null)} />}
+      {evidenceFor && (
+        <SubmitForReviewDialog
+          busy={submitting === evidenceFor.id}
+          error={dialogError}
+          hasExistingEvidence={(evidenceFor.verificationEvidence?.length ?? 0) > 0}
+          listingTitle={evidenceFor.title}
+          onCancel={() => setEvidenceFor(null)}
+          onSubmit={(evidence) => void submitForReview(evidenceFor, evidence)}
+        />
+      )}
 
       {data && data.total > data.pageSize && (
         <div className="flex items-center justify-between text-sm text-muted">

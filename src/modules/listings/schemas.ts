@@ -215,6 +215,18 @@ export const listingVerificationSchema = z.object({
   }).strict()).max(50).optional(),
 }).strict();
 
+/** Evidence the professional names when submitting a listing: a private reference NesAfric can
+ * follow up (document location, mandate number…), never the document itself. */
+export const LISTING_AUTHORITY_EVIDENCE_TYPES = ["owner_mandate", "listing_authority", "developer_authority", "ownership_reference"] as const;
+
+export const submitListingForReviewSchema = z.object({
+  note: z.string().trim().min(1).max(2_000).optional(),
+  evidence: z.object({
+    type: z.enum(LISTING_AUTHORITY_EVIDENCE_TYPES),
+    reference: z.string().trim().min(3).max(1_000),
+  }).strict().optional(),
+}).strict();
+
 const commaSeparated = (schema: z.ZodType<string>) => z.preprocess(
   (value) => typeof value === "string" ? value.split(",").map((part) => part.trim()).filter(Boolean) : value,
   z.array(schema).max(50),
