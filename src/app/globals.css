@@ -62,6 +62,24 @@
   --color-info: #2563eb;
 
   /*
+   * Marketplace semantic accents.
+   * Shared with the native app so marketplace meaning remains consistent
+   * across web and mobile.
+   */
+  --color-market-rent: #2563eb;
+  --color-market-rent-tint: #eff6ff;
+  --color-market-sale: #047857;
+  --color-market-sale-tint: #e8f3ee;
+  --color-market-new: #8a6424;
+  --color-market-new-tint: #fbf3e4;
+  --color-market-land: #6b5d4a;
+  --color-market-land-tint: #f5f0e8;
+  --color-market-commercial: #574a80;
+  --color-market-commercial-tint: #f1eff8;
+  --color-market-verified: #006b5f;
+  --color-market-verified-tint: #e7f5f2;
+
+  /*
    * Surveyor's precision: near-square geometry.
    * control 6px (buttons, inputs) · panel 8px (content surfaces) · media 4px (photographs).
    * Pills (rounded-full) are reserved for filter chips, status dots and avatars.
@@ -104,6 +122,18 @@
   --color-warning-tint: var(--color-warning-tint);
   --color-danger-ink: var(--color-danger-ink);
   --color-danger-tint: var(--color-danger-tint);
+  --color-market-rent: var(--color-market-rent);
+  --color-market-rent-tint: var(--color-market-rent-tint);
+  --color-market-sale: var(--color-market-sale);
+  --color-market-sale-tint: var(--color-market-sale-tint);
+  --color-market-new: var(--color-market-new);
+  --color-market-new-tint: var(--color-market-new-tint);
+  --color-market-land: var(--color-market-land);
+  --color-market-land-tint: var(--color-market-land-tint);
+  --color-market-commercial: var(--color-market-commercial);
+  --color-market-commercial-tint: var(--color-market-commercial-tint);
+  --color-market-verified: var(--color-market-verified);
+  --color-market-verified-tint: var(--color-market-verified-tint);
 
   /*
    * Radius scale, re-based on the NesAfric geometry so the ~1,500 existing rounded-* classes

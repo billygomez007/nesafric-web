@@ -3,15 +3,78 @@ import { Pressable, StyleSheet } from "react-native";
 import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { AppText } from "./ui";
 
-export function Chip({ label, selected = false, onPress }: { label: string; selected?: boolean; onPress: () => void }) {
+export type ChipTone = "default" | "rent" | "sale" | "land" | "commercial" | "residential";
+
+const toneColors: Record<ChipTone, { foreground: string; background: string; border: string }> = {
+  default: {
+    foreground: colors.ink,
+    background: colors.elevated,
+    border: colors.hairline,
+  },
+  rent: {
+    foreground: colors.marketRent,
+    background: colors.marketRentTint,
+    border: colors.marketRent,
+  },
+  sale: {
+    foreground: colors.marketSale,
+    background: colors.marketSaleTint,
+    border: colors.marketSale,
+  },
+  land: {
+    foreground: colors.marketLand,
+    background: colors.marketLandTint,
+    border: colors.marketLand,
+  },
+  commercial: {
+    foreground: colors.marketCommercial,
+    background: colors.marketCommercialTint,
+    border: colors.marketCommercial,
+  },
+  residential: {
+    foreground: colors.marketVerified,
+    background: colors.marketVerifiedTint,
+    border: colors.marketVerified,
+  },
+};
+
+export function Chip({
+  label,
+  selected = false,
+  tone = "default",
+  onPress,
+}: {
+  label: string;
+  selected?: boolean;
+  tone?: ChipTone;
+  onPress: () => void;
+}) {
+  const palette = toneColors[tone];
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.chip, selected && styles.selected, pressed && !selected && styles.pressed]}
+      style={({ pressed }) => [
+        styles.chip,
+        tone !== "default" && {
+          backgroundColor: palette.background,
+          borderColor: palette.border,
+        },
+        selected && styles.selected,
+        pressed && !selected && styles.pressed,
+      ]}
     >
-      <AppText style={[styles.label, selected && styles.labelSelected]}>{label}</AppText>
+      <AppText
+        style={[
+          styles.label,
+          tone !== "default" && { color: palette.foreground },
+          selected && styles.labelSelected,
+        ]}
+      >
+        {label}
+      </AppText>
     </Pressable>
   );
 }
