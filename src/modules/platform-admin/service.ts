@@ -16,7 +16,7 @@ import {
   updatePlanSchema,
 } from "@/modules/subscriptions/schemas";
 import { createFeatureFlagSchema, listingPublishDecisionSchema, listingReturnDecisionSchema, organisationListQuerySchema, platformAuditQuerySchema, setFlagOverrideSchema, updateFeatureFlagSchema } from "./schemas";
-import { applyListingTransition, applyListingVerification } from "@/modules/listings/service";
+import { applyListingTransition, applyListingVerification, REVIEW_TRANSACTION_OPTIONS } from "@/modules/listings/service";
 import { listingReadinessProblems } from "@/modules/listings/readiness";
 import { getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
 import { runDueJobs, runPendingJobs } from "@/platform/jobs/runner";
@@ -2524,7 +2524,7 @@ export async function verifyAndPublishListingForPlatform(principal: PlatformPrin
     const published = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "PUBLISHED", note: data.note ?? "Verified and published by NesAfric." }, via);
     await recordListingDecision(tx, principal, "platform_admin.listing_verified_and_published", listing, { verifiedNow, note: data.note ?? null });
     return published;
-  });
+  }, REVIEW_TRANSACTION_OPTIONS);
 }
 
 /**
@@ -2540,7 +2540,7 @@ export async function requestListingChangesForPlatform(principal: PlatformPrinci
     const returned = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "DRAFT", note: data.note }, { authority: "PLATFORM", via: "request_changes" });
     await recordListingDecision(tx, principal, "platform_admin.listing_changes_requested", listing, { note: data.note });
     return returned;
-  });
+  }, REVIEW_TRANSACTION_OPTIONS);
 }
 
 /**
@@ -2560,5 +2560,5 @@ export async function rejectListingForPlatform(principal: PlatformPrincipal, lis
     const rejected = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "REJECTED", note: data.note }, via);
     await recordListingDecision(tx, principal, "platform_admin.listing_rejected", listing, { note: data.note });
     return rejected;
-  });
+  }, REVIEW_TRANSACTION_OPTIONS);
 }

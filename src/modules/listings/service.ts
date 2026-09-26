@@ -604,6 +604,15 @@ export async function transitionMarketplaceProfessionalListing(userId: string, m
 
 export { listingReadinessProblems, type ListingReadinessProblem } from "./readiness";
 
+/**
+ * Review workflows run several lifecycle steps (verification, one or two status transitions, each
+ * re-reading the listing and writing history + audit) in ONE transaction so they stay atomic.
+ * That is more work than Prisma's 5 s interactive-transaction default comfortably allows against
+ * a serverless Postgres, so these composite operations get an explicit, bounded budget. A failure
+ * still rolls the whole operation back.
+ */
+export const REVIEW_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
+
 const SUBMITTABLE_STATUSES: ListingStatus[] = ["DRAFT", "REJECTED"];
 const VERIFICATION_NEEDS_EVIDENCE: ListingVerificationStatus[] = ["UNVERIFIED", "REJECTED", "SUSPENDED"];
 
@@ -643,7 +652,7 @@ export async function submitMarketplaceListingForReview(userId: string, marketpl
       await applyListingTransition(tx, userId, organisationId, listing.id, { status: "DRAFT", note: "Resubmitted by the professional." }, { via: "submit_for_review" });
     }
     return applyListingTransition(tx, userId, organisationId, listing.id, { status: "PENDING_REVIEW", note: data.note }, { via: "submit_for_review" });
-  });
+  }, REVIEW_TRANSACTION_OPTIONS);
 }
 
 export async function submitMarketplaceProfessionalListingVerification(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
