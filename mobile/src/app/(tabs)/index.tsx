@@ -8,15 +8,15 @@ import { CategoryChips } from "@/home/components/category-chips";
 import { FeaturedAdsCarousel } from "@/home/components/featured-ads-carousel";
 import { HeroSearch } from "@/home/components/hero-search";
 import { HomeHeader } from "@/home/components/home-header";
-import { PropertySearchSection } from "@/home/components/property-search-section";
+import { PropertiesOnNesAfric } from "@/home/components/properties-on-nesafric";
 import { TrustedCompanies } from "@/home/components/trusted-companies";
 import { HOME_SECTION_GAP } from "@/home/components/layout";
 import { colors, spacing } from "@/theme/tokens";
 
 /**
- * Marketplace home, in the order of the homepage brief: header → heading + search → category
- * chips → featured carousel → trusted companies → property search cards → advanced search. Every
- * section is backed by the real public API; nothing here is sample data.
+ * Marketplace home: header → heading + search → category chips → featured carousel → trusted
+ * companies → properties on NesAfric → advanced search. Every section is backed by the real
+ * public API; nothing here is sample data.
  */
 export default function HomeScreen() {
   const queryClient = useQueryClient();
@@ -43,7 +43,7 @@ export default function HomeScreen() {
         <CategoryChips />
         <FeaturedAdsCarousel />
         <TrustedCompanies />
-        <PropertySearchSection />
+        <PropertiesOnNesAfric />
         <AdvancedSearchCTA />
       </ScrollView>
     </SafeAreaView>

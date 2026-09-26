@@ -53,9 +53,9 @@ describe("signed-out marketplace", () => {
     renderRouter(APP_DIR, { initialUrl: "/" });
 
     expect(await screen.findByText("Find your perfect property")).toBeTruthy();
-    // With no campaigns the featured carousel shows real published listings.
-    expect(await screen.findByText("4 Bedroom House")).toBeTruthy();
-    expect(screen.getByText("Search properties")).toBeTruthy();
+    // With no campaigns the featured carousel and the properties rail both show real published listings.
+    expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Properties on NesAfric")).toBeTruthy();
     expect(screen.getByLabelText("Advanced search")).toBeTruthy();
     expect(screen.queryByText(/sign in to continue/i)).toBeNull();
     // Every request is to a public endpoint, with no credentials.
