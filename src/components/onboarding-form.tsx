@@ -253,7 +253,7 @@ export function OnboardingForm() {
       {error && <p className="text-sm text-red-800">{error}</p>}
 
       <button
-        className="rounded bg-forest p-3 font-semibold text-white transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:opacity-60"
+        className="rounded bg-forest p-3 font-semibold text-white transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
         disabled={submitting}
         type="submit"
       >
