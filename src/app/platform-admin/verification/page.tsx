@@ -1,37 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { PlatformAdminShell } from "@/components/platform-admin/shell";
+import { ListingReviewQueue, type ReviewListing } from "@/components/platform-admin/listing-review-queue";
+import { Dialog } from "@/components/ui/dialog";
+import { buttonClass } from "@/components/ui/button-styles";
+import { fieldLabelClass, textareaClass } from "@/components/ui/field-styles";
 
 type Queue = {
-  listings: Array<{
-    id: string;
-    title: string;
-    listingType: string;
-    category: string;
-    verificationStatus: string;
-    evidenceReady: boolean;
-    submittedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
-    city: string | null;
-    countryCode: string;
-    organisation: {
-      id: string;
-      name: string;
-    };
-    marketplaceProfessional: {
-      id: string;
-      displayName: string;
-      slug: string;
-      verificationStatus: string;
-    } | null;
-    _count: {
-      verificationEvidence: number;
-      media: number;
-    };
-  }>;
+  listings: ReviewListing[];
+  canDecideListings: boolean;
   professionals: Array<{
     id: string;
     displayName: string;
@@ -50,6 +30,10 @@ function VerificationContent() {
   const [queue, setQueue] = useState<Queue | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  // Deep link from Platform Admin > Listings: /platform-admin/verification?listing=<id>
+  const highlightId = useSearchParams().get("listing");
+  const [professionalDecision, setProfessionalDecision] = useState<{ id: string; name: string; status: "VERIFIED" | "REJECTED" } | null>(null);
+  const [professionalReason, setProfessionalReason] = useState("");
 
   const load = useCallback(() => {
     const controller = new AbortController();
@@ -89,71 +73,11 @@ function VerificationContent() {
     return () => controller.abort();
   }, [load]);
 
-  async function reviewListing(
-    listingId: string,
-    status: "VERIFIED" | "REJECTED" | "SUSPENDED",
-  ) {
-    const note = window.prompt(
-      `Reason or note for ${status.replaceAll("_", " ").toLowerCase()}:`,
-    );
-
-    if (note === null) return;
-
-    setBusy(`listing:${listingId}`);
-    setError("");
-
-    try {
-      const response = await fetch(
-        `/api/platform-admin/listings/${listingId}/verification`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            status,
-            note: note.trim() || undefined,
-          }),
-        },
-      );
-
-      const body = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          body.error?.message ?? "Listing verification review failed.",
-        );
-      }
-
-      setQueue((current) =>
-        current
-          ? {
-              ...current,
-              listings: current.listings.filter(
-                (listing) => listing.id !== listingId,
-              ),
-            }
-          : current,
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Listing verification review failed.",
-      );
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function reviewProfessional(
     professionalId: string,
     status: "VERIFIED" | "REJECTED" | "SUSPENDED",
+    reason: string,
   ) {
-    const reason = window.prompt(
-      `Reason or note for ${status.replaceAll("_", " ").toLowerCase()}:`,
-    );
-
-    if (reason === null) return;
-
     setBusy(`professional:${professionalId}`);
     setError("");
 
@@ -165,7 +89,7 @@ function VerificationContent() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             status,
-            reason: reason.trim() || undefined,
+            reason: reason || undefined,
           }),
         },
       );
@@ -189,6 +113,7 @@ function VerificationContent() {
             }
           : current,
       );
+      setProfessionalDecision(null);
     } catch (err) {
       setError(
         err instanceof Error
@@ -229,10 +154,10 @@ function VerificationContent() {
           <section className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-hairline bg-white p-5 shadow-card">
               <p className="text-xs uppercase tracking-wider text-muted">
-                Pending listings
+                Listings to review
               </p>
               <p className="mt-2 text-3xl font-semibold text-forest">
-                {queue.listings.length}
+                {queue.listings.filter((listing) => listing.status === "PENDING_REVIEW").length}
               </p>
             </div>
             <div className="rounded-xl border border-hairline bg-white p-5 shadow-card">
@@ -262,77 +187,19 @@ function VerificationContent() {
           <section className="rounded-xl border border-hairline bg-white shadow-card">
             <div className="border-b border-hairline px-5 py-4">
               <h3 className="font-semibold text-forest">
-                Listing verification
+                Listing review
               </h3>
+              <p className="mt-1 text-xs text-muted">
+                Listings submitted for review with their authority evidence. Verify &amp; publish makes a listing public immediately.
+              </p>
             </div>
 
-            {!queue.listings.length ? (
-              <p className="p-6 text-sm text-muted">
-                No listings are awaiting verification.
-              </p>
-            ) : (
-              <div className="divide-y divide-hairline">
-                {queue.listings.map((listing) => (
-                  <div
-                    className="grid gap-4 p-5 xl:grid-cols-[1fr_auto]"
-                    key={listing.id}
-                  >
-                    <div>
-                      <p className="font-semibold text-forest">
-                        {listing.title}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">
-                        {listing.marketplaceProfessional?.displayName ??
-                          listing.organisation.name}
-                        {" · "}
-                        {listing.city ?? listing.countryCode}
-                      </p>
-                      <p className="mt-2 text-xs text-muted">
-                        {listing._count.verificationEvidence} verification
-                        document
-                        {listing._count.verificationEvidence === 1 ? "" : "s"}
-                        {" · "}
-                        {listing._count.media} media item
-                        {listing._count.media === 1 ? "" : "s"}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className="rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
-                        disabled={busy === `listing:${listing.id}`}
-                        onClick={() =>
-                          reviewListing(listing.id, "VERIFIED")
-                        }
-                        type="button"
-                      >
-                        Verify
-                      </button>
-                      <button
-                        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
-                        disabled={busy === `listing:${listing.id}`}
-                        onClick={() =>
-                          reviewListing(listing.id, "REJECTED")
-                        }
-                        type="button"
-                      >
-                        Reject
-                      </button>
-                      <button
-                        className="rounded-lg border border-hairline px-3 py-2 text-xs font-semibold text-forest disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
-                        disabled={busy === `listing:${listing.id}`}
-                        onClick={() =>
-                          reviewListing(listing.id, "SUSPENDED")
-                        }
-                        type="button"
-                      >
-                        Suspend
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <ListingReviewQueue
+              canDecide={queue.canDecideListings}
+              highlightId={highlightId}
+              listings={queue.listings}
+              onDecided={() => { load(); }}
+            />
           </section>
 
           <section className="rounded-xl border border-hairline bg-white shadow-card">
@@ -378,9 +245,10 @@ function VerificationContent() {
                         disabled={
                           busy === `professional:${professional.id}`
                         }
-                        onClick={() =>
-                          reviewProfessional(professional.id, "VERIFIED")
-                        }
+                        onClick={() => {
+                          setProfessionalReason("");
+                          setProfessionalDecision({ id: professional.id, name: professional.displayName, status: "VERIFIED" });
+                        }}
                         type="button"
                       >
                         Verify
@@ -390,9 +258,10 @@ function VerificationContent() {
                         disabled={
                           busy === `professional:${professional.id}`
                         }
-                        onClick={() =>
-                          reviewProfessional(professional.id, "REJECTED")
-                        }
+                        onClick={() => {
+                          setProfessionalReason("");
+                          setProfessionalDecision({ id: professional.id, name: professional.displayName, status: "REJECTED" });
+                        }}
                         type="button"
                       >
                         Reject
@@ -405,6 +274,36 @@ function VerificationContent() {
           </section>
         </>
       )}
+
+      {professionalDecision && (
+        <Dialog
+          busy={busy === `professional:${professionalDecision.id}`}
+          description={professionalDecision.status === "VERIFIED"
+            ? <>Marks <span className="font-medium text-ink">{professionalDecision.name}</span> as a verified professional on the public marketplace.</>
+            : <>Rejects <span className="font-medium text-ink">{professionalDecision.name}</span>&apos;s verification request. They can resubmit evidence.</>}
+          footer={
+            <>
+              <button className={buttonClass("secondary")} disabled={busy !== ""} onClick={() => setProfessionalDecision(null)} type="button">Cancel</button>
+              <button
+                className={buttonClass(professionalDecision.status === "REJECTED" ? "danger" : "primary")}
+                disabled={busy !== "" || (professionalDecision.status === "REJECTED" && professionalReason.trim().length < 3)}
+                onClick={() => void reviewProfessional(professionalDecision.id, professionalDecision.status, professionalReason.trim())}
+                type="button"
+              >
+                {professionalDecision.status === "VERIFIED" ? "Verify professional" : "Reject verification"}
+              </button>
+            </>
+          }
+          onClose={() => setProfessionalDecision(null)}
+          title={professionalDecision.status === "VERIFIED" ? "Verify professional" : "Reject verification"}
+        >
+          <label className={fieldLabelClass} htmlFor="professional-reason">
+            {professionalDecision.status === "REJECTED" ? "Reason (required)" : "Note (optional)"}
+          </label>
+          <textarea className={textareaClass} id="professional-reason" maxLength={2000} onChange={(event) => setProfessionalReason(event.target.value)} rows={3} value={professionalReason} />
+          {error && <p className="mt-3 text-sm text-danger-ink" role="alert">{error}</p>}
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -412,7 +311,9 @@ function VerificationContent() {
 export default function PlatformAdminVerificationPage() {
   return (
     <PlatformAdminShell>
-      <VerificationContent />
+      <Suspense fallback={<p className="text-sm text-muted">Loading verification queue…</p>}>
+        <VerificationContent />
+      </Suspense>
     </PlatformAdminShell>
   );
 }

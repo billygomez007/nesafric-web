@@ -27,3 +27,15 @@ export const platformAuditQuerySchema = z.object({
   organisationId: z.string().uuid().optional(),
   take: z.number().int().min(1).max(200).optional().default(100),
 }).strict();
+
+/** Every listing review decision names the version the reviewer looked at, so a listing edited
+ * after the review screen loaded is never published or returned on stale information. */
+export const listingPublishDecisionSchema = z.object({
+  expectedUpdatedAt: z.coerce.date(),
+  note: z.string().trim().min(1).max(2_000).optional(),
+}).strict();
+
+export const listingReturnDecisionSchema = z.object({
+  expectedUpdatedAt: z.coerce.date(),
+  note: z.string().trim().min(3, "Explain what needs to change.").max(2_000),
+}).strict();
