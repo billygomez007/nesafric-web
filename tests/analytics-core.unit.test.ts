@@ -1,13 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const sendGAEvent = vi.fn();
-vi.mock("@next/third-parties/google", () => ({ sendGAEvent }));
-
 describe("analytics core (src/platform/analytics.ts)", () => {
   beforeEach(() => {
-    sendGAEvent.mockClear();
     vi.resetModules();
+    delete (window as Window & { dataLayer?: Array<Record<string, unknown>> }).dataLayer;
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -28,20 +25,21 @@ describe("analytics core (src/platform/analytics.ts)", () => {
     expect(compactParams({ a: "x", b: undefined, c: 0, d: false, e: "" })).toEqual({ a: "x", c: 0, d: false, e: "" });
   });
 
-  it("does not call sendGAEvent when NEXT_PUBLIC_GA_MEASUREMENT_ID is unset (dev/Preview safety)", async () => {
-    vi.stubEnv("NEXT_PUBLIC_GA_MEASUREMENT_ID", "");
+  it("does not push to dataLayer when NEXT_PUBLIC_GTM_ID is unset (dev/Preview safety)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_GTM_ID", "");
     const { trackEvent, isAnalyticsEnabled } = await import("@/platform/analytics");
     expect(isAnalyticsEnabled()).toBe(false);
     trackEvent("login");
-    expect(sendGAEvent).not.toHaveBeenCalled();
+    expect((window as Window & { dataLayer?: Array<Record<string, unknown>> }).dataLayer).toBeUndefined();
   });
 
-  it("calls sendGAEvent with the event name and params when a measurement ID is configured", async () => {
-    vi.stubEnv("NEXT_PUBLIC_GA_MEASUREMENT_ID", "G-TEST123");
+  it("pushes the event name and params to dataLayer when a GTM container is configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_GTM_ID", "GTM-TEST123");
     const { trackEvent, isAnalyticsEnabled } = await import("@/platform/analytics");
     expect(isAnalyticsEnabled()).toBe(true);
     trackEvent("sign_up", { method: "email" });
-    expect(sendGAEvent).toHaveBeenCalledTimes(1);
-    expect(sendGAEvent).toHaveBeenCalledWith("event", "sign_up", { method: "email" });
+    expect((window as Window & { dataLayer?: Array<Record<string, unknown>> }).dataLayer).toEqual([
+      { event: "sign_up", method: "email" },
+    ]);
   });
 });
