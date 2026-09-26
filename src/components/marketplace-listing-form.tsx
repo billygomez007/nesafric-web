@@ -2,13 +2,17 @@
 
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { readApiResponse } from "@/lib/api-response";
 import {
-  filesToSelectedImages,
+  describeUploadOutcome,
+  type ListingImageUploadResult,
   MAX_LISTING_IMAGES,
+  partitionSelectedImages,
   releaseSelectedImage,
   type SelectedListingImage,
-  uploadListingImages,
+  uploadListingImagePhotos,
 } from "@/lib/listing-image-upload";
+import { formatMegabytes, MAX_LISTING_PHOTO_SOURCE_BYTES } from "@/lib/listing-media-rules";
 
 
 const PROPERTY_TYPES = [
@@ -111,6 +115,13 @@ export function MarketplaceListingForm({
   const [images, setImages] = useState<SelectedListingImage[]>([]);
   const [existingMedia, setExistingMedia] = useState(existing?.media ?? []);
   const [mediaBusy, setMediaBusy] = useState(false);
+  // The listing this form writes to. Set once the draft exists, so a retry or a second save
+  // updates that same listing — never a duplicate.
+  const [listingId, setListingId] = useState<string | null>(existing?.id ?? null);
+  const [uploadState, setUploadState] = useState<Record<string, { status: "uploading" | "failed"; message?: string }>>({});
+  const [uploadNotice, setUploadNotice] = useState("");
+  // A cover chosen among photos not uploaded yet; applied once that photo is uploaded.
+  const [pendingCoverKey, setPendingCoverKey] = useState<string | null>(null);
   const [amenities, setAmenities] = useState<string[]>(existing?.amenities.map((amenity) => amenity.label) ?? []);
   const totalImages = existingMedia.length + images.length;
   const existingPrice = existing ? existing.rentAmountMinor ?? existing.askingAmountMinor : null;
@@ -136,65 +147,115 @@ export function MarketplaceListingForm({
 
   function addImages(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
     const remaining = MAX_LISTING_IMAGES - existingMedia.length - images.length;
 
     if (remaining <= 0) {
-      setError("A property can contain up to 12 images.");
-      event.target.value = "";
+      setError(`A property can contain up to ${MAX_LISTING_IMAGES} images.`);
       return;
     }
 
-    try {
-      const selected = filesToSelectedImages(
-        files.slice(0, remaining),
-      );
-
-      setImages((current) => [...current, ...selected]);
-      setError("");
-
-      if (files.length > remaining) {
-        setError(
-          `Only ${remaining} more image${remaining === 1 ? "" : "s"} could be added. Maximum is 12.`,
-        );
-      }
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to add selected images.",
-      );
+    // Every acceptable photo is kept; each unacceptable one is named with its reason.
+    const { accepted, rejected } = partitionSelectedImages(files);
+    const kept = accepted.slice(0, remaining);
+    accepted.slice(remaining).forEach(releaseSelectedImage);
+    setImages((current) => [...current, ...kept]);
+    const problems = [...rejected];
+    if (accepted.length > remaining) {
+      problems.push(`Only ${remaining} more image${remaining === 1 ? "" : "s"} could be added. Maximum is ${MAX_LISTING_IMAGES}.`);
     }
-
-    event.target.value = "";
+    setError(problems.join(" "));
   }
 
-  function removeImage(index: number) {
+  function removeImage(key: string) {
     setImages((current) => {
-      const selected = current[index];
-
-      if (selected) {
-        releaseSelectedImage(selected);
-      }
-
-      return current.filter(
-        (_, itemIndex) => itemIndex !== index,
-      );
+      const selected = current.find((image) => image.key === key);
+      if (selected) releaseSelectedImage(selected);
+      return current.filter((image) => image.key !== key);
     });
+    setUploadState(({ [key]: _removed, ...rest }) => rest);
+    if (pendingCoverKey === key) setPendingCoverKey(null);
+  }
+
+  async function refreshExistingMedia(id: string) {
+    const response = await fetch(`/api/marketplace-professionals/${professionalId}/listings/${id}`);
+    const result = await readApiResponse<{ media?: EditableMarketplaceListing["media"] }>(response, "Unable to load photos.");
+    if (result.ok && result.data?.media) setExistingMedia(result.data.media);
+  }
+
+  /**
+   * Uploads photos to the listing one at a time. Successful photos move into "Current photos"
+   * straight away; failed ones stay listed with their reason so they can be retried alone.
+   * Returns the per-photo results.
+   */
+  async function uploadPending(id: string, pending: SelectedListingImage[], title: string) {
+    setUploadState((current) => ({ ...current, ...Object.fromEntries(pending.map((image) => [image.key, { status: "uploading" as const }])) }));
+    const results = await uploadListingImagePhotos({
+      listingId: id,
+      professionalId,
+      title,
+      images: pending,
+      firstPosition: existingMedia.length + 1,
+      onResult: (result) => {
+        if (result.ok) {
+          setImages((current) => current.filter((image) => {
+            if (image.key !== result.key) return true;
+            releaseSelectedImage(image);
+            return false;
+          }));
+          setUploadState(({ [result.key]: _done, ...rest }) => rest);
+        } else {
+          setUploadState((current) => ({ ...current, [result.key]: { status: "failed", message: result.message } }));
+        }
+      },
+    });
+    await applyPendingCover(id, results);
+    await refreshExistingMedia(id);
+    return results;
+  }
+
+  async function applyPendingCover(id: string, results: ListingImageUploadResult[]) {
+    if (!pendingCoverKey) return;
+    const chosen = results.find((result) => result.key === pendingCoverKey);
+    if (!chosen) return;
+    if (!chosen.ok || !chosen.media) {
+      setUploadNotice("The photo you chose as the cover didn't upload, so the first uploaded photo is the cover for now. Retry it, then choose it again.");
+      return;
+    }
+    const response = await fetch(`/api/marketplace-professionals/${professionalId}/listings/${id}/media/${chosen.media.id}/cover`, { method: "POST" });
+    const result = await readApiResponse(response, "Unable to set the cover photo.");
+    if (!result.ok) setUploadNotice(result.message ?? "Unable to set the cover photo.");
+    setPendingCoverKey(null);
+  }
+
+  async function retryFailedPhotos() {
+    if (!listingId) return;
+    const failed = images.filter((image) => uploadState[image.key]?.status === "failed");
+    if (!failed.length) return;
+    setBusy(true);
+    setError("");
+    setUploadNotice("");
+    const results = await uploadPending(listingId, failed, existing?.title ?? "Property");
+    setBusy(false);
+    const outcome = describeUploadOutcome(results, "saved");
+    setUploadNotice(outcome ? outcome.replace("Your changes were saved, but", "Still") : "All photos are uploaded.");
   }
 
   async function changeExistingMedia(mediaId: string, action: "remove" | "cover") {
-    if (!existing) return;
+    if (!listingId) return;
     setMediaBusy(true);
     setError("");
-    const base = `/api/marketplace-professionals/${professionalId}/listings/${existing.id}/media/${mediaId}`;
+    const base = `/api/marketplace-professionals/${professionalId}/listings/${listingId}/media/${mediaId}`;
     const response = await fetch(action === "remove" ? base : `${base}/cover`, { method: action === "remove" ? "DELETE" : "POST" });
-    const result = await response.json();
+    const result = await readApiResponse<{ media?: EditableMarketplaceListing["media"] }>(response, "Unable to update photos.");
     setMediaBusy(false);
-    if (!response.ok) {
-      setError(result.error?.message ?? "Unable to update photos.");
+    if (!result.ok) {
+      setError(result.message ?? "Unable to update photos.");
       return;
     }
-    setExistingMedia(result.media ?? []);
+    // Choosing an uploaded photo replaces any cover picked among photos not uploaded yet.
+    if (action === "cover") setPendingCoverKey(null);
+    setExistingMedia(result.data?.media ?? []);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -323,17 +384,20 @@ export function MarketplaceListingForm({
       listingAuthority: String(form.get("listingAuthority")),
     };
 
-    if (editing) {
+    // Once the draft exists (editing, or created by an earlier attempt), save onto it.
+    const target = listingId;
+    if (target) {
       // The development unit is fixed once a listing exists.
       delete (body.asset as { developmentUnitId?: string }).developmentUnitId;
     }
 
+    setUploadNotice("");
     const response = await fetch(
-      editing
-        ? `/api/marketplace-professionals/${professionalId}/listings/${existing!.id}/details`
+      target
+        ? `/api/marketplace-professionals/${professionalId}/listings/${target}/details`
         : `/api/marketplace-professionals/${professionalId}/listings`,
       {
-        method: editing ? "PUT" : "POST",
+        method: target ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -341,32 +405,30 @@ export function MarketplaceListingForm({
       },
     );
 
-    const result = await response.json();
+    const result = await readApiResponse<{ id: string }>(response, target ? "Unable to save changes." : "Unable to create listing.");
 
-    if (!response.ok) {
+    if (!result.ok || !result.data?.id) {
       setBusy(false);
-      setError(result.error?.message ?? (editing ? "Unable to save changes." : "Unable to create listing."));
+      setError(result.message ?? (target ? "Unable to save changes." : "Unable to create listing."));
       return;
     }
 
-    if (images.length) try {
-      await uploadListingImages({
-        listingId: result.id,
-        professionalId,
-        title,
-        images,
-      });
-    } catch (cause) {
-      setBusy(false);
-      setError(
-        cause instanceof Error
-          ? `${cause.message} ${editing ? "Your changes were saved" : "The property draft was created"}, but one or more photos were not uploaded.`
-          : editing ? "Your changes were saved, but the new photos could not be uploaded." : "The property draft was created, but its photos could not be uploaded.",
-      );
-      return;
+    const savedId = result.data.id;
+    const created = !target;
+    setListingId(savedId);
+
+    if (images.length) {
+      const results = await uploadPending(savedId, images, title);
+      const outcome = describeUploadOutcome(results, created && !editing ? "created" : "saved");
+      if (outcome) {
+        // Nothing is lost: the draft and every uploaded photo are kept; only the failed photos
+        // stay here to retry — and saving again updates this same draft.
+        setBusy(false);
+        setUploadNotice(`${outcome} The failed photos are listed below — retry them, or remove them and continue.`);
+        return;
+      }
     }
 
-    images.forEach(releaseSelectedImage);
     setBusy(false);
     router.push(`/pro/${professionalId}/listings`);
     router.refresh();
@@ -684,8 +746,8 @@ export function MarketplaceListingForm({
               Upload up to 12 photos
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Choose photos directly from your phone or computer.
-              The first photo becomes the marketplace cover image.
+              Choose photos directly from your phone or computer. The photo marked
+              COVER is the listing&apos;s main image everywhere on NesAfric — choose any photo.
             </p>
           </div>
 
@@ -700,7 +762,7 @@ export function MarketplaceListingForm({
           </span>
 
           <span className="mt-1 text-sm text-muted">
-            JPG, PNG or WebP · Maximum 10MB per image
+            JPG, PNG or WebP · up to {formatMegabytes(MAX_LISTING_PHOTO_SOURCE_BYTES)} each · large photos are resized automatically
           </span>
 
           <span className="mt-3 rounded-xl bg-forest px-4 py-2 text-sm font-semibold text-white">
@@ -717,29 +779,46 @@ export function MarketplaceListingForm({
           />
         </label>
 
+        {uploadNotice && (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="status">
+            <p>{uploadNotice}</p>
+            {listingId && images.some((image) => uploadState[image.key]?.status === "failed") && (
+              <button className="rounded-lg bg-forest px-3 py-2 text-xs font-semibold text-white disabled:bg-surface disabled:text-muted" disabled={busy} onClick={() => void retryFailedPhotos()} type="button">
+                {busy ? "Retrying…" : "Retry failed photos"}
+              </button>
+            )}
+          </div>
+        )}
+
         {existingMedia.length > 0 && (
           <div className="mt-5">
             <p className="text-sm font-semibold">Current photos</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {existingMedia.map((media, index) => (
-                <div className="overflow-hidden rounded-xl border border-hairline bg-white" key={media.id}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- listing photos are served from the storage provider's public URL */}
-                  <img alt={media.altText ?? `Property photo ${index + 1}`} className="h-44 w-full object-cover" src={media.publicUrl} />
-                  <div className="flex items-center justify-between gap-3 p-3">
-                    <p className="truncate text-xs font-semibold">{media.isCover ? "Cover photo" : `Photo ${index + 1}`}</p>
-                    <div className="flex shrink-0 gap-3">
-                      {!media.isCover && media.type === "PHOTO" && (
-                        <button className="text-xs font-semibold text-forest disabled:text-muted" disabled={mediaBusy} onClick={() => void changeExistingMedia(media.id, "cover")} type="button">
-                          Make cover
+              {existingMedia.map((media, index) => {
+                const isCover = media.isCover && !pendingCoverKey;
+                return (
+                  <div className={`overflow-hidden rounded-xl border bg-white ${isCover ? "border-forest ring-2 ring-forest/30" : "border-hairline"}`} key={media.id}>
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- listing photos are served from the storage provider's public URL */}
+                      <img alt={media.altText ?? `Property photo ${index + 1}`} className="h-44 w-full object-cover" src={media.publicUrl} />
+                      {isCover && <CoverBadge />}
+                    </div>
+                    <div className="flex items-center justify-between gap-3 p-3">
+                      <p className="truncate text-xs font-semibold">{isCover ? "Cover photo" : `Photo ${index + 1}`}</p>
+                      <div className="flex shrink-0 gap-3">
+                        {!isCover && media.type === "PHOTO" && (
+                          <button className="text-xs font-semibold text-forest disabled:text-muted" disabled={mediaBusy || busy} onClick={() => void changeExistingMedia(media.id, "cover")} type="button">
+                            Set as cover
+                          </button>
+                        )}
+                        <button className="text-xs font-semibold text-red-700 disabled:text-muted" disabled={mediaBusy || busy} onClick={() => void changeExistingMedia(media.id, "remove")} type="button">
+                          Remove
                         </button>
-                      )}
-                      <button className="text-xs font-semibold text-red-700 disabled:text-muted" disabled={mediaBusy} onClick={() => void changeExistingMedia(media.id, "remove")} type="button">
-                        Remove
-                      </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             {images.length > 0 && <p className="mt-5 text-sm font-semibold">New photos to upload</p>}
           </div>
@@ -747,40 +826,50 @@ export function MarketplaceListingForm({
 
         {images.length > 0 && (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {images.map((image, index) => (
-              <div
-                key={`${image.file.name}-${index}`}
-                className="overflow-hidden rounded-xl border border-hairline bg-white"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  alt={`Property preview ${index + 1}`}
-                  className="h-44 w-full object-cover"
-                  src={image.previewUrl}
-                />
-
-                <div className="flex items-center justify-between gap-3 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold">
-                      {index === 0 && existingMedia.length === 0
-                        ? "Cover photo"
-                        : `Photo ${existingMedia.length + index + 1}`}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-muted">
-                      {image.file.name}
-                    </p>
+            {images.map((image, index) => {
+              const state = uploadState[image.key];
+              // Until one is chosen, the first new photo is the cover only when none exists yet.
+              const isCover = pendingCoverKey ? pendingCoverKey === image.key : index === 0 && !existingMedia.some((media) => media.isCover);
+              return (
+                <div
+                  key={image.key}
+                  className={`overflow-hidden rounded-xl border bg-white ${state?.status === "failed" ? "border-red-300" : isCover ? "border-forest ring-2 ring-forest/30" : "border-hairline"}`}
+                >
+                  <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      alt={`Property preview ${index + 1}`}
+                      className={`h-44 w-full object-cover ${state?.status === "uploading" ? "opacity-60" : ""}`}
+                      src={image.previewUrl}
+                    />
+                    {isCover && <CoverBadge />}
                   </div>
 
-                  <button
-                    className="shrink-0 text-xs font-semibold text-red-700"
-                    onClick={() => removeImage(index)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
+                  <div className="grid gap-2 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold">
+                          {isCover ? "Cover photo" : `Photo ${existingMedia.length + index + 1}`}
+                          {state?.status === "uploading" && <span className="ml-2 font-normal text-muted">Uploading…</span>}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-muted">{image.file.name}</p>
+                      </div>
+                      <div className="flex shrink-0 gap-3">
+                        {!isCover && (
+                          <button className="text-xs font-semibold text-forest disabled:text-muted" disabled={busy} onClick={() => setPendingCoverKey(image.key)} type="button">
+                            Set as cover
+                          </button>
+                        )}
+                        <button className="text-xs font-semibold text-red-700 disabled:text-muted" disabled={state?.status === "uploading"} onClick={() => removeImage(image.key)} type="button">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    {state?.status === "failed" && <p className="text-xs text-red-800" role="alert">{state.message ?? "This photo didn't upload."}</p>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -942,8 +1031,16 @@ export function MarketplaceListingForm({
         className="rounded-xl bg-forest px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
         disabled={busy}
       >
-        {busy ? (editing ? "Saving changes…" : "Creating property…") : editing ? "Save changes" : "Create draft property"}
+        {busy ? (listingId ? "Saving…" : "Creating property…") : editing ? "Save changes" : listingId ? "Save draft" : "Create draft property"}
       </button>
     </form>
+  );
+}
+
+function CoverBadge() {
+  return (
+    <span className="absolute left-2 top-2 rounded-full bg-forest px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-sm">
+      Cover
+    </span>
   );
 }

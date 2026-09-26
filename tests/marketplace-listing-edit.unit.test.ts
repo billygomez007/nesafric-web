@@ -59,6 +59,8 @@ vi.mock("@/platform/database/client", () => {
       update: vi.fn(async ({ where, data }) => { state.calls.mediaUpdates.push({ where, data }); state.media = state.media.map((m) => (m.id === where.id ? { ...m, ...data } : m)); return {}; }),
     },
     storageObject: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    // Row lock taken before any photo change (see modules/listings/cover.ts).
+    $queryRaw: vi.fn(async () => []),
     marketplaceProfessionalMember: { findUnique: vi.fn(async () => null) },
     auditEvent: { create: vi.fn(async () => ({})) },
     domainEvent: { create: vi.fn(async () => ({})) },
