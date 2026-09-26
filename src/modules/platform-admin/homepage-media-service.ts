@@ -26,6 +26,13 @@ type HomepageLogoInput = {
   sortOrder?: number;
 };
 
+const HOMEPAGE_COMPANY_TYPES = [
+  "BROKERAGE",
+  "REAL_ESTATE_COMPANY",
+  "DEVELOPER",
+  "PROPERTY_MARKETING_COMPANY",
+] as const;
+
 function normalizeSortOrder(value: number | undefined) {
   if (value === undefined) return 0;
 
@@ -43,6 +50,9 @@ async function assertEligibleProfessional(id: string) {
       archivedAt: null,
       status: "ACTIVE",
       verificationStatus: "VERIFIED",
+      type: {
+        in: [...HOMEPAGE_COMPANY_TYPES],
+      },
     },
     select: {
       id: true,
@@ -56,7 +66,7 @@ async function assertEligibleProfessional(id: string) {
 
   if (!professional) {
     throw new Error(
-      "Only active, verified marketplace professionals can be featured on the homepage.",
+      "Only active, verified marketplace companies can be featured on the homepage.",
     );
   }
 
@@ -94,6 +104,9 @@ export async function listHomepageMediaForPlatform(
         archivedAt: null,
         status: "ACTIVE",
         verificationStatus: "VERIFIED",
+        type: {
+          in: [...HOMEPAGE_COMPANY_TYPES],
+        },
       },
       orderBy: [{ displayName: "asc" }],
       select: {
@@ -120,7 +133,7 @@ export async function createHomepageCompanyLogo(
   const professionalId = input.marketplaceProfessionalId?.trim();
 
   if (!professionalId) {
-    throw new Error("Select a verified marketplace professional.");
+    throw new Error("Select a verified marketplace company.");
   }
 
   await assertEligibleProfessional(professionalId);
@@ -172,7 +185,7 @@ export async function updateHomepageCompanyLogo(
       : input.marketplaceProfessionalId.trim();
 
   if (!professionalId) {
-    throw new Error("Select a verified marketplace professional.");
+    throw new Error("Select a verified marketplace company.");
   }
 
   await assertEligibleProfessional(professionalId);
@@ -240,6 +253,9 @@ export async function listPublicHomepageCompanies() {
         archivedAt: null,
         status: "ACTIVE",
         verificationStatus: "VERIFIED",
+        type: {
+          in: [...HOMEPAGE_COMPANY_TYPES],
+        },
       },
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
