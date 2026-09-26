@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AdvancedSearchCTA } from "@/home/components/advanced-search-cta";
@@ -8,6 +8,7 @@ import { AI_BUTTON_CLEARANCE, AiPropertyAssistant } from "@/home/components/ai-p
 import { CategoryChips } from "@/home/components/category-chips";
 import { FeaturedAdsCarousel } from "@/home/components/featured-ads-carousel";
 import { HeroSearch } from "@/home/components/hero-search";
+import { HomePremiumBackground } from "@/home/components/home-premium-background";
 import { HomeHeader } from "@/home/components/home-header";
 import { PropertiesOnNesAfric } from "@/home/components/properties-on-nesafric";
 import { TrustedCompanies } from "@/home/components/trusted-companies";
@@ -34,27 +35,32 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.forest} />}
-      >
-        <HomeHeader />
-        <HeroSearch />
-        <CategoryChips />
-        <FeaturedAdsCarousel />
-        <TrustedCompanies />
-        <PropertiesOnNesAfric />
-        <AdvancedSearchCTA />
-      </ScrollView>
-      <AiPropertyAssistant />
-    </SafeAreaView>
+    <View style={styles.root}>
+      {/* Fixed, touch-transparent backdrop; everything below renders above it. */}
+      <HomePremiumBackground />
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.forest} />}
+        >
+          <HomeHeader />
+          <HeroSearch />
+          <CategoryChips />
+          <FeaturedAdsCarousel />
+          <TrustedCompanies />
+          <PropertiesOnNesAfric />
+          <AdvancedSearchCTA />
+        </ScrollView>
+        <AiPropertyAssistant />
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1 },
+  safe: { flex: 1 },
   // The tab bar sits below this scroll view; the extra bottom room keeps the last section clear of
   // the floating "Speak to AI" pill when scrolled to the end.
   content: { paddingTop: spacing.xs, paddingBottom: AI_BUTTON_CLEARANCE, gap: HOME_SECTION_GAP },

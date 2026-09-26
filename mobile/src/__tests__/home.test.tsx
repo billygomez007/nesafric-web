@@ -246,6 +246,32 @@ describe("marketplace home", () => {
     await waitFor(() => expect(searchCalls().some((params) => params.get("listingType") === "SALE" && params.get("pageSize") === "20")).toBe(true));
   });
 
+  it("draws the premium background behind Home, never taking touches", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByLabelText("Properties on NesAfric");
+    // Hidden from screen readers by design, so the query has to include hidden elements.
+    const background = screen.getByTestId("home-premium-background", { includeHiddenElements: true });
+    expect(StyleSheet.flatten(background.props.style).pointerEvents).toBe("none");
+    expect(background.props.accessibilityElementsHidden).toBe(true);
+    // It is the first child of the Home root, so everything else paints above it…
+    expect(background.parent?.children[0]).toBe(background);
+    // …and it holds no Home content.
+    expect(background.findAll((node) => node.props?.accessibilityRole === "button" || node.props?.accessibilityRole === "link")).toHaveLength(0);
+  });
+
+  it("with the premium background, Speak to AI opens and the Rent chip still navigates", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByTestId("home-premium-background", { includeHiddenElements: true });
+    fireEvent.press(await screen.findByLabelText("Speak to AI"));
+    expect(await screen.findByTestId("ai-search-sheet")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Close"));
+    await waitFor(() => expect(screen.queryByTestId("ai-search-sheet")).toBeNull());
+    fireEvent.press(screen.getByText("Rent"));
+    await waitFor(() => expect(searchCalls().some((params) => params.get("listingType") === "RENT" && params.get("pageSize") === "20")).toBe(true));
+  });
+
   it("rails only verified companies with real logos, as a swipeable rail, and opens the profile", async () => {
     mockApi({ companies: [
       { slug: "accra-homes", displayName: "Accra Homes Ltd", type: "BROKERAGE", logoUrl: "/uploads/accra-homes.png", verificationStatus: "VERIFIED" },
