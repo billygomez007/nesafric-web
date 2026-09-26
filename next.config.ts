@@ -13,6 +13,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // The marketplace landing page is the site root. /marketplace (exact path only) permanently
+  // redirects there so the two never compete as duplicate content; every deeper
+  // /marketplace/* route (properties, professionals, services, profiles) is unaffected.
+  async redirects() {
+    return [{ source: "/marketplace", destination: "/", permanent: true }];
+  },
   // Use native Node `require` for the Postgres driver adapter stack instead of bundling —
   // avoids production-only breakage of `pg`'s conditional/dynamic requires under Vercel's
   // per-route serverless packaging.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
+import { AccountChip } from "@/components/account-chip";
 import { BrandLogo } from "@/components/brand-logo";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
@@ -126,7 +127,7 @@ function ProfessionalSidebar({
       }`}
     >
       <div className="flex h-[78px] items-center border-b border-white/10 px-6">
-        <Link href="/pro" onClick={onNavigate}>
+        <Link aria-label="NesAfric professional workspace home" href="/pro" onClick={onNavigate}>
           <BrandLogo className="max-w-[150px]" height={34} variant="dark" />
         </Link>
       </div>
@@ -273,10 +274,10 @@ export function MarketplaceProShell({
       )}
 
       <div className="min-h-screen lg:pl-[258px]">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-hairline bg-warm-white/95 px-4 backdrop-blur lg:h-[78px] lg:px-8 xl:px-10">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-hairline bg-warm-white px-4 lg:h-[72px] lg:px-8 xl:px-10">
           <button
             aria-label="Open navigation"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-hairline bg-white text-forest lg:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] border border-hairline bg-white text-forest lg:hidden"
             onClick={() => setMobileOpen(true)}
             type="button"
           >
@@ -292,43 +293,9 @@ export function MarketplaceProShell({
             </svg>
           </button>
 
-          <div className="hidden w-full max-w-md lg:block">
-            <div className="relative">
-              <svg
-                aria-hidden="true"
-                className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                viewBox="0 0 24 24"
-              >
-                <circle cx="11" cy="11" r="6" />
-                <path d="m16 16 4 4" />
-              </svg>
+          <div className="flex-1" />
 
-              <input
-                aria-label="Search professional workspace"
-                className="h-10 w-full rounded-xl border border-hairline bg-white pl-10 pr-4 text-sm outline-none focus:border-teal focus:ring-2 focus:ring-teal/10"
-                placeholder="Search listings, leads, developments..."
-                type="search"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-xs font-semibold text-ink">
-                Professional Workspace
-              </p>
-              <p className="mt-0.5 text-[11px] text-muted">
-                Marketplace &amp; Sales
-              </p>
-            </div>
-
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-forest text-xs font-bold text-white">
-              P
-            </div>
-          </div>
+          <AccountChip context="Professional workspace" />
         </header>
 
         <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10">

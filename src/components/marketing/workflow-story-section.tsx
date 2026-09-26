@@ -11,14 +11,14 @@ const STEPS = [
 
 export function WorkflowStorySection() {
   return (
-    <section className="bg-navy py-24 sm:py-32">
+    <section className="bg-forest-deep py-16 sm:py-24">
       <div className="mx-auto max-w-5xl px-6 sm:px-8">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold tracking-[0.22em] text-brand">FROM LISTING TO CLOSED DEAL</p>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+          <p className="text-sm font-medium text-gold-soft">From listing to closed deal</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.02em] text-white sm:text-[40px] sm:leading-[1.1]">
             Stop spending your day on administrative follow-up.
           </h2>
-          <p className="mt-4 text-base leading-7 text-slate-400">
+          <p className="mt-4 text-base leading-7 text-white/70">
             NesAfric handles the work around the opportunity, so you can concentrate on the moments where you
             actually create value — the viewing, the negotiation, the close.
           </p>
@@ -27,18 +27,18 @@ export function WorkflowStorySection() {
         <ol className="relative mt-16 border-l border-white/10 pl-8 sm:pl-10">
           {STEPS.map((step, index) => (
             <li className="relative pb-10 last:pb-0" key={step.label}>
-              <span className="absolute -left-[2.55rem] flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-navy text-xs font-semibold text-brand sm:-left-[3.05rem]">
+              <span className="absolute -left-[2.55rem] flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-forest-deep text-xs font-semibold tabular-nums text-gold-soft sm:-left-[3.05rem]">
                 {index + 1}
               </span>
               <p className="text-lg font-semibold text-white">{step.label}</p>
-              <p className="mt-1.5 max-w-xl text-sm leading-6 text-slate-400">{step.detail}</p>
+              <p className="mt-1.5 max-w-xl text-sm leading-6 text-white/65">{step.detail}</p>
             </li>
           ))}
         </ol>
 
         <div className="mt-4 flex items-center gap-3 border-t border-white/10 pt-8">
-          <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-          <p className="text-sm font-medium text-slate-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+          <p className="text-sm font-medium text-white/75">
             You handle the deal. <span className="text-white">NesAfric handles the work around it.</span>
           </p>
         </div>

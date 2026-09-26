@@ -211,7 +211,7 @@ export function MarketplaceProfileDashboard({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((item) => (
           <div
-            className="h-40 animate-pulse rounded-[22px] border border-hairline bg-white"
+            className="h-40 motion-safe:animate-pulse rounded-panel border border-hairline bg-white"
             key={item}
           />
         ))}
@@ -227,7 +227,7 @@ export function MarketplaceProfileDashboard({
         </div>
       )}
 
-      <section className="relative overflow-hidden rounded-[30px] bg-forest-deep px-6 py-7 text-white shadow-[0_22px_60px_rgba(16,45,42,0.16)] sm:px-8 sm:py-8">
+      <section className="relative overflow-hidden rounded-panel bg-forest-deep px-6 py-7 text-white sm:px-8 sm:py-8">
         <div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-teal/15 blur-3xl" />
         <div className="absolute -bottom-28 right-40 h-64 w-64 rounded-full bg-gold/10 blur-3xl" />
 
