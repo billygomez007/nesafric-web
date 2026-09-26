@@ -32,6 +32,10 @@ export const PLATFORM_PERMISSIONS = {
   /// (homepage announcements and marketplace banners). Its own permission — distinct from
   /// `marketplaceVerify` (trust/verification) and `plansManage` (commercial plans).
   campaignReview: "campaign.review",
+  /// Curating public homepage media: trusted-company logo rail ordering/visibility
+  /// and other homepage presentation controls. Kept separate from campaign.review
+  /// so advertising operations and homepage editorial control can diverge safely.
+  homepageMediaManage: "homepage_media.manage",
   /// Phase 23: reviewing mandatory identity/business/credential evidence (Ghana Card etc.) for a
   /// Property Service Professional and setting `ServiceProvider.identityVerifiedAt` /
   /// `businessVerifiedAt` / `skillVerifiedAt`. Deliberately separate from `marketplaceVerify`
