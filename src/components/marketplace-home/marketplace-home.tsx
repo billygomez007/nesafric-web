@@ -337,7 +337,7 @@ export function MarketplaceHome() {
   const listings = useJson<ListingsResult>(`/api/public/listings?page=1&pageSize=${LISTING_SAMPLE_SIZE}`, NO_LISTINGS);
   return (
     <>
-      <CompaniesCarouselSection emptyState />
+      <CompaniesCarouselSection emptyState title="Trusted by leading companies" />
       <PropertyDiscovery result={listings} />
       <PopularLocations result={listings} />
       <ProfessionalDiscovery />

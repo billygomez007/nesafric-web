@@ -13,7 +13,13 @@ import { buttonClass } from "@/components/ui/button-styles";
  * or if the fetch fails. With `emptyState` (the marketplace homepage) the section stays in place
  * and, with nothing verified to show, says so and invites professionals to get verified — it
  * never shows placeholder names or logos. */
-export function CompaniesCarouselSection({ emptyState = false }: { emptyState?: boolean }) {
+export function CompaniesCarouselSection({
+  emptyState = false,
+  title = "Companies and professionals on NesAfric",
+}: {
+  emptyState?: boolean;
+  title?: string;
+}) {
   const [items, setItems] = useState<CompanyCarouselItem[] | null>(null);
 
   useEffect(() => {
@@ -35,7 +41,7 @@ export function CompaniesCarouselSection({ emptyState = false }: { emptyState?: 
     <section aria-labelledby="companies-heading" className="border-y border-hairline bg-white py-12 sm:py-16">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-end justify-between gap-4 px-5 sm:px-8">
         <h2 className="text-2xl font-semibold tracking-[-0.015em] text-forest-deep sm:text-[28px]" id="companies-heading">
-          Companies and professionals on NesAfric
+          {title}
         </h2>
         {hasItems && (
           <Link className="text-sm font-semibold text-forest hover:underline" href="/marketplace/professionals">
