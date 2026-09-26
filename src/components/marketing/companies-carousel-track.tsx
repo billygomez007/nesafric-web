@@ -18,28 +18,29 @@ function CompanyChip({ item, duplicate }: { item: CompanyCarouselItem; duplicate
   return (
     <Link
       aria-hidden={duplicate || undefined}
-      className={`flex shrink-0 items-center gap-3 rounded-full border border-slate-200 bg-white px-5 py-3 shadow-sm transition-colors hover:border-brand ${duplicate ? "motion-reduce:hidden" : ""}`}
+      className={`relative flex shrink-0 items-center gap-3 rounded-[var(--radius-control)] border border-hairline bg-white px-4 py-3 transition-colors hover:border-forest/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-strong ${duplicate ? "motion-reduce:hidden" : ""}`}
       href={`/marketplace/professionals/${item.slug}`}
       tabIndex={duplicate ? -1 : undefined}
     >
       {item.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt="" aria-hidden="true" className="h-8 w-8 shrink-0 rounded-full object-cover" src={item.logoUrl} />
+        <img alt="" aria-hidden="true" className="h-10 w-10 shrink-0 rounded-[var(--radius-media)] object-contain" src={item.logoUrl} />
       ) : (
-        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+        <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-media)] bg-cream font-display text-sm font-semibold text-forest-deep">
           {item.displayName.slice(0, 1)}
         </span>
       )}
       <span className="flex flex-col leading-tight">
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-950">
+        <span className="flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-forest-deep">
           {item.displayName}
           {item.verificationStatus === "VERIFIED" && (
-            <span aria-label="Verified" className="text-brand-strong" title="Verified">
-              ✓
+            <span className="inline-flex items-center text-gold-ink" title="Verified">
+              <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
+              <span className="sr-only">Verified</span>
             </span>
           )}
         </span>
-        <span className="text-xs text-slate-500">{TYPE_LABELS[item.type] ?? item.type}</span>
+        <span className="whitespace-nowrap text-xs text-muted">{TYPE_LABELS[item.type] ?? item.type}</span>
       </span>
     </Link>
   );

@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { trackEvent } from "@/platform/analytics";
+import { buttonClass } from "@/components/ui/button-styles";
+import { controlClass } from "@/components/ui/field-styles";
 
 type Workspaces = {
   propertyOsOrganisations: Array<{
@@ -129,7 +131,7 @@ export function AuthForm({
   return (
     <div className="mt-8">
       <a
-        className="flex w-full items-center justify-center gap-3 rounded-xl border border-hairline bg-white px-4 py-3.5 text-sm font-semibold text-forest transition hover:border-teal/40 hover:bg-warm-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+        className="flex min-h-11 w-full items-center justify-center gap-3 rounded-control border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-forest transition hover:border-forest/40 hover:bg-warm-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-strong"
         href="/api/auth/google/start"
       >
         <GoogleIcon />
@@ -152,7 +154,7 @@ export function AuthForm({
             Name
             <input
               autoComplete="name"
-              className="mt-2 w-full rounded-xl border border-hairline bg-white px-4 py-3 text-forest transition placeholder:text-muted focus:border-teal focus:ring-4 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+              className={`mt-2 ${controlClass}`}
               name="displayName"
               required
             />
@@ -163,7 +165,7 @@ export function AuthForm({
           Email
           <input
             autoComplete="email"
-            className="mt-2 w-full rounded-xl border border-hairline bg-white px-4 py-3 text-forest transition placeholder:text-muted focus:border-teal focus:ring-4 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+            className={`mt-2 ${controlClass}`}
             name="email"
             required
             type="email"
@@ -176,7 +178,7 @@ export function AuthForm({
             autoComplete={
               mode === "register" ? "new-password" : "current-password"
             }
-            className="mt-2 w-full rounded-xl border border-hairline bg-white px-4 py-3 text-forest transition placeholder:text-muted focus:border-teal focus:ring-4 focus:ring-teal/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+            className={`mt-2 ${controlClass}`}
             minLength={mode === "register" ? 12 : undefined}
             name="password"
             required
@@ -187,7 +189,7 @@ export function AuthForm({
         {error && (
           <p
             aria-live="polite"
-            className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-5 text-red-900"
+            className="border-l-2 border-danger bg-danger-tint p-3 text-sm leading-5 text-danger-ink"
             role="alert"
           >
             {error}
@@ -195,7 +197,7 @@ export function AuthForm({
         )}
 
         <button
-          className="w-full rounded-xl bg-forest px-4 py-3.5 font-semibold text-white transition-colors hover:bg-emerald disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+          className={`${buttonClass("primary")} w-full disabled:cursor-not-allowed`}
           disabled={submitting}
           type="submit"
         >

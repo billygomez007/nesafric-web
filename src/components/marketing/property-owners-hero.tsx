@@ -1,36 +1,15 @@
-"use client";
-
-import Link from "next/link";
-import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
+import { AudienceHero } from "@/components/marketing/audience-hero";
+import { RentLedgerFragment } from "@/components/marketing/product-fragments";
 
 export function PropertyOwnersHero() {
   return (
-    <section className="marketing-grid relative overflow-hidden bg-navy pt-20 pb-24 sm:pt-28 sm:pb-32">
-      <div className="relative mx-auto max-w-4xl px-6 text-center sm:px-8">
-        <p className="text-xs font-semibold tracking-[0.22em] text-brand">FOR OWNERS · LANDLORDS · PROPERTY MANAGERS · DEVELOPERS</p>
-        <h1 className="mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
-          Run your property operation from one intelligent platform.
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-          Properties, units, tenants, leases, rent, payments, maintenance and providers — organised in one
-          place, with AI employees working inside the operation alongside your team.
-        </p>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            className="rounded-full bg-brand px-6 py-3.5 text-sm font-semibold text-navy transition-colors hover:bg-brand-hover"
-            href="/register"
-            onClick={() => trackCampaignEvent("join_free_click", { placement: "property_owners_hero" })}
-          >
-            Get Started
-          </Link>
-          <Link
-            className="rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
-            href="/ghana"
-          >
-            See the Ghana Launch →
-          </Link>
-        </div>
-      </div>
-    </section>
+    <AudienceHero
+      audience="For owners, landlords and property managers"
+      fragment={<RentLedgerFragment />}
+      lede="Every building, unit, tenant, lease, rent payment and repair on one record — so you know who has paid, what is overdue and what needs fixing without chasing spreadsheets and WhatsApp threads."
+      primary={{ label: "Start with NesAfric", href: "/register", event: "join_free_click", placement: "property_owners_hero" }}
+      secondary={{ label: "See the Ghana launch", href: "/ghana" }}
+      title="Know what every unit owes, and what it needs."
+    />
   );
 }

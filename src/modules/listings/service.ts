@@ -6,6 +6,7 @@ import {
   ViewingRequestStatus,
 } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
+import { getObjectStorageAdapter } from "@/platform/storage";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { AppError, notFound } from "@/platform/errors";
 import { getActiveGeocodingAdapter } from "@/modules/geocoding/provider";
@@ -273,6 +274,56 @@ export async function createListing(userId: string, organisationId: string, inpu
 
 /** Creates both the professional-owned source asset and its first listing atomically. No
  * PropertyOS Property, Unit, subscription, or visible organisation is created. */
+type NativeListingInput = ReturnType<typeof createMarketplaceNativeListingSchema.parse>;
+
+/**
+ * The Listing fields a marketplace-native listing derives from its create/edit payload. Shared by
+ * create and edit so both always write the listing the same way.
+ */
+function nativeListingInput(data: NativeListingInput, marketplaceAssetId: string, marketplaceProfessionalId: string, developmentId: string | null) {
+  return {
+    ...data.listing,
+    propertyId: null,
+    marketplaceAssetId,
+    listingType: data.asset.purpose,
+    category: data.listing.category ?? data.asset.category,
+    title: data.listing.title ?? data.asset.name,
+    currencyCode: data.asset.currencyCode,
+    availableFrom: data.asset.availableFrom,
+    bedrooms: data.listing.bedrooms ?? data.asset.bedrooms,
+    bathrooms: data.listing.bathrooms ?? data.asset.bathrooms,
+    sizeSqm: data.listing.sizeSqm ?? data.asset.sizeSqm,
+    countryCode: data.asset.countryCode,
+    region: data.listing.region ?? data.asset.region,
+    city: data.listing.city ?? data.asset.city,
+    district: data.listing.district ?? data.asset.district,
+    locality: data.listing.locality ?? data.asset.locality,
+    publicLocationLabel: data.listing.publicLocationLabel ?? data.asset.publicLocationLabel,
+    mapLatitude: data.listing.mapLatitude ?? data.asset.mapLatitude,
+    mapLongitude: data.listing.mapLongitude ?? data.asset.mapLongitude,
+    askingAmountMinor: data.asset.purpose === "SALE" ? data.asset.priceMinor : null,
+    rentAmountMinor: data.asset.purpose === "RENT" ? data.asset.priceMinor : null,
+    marketplaceProfessionalId,
+    listingRepresentativeUserId: data.listingRepresentativeUserId ?? null,
+    listingAuthority: data.listingAuthority,
+    developmentId,
+    developmentUnitId: data.asset.developmentUnitId ?? null,
+  };
+}
+
+/** Same editable states as `updateListing`: anything in review, live, let/sold or archived goes
+ * through the moderation lifecycle (pause → edit → resubmit), never a direct edit. */
+export const EDITABLE_LISTING_STATUSES = ["DRAFT", "REJECTED", "PAUSED"] as const;
+export const MAX_LISTING_MEDIA = 12;
+
+export function isListingEditable(status: string) {
+  return (EDITABLE_LISTING_STATUSES as readonly string[]).includes(status);
+}
+
+function listingNotEditable() {
+  return new AppError("LISTING_NOT_EDITABLE", 409, "Only draft, rejected, or paused listings can be edited.");
+}
+
 export async function createMarketplaceNativeListing(userId: string, marketplaceProfessionalId: string, input: unknown) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);
   await assertMarketplaceOperational(marketplaceProfessionalId, MARKETPLACE_ENTITLEMENTS.activeListingsMax.key);
@@ -304,34 +355,7 @@ export async function createMarketplaceNativeListing(userId: string, marketplace
         mapLatitude: decimal(data.asset.mapLatitude), mapLongitude: decimal(data.asset.mapLongitude),
       },
     });
-    const parsedListing = createListingSchema.parse({
-      ...data.listing,
-      propertyId: null,
-      marketplaceAssetId: asset.id,
-      listingType: data.asset.purpose,
-      category: data.listing.category ?? data.asset.category,
-      title: data.listing.title ?? data.asset.name,
-      currencyCode: data.asset.currencyCode,
-      availableFrom: data.asset.availableFrom,
-      bedrooms: data.listing.bedrooms ?? data.asset.bedrooms,
-      bathrooms: data.listing.bathrooms ?? data.asset.bathrooms,
-      sizeSqm: data.listing.sizeSqm ?? data.asset.sizeSqm,
-      countryCode: data.asset.countryCode,
-      region: data.listing.region ?? data.asset.region,
-      city: data.listing.city ?? data.asset.city,
-      district: data.listing.district ?? data.asset.district,
-      locality: data.listing.locality ?? data.asset.locality,
-      publicLocationLabel: data.listing.publicLocationLabel ?? data.asset.publicLocationLabel,
-      mapLatitude: data.listing.mapLatitude ?? data.asset.mapLatitude,
-      mapLongitude: data.listing.mapLongitude ?? data.asset.mapLongitude,
-      askingAmountMinor: data.asset.purpose === "SALE" ? data.asset.priceMinor : null,
-      rentAmountMinor: data.asset.purpose === "RENT" ? data.asset.priceMinor : null,
-      marketplaceProfessionalId,
-      listingRepresentativeUserId: data.listingRepresentativeUserId ?? null,
-      listingAuthority: data.listingAuthority,
-      developmentId,
-      developmentUnitId: data.asset.developmentUnitId ?? null,
-    });
+    const parsedListing = createListingSchema.parse(nativeListingInput(data, asset.id, marketplaceProfessionalId, developmentId));
     const listing = await tx.listing.create({
       data: {
         organisationId: professional.backingOrganisationId,
@@ -345,6 +369,125 @@ export async function createMarketplaceNativeListing(userId: string, marketplace
     await record(tx, professional.backingOrganisationId, userId, "marketplace_listing.created", "listing", listing.id, { marketplaceAssetId: asset.id, marketplaceProfessionalId, developmentUnitId: data.asset.developmentUnitId ?? null });
     return listing;
   });
+}
+
+/**
+ * Edit an existing marketplace-native listing in place: same payload shape as create, same
+ * listing id, same MarketplaceAsset. Media rows are never rewritten here (photos are added,
+ * removed and re-covered through their own endpoints), so ids, storage keys, public
+ * classification and cover survive every edit.
+ */
+export async function updateMarketplaceNativeListing(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  listingId = listingIdSchema.parse(listingId);
+  const data = createMarketplaceNativeListingSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const current = await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, include: listingInclude });
+    if (!current) throw notFound();
+    if (!current.marketplaceAssetId || !current.marketplaceAsset) {
+      throw new AppError("LISTING_NOT_MARKETPLACE_NATIVE", 409, "This listing comes from a managed property and is edited from that property.");
+    }
+    if (!isListingEditable(current.status)) throw listingNotEditable();
+    if (data.asset.developmentUnitId !== undefined && (data.asset.developmentUnitId ?? null) !== (current.marketplaceAsset.developmentUnitId ?? null)) {
+      throw new AppError("LISTING_SOURCE_IMMUTABLE", 409, "A listing's development unit cannot be changed.");
+    }
+    const [country, currency] = await Promise.all([
+      tx.country.findUnique({ where: { code: data.asset.countryCode } }),
+      tx.currency.findUnique({ where: { code: data.asset.currencyCode } }),
+    ]);
+    if (!country?.isActive || !currency?.isActive) throw new AppError("INVALID_LISTING_CONFIGURATION", 422, "The listing country or currency is not supported.");
+    const representativeUserId = data.listingRepresentativeUserId === undefined ? current.listingRepresentativeUserId : data.listingRepresentativeUserId;
+    await validateMarketplaceAttribution(tx, userId, { marketplaceProfessionalId, listingRepresentativeUserId: representativeUserId });
+
+    const { developmentUnitId: _unit, mediaUrls: _mediaUrls, ...assetFields } = data.asset;
+    await tx.marketplaceAsset.update({
+      where: { id: current.marketplaceAssetId },
+      data: {
+        ...assetFields,
+        bathrooms: decimal(data.asset.bathrooms), sizeSqm: decimal(data.asset.sizeSqm), priceMinor: decimal(data.asset.priceMinor)!,
+        mapLatitude: decimal(data.asset.mapLatitude), mapLongitude: decimal(data.asset.mapLongitude),
+      },
+    });
+
+    const parsedListing = createListingSchema.parse({
+      ...nativeListingInput({ ...data, listingRepresentativeUserId: representativeUserId, asset: { ...data.asset, developmentUnitId: current.developmentUnitId } }, current.marketplaceAssetId, marketplaceProfessionalId, current.developmentId),
+      media: [],
+    });
+    const { amenities, media: _media, ...fields } = listingWriteData(parsedListing);
+    const authorityChanged = parsedListing.listingAuthority !== current.listingAuthority || representativeUserId !== current.listingRepresentativeUserId;
+    await tx.listingAmenity.deleteMany({ where: { listingId } });
+    const listing = await tx.listing.update({
+      where: { id: listingId },
+      data: {
+        ...fields,
+        amenities,
+        ...(authorityChanged ? { attributionHistory: { create: {
+          actorUserId: userId,
+          fromMarketplaceProfessionalId: marketplaceProfessionalId, toMarketplaceProfessionalId: marketplaceProfessionalId,
+          fromRepresentativeUserId: current.listingRepresentativeUserId, toRepresentativeUserId: representativeUserId,
+          fromAuthority: current.listingAuthority, toAuthority: parsedListing.listingAuthority,
+          reason: "Updated while editing the listing",
+        } } } : {}),
+      },
+      include: listingInclude,
+    });
+    await record(tx, current.organisationId, userId, "marketplace_listing.updated", "listing", listing.id, { marketplaceProfessionalId, authorityChanged });
+    return listing;
+  });
+}
+
+async function editableProfessionalListing(tx: Tx, marketplaceProfessionalId: string, listingId: string) {
+  const listing = await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, select: { id: true, status: true, organisationId: true } });
+  if (!listing) throw notFound();
+  if (!isListingEditable(listing.status)) throw listingNotEditable();
+  return listing;
+}
+
+/** Remove one photo from a professional's editable listing. The next photo becomes the cover when
+ * the cover is removed. The stored object is archived and deleted from storage best-effort. */
+export async function removeMarketplaceListingMedia(userId: string, marketplaceProfessionalId: string, listingId: string, mediaId: string) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  listingId = listingIdSchema.parse(listingId);
+  mediaId = listingIdSchema.parse(mediaId);
+  const removed = await db.$transaction(async (tx) => {
+    const listing = await editableProfessionalListing(tx, marketplaceProfessionalId, listingId);
+    const media = await tx.listingMedia.findFirst({ where: { id: mediaId, listingId: listing.id } });
+    if (!media) throw notFound();
+    await tx.listingMedia.delete({ where: { id: media.id } });
+    const remaining = await tx.listingMedia.findMany({ where: { listingId: listing.id }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, isCover: true } });
+    if (remaining.length && !remaining.some((item) => item.isCover)) {
+      await tx.listingMedia.update({ where: { id: remaining[0].id }, data: { isCover: true } });
+    }
+    if (media.storageKey) {
+      await tx.storageObject.updateMany({ where: { storageKey: media.storageKey, targetType: "LISTING_MEDIA", targetId: listing.id, archivedAt: null }, data: { archivedAt: new Date() } });
+    }
+    await record(tx, listing.organisationId, userId, "marketplace_listing.media_removed", "listing", listing.id, { mediaId: media.id, marketplaceProfessionalId });
+    return media;
+  });
+  if (removed.storageKey) {
+    await getObjectStorageAdapter().deleteObject(removed.storageKey, removed.classification).catch(() => undefined);
+  }
+  return getMarketplaceProfessionalListing(userId, marketplaceProfessionalId, listingId);
+}
+
+/** Make one photo the cover: it moves to the front, the rest keep their relative order. */
+export async function setMarketplaceListingCoverMedia(userId: string, marketplaceProfessionalId: string, listingId: string, mediaId: string) {
+  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  listingId = listingIdSchema.parse(listingId);
+  mediaId = listingIdSchema.parse(mediaId);
+  await db.$transaction(async (tx) => {
+    const listing = await editableProfessionalListing(tx, marketplaceProfessionalId, listingId);
+    const media = await tx.listingMedia.findMany({ where: { listingId: listing.id }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, type: true } });
+    const chosen = media.find((item) => item.id === mediaId);
+    if (!chosen) throw notFound();
+    if (chosen.type !== "PHOTO") throw new AppError("COVER_MUST_BE_PHOTO", 422, "Only a photo can be the cover image.");
+    const ordered = [chosen, ...media.filter((item) => item.id !== mediaId)];
+    for (const [index, item] of ordered.entries()) {
+      await tx.listingMedia.update({ where: { id: item.id }, data: { sortOrder: index, isCover: item.id === mediaId } });
+    }
+    await record(tx, listing.organisationId, userId, "marketplace_listing.cover_changed", "listing", listing.id, { mediaId, marketplaceProfessionalId });
+  });
+  return getMarketplaceProfessionalListing(userId, marketplaceProfessionalId, listingId);
 }
 
 /**

@@ -55,7 +55,8 @@ const STATIC_ENTRIES: Entry[] = [
   // Search/discovery landing pages: the content on them (listing and provider cards) changes as
   // often as the underlying marketplace data, so these are checked more frequently than static
   // marketing copy even though the page shell itself is static.
-  { url: `${BRAND.siteUrl}/marketplace`, changeFrequency: "daily", priority: 0.9 },
+  { url: `${BRAND.siteUrl}/platform`, changeFrequency: "monthly", priority: 0.8 },
+  { url: `${BRAND.siteUrl}/marketplace/services`, changeFrequency: "daily", priority: 0.8 },
   { url: `${BRAND.siteUrl}/marketplace/properties`, changeFrequency: "daily", priority: 0.9 },
   { url: `${BRAND.siteUrl}/marketplace/professionals`, changeFrequency: "daily", priority: 0.9 },
 ];
