@@ -366,7 +366,7 @@ export function MarketplaceBusinessProfile({ professionalId }: { professionalId:
         </div>
 
         {canEdit && (
-          <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-hairline bg-warm-white/95 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-[var(--radius-panel)] sm:border">
+          <div className={`${dirty || saving ? "sticky bottom-0 z-20 shadow-[0_-8px_24px_rgba(0,47,43,0.08)]" : ""} -mx-4 mt-6 border-t border-hairline bg-warm-white/95 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-[var(--radius-panel)] sm:border`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div aria-live="polite" className="min-w-0 text-sm">
                 {error ? <span className="font-medium text-danger-ink">{error}</span>

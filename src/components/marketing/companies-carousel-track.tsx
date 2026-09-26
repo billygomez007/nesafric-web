@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TYPE_LABELS } from "@/components/marketplace-directory";
 
 export type CompanyCarouselItem = {
@@ -24,7 +24,7 @@ function CompanyChip({ item, duplicate }: { item: CompanyCarouselItem; duplicate
     >
       {item.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt="" aria-hidden="true" className="h-10 w-10 shrink-0 rounded-[var(--radius-media)] object-contain" src={item.logoUrl} />
+        <img alt="" aria-hidden="true" className="h-10 w-auto max-w-24 shrink-0 rounded-[var(--radius-media)] object-contain" src={item.logoUrl} />
       ) : (
         <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-media)] bg-cream font-display text-sm font-semibold text-forest-deep">
           {item.displayName.slice(0, 1)}
@@ -56,11 +56,28 @@ export function CompaniesCarouselTrack({ items }: { items: CompanyCarouselItem[]
   const pausedRef = useRef(false);
   const loopWidthRef = useRef(0);
 
-  const doubled = [...items, ...items];
+  // The seamless loop needs a second copy of the chips, which only makes sense when one copy is
+  // wider than the strip. With a few companies that fit on screen, show each exactly once.
+  const [loop, setLoop] = useState(false);
+  const doubled = loop ? [...items, ...items] : items;
 
   useEffect(() => {
     const track = trackRef.current;
     if (!track) return;
+    const check = () => {
+      const oneCopy = loop ? track.scrollWidth / 2 : track.scrollWidth;
+      setLoop(oneCopy > track.clientWidth + 1);
+    };
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(check);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, [loop, items.length]);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track || !loop) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduceMotion || items.length === 0) return;
@@ -116,7 +133,7 @@ export function CompaniesCarouselTrack({ items }: { items: CompanyCarouselItem[]
       track.removeEventListener("touchstart", pause);
       track.removeEventListener("touchend", resume);
     };
-  }, [items.length]);
+  }, [items.length, loop]);
 
   return (
     <div

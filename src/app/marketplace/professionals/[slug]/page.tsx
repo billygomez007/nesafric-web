@@ -26,9 +26,17 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
         <div className="mx-auto max-w-5xl">
           <nav className="flex items-center justify-between text-sm text-white/70"><Link href="/"><BrandLogo height={22} /></Link><Link className="transition hover:text-white" href="/marketplace/properties">Browse properties</Link></nav>
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/10 text-xl font-semibold">
-              {profile.displayName.slice(0, 1)}
-            </div>
+            {profile.logoUrl ? (
+              <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-white p-2">
+                {/* The company's uploaded logo from NesAfric storage (MarketplaceProfessional.logoUrl). */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt={`${profile.displayName} logo`} className="max-h-full max-w-full object-contain" src={profile.logoUrl} />
+              </div>
+            ) : (
+              <div aria-hidden="true" className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/10 text-xl font-semibold">
+                {profile.displayName.slice(0, 1)}
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-semibold sm:text-4xl">{profile.displayName}</h1>
@@ -92,13 +100,30 @@ export default async function PublicMarketplaceProfessionalPage({ params }: { pa
             <dl className="mt-3 grid gap-2 text-sm">
               {profile.contactEmail && <div><dt className="text-muted">Email</dt><dd className="font-medium">{profile.contactEmail}</dd></div>}
               {profile.contactPhone && <div><dt className="text-muted">Phone</dt><dd className="font-medium">{profile.contactPhone}</dd></div>}
-              {profile.websiteUrl && <div><dt className="text-muted">Website</dt><dd className="font-medium">{profile.websiteUrl}</dd></div>}
+              {profile.websiteUrl && (
+                <div>
+                  <dt className="text-muted">Website</dt>
+                  <dd className="font-medium">
+                    {/^https?:\/\//i.test(profile.websiteUrl) ? (
+                      <a className="break-all text-forest underline-offset-4 hover:underline" href={profile.websiteUrl} rel="noopener noreferrer nofollow" target="_blank">
+                        {profile.websiteUrl.replace(/^https?:\/\//i, "").replace(/\/$/, "")}
+                      </a>
+                    ) : profile.websiteUrl}
+                  </dd>
+                </div>
+              )}
             </dl>
           </section>
           {profile.specialities.length > 0 && (
             <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm">
               <h2 className="font-semibold">Specialities</h2>
               <div className="mt-3 flex flex-wrap gap-2">{profile.specialities.map((item) => <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-semibold" key={item}>{item}</span>)}</div>
+            </section>
+          )}
+          {profile.servicesOffered.length > 0 && (
+            <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm">
+              <h2 className="font-semibold">Services</h2>
+              <div className="mt-3 flex flex-wrap gap-2">{profile.servicesOffered.map((item) => <span className="rounded-full bg-surface px-2.5 py-1 text-xs font-semibold" key={item}>{item}</span>)}</div>
             </section>
           )}
           {profile.serviceAreas.length > 0 && (

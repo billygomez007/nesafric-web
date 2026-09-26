@@ -220,6 +220,42 @@ export function HomepageMediaContent() {
       : <LoadingState label="Loading Homepage Media" />;
   }
 
+  const identity = (company: Candidate) => (
+    <div className="flex items-start gap-3">
+      <CompanyLogo logoUrl={company.logoUrl} name={company.displayName} size="sm" />
+      <div className="min-w-0">
+        <p className="font-semibold text-ink">{company.displayName}</p>
+        <Link className="text-xs text-muted hover:text-forest hover:underline" href={`/marketplace/professionals/${company.slug}`} target="_blank">/{company.slug} ↗</Link>
+        {!company.logoUrl && <p className="mt-1 text-xs text-warning-ink">No logo uploaded</p>}
+        {permissions.canVerify && !isArchived(company) && (
+          <button className="mt-1 block whitespace-nowrap text-left text-xs font-semibold text-forest underline-offset-4 hover:underline" onClick={() => setLogoCompany(company)} type="button">
+            {company.logoUrl ? "Change logo" : "Upload logo"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const actionButtons = (company: Candidate, item: RailItem | undefined, rowBusy: boolean) => (
+    <div className="flex max-w-md flex-wrap gap-2">
+      <LifecycleActionButtons
+        actions={professionalLifecycleActions(company, permissions, { onHomepage: Boolean(item) })}
+        disabled={rowBusy}
+        onSelect={(action) => {
+          if (action.kind === "add_to_homepage") void addToHomepage(company);
+          else setLifecycle({ company, action });
+        }}
+      />
+      {item && (item.isPublished ? (
+        <button className={buttonClass("secondary", "sm")} disabled={rowBusy} onClick={() => void setPublished(item, false)} type="button">Unpublish</button>
+      ) : (
+        <button className={buttonClass("secondary", "sm")} disabled={rowBusy || !isHomepageEligible(company)} onClick={() => void setPublished(item, true)} type="button">Publish</button>
+      ))}
+      {item && <button className={buttonClass("secondary", "sm")} disabled={rowBusy} onClick={() => setRemoving(item)} type="button">Remove from homepage</button>}
+      {isArchived(company) && <span className="text-xs text-muted">Archived profiles are read-only.</span>}
+    </div>
+  );
+
   const addButton = (
     <button className={buttonClass("primary")} onClick={() => { setAddOpen(true); setNotice(""); setError(""); }} type="button">
       Add company logo
@@ -241,7 +277,7 @@ export function HomepageMediaContent() {
         {[
           ["Live on homepage", publishedCount, "Published and eligible"],
           ["In the rail", items.length, `${items.length - publishedCount} not shown publicly`],
-          ["Ready to add", readyNotOnRail, `${readyCount} verified companies in total`],
+          ["Ready to add", readyNotOnRail, `${readyCount} verified ${readyCount === 1 ? "company" : "companies"} in total`],
           ["Need attention", attentionCount, "Unverified or suspended"],
         ].map(([label, value, hint]) => (
           <div className="bg-white px-5 py-4" key={String(label)}>
@@ -375,7 +411,8 @@ export function HomepageMediaContent() {
             {candidates.length === 0 ? "No companies have registered on the marketplace yet." : "No companies match this filter."}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="border-b border-hairline bg-warm-white text-xs text-muted">
                 <tr>
@@ -391,24 +428,11 @@ export function HomepageMediaContent() {
                 {visibleCompanies.map((company) => {
                   const item = railByCompany.get(company.id);
                   const position = item ? items.indexOf(item) + 1 : null;
-                  const actions = professionalLifecycleActions(company, permissions, { onHomepage: Boolean(item) });
                   const rowBusy = busy !== null && (busy === company.id || busy === item?.id);
                   return (
                     <tr className="align-top" key={company.id}>
                       <td className="px-5 py-4">
-                        <div className="flex items-start gap-3">
-                          <CompanyLogo logoUrl={company.logoUrl} name={company.displayName} size="sm" />
-                          <div className="min-w-0">
-                            <p className="font-semibold text-ink">{company.displayName}</p>
-                            <Link className="text-xs text-muted hover:text-forest hover:underline" href={`/marketplace/professionals/${company.slug}`} target="_blank">/{company.slug} ↗</Link>
-                            {!company.logoUrl && <p className="mt-1 text-xs text-warning-ink">No logo uploaded</p>}
-                            {permissions.canVerify && !isArchived(company) && (
-                              <button className="mt-1 block text-xs font-semibold text-forest underline-offset-4 hover:underline" onClick={() => setLogoCompany(company)} type="button">
-                                {company.logoUrl ? "Change logo" : "Upload logo"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                        {identity(company)}
                       </td>
                       <td className="px-3 py-4 text-xs text-ink">{humanizeStatus(company.type)}</td>
                       <td className="px-3 py-4">
@@ -420,23 +444,7 @@ export function HomepageMediaContent() {
                       <td className="px-3 py-4"><HomepageBadge state={item ? (item.isPublished ? "published" : "hidden") : "none"} /></td>
                       <td className="px-3 py-4 tabular-nums text-muted">{position ?? "—"}</td>
                       <td className="px-5 py-4">
-                        <div className="flex max-w-md flex-wrap gap-2">
-                          <LifecycleActionButtons
-                            actions={actions}
-                            disabled={rowBusy}
-                            onSelect={(action) => {
-                              if (action.kind === "add_to_homepage") void addToHomepage(company);
-                              else setLifecycle({ company, action });
-                            }}
-                          />
-                          {item && (item.isPublished ? (
-                            <button className={buttonClass("secondary", "sm")} disabled={rowBusy} onClick={() => void setPublished(item, false)} type="button">Unpublish</button>
-                          ) : (
-                            <button className={buttonClass("secondary", "sm")} disabled={rowBusy || !isHomepageEligible(company)} onClick={() => void setPublished(item, true)} type="button">Publish</button>
-                          ))}
-                          {item && <button className={buttonClass("secondary", "sm")} disabled={rowBusy} onClick={() => setRemoving(item)} type="button">Remove from homepage</button>}
-                          {isArchived(company) && <span className="text-xs text-muted">Archived profiles are read-only.</span>}
-                        </div>
+                        {actionButtons(company, item, rowBusy)}
                       </td>
                     </tr>
                   );
@@ -444,6 +452,26 @@ export function HomepageMediaContent() {
               </tbody>
             </table>
           </div>
+          {/* Phones: one card per company so every action stays on screen. */}
+          <ul className="divide-y divide-hairline md:hidden">
+            {visibleCompanies.map((company) => {
+              const item = railByCompany.get(company.id);
+              const rowBusy = busy !== null && (busy === company.id || busy === item?.id);
+              return (
+                <li className="grid gap-3 px-5 py-4" key={company.id}>
+                  {identity(company)}
+                  <div className="flex flex-wrap gap-1.5">
+                    <AccountBadge status={company.archivedAt ? "ARCHIVED" : company.status} />
+                    <VerificationBadge status={company.verificationStatus} />
+                    <HomepageBadge state={item ? (item.isPublished ? "published" : "hidden") : "none"} />
+                  </div>
+                  <p className="text-xs text-muted">{humanizeStatus(company.type)}{item ? ` · Position ${items.indexOf(item) + 1}` : ""}</p>
+                  {actionButtons(company, item, rowBusy)}
+                </li>
+              );
+            })}
+          </ul>
+          </>
         )}
       </section>
 
