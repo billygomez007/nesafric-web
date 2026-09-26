@@ -3,7 +3,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 import path from "path";
 import * as WebBrowser from "expo-web-browser";
-import { Animated } from "react-native";
+import { Animated, StyleSheet } from "react-native";
 
 import type { CampaignBanner } from "@/api/home";
 import { buildFeaturedSlides, resolveDestination } from "@/home/featured";
@@ -206,6 +206,44 @@ describe("marketplace home", () => {
     renderRouter(APP_DIR, { initialUrl: "/" });
     fireEvent.press(await screen.findByLabelText("Advanced search"));
     expect(await screen.findByText("Bedrooms (at least)")).toBeTruthy();
+  });
+
+  it("shows a floating Speak to AI button that opens an honest AI search sheet and closes it", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    const button = await screen.findByLabelText("Speak to AI");
+    expect(screen.queryByTestId("ai-search-sheet")).toBeNull();
+    fireEvent.press(button);
+    const sheet = await screen.findByTestId("ai-search-sheet");
+    expect(sheet.props.accessibilityLabel).toBe("AI property search");
+    expect(screen.getByText("Find property with AI")).toBeTruthy();
+    expect(screen.getByText("Tell NesAfric what kind of property you're looking for.")).toBeTruthy();
+    expect(screen.getByText("“3-bedroom house in East Legon under GH₵3 million”")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Close"));
+    await waitFor(() => expect(screen.queryByTestId("ai-search-sheet")).toBeNull());
+  });
+
+  it("the AI microphone says voice search is coming soon — nothing recorded, requested or recommended", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByLabelText("Properties on NesAfric");
+    fireEvent.press(await screen.findByLabelText("Speak to AI"));
+    const before = calls.length;
+    fireEvent.press(screen.getByLabelText("Voice search, coming soon"));
+    expect(await screen.findByText(/Nothing was recorded/)).toBeTruthy();
+    expect(calls.length).toBe(before);
+    expect(screen.queryByText(/recording|listening|results for/i)).toBeNull();
+    fireEvent.press(screen.getByText("Use Advanced Search"));
+    expect(await screen.findByText("Bedrooms (at least)")).toBeTruthy();
+  });
+
+  it("the floating layer passes touches through to Home except on the pill", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByTestId("speak-to-ai");
+    expect(StyleSheet.flatten(screen.getByTestId("speak-to-ai-layer").props.style).pointerEvents).toBe("box-none");
+    fireEvent.press(screen.getByText("Buy"));
+    await waitFor(() => expect(searchCalls().some((params) => params.get("listingType") === "SALE" && params.get("pageSize") === "20")).toBe(true));
   });
 
   it("rails only verified companies with real logos, as a swipeable rail, and opens the profile", async () => {

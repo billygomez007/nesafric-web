@@ -26,7 +26,7 @@ export function wrapOffset(x: number, setWidth: number) {
   return setWidth + ((((x - setWidth) % setWidth) + setWidth) % setWidth);
 }
 
-function useReduceMotion() {
+export function useReduceMotion() {
   const [reduce, setReduce] = useState(false);
   useEffect(() => {
     let active = true;

@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AdvancedSearchCTA } from "@/home/components/advanced-search-cta";
+import { AI_BUTTON_CLEARANCE, AiPropertyAssistant } from "@/home/components/ai-property-assistant";
 import { CategoryChips } from "@/home/components/category-chips";
 import { FeaturedAdsCarousel } from "@/home/components/featured-ads-carousel";
 import { HeroSearch } from "@/home/components/hero-search";
@@ -16,7 +17,8 @@ import { colors, spacing } from "@/theme/tokens";
 /**
  * Marketplace home: header → heading + search → category chips → featured carousel → trusted
  * companies → properties on NesAfric → advanced search. Every section is backed by the real
- * public API; nothing here is sample data.
+ * public API; nothing here is sample data. The floating "Speak to AI" entry point sits above the
+ * tab bar in a touch-transparent layer.
  */
 export default function HomeScreen() {
   const queryClient = useQueryClient();
@@ -46,12 +48,14 @@ export default function HomeScreen() {
         <PropertiesOnNesAfric />
         <AdvancedSearchCTA />
       </ScrollView>
+      <AiPropertyAssistant />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  // The tab bar sits below this scroll view, so the last card only needs breathing room.
-  content: { paddingTop: spacing.xs, paddingBottom: spacing.xl, gap: HOME_SECTION_GAP },
+  // The tab bar sits below this scroll view; the extra bottom room keeps the last section clear of
+  // the floating "Speak to AI" pill when scrolled to the end.
+  content: { paddingTop: spacing.xs, paddingBottom: AI_BUTTON_CLEARANCE, gap: HOME_SECTION_GAP },
 });
