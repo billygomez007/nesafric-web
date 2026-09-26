@@ -23,6 +23,9 @@ if [ -z "$DB_HOST" ] || [ -z "$DB_NAME" ]; then
   false
 fi
 
+# psql rejects Prisma-only URL parameters such as `?schema=public`.
+PSQL_URL="${DATABASE_URL%%\?*}"
+
 echo "Target host: $DB_HOST"
 echo "Target database: $DB_NAME"
 
@@ -47,7 +50,7 @@ if ! command -v psql >/dev/null 2>&1; then
   false
 fi
 
-USER_TABLE_COUNT="$(psql "$DATABASE_URL" -Atqc "
+USER_TABLE_COUNT="$(psql "$PSQL_URL" -Atqc "
 SELECT COUNT(*)
 FROM information_schema.tables
 WHERE table_schema = 'public'
@@ -64,20 +67,44 @@ fi
 
 echo ""
 echo "===== 1. ENABLE REQUIRED POSTGRES EXTENSIONS ====="
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS citext;"
+psql "$PSQL_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS citext;"
 
 echo ""
-echo "===== 2. CREATE CURRENT SCHEMA ====="
-./node_modules/.bin/prisma db push --skip-generate
+echo "===== 2. REPLAY HISTORICAL MIGRATIONS IN APPLIED ORDER ====="
+# Every migration's real SQL is executed, so the database gets everything the migrations create
+# that `prisma db push` cannot: immutability triggers, functions, CHECK constraints and seeded
+# rows. The only difference from filename order is the one known out-of-order pair — phase25
+# (earlier timestamp) alters a table that phase23 creates, and production applied phase23 first.
+MIGRATION_ORDER="$(
+  find prisma/migrations -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort |
+    grep -v '^20260829070919_phase25_service_category_admin_controls$' |
+    sed 's/^20260829130000_phase23_property_service_professionals$/&\
+20260829070919_phase25_service_category_admin_controls/'
+)"
 
-echo ""
-echo "===== 3. REGISTER HISTORICAL MIGRATIONS ====="
+EXPECTED_COUNT="$(find prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+ACTUAL_COUNT="$(printf '%s\n' "$MIGRATION_ORDER" | grep -c .)"
+if [ "$EXPECTED_COUNT" != "$ACTUAL_COUNT" ]; then
+  echo "ERROR: Migration ordering lost a migration ($ACTUAL_COUNT of $EXPECTED_COUNT)."
+  false
+fi
 
-find prisma/migrations -mindepth 1 -maxdepth 1 -type d -print | sort | while IFS= read -r migration_path; do
-  migration_name="$(basename "$migration_path")"
-  echo "Registering: $migration_name"
-  ./node_modules/.bin/prisma migrate resolve --applied "$migration_name"
+printf '%s\n' "$MIGRATION_ORDER" | while IFS= read -r migration_name; do
+  echo "Applying: $migration_name"
+  psql "$PSQL_URL" -v ON_ERROR_STOP=1 -q -f "prisma/migrations/$migration_name/migration.sql" >/dev/null
+  ./node_modules/.bin/prisma migrate resolve --applied "$migration_name" >/dev/null
 done
+
+echo ""
+echo "===== 3. VERIFY NO DRIFT FROM prisma/schema.prisma ====="
+./node_modules/.bin/prisma migrate diff \
+  --from-url "$DATABASE_URL" \
+  --to-schema-datamodel prisma/schema.prisma \
+  --exit-code >/dev/null || {
+  echo "ERROR: The replayed database does not match prisma/schema.prisma."
+  false
+}
+echo "No drift."
 
 echo ""
 echo "===== 4. VERIFY MIGRATION STATE ====="

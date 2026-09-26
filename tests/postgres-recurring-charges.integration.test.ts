@@ -211,7 +211,9 @@ beforeAll(async () => {
     throw new Error("Unable to identify PostgreSQL database.");
   }
 
-  if (current.database !== "propertyos") {
+  // The default local database, or any disposable database whose name marks it as a test one.
+  // Together with the local-server check below this keeps the suite off shared databases.
+  if (current.database !== "propertyos" && !/test/i.test(current.database)) {
     throw new Error(
       `Refusing recurring-charge integration test against database ${current.database}`,
     );
