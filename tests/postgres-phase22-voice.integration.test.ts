@@ -162,6 +162,11 @@ describe("PostgreSQL Phase 22 AI voice", () => {
 
     await expect(getTenantCallSummary(call.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
 
+    // A number other than the calling line never unlocks tenant data, even with the right email.
+    const otherLine = await verifyVoiceCallerIdentity(call.id, { phone: "+233240000098", email: "voice-tenant@example.com" });
+    expect(otherLine.level).toBe("NONE");
+    await expect(getTenantCallSummary(call.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
+
     const wrongEmail = await verifyVoiceCallerIdentity(call.id, { phone: "+233240000097", email: "wrong@example.com" });
     expect(wrongEmail.level).toBe("CLAIMED");
     await expect(getTenantCallSummary(call.id)).rejects.toMatchObject({ code: "FORBIDDEN" });

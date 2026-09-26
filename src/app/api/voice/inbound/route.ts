@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireVoiceProviderRequest } from "@/modules/voice/provider-auth";
 import { errorResponse } from "@/platform/errors";
 import { startInboundCall } from "@/modules/voice/service";
 
@@ -11,6 +12,7 @@ import { startInboundCall } from "@/modules/voice/service";
  */
 export async function POST(request: Request) {
   try {
+    requireVoiceProviderRequest(request);
     return NextResponse.json(await startInboundCall(await request.json()), { status: 201 });
   } catch (error) {
     return errorResponse(error);

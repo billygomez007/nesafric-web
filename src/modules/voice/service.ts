@@ -434,7 +434,14 @@ async function startInboundPropertyOsCall(
 export async function verifyVoiceCallerIdentity(callId: string, input: unknown) {
   const data = voiceIdentityVerifySchema.parse(input);
   const call = await loadCall(callId);
-  const claimed = await resolveTenantIdentity(call.organisationId, { phone: data.phone });
+  // The phone number is the telephony caller-ID, not what the caller says: a spoken number that
+  // differs from the line actually calling can never unlock a tenant's private data.
+  const digits = (value: string) => value.replace(/\D/g, "");
+  if (!digits(call.fromNumber) || digits(data.phone) !== digits(call.fromNumber)) {
+    await appendTranscript(callId, "SYSTEM", "Identity verification failed: the stated phone number is not the number calling.");
+    return { level: "NONE" as const };
+  }
+  const claimed = await resolveTenantIdentity(call.organisationId, { phone: call.fromNumber });
   if (claimed.level !== "CLAIMED" || !claimed.tenantOrganisationId) {
     await appendTranscript(callId, "SYSTEM", "Identity verification failed: no tenant record matches this phone number.");
     return { level: "NONE" as const };
