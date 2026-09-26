@@ -75,7 +75,7 @@ describe("marketplace home", () => {
     await screen.findByText("4 Bedroom House");
     await screen.findByText("Verified companies appear here");
     const texts = flatten(view.toJSON() as Node);
-    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "4 Bedroom House", "Trusted companies on NesAfric", "Search properties", "Homes and villas", "Flats and studios", "Plots and acreage", "Offices and shops", "Advanced search"];
+    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "4 Bedroom House", "Trusted by leading companies", "Search properties", "Find your next home", "Own your future", "Invest in land", "Businesses & offices", "Advanced Search"];
     const positions = order.map((text) => texts.indexOf(text));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -107,12 +107,11 @@ describe("marketplace home", () => {
     await waitFor(() => expect(searchCalls().some((params) => params.get("category") === "VILLA" && params.get("pageSize") === "20")).toBe(true));
   });
 
-  it("search cards show live counts and open the matching results", async () => {
-    mockApi({ search: (url) => (url.searchParams.get("category") === "LAND" ? [] : [house]) });
+  it("search cards open the matching results", async () => {
+    mockApi();
     renderRouter(APP_DIR, { initialUrl: "/" });
-    expect(await screen.findByLabelText(/^Land\. Plots and acreage\. No listings yet$/)).toBeTruthy();
-    fireEvent.press(await screen.findByLabelText(/^Houses\. Homes and villas\. 1 property$/));
-    await waitFor(() => expect(searchCalls().some((params) => params.get("category") === "HOUSE" && params.get("pageSize") === "20")).toBe(true));
+    fireEvent.press(await screen.findByLabelText("Land. Invest in land"));
+    await waitFor(() => expect(searchCalls().some((params) => params.get("category") === "LAND" && params.get("pageSize") === "20")).toBe(true));
   });
 
   it("Advanced search opens the existing filter sheet", async () => {
@@ -128,7 +127,7 @@ describe("marketplace home", () => {
       { slug: "legon-realty", displayName: "Legon Realty", type: "BROKERAGE", logoUrl: null, verificationStatus: "VERIFIED" },
     ] });
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
-    expect(await screen.findByText("Accra Homes Ltd")).toBeTruthy();
+    expect(await screen.findByLabelText("Accra Homes Ltd, verified company")).toBeTruthy();
     expect(screen.getByText("LR")).toBeTruthy();
     expect(screen.queryByText("AH")).toBeNull();
     expect(flatten(view.toJSON() as Node)).toContain("https://api.test/uploads/accra-homes.png");

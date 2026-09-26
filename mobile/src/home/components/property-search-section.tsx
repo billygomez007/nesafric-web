@@ -1,27 +1,27 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { useListingCollection } from "@/api/queries";
 import { AppText } from "@/components/ui";
 import type { SearchFilters } from "@/marketplace/filters";
 import { openSearch } from "@/marketplace/navigation";
-import { colors, fonts, radii, spacing } from "@/theme/tokens";
+import { colors, fonts, radii } from "@/theme/tokens";
+import { HOME_GUTTER } from "./layout";
 import { SectionHeading } from "./section-heading";
 
-type IconName = keyof typeof Ionicons.glyphMap;
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 export const SEARCH_CARDS: { id: string; label: string; description: string; icon: IconName; filters: SearchFilters }[] = [
-  { id: "houses", label: "Houses", description: "Homes and villas", icon: "home-outline", filters: { category: "HOUSE" } },
-  { id: "apartments", label: "Apartments", description: "Flats and studios", icon: "business-outline", filters: { category: "APARTMENT" } },
-  { id: "land", label: "Land", description: "Plots and acreage", icon: "map-outline", filters: { category: "LAND" } },
-  { id: "commercial", label: "Commercial", description: "Offices and shops", icon: "storefront-outline", filters: { category: "COMMERCIAL" } },
+  { id: "rent", label: "For rent", description: "Find your next home", icon: "home", filters: { listingType: "RENT" } },
+  { id: "sale", label: "For sale", description: "Own your future", icon: "cart", filters: { listingType: "SALE" } },
+  { id: "land", label: "Land", description: "Invest in land", icon: "land-plots", filters: { category: "LAND" } },
+  { id: "commercial", label: "Commercial", description: "Businesses & offices", icon: "office-building", filters: { category: "COMMERCIAL" } },
 ];
 
-/** "Search properties": four entry points into the Search tab, each with its live listing count. */
+/** "Search properties": four entry points into the Search tab, in two columns. */
 export function PropertySearchSection() {
   return (
     <View style={styles.section}>
-      <SectionHeading title="Search properties" subtitle="Browse verified listings by type" />
+      <SectionHeading title="Search properties" subtitle="Find the right property, in the right location." />
       <View style={styles.grid}>
         {SEARCH_CARDS.map((card) => <PropertyTypeCard key={card.id} {...card} />)}
       </View>
@@ -29,55 +29,46 @@ export function PropertySearchSection() {
   );
 }
 
-export function PropertyTypeCard({ label, description, icon, filters, id }: (typeof SEARCH_CARDS)[number]) {
-  // A one-item page is enough: the API returns the total, so the count is real and cheap.
-  const count = useListingCollection(`count:${id}`, filters, 1);
-  const total = count.data?.pagination.total;
-  const countText = total === undefined ? " " : total === 0 ? "No listings yet" : total === 1 ? "1 property" : `${total.toLocaleString()} properties`;
+export function PropertyTypeCard({ label, description, icon, filters }: (typeof SEARCH_CARDS)[number]) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${label}. ${description}. ${countText.trim()}`}
+      accessibilityLabel={`${label}. ${description}`}
       onPress={() => openSearch(filters)}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
-      <View style={styles.icon}><Ionicons name={icon} size={22} color={colors.forest} /></View>
-      <View style={styles.cardCopy}>
+      <View style={styles.icon}><MaterialCommunityIcons name={icon} size={21} color={colors.forestDeep} /></View>
+      <View style={styles.copy}>
         <AppText style={styles.label} numberOfLines={1}>{label}</AppText>
-        <AppText variant="caption" numberOfLines={1}>{description}</AppText>
+        <AppText style={styles.description} numberOfLines={2}>{description}</AppText>
       </View>
-      <View style={styles.footer}>
-        <AppText style={styles.count} numberOfLines={1}>{countText}</AppText>
-        <Ionicons name="chevron-forward" size={18} color={colors.forest} />
-      </View>
+      <MaterialCommunityIcons name="chevron-right" size={16} color={colors.muted} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { gap: spacing.md },
-  grid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: spacing.xl, gap: spacing.md },
-  // Two equal columns at any width: (100% - one gap) / 2.
+  section: { gap: 10 },
+  grid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: HOME_GUTTER, gap: 10 },
+  // Two equal columns at any phone width: basis just under half, growing to fill the gap.
   card: {
-    flexBasis: "47%",
+    flexBasis: "46%",
     flexGrow: 1,
-    minHeight: 148,
-    padding: spacing.lg,
-    gap: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 52,
+    paddingLeft: 7,
+    paddingRight: 3,
+    paddingVertical: 6,
     borderRadius: radii.panel,
     borderWidth: 1,
     borderColor: colors.hairline,
     backgroundColor: colors.elevated,
-    shadowColor: "#102d2a",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
   },
   pressed: { backgroundColor: colors.surface },
-  icon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.cream },
-  cardCopy: { flex: 1, gap: 2 },
-  label: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 21, color: colors.ink },
-  footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.xs },
-  count: { flex: 1, fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, color: colors.forest },
+  icon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+  copy: { flex: 1, minWidth: 0 },
+  label: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.forestDeep },
+  description: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 14, color: colors.muted },
 });

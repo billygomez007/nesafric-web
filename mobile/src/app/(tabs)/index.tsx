@@ -10,6 +10,7 @@ import { HeroSearch } from "@/home/components/hero-search";
 import { HomeHeader } from "@/home/components/home-header";
 import { PropertySearchSection } from "@/home/components/property-search-section";
 import { TrustedCompanies } from "@/home/components/trusted-companies";
+import { HOME_SECTION_GAP } from "@/home/components/layout";
 import { colors, spacing } from "@/theme/tokens";
 
 /**
@@ -52,5 +53,5 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   // The tab bar sits below this scroll view, so the last card only needs breathing room.
-  content: { paddingTop: spacing.xs, paddingBottom: spacing.xxl + spacing.lg, gap: spacing.xl },
+  content: { paddingTop: spacing.xs, paddingBottom: spacing.xl, gap: HOME_SECTION_GAP },
 });
