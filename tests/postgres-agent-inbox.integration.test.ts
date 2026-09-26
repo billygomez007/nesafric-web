@@ -28,6 +28,7 @@ import { addMarketplaceMember, assignMarketplaceLead, createMarketplaceProfessio
 import { createOrganisation } from "@/modules/organisations/service";
 import { createSessionRecord } from "@/platform/auth/session";
 import { db } from "@/platform/database/client";
+import { verifyListingAsNesAfric } from "./helpers/nesafric-review";
 
 const PASSWORD = "secure-password-123";
 const FORBIDDEN_KEYS = ["idempotencyKeyHash", "idempotencyFingerprint", "passwordHash", "organisationId", "userId", "actorUserId", "tokenHash", "metadata", "tenantOrganisationId", "applicantId", "leaseId"];
@@ -71,7 +72,7 @@ const nativeInput = (title: string) => ({
 async function publishedNativeListing(ownerId: string, professional: { id: string; backingOrganisationId: string }, title: string) {
   const listing = await createMarketplaceNativeListing(ownerId, professional.id, nativeInput(title));
   await submitMarketplaceProfessionalListingVerification(ownerId, professional.id, listing.id, { status: "PENDING", evidence: [{ type: "marketing_authority", privateReference: "private/authority.pdf" }] });
-  await updateListingVerification(ownerId, professional.backingOrganisationId, listing.id, { status: "VERIFIED" });
+  await verifyListingAsNesAfric(listing.id);
   await transitionMarketplaceProfessionalListing(ownerId, professional.id, listing.id, { status: "PENDING_REVIEW" });
   await transitionMarketplaceProfessionalListing(ownerId, professional.id, listing.id, { status: "PUBLISHED" });
   return listing;
