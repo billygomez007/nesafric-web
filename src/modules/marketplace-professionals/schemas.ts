@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeHttpUrl } from "@/platform/validation/url";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const id = z.string().uuid();
@@ -7,9 +8,9 @@ export const createMarketplaceProfessionalSchema = z.object({
   type: z.enum(["INDIVIDUAL_AGENT", "BROKER", "BROKERAGE", "REAL_ESTATE_COMPANY", "DEVELOPER", "PROPERTY_MARKETING_COMPANY", "OTHER"]),
   displayName: text(200),
   legalName: text(300).optional(),
-  logoUrl: z.string().trim().url().max(2000).optional(),
+  logoUrl: safeHttpUrl(2000).optional(),
   description: z.string().trim().max(5000).optional(),
-  websiteUrl: z.string().trim().url().max(2000).optional(),
+  websiteUrl: safeHttpUrl(2000).optional(),
   contactEmail: z.string().trim().email().max(320).optional(),
   contactPhone: text(50).optional(),
   countryCode: z.string().length(2).toUpperCase(),
@@ -25,7 +26,7 @@ export const updateMarketplaceProfessionalSchema = z.object({
    * logo endpoint, never set from an arbitrary external URL. */
   logoUrl: z.null().optional(),
   description: z.string().trim().max(5000).nullable().optional(),
-  websiteUrl: z.string().trim().url().max(2000).nullable().optional(),
+  websiteUrl: safeHttpUrl(2000).nullable().optional(),
   contactEmail: z.string().trim().email().max(320).nullable().optional(),
   contactPhone: text(50).nullable().optional(),
   specialities: z.array(text(80)).max(50).optional(),

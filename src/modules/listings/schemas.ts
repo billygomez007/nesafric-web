@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeHttpUrl } from "@/platform/validation/url";
 
 const id = z.string().uuid();
 const optionalText = (max: number) => z.string().trim().min(1).max(max).nullable().optional();
@@ -23,7 +24,7 @@ export const listingAmenitySchema = z.object({
 
 export const listingMediaSchema = z.object({
   type: z.enum(["PHOTO", "VIDEO", "FLOOR_PLAN"]),
-  publicUrl: z.string().url().max(2_000),
+  publicUrl: safeHttpUrl(2_000),
   storageKey: optionalText(500),
   mimeType: optionalText(120),
   title: optionalText(160),
@@ -165,7 +166,7 @@ export const createMarketplaceAssetSchema = z.object({
   mapLongitude: z.number().min(-180).max(180).nullable().optional(),
   amenities: z.array(z.string().trim().min(1).max(120)).max(200).default([]),
   furnishing: optionalText(100),
-  mediaUrls: z.array(z.string().url().max(2_000)).max(12, "A property listing can contain up to 12 images.").default([]),
+  mediaUrls: z.array(safeHttpUrl(2_000)).max(12, "A property listing can contain up to 12 images.").default([]),
   availableFrom: z.coerce.date(),
   authorityEvidenceReady: z.boolean().default(false),
 }).strict().superRefine((asset, context) => {

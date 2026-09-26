@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeHttpUrl } from "@/platform/validation/url";
 
 const id = z.string().uuid();
 const money = z.string().regex(/^[1-9]\d*$/, "Amount must be a positive integer in minor units.");
@@ -32,7 +33,7 @@ export const paymentIntentSchema = z.object({
   method: z.enum(["BANK_TRANSFER", "MOBILE_MONEY", "CARD"]),
   providerKey: z.string().trim().min(1).max(100),
   idempotencyKey: z.string().trim().min(1).max(200),
-  returnUrl: z.string().url().optional(),
+  returnUrl: safeHttpUrl(2000).optional(),
   metadata: z.record(z.string(), z.string()).optional(),
 });
 

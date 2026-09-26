@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeHttpUrl } from "@/platform/validation/url";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 
@@ -13,7 +14,7 @@ export const createDevelopmentSchema = z.object({
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   amenities: z.array(text(80)).max(50).default([]),
-  mediaUrls: z.array(z.string().trim().url().max(2000)).max(50).default([]),
+  mediaUrls: z.array(safeHttpUrl(2000)).max(50).default([]),
 });
 
 export const updateDevelopmentSchema = z.object({
@@ -21,7 +22,7 @@ export const updateDevelopmentSchema = z.object({
   description: z.string().trim().max(5000).nullable().optional(),
   status: z.enum(["PLANNING", "UNDER_CONSTRUCTION", "COMPLETED", "HANDED_OVER", "ARCHIVED"]).optional(),
   amenities: z.array(text(80)).max(50).optional(),
-  mediaUrls: z.array(z.string().trim().url().max(2000)).max(50).optional(),
+  mediaUrls: z.array(safeHttpUrl(2000)).max(50).optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
 export const createDevelopmentUnitSchema = z.object({

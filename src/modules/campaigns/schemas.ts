@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeHttpUrl } from "@/platform/validation/url";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const id = z.string().uuid();
@@ -12,14 +13,7 @@ export const ALL_PLACEMENTS = ["HOMEPAGE_ANNOUNCEMENT", "MARKETPLACE_PRIMARY", .
  * `javascript:`, `data:`, `vbscript:`, and every other scheme regardless of who authored the
  * campaign (self-service submissions are platform-reviewed, but this is enforced at the schema
  * boundary so it can never depend on review diligence alone). */
-const safeHttpUrl = (max: number) =>
-  z.string().trim().max(max).refine((value) => {
-    try {
-      return ["http:", "https:"].includes(new URL(value).protocol);
-    } catch {
-      return false;
-    }
-  }, "Must be an absolute http:// or https:// URL");
+
 
 export const CAMPAIGN_TYPES = [
   "PROPERTY", "DEVELOPMENT", "REAL_ESTATE_PROFESSIONAL", "REAL_ESTATE_COMPANY",
