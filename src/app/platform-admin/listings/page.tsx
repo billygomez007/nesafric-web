@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { PlatformAdminShell } from "@/components/platform-admin/shell";
+import { buttonClass } from "@/components/ui/button-styles";
 
 type ListingRow = {
   id: string;
@@ -102,6 +104,34 @@ function amount(listing: ListingRow) {
   } catch {
     return `${listing.currencyCode} ${value.toFixed(2)}`;
   }
+}
+
+/**
+ * The next step for a listing, never a publish shortcut: decisions happen on the review screen,
+ * which shows the evidence and runs every publication check.
+ */
+function ListingAction({ listing }: { listing: ListingRow }) {
+  const review = `/platform-admin/verification?listing=${listing.id}`;
+  if (listing.status === "PENDING_REVIEW") {
+    if (listing.verificationStatus === "PENDING") return <Link className={buttonClass("primary", "sm")} href={review}>Review · Verify &amp; publish</Link>;
+    if (listing.verificationStatus === "VERIFIED") return <Link className={buttonClass("primary", "sm")} href={review}>Review · Publish</Link>;
+    return (
+      <div className="grid gap-1.5">
+        <p className="text-xs font-semibold text-danger-ink">Verification not submitted</p>
+        <Link className={buttonClass("secondary", "sm")} href={review}>Review</Link>
+      </div>
+    );
+  }
+  if (listing.status === "PUBLISHED") {
+    return (
+      <a className={buttonClass("tertiary")} href={`/marketplace/properties/${listing.id}`} rel="noopener noreferrer" target="_blank">
+        View live <span aria-hidden="true">↗</span><span className="sr-only">(opens in a new tab)</span>
+      </a>
+    );
+  }
+  if (listing.status === "REJECTED") return <p className="text-xs text-muted">Rejected — waiting for the professional</p>;
+  if (listing.status === "DRAFT" && listing.verificationStatus === "PENDING") return <p className="text-xs text-muted">Returned for changes</p>;
+  return <p className="text-xs text-muted">No action</p>;
 }
 
 function ListingsContent() {
@@ -284,7 +314,7 @@ function ListingsContent() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-hairline bg-white shadow-card">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1250px] text-left text-sm">
+            <table className="w-full min-w-[1400px] text-left text-sm">
               <thead className="border-b border-hairline bg-warm-white text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th className="px-5 py-4">Listing</th>
@@ -295,6 +325,7 @@ function ListingsContent() {
                   <th className="px-5 py-4">Verification</th>
                   <th className="px-5 py-4">Evidence</th>
                   <th className="px-5 py-4">Engagement</th>
+                  <th className="px-5 py-4">Actions</th>
                 </tr>
               </thead>
 
@@ -364,6 +395,10 @@ function ListingsContent() {
                       {listing._count.leads} leads
                       <br />
                       {listing._count.viewingRequests} viewings
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <ListingAction listing={listing} />
                     </td>
                   </tr>
                 ))}

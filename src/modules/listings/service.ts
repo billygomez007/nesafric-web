@@ -1,3 +1,5 @@
+import type { z } from "zod";
+import { listingReadinessProblems } from "./readiness";
 import {
   ListingStatus,
   ListingVerificationStatus,
@@ -28,6 +30,7 @@ import {
   listingManagementListSchema,
   listingTransitionSchema,
   listingVerificationSchema,
+  submitListingForReviewSchema,
   marketplaceLeadListSchema,
   publicListingSearchSchema,
   updateListingSchema,
@@ -588,9 +591,68 @@ export async function updateMarketplaceProfessionalListing(userId: string, marke
 
 export async function transitionMarketplaceProfessionalListing(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  // Review is only reachable through the submit-for-review workflow, so a listing can never enter
+  // review without its authority verification also being with NesAfric.
+  const requested = listingTransitionSchema.safeParse(input);
+  if (requested.success && requested.data.status === "PENDING_REVIEW") {
+    return submitMarketplaceListingForReview(userId, marketplaceProfessionalId, listingId, { note: requested.data.note });
+  }
   const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { backingOrganisationId: true } });
   if (!professional || !await db.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, select: { id: true } })) throw notFound();
   return transitionListing(userId, professional.backingOrganisationId, listingId, input);
+}
+
+export { listingReadinessProblems, type ListingReadinessProblem } from "./readiness";
+
+/**
+ * Review workflows run several lifecycle steps (verification, one or two status transitions, each
+ * re-reading the listing and writing history + audit) in ONE transaction so they stay atomic.
+ * That is more work than Prisma's 5 s interactive-transaction default comfortably allows against
+ * a serverless Postgres, so these composite operations get an explicit, bounded budget. A failure
+ * still rolls the whole operation back.
+ */
+export const REVIEW_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
+
+const SUBMITTABLE_STATUSES: ListingStatus[] = ["DRAFT", "REJECTED"];
+const VERIFICATION_NEEDS_EVIDENCE: ListingVerificationStatus[] = ["UNVERIFIED", "REJECTED", "SUSPENDED"];
+
+/**
+ * The single professional action that sends a listing to NesAfric: validates the listing,
+ * submits (or re-submits) listing-authority verification when it is not already pending or
+ * verified, and moves the listing to PENDING_REVIEW — all in one transaction, so a listing can no
+ * longer sit "in review" while nobody has been asked to verify it. A REJECTED listing goes back
+ * through DRAFT first so the lifecycle history stays truthful.
+ */
+export async function submitMarketplaceListingForReview(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
+  await requireMarketplaceRole(userId, marketplaceProfessionalId, "AGENT");
+  listingId = listingIdSchema.parse(listingId);
+  const data = submitListingForReviewSchema.parse(input ?? {});
+  return db.$transaction(async (tx) => {
+    const listing = await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, include: listingInclude });
+    if (!listing) throw notFound();
+    if (!SUBMITTABLE_STATUSES.includes(listing.status)) {
+      throw new AppError("LISTING_NOT_SUBMITTABLE", 409, "Only draft or returned listings can be submitted for review.");
+    }
+    const problems = listingReadinessProblems(listing);
+    if (problems.length) {
+      throw new AppError("LISTING_INCOMPLETE", 422, `Complete the listing before submitting it: ${problems.map(({ message }) => message).join(" ")}`, { problems });
+    }
+    const organisationId = listing.organisationId;
+    if (VERIFICATION_NEEDS_EVIDENCE.includes(listing.verificationStatus)) {
+      const usable = listing.verificationEvidence.some(({ expiresAt }) => !expiresAt || expiresAt > new Date());
+      if (!data.evidence && !usable) {
+        throw new AppError("VERIFICATION_EVIDENCE_REQUIRED", 422, "Add a reference to the document that authorises you to market this property.");
+      }
+      await applyListingVerification(tx, userId, organisationId, listing.id, {
+        status: "PENDING",
+        evidence: data.evidence ? [{ type: data.evidence.type, privateReference: data.evidence.reference }] : undefined,
+      }, { via: "submit_for_review" });
+    }
+    if (listing.status === "REJECTED") {
+      await applyListingTransition(tx, userId, organisationId, listing.id, { status: "DRAFT", note: "Resubmitted by the professional." }, { via: "submit_for_review" });
+    }
+    return applyListingTransition(tx, userId, organisationId, listing.id, { status: "PENDING_REVIEW", note: data.note }, { via: "submit_for_review" });
+  }, REVIEW_TRANSACTION_OPTIONS);
 }
 
 export async function submitMarketplaceProfessionalListingVerification(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
@@ -803,72 +865,87 @@ export async function transitionListing(userId: string, organisationId: string, 
   const professional = await db.marketplaceProfessional.findUnique({ where: { backingOrganisationId: organisationId }, select: { id: true } });
   if (professional) await requireMarketplaceRole(userId, professional.id, data.status === "PUBLISHED" || data.status === "REJECTED" ? "ADMIN" : "AGENT");
   else await requirePermission(userId, organisationId, data.status === "PUBLISHED" || data.status === "REJECTED" ? PERMISSIONS.listingPublish : PERMISSIONS.listingManage);
-  return db.$transaction(async (tx) => {
-    const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
-    if (!listing) throw notFound();
-    if (!listingTransitions[listing.status].includes(data.status)) {
-      throw new AppError("INVALID_LISTING_TRANSITION", 409, `A ${listing.status} listing cannot transition to ${data.status}.`);
-    }
-    if (data.status === "PENDING_REVIEW" && !listing.media.some(({ type }) => type === "PHOTO")) {
-      throw new AppError("LISTING_PHOTO_REQUIRED", 409, "At least one public photo is required before review.");
-    }
-    if (data.status === "PUBLISHED" && listing.status === "RESERVED" && listing.unitId && listing.propertyId) {
-      const released = await tx.unit.updateMany({
-        where: { id: listing.unitId, propertyId: listing.propertyId, status: "RESERVED", archivedAt: null },
-        data: { status: "AVAILABLE" },
-      });
-      if (released.count !== 1) throw new AppError("ASSET_NOT_AVAILABLE", 409, "The reserved unit is no longer available.");
-    }
-    if (data.status === "PUBLISHED") await ensurePublicationReady(tx, listing);
-    if (data.status === "RENTED" && listing.listingType !== "RENT") {
-      throw new AppError("INVALID_LISTING_TRANSITION", 409, "Only rental listings can be marked rented.");
-    }
-    const now = new Date();
-    if (listing.unitId && listing.propertyId) {
-      if (data.status === "RESERVED") {
-        const changed = await tx.unit.updateMany({
-          where: { id: listing.unitId, propertyId: listing.propertyId, status: "AVAILABLE", archivedAt: null },
-          data: { status: "RESERVED" },
-        });
-        if (changed.count !== 1) throw new AppError("ASSET_NOT_AVAILABLE", 409, "The unit is no longer available.");
-      }
-      if (data.status === "RENTED") {
-        await tx.unit.update({ where: { id: listing.unitId }, data: { status: "OCCUPIED" } });
-      }
-      if (listing.status === "RESERVED" && ["PUBLISHED", "ARCHIVED"].includes(data.status)) {
-        await tx.unit.updateMany({ where: { id: listing.unitId, status: "RESERVED" }, data: { status: "AVAILABLE" } });
-      }
-    }
-    if (listing.marketplaceAssetId) {
-      if (data.status === "RESERVED") await tx.marketplaceAsset.update({ where: { id: listing.marketplaceAssetId }, data: { availabilityStatus: "RESERVED" } });
-      if (data.status === "RENTED") await tx.marketplaceAsset.update({ where: { id: listing.marketplaceAssetId }, data: { availabilityStatus: listing.listingType === "RENT" ? "RENTED" : "SOLD" } });
-      if (listing.status === "RESERVED" && ["PUBLISHED", "ARCHIVED"].includes(data.status)) await tx.marketplaceAsset.updateMany({ where: { id: listing.marketplaceAssetId, availabilityStatus: "RESERVED" }, data: { availabilityStatus: "AVAILABLE" } });
-    }
-    const timestamps = {
-      ...(data.status === "PENDING_REVIEW" ? { submittedAt: now } : {}),
-      ...(data.status === "PUBLISHED" ? { publishedAt: listing.publishedAt ?? now, pausedAt: null } : {}),
-      ...(data.status === "PAUSED" ? { pausedAt: now } : {}),
-      ...(data.status === "RESERVED" ? { reservedAt: now } : {}),
-      ...(data.status === "RENTED" ? { rentedAt: now } : {}),
-      ...(data.status === "ARCHIVED" ? { archivedAt: now } : {}),
-      ...(data.status === "REJECTED" ? { rejectedAt: now } : {}),
-    };
-    const updated = await tx.listing.update({
-      where: { id: listing.id },
-      data: {
-        status: data.status,
-        ...timestamps,
-        statusHistory: {
-          create: { actorUserId: userId, fromStatus: listing.status, toStatus: data.status, note: data.note },
-        },
-      },
-      include: listingInclude,
+  return db.$transaction((tx) => applyListingTransition(tx, userId, organisationId, listingId, data));
+}
+
+/**
+ * The lifecycle transition itself, inside a caller's transaction. Callers are responsible for
+ * authorisation; every lifecycle rule (allowed transitions, photo requirement, publication
+ * readiness, inventory side effects, history and events) lives here so composite workflows —
+ * "submit for review", "verify & publish" — reuse it rather than re-implementing it.
+ */
+export async function applyListingTransition(
+  tx: Tx,
+  userId: string,
+  organisationId: string,
+  listingId: string,
+  data: z.infer<typeof listingTransitionSchema>,
+  eventPayload: Record<string, unknown> = {},
+) {
+  const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
+  if (!listing) throw notFound();
+  if (!listingTransitions[listing.status].includes(data.status)) {
+    throw new AppError("INVALID_LISTING_TRANSITION", 409, `A ${listing.status} listing cannot transition to ${data.status}.`);
+  }
+  if (data.status === "PENDING_REVIEW" && !listing.media.some(({ type }) => type === "PHOTO")) {
+    throw new AppError("LISTING_PHOTO_REQUIRED", 409, "At least one public photo is required before review.");
+  }
+  if (data.status === "PUBLISHED" && listing.status === "RESERVED" && listing.unitId && listing.propertyId) {
+    const released = await tx.unit.updateMany({
+      where: { id: listing.unitId, propertyId: listing.propertyId, status: "RESERVED", archivedAt: null },
+      data: { status: "AVAILABLE" },
     });
-    const payload = { fromStatus: listing.status, toStatus: data.status, propertyId: listing.propertyId, unitId: listing.unitId };
-    await record(tx, organisationId, userId, "listing.status_changed", "listing", listing.id, payload);
-    await record(tx, organisationId, userId, `listing.${data.status.toLowerCase()}`, "listing", listing.id, payload);
-    return updated;
+    if (released.count !== 1) throw new AppError("ASSET_NOT_AVAILABLE", 409, "The reserved unit is no longer available.");
+  }
+  if (data.status === "PUBLISHED") await ensurePublicationReady(tx, listing);
+  if (data.status === "RENTED" && listing.listingType !== "RENT") {
+    throw new AppError("INVALID_LISTING_TRANSITION", 409, "Only rental listings can be marked rented.");
+  }
+  const now = new Date();
+  if (listing.unitId && listing.propertyId) {
+    if (data.status === "RESERVED") {
+      const changed = await tx.unit.updateMany({
+        where: { id: listing.unitId, propertyId: listing.propertyId, status: "AVAILABLE", archivedAt: null },
+        data: { status: "RESERVED" },
+      });
+      if (changed.count !== 1) throw new AppError("ASSET_NOT_AVAILABLE", 409, "The unit is no longer available.");
+    }
+    if (data.status === "RENTED") {
+      await tx.unit.update({ where: { id: listing.unitId }, data: { status: "OCCUPIED" } });
+    }
+    if (listing.status === "RESERVED" && ["PUBLISHED", "ARCHIVED"].includes(data.status)) {
+      await tx.unit.updateMany({ where: { id: listing.unitId, status: "RESERVED" }, data: { status: "AVAILABLE" } });
+    }
+  }
+  if (listing.marketplaceAssetId) {
+    if (data.status === "RESERVED") await tx.marketplaceAsset.update({ where: { id: listing.marketplaceAssetId }, data: { availabilityStatus: "RESERVED" } });
+    if (data.status === "RENTED") await tx.marketplaceAsset.update({ where: { id: listing.marketplaceAssetId }, data: { availabilityStatus: listing.listingType === "RENT" ? "RENTED" : "SOLD" } });
+    if (listing.status === "RESERVED" && ["PUBLISHED", "ARCHIVED"].includes(data.status)) await tx.marketplaceAsset.updateMany({ where: { id: listing.marketplaceAssetId, availabilityStatus: "RESERVED" }, data: { availabilityStatus: "AVAILABLE" } });
+  }
+  const timestamps = {
+    ...(data.status === "PENDING_REVIEW" ? { submittedAt: now } : {}),
+    ...(data.status === "PUBLISHED" ? { publishedAt: listing.publishedAt ?? now, pausedAt: null } : {}),
+    ...(data.status === "PAUSED" ? { pausedAt: now } : {}),
+    ...(data.status === "RESERVED" ? { reservedAt: now } : {}),
+    ...(data.status === "RENTED" ? { rentedAt: now } : {}),
+    ...(data.status === "ARCHIVED" ? { archivedAt: now } : {}),
+    ...(data.status === "REJECTED" ? { rejectedAt: now } : {}),
+  };
+  const updated = await tx.listing.update({
+    where: { id: listing.id },
+    data: {
+      status: data.status,
+      ...timestamps,
+      statusHistory: {
+        create: { actorUserId: userId, fromStatus: listing.status, toStatus: data.status, note: data.note },
+      },
+    },
+    include: listingInclude,
   });
+  const payload = { fromStatus: listing.status, toStatus: data.status, propertyId: listing.propertyId, unitId: listing.unitId, ...(data.note ? { note: data.note } : {}), ...eventPayload };
+  await record(tx, organisationId, userId, "listing.status_changed", "listing", listing.id, payload);
+  await record(tx, organisationId, userId, `listing.${data.status.toLowerCase()}`, "listing", listing.id, payload);
+  return updated;
 }
 
 const verificationTransitions: Record<ListingVerificationStatus, ListingVerificationStatus[]> = {
@@ -890,73 +967,85 @@ export async function updateListingVerification(
   const professional = await db.marketplaceProfessional.findUnique({ where: { backingOrganisationId: organisationId }, select: { id: true } });
   if (professional && data.status === "PENDING") await requireMarketplaceMember(userId, professional.id);
   else await requirePermission(userId, organisationId, data.status === "PENDING" ? PERMISSIONS.listingManage : PERMISSIONS.listingVerify);
-  return db.$transaction(async (tx) => {
-    const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
-    if (!listing) throw notFound();
-    if (!verificationTransitions[listing.verificationStatus].includes(data.status)) {
-      throw new AppError("INVALID_VERIFICATION_TRANSITION", 409, "The listing verification cannot transition to that status.");
+  return db.$transaction((tx) => applyListingVerification(tx, userId, organisationId, listingId, data));
+}
+
+/** The verification change itself, inside a caller's transaction (callers authorise). */
+export async function applyListingVerification(
+  tx: Tx,
+  userId: string,
+  organisationId: string,
+  listingId: string,
+  data: z.infer<typeof listingVerificationSchema>,
+  eventPayload: Record<string, unknown> = {},
+) {
+  const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
+  if (!listing) throw notFound();
+  if (!verificationTransitions[listing.verificationStatus].includes(data.status)) {
+    throw new AppError("INVALID_VERIFICATION_TRANSITION", 409, "The listing verification cannot transition to that status.");
+  }
+  if (data.status === "PENDING") {
+    const newEvidence = data.evidence ?? [];
+    const currentUsable = listing.verificationEvidence.filter(({ expiresAt }) => !expiresAt || expiresAt > new Date()).length;
+    if (!newEvidence.length && !currentUsable) {
+      throw new AppError("VERIFICATION_EVIDENCE_REQUIRED", 422, "Verification evidence metadata is required.");
     }
-    if (data.status === "PENDING") {
-      const newEvidence = data.evidence ?? [];
-      const currentUsable = listing.verificationEvidence.filter(({ expiresAt }) => !expiresAt || expiresAt > new Date()).length;
-      if (!newEvidence.length && !currentUsable) {
-        throw new AppError("VERIFICATION_EVIDENCE_REQUIRED", 422, "Verification evidence metadata is required.");
-      }
-      if (newEvidence.length) {
-        await tx.listingVerificationEvidence.createMany({
-          data: newEvidence.map((evidence) => ({
-            listingId,
-            submittedByUserId: userId,
-            type: evidence.type,
-            privateReference: evidence.privateReference,
-            metadata: evidence.metadata ? json(evidence.metadata) : undefined,
-            expiresAt: evidence.expiresAt,
-          })),
-        });
-      }
-    }
-    const pause = data.status === "SUSPENDED" && listing.status === "PUBLISHED";
-    const now = new Date();
-    const updated = await tx.listing.update({
-      where: { id: listing.id },
-      data: {
-        verificationStatus: data.status,
-        evidenceReady: data.status === "PENDING" || data.status === "VERIFIED",
-        verificationHistory: {
-          create: {
-            actorUserId: userId,
-            fromStatus: listing.verificationStatus,
-            toStatus: data.status,
-            note: data.note,
-          },
-        },
-        ...(pause ? {
-          status: "PAUSED",
-          pausedAt: now,
-          statusHistory: {
-            create: { actorUserId: userId, fromStatus: "PUBLISHED", toStatus: "PAUSED", note: "Verification suspended." },
-          },
-        } : {}),
-      },
-      include: listingInclude,
-    });
-    const eventName = data.status === "PENDING"
-      ? "listing.verification_submitted"
-      : `listing.verification_${data.status.toLowerCase()}`;
-    await record(tx, organisationId, userId, eventName, "listing", listing.id, {
-      fromStatus: listing.verificationStatus,
-      toStatus: data.status,
-      evidenceReady: updated.evidenceReady,
-    });
-    if (pause) {
-      await record(tx, organisationId, userId, "listing.status_changed", "listing", listing.id, {
-        fromStatus: "PUBLISHED",
-        toStatus: "PAUSED",
-        reason: "verification_suspended",
+    if (newEvidence.length) {
+      await tx.listingVerificationEvidence.createMany({
+        data: newEvidence.map((evidence) => ({
+          listingId,
+          submittedByUserId: userId,
+          type: evidence.type,
+          privateReference: evidence.privateReference,
+          metadata: evidence.metadata ? json(evidence.metadata) : undefined,
+          expiresAt: evidence.expiresAt,
+        })),
       });
     }
-    return updated;
+  }
+  const pause = data.status === "SUSPENDED" && listing.status === "PUBLISHED";
+  const now = new Date();
+  const updated = await tx.listing.update({
+    where: { id: listing.id },
+    data: {
+      verificationStatus: data.status,
+      evidenceReady: data.status === "PENDING" || data.status === "VERIFIED",
+      verificationHistory: {
+        create: {
+          actorUserId: userId,
+          fromStatus: listing.verificationStatus,
+          toStatus: data.status,
+          note: data.note,
+        },
+      },
+      ...(pause ? {
+        status: "PAUSED",
+        pausedAt: now,
+        statusHistory: {
+          create: { actorUserId: userId, fromStatus: "PUBLISHED", toStatus: "PAUSED", note: "Verification suspended." },
+        },
+      } : {}),
+    },
+    include: listingInclude,
   });
+  const eventName = data.status === "PENDING"
+    ? "listing.verification_submitted"
+    : `listing.verification_${data.status.toLowerCase()}`;
+  await record(tx, organisationId, userId, eventName, "listing", listing.id, {
+    fromStatus: listing.verificationStatus,
+    toStatus: data.status,
+    evidenceReady: updated.evidenceReady,
+    ...(data.note ? { note: data.note } : {}),
+    ...eventPayload,
+  });
+  if (pause) {
+    await record(tx, organisationId, userId, "listing.status_changed", "listing", listing.id, {
+      fromStatus: "PUBLISHED",
+      toStatus: "PAUSED",
+      reason: "verification_suspended",
+    });
+  }
+  return updated;
 }
 
 type ListingSearchRow = { id: string; total: bigint };
