@@ -1049,6 +1049,19 @@ export async function applyListingVerification(
   return updated;
 }
 
+/** A published, verified listing is public only while its marketplace professional (if any) is an
+ * active, non-archived account: suspending or archiving a professional takes all of its listings
+ * off the marketplace — search, detail, sitemap, enquiries and viewings — without touching the
+ * listings themselves. PropertyOS-owned listings (no professional) are unaffected. */
+export const PUBLIC_LISTING_WHERE = {
+  status: "PUBLISHED",
+  verificationStatus: "VERIFIED",
+  OR: [
+    { marketplaceProfessionalId: null },
+    { marketplaceProfessional: { status: "ACTIVE", archivedAt: null } },
+  ],
+} satisfies Prisma.ListingWhereInput;
+
 type ListingSearchRow = { id: string; total: bigint };
 
 function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.parse>) {
@@ -1057,6 +1070,12 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   const conditions: Prisma.Sql[] = [
     Prisma.sql`l."status" = 'PUBLISHED'::"ListingStatus"`,
     Prisma.sql`l."verificationStatus" = 'VERIFIED'::"ListingVerificationStatus"`,
+    Prisma.sql`(l."marketplaceProfessionalId" IS NULL OR EXISTS (
+      SELECT 1 FROM "MarketplaceProfessional" mp
+      WHERE mp."id" = l."marketplaceProfessionalId"
+        AND mp."status" = 'ACTIVE'::"MarketplaceProfessionalStatus"
+        AND mp."archivedAt" IS NULL
+    ))`,
     Prisma.sql`(
       (l."marketplaceAssetId" IS NOT NULL
         AND ma."archivedAt" IS NULL
@@ -1251,7 +1270,7 @@ export async function searchPublicListings(query: unknown = {}) {
 export async function getPublicListing(listingId: string) {
   listingId = listingIdSchema.parse(listingId);
   const listing = await db.listing.findFirst({
-    where: { id: listingId, status: "PUBLISHED", verificationStatus: "VERIFIED" },
+    where: { id: listingId, ...PUBLIC_LISTING_WHERE },
     include: publicListingInclude,
   });
   if (!listing || !await isAssetAvailable(db, listing)) throw notFound();
@@ -1265,7 +1284,7 @@ const SITEMAP_LISTING_LIMIT = 15_000;
 
 export async function listPublicListingsForSitemap(): Promise<Array<{ id: string; updatedAt: Date }>> {
   const candidates = await db.listing.findMany({
-    where: { status: "PUBLISHED", verificationStatus: "VERIFIED" },
+    where: PUBLIC_LISTING_WHERE,
     select: { id: true, updatedAt: true, propertyId: true, unitId: true, marketplaceAssetId: true },
     orderBy: { updatedAt: "desc" },
     take: SITEMAP_LISTING_LIMIT,
@@ -1303,7 +1322,7 @@ export async function createMarketplaceLead(listingId: string, userId: string | 
   const data = createMarketplaceLeadSchema.parse(input);
   const result = await db.$transaction(async (tx) => {
     const listing = await tx.listing.findFirst({
-      where: { id: listingId, status: "PUBLISHED", verificationStatus: "VERIFIED", enquiryEnabled: true },
+      where: { id: listingId, ...PUBLIC_LISTING_WHERE, enquiryEnabled: true },
     });
     if (!listing || !await isAssetAvailable(tx, listing)) throw notFound();
     const lead = await tx.marketplaceLead.create({
@@ -1490,7 +1509,7 @@ export async function createViewingRequest(
   }
   const result = await db.$transaction(async (tx) => {
     const listing = await tx.listing.findFirst({
-      where: { id: listingId, status: "PUBLISHED", verificationStatus: "VERIFIED", enquiryEnabled: true },
+      where: { id: listingId, ...PUBLIC_LISTING_WHERE, enquiryEnabled: true },
     });
     if (!listing || !await isAssetAvailable(tx, listing)) throw notFound();
     const lead = await tx.marketplaceLead.findFirst({

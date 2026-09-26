@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 import { createOrganisation, listUserOrganisations } from "@/modules/organisations/service";
-import { updateMarketplaceProfessionalLead } from "@/modules/listings/service";
+import { PUBLIC_LISTING_WHERE, updateMarketplaceProfessionalLead } from "@/modules/listings/service";
 import { requirePlatformPrincipal, PLATFORM_PERMISSIONS } from "@/platform/platform-admin/auth";
 import {
   createMarketplaceProfessionalSchema,
@@ -367,9 +367,9 @@ export async function getPublicMarketplaceProfessionalProfile(slug: string) {
       specialities: true, servicesOffered: true, serviceAreas: true, verificationStatus: true, createdAt: true,
       members: { where: { status: "ACTIVE" }, select: { role: true, user: { select: { displayName: true } } }, orderBy: { createdAt: "asc" }, take: 50 },
       developments: { where: { archivedAt: null }, select: { id: true, name: true, status: true, city: true, region: true, countryCode: true }, take: 50, orderBy: { createdAt: "desc" } },
-      _count: { select: { listings: { where: { status: "PUBLISHED", archivedAt: null } } } },
+      _count: { select: { listings: { where: { ...PUBLIC_LISTING_WHERE, archivedAt: null } } } },
       listings: {
-        where: { status: "PUBLISHED", archivedAt: null },
+        where: { ...PUBLIC_LISTING_WHERE, archivedAt: null },
         select: { id: true, title: true, listingType: true, city: true, rentAmountMinor: true, askingAmountMinor: true, currencyCode: true, listingAuthority: true },
         take: 24, orderBy: { updatedAt: "desc" },
       },
@@ -399,7 +399,7 @@ export async function searchMarketplaceDirectory(input: unknown) {
       select: {
         slug: true, displayName: true, type: true, logoUrl: true, description: true, verificationStatus: true,
         countryCode: true, serviceAreas: true, specialities: true,
-        _count: { select: { listings: { where: { status: "PUBLISHED", archivedAt: null } }, developments: true } },
+        _count: { select: { listings: { where: { ...PUBLIC_LISTING_WHERE, archivedAt: null } }, developments: true } },
       },
       // Not `orderBy: verificationStatus` — Postgres enum DESC sorts by declaration order
       // (UNVERIFIED, PENDING, VERIFIED, REJECTED, SUSPENDED), which would rank a SUSPENDED

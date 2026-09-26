@@ -9,6 +9,8 @@ import {
   updateListingVerification, updateMarketplaceListingAttribution,
 } from "@/modules/listings/service";
 import { listUserOrganisations } from "@/modules/organisations/service";
+import { getPublicMarketplaceProfessionalProfile, searchMarketplaceDirectory } from "@/modules/marketplace-professionals/service";
+import { listPublicListingsForSitemap } from "@/modules/listings/service";
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner" CASCADE');
@@ -49,6 +51,36 @@ describe("PostgreSQL standalone marketplace listings", () => {
     expect(listing.organisationId).toBe(professional.backingOrganisationId);
     expect(await listUserOrganisations(owner.id)).toEqual([]);
     expect(await db.organisationSubscription.findUnique({ where: { organisationId: professional.backingOrganisationId } })).toBeNull();
+  });
+
+  it("takes a suspended or archived professional's published listings off the public marketplace", async () => {
+    const owner = await registerUser({ displayName: "Suspend Owner", email: "suspend-owner@example.com", password: "secure-password-123" });
+    const professional = await createMarketplaceProfessional(owner.id, { type: "BROKERAGE", displayName: "Suspendable Brokerage", countryCode: "GH" });
+    const listing = await createMarketplaceNativeListing(owner.id, professional.id, standaloneInput());
+    await submitMarketplaceProfessionalListingVerification(owner.id, professional.id, listing.id, { status: "PENDING", evidence: [{ type: "marketing_authority", privateReference: "private/auth.pdf" }] });
+    await updateListingVerification(owner.id, professional.backingOrganisationId, listing.id, { status: "VERIFIED" });
+    await transitionMarketplaceProfessionalListing(owner.id, professional.id, listing.id, { status: "PENDING_REVIEW" });
+    await transitionMarketplaceProfessionalListing(owner.id, professional.id, listing.id, { status: "PUBLISHED" });
+
+    const visible = async () => ({
+      search: (await searchPublicListings({ country: "GH" })).items.map((item) => item.id),
+      sitemap: (await listPublicListingsForSitemap()).map((item) => item.id),
+    });
+    expect(await visible()).toEqual({ search: [listing.id], sitemap: [listing.id] });
+    expect((await getPublicMarketplaceProfessionalProfile(professional.slug)).listings.map((item) => item.id)).toEqual([listing.id]);
+
+    await db.marketplaceProfessional.update({ where: { id: professional.id }, data: { status: "SUSPENDED" } });
+    expect(await visible()).toEqual({ search: [], sitemap: [] });
+    await expect(getPublicListing(listing.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(createMarketplaceLead(listing.id, undefined, { name: "Buyer", email: "b@example.com" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    await db.marketplaceProfessional.update({ where: { id: professional.id }, data: { status: "ACTIVE", archivedAt: new Date() } });
+    expect(await visible()).toEqual({ search: [], sitemap: [] });
+    expect((await searchMarketplaceDirectory({})).items).toEqual([]);
+
+    await db.marketplaceProfessional.update({ where: { id: professional.id }, data: { archivedAt: null } });
+    expect(await visible()).toEqual({ search: [listing.id], sitemap: [listing.id] });
+    expect((await getPublicListing(listing.id)).listing.id).toBe(listing.id);
   });
 
   it("publishes developer inventory into public search and supports leads and viewings", async () => {

@@ -303,6 +303,9 @@ function eligibleCampaignWhere(placement: $Enums.CampaignPlacement, countryCode:
       // independently of verification status (a platform-wide suspension can apply to an
       // otherwise-VERIFIED provider).
       { OR: [{ advertiserServiceProviderId: null }, { advertiserProvider: { is: { verificationStatus: "VERIFIED" as const, suspendedAt: null } } }] },
+      // A suspended or archived marketplace professional's self-service campaigns stop showing,
+      // the same way its listings leave the public marketplace.
+      { OR: [{ advertiserMarketplaceProfessionalId: null }, { advertiser: { is: { status: "ACTIVE" as const, archivedAt: null } } }] },
     ],
   };
 }

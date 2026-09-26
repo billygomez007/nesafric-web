@@ -110,6 +110,12 @@ describe("PostgreSQL Phase 21B campaigns & promotions", () => {
     expect(bannerAfterApproval).not.toHaveProperty("impressionCount");
     expect(bannerAfterApproval).not.toHaveProperty("status");
 
+    // Suspending the advertiser's marketplace account takes its campaign down; reactivating restores it.
+    await db.marketplaceProfessional.update({ where: { id: professional.id }, data: { status: "SUSPENDED" } });
+    expect(await getPublicBanner({ placement: "SEARCH_FEATURED" })).toBeNull();
+    await db.marketplaceProfessional.update({ where: { id: professional.id }, data: { status: "ACTIVE" } });
+    expect((await getPublicBanner({ placement: "SEARCH_FEATURED" }))?.id).toBe(draft.id);
+
     const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const farFuture = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const scheduled = await scheduleCampaign(principal, draft.id, { startAt: future, endAt: farFuture });

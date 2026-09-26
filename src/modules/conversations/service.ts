@@ -5,7 +5,7 @@ import { PERMISSIONS, requirePermission } from "@/platform/authorization/permiss
 import { AppError, notFound } from "@/platform/errors";
 import { enqueueJob } from "@/platform/jobs/runner";
 import { hashSessionToken } from "@/platform/auth/session";
-import { createMarketplaceLead, createViewingRequest } from "@/modules/listings/service";
+import { createMarketplaceLead, createViewingRequest, PUBLIC_LISTING_WHERE } from "@/modules/listings/service";
 import { createAIEmployeeHandoff, receptionistMaintenanceIntake, selectReceptionistForProperty } from "@/modules/ai-employees/service";
 import { canAccessPrivateData, resolveTenantIdentity } from "./identity";
 import { getChannelAdapter, type ChannelAdapters } from "./channels/registry";
@@ -69,7 +69,7 @@ async function enforceInboundRateLimit(organisationId: string, conversationId: s
 async function resolveWebChatContext(input: { listingId?: string; propertyId?: string }) {
   if (input.listingId) {
     const listing = await db.listing.findFirst({
-      where: { id: input.listingId, status: "PUBLISHED", verificationStatus: "VERIFIED" },
+      where: { id: input.listingId, ...PUBLIC_LISTING_WHERE },
       select: { id: true, organisationId: true, propertyId: true, title: true },
     });
     if (!listing) throw notFound();
