@@ -1257,6 +1257,25 @@ export async function getPublicListing(listingId: string) {
   return { listing: publicProjection(listing), meta: { rateLimit: PUBLIC_LISTING_RATE_LIMIT } };
 }
 
+/**
+ * Public projections for the given listing ids, applying exactly the eligibility rules of
+ * `getPublicListing` (PUBLISHED, VERIFIED and the underlying asset still available). Ids that are
+ * not eligible are simply absent from the result. Used by saved listings.
+ */
+export async function getPublicListingsByIds(listingIds: string[]) {
+  const ids = [...new Set(listingIds)];
+  const result = new Map<string, ReturnType<typeof publicProjection>>();
+  if (!ids.length) return result;
+  const listings = await db.listing.findMany({
+    where: { id: { in: ids }, status: "PUBLISHED", verificationStatus: "VERIFIED" },
+    include: publicListingInclude,
+  });
+  for (const listing of listings) {
+    if (await isAssetAvailable(db, listing)) result.set(listing.id, publicProjection(listing));
+  }
+  return result;
+}
+
 /// Sitemap generation (SEO). Cap kept comfortably under Google's 50,000-URL-per-sitemap limit —
 /// once this category alone approaches it, switch `app/sitemap.ts` to `generateSitemaps` and shard
 /// by this same eligibility query instead of raising the cap.
