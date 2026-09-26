@@ -5,9 +5,14 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 /**
  * The public homepage must only surface credible data: verified professionals for the company
  * carousel and trust counts, and service categories only when a public provider offers them.
+ *
+ * The trusted-companies carousel is composed by the homepage itself (`src/app/page.tsx`), directly
+ * above `MarketplaceHome`, so the trust checks render the real homepage to cover both.
  */
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/" }));
+vi.mock("@/components/marketing/site-nav", () => ({ SiteNav: () => <nav data-section="nav" /> }));
+vi.mock("@/components/marketing/site-footer", () => ({ SiteFooter: () => <footer data-section="footer" /> }));
 
 const CATEGORIES = [
   { id: "c1", key: "plumbing", name: "Plumbing" },
@@ -33,6 +38,11 @@ function mockApi({ providers, directory }: Routes) {
 const directoryUrls = () => vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost")).filter((url) => url.pathname === "/api/public/marketplace-directory");
 
 const { MarketplaceHome } = await import("@/components/marketplace-home/marketplace-home");
+const { default: Home } = await import("@/app/page");
+
+/** The carousel asks for a page of companies; the trust counts ask for totals only (pageSize=1). */
+const carouselUrls = () => directoryUrls().filter((url) => url.searchParams.get("pageSize") === "16");
+const countUrls = () => directoryUrls().filter((url) => url.searchParams.get("pageSize") === "1");
 
 beforeEach(() => {
   window.matchMedia = vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
@@ -42,17 +52,20 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("marketplace homepage data quality", () => {
   it("requests only verified professionals for the carousel and every homepage count", async () => {
     mockApi({ providers: { items: [], pagination: { total: 0 } } });
-    render(<MarketplaceHome />);
+    render(<Home />);
     await waitFor(() => expect(directoryUrls().length).toBeGreaterThanOrEqual(5));
+    // One company carousel plus the four professional-type counts, and nothing unverified.
+    expect(carouselUrls()).toHaveLength(1);
+    expect(countUrls()).toHaveLength(4);
     for (const url of directoryUrls()) expect(url.searchParams.get("verifiedOnly")).toBe("true");
   });
 
   it("keeps the company section with an honest empty state and omits counts when no professional is verified", async () => {
     mockApi({ providers: { items: [], pagination: { total: 0 } }, directory: () => ({ items: [], total: 0 }) });
-    render(<MarketplaceHome />);
+    render(<Home />);
     await screen.findByText("Agents, brokerages and developers");
     await waitFor(() => expect(directoryUrls().length).toBeGreaterThanOrEqual(5));
-    expect(screen.getByText("Companies and professionals on NesAfric")).toBeTruthy();
+    expect(screen.getByText("Trusted by leading companies")).toBeTruthy();
     expect(await screen.findByText("Verified companies will appear here")).toBeTruthy();
     expect(screen.queryByText(/^\d+ verified$/)).toBeNull();
   });
