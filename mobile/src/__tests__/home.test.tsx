@@ -42,7 +42,7 @@ function mockApi({ banners = [] as CampaignBanner[], companies = [] as unknown[]
     calls.push({ url, method: init.method ?? "GET" });
     if (url.pathname === "/api/public/campaigns") return json(200, { banners });
     if (url.pathname.startsWith("/api/public/campaigns/")) return json(200, { recorded: true });
-    if (url.pathname === "/api/public/marketplace-directory") return json(200, { items: companies, total: companies.length, page: 1, pageSize: 12 });
+    if (url.pathname === "/api/public/homepage-companies") return json(200, { items: companies });
     if (url.pathname === "/api/public/listings") {
       if (listingsStatus >= 400) return json(listingsStatus, { error: { code: "INTERNAL", message: "Unavailable" } });
       const items = search(url);
@@ -285,7 +285,9 @@ describe("marketplace home", () => {
     expect(flatten(view.toJSON() as Node)).toContain("https://api.test/uploads/accra-homes.png");
     expect(screen.getByLabelText("Verified companies").props.horizontal).toBe(true);
     expect(screen.queryByTestId("company-rail-placeholder")).toBeNull();
-    expect(calls.find((call) => call.url.pathname === "/api/public/marketplace-directory")?.url.searchParams.get("verifiedOnly")).toBe("true");
+    // The curated Homepage Media rail, not the raw directory (which also lists agents and brokers).
+    expect(calls.some((call) => call.url.pathname === "/api/public/homepage-companies")).toBe(true);
+    expect(calls.some((call) => call.url.pathname === "/api/public/marketplace-directory")).toBe(false);
     fireEvent.press(screen.getByLabelText("Accra Homes Ltd, verified company"));
     expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith("https://api.test/marketplace/professionals/accra-homes");
   });

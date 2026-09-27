@@ -12,7 +12,7 @@ export type CampaignBanner = {
   mobileMediaUrl: string | null;
 };
 
-/** Verified professional as returned by the public directory (only the fields the app shows). */
+/** A company in the homepage trusted-company rail (`GET /api/public/homepage-companies`). */
 export type DirectoryCompany = {
   slug: string;
   displayName: string;
@@ -31,6 +31,10 @@ export const recordCampaignImpression = (api: ApiClient, campaignId: string) =>
 export const recordCampaignClick = (api: ApiClient, campaignId: string) =>
   api.request<unknown>(`/api/public/campaigns/${encodeURIComponent(campaignId)}/click`, { method: "POST" });
 
-/** Verified companies only — the directory never lists unverified profiles here. */
-export const getVerifiedCompanies = (api: ApiClient, pageSize = 12) =>
-  api.request<{ items: DirectoryCompany[]; total: number }>("/api/public/marketplace-directory", { query: { verifiedOnly: "true", page: 1, pageSize } });
+/**
+ * The same curated rail as the website homepage: companies a NesAfric admin published in Homepage
+ * Media, in their order. The server returns only active, verified companies of a company type
+ * (never individual agents or brokers), so an admin unpublishing one removes it here too.
+ */
+export const getVerifiedCompanies = (api: ApiClient) =>
+  api.request<{ items: DirectoryCompany[] }>("/api/public/homepage-companies");
