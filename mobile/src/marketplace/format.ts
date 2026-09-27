@@ -1,7 +1,7 @@
 import type { ListingMedia, PublicListing } from "@/api/types";
+import { priceUnitSuffix } from "./price-units";
 
 const CURRENCY_SYMBOLS: Record<string, string> = { GHS: "GH₵", USD: "US$", NGN: "₦", KES: "KSh ", EUR: "€", GBP: "£" };
-const FREQUENCY_SUFFIX: Record<string, string> = { MONTHLY: "/month", QUARTERLY: "/quarter", ANNUAL: "/year" };
 
 function groupThousands(integer: string) {
   return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -16,13 +16,13 @@ export function formatMoney(amountMinor: string, currencyCode: string) {
   return `${symbol}${major}${minor === "00" ? "" : `.${minor}`}`;
 }
 
-/** "GH₵8,500/month" for rentals, "US$250,000" for sales; null when the listing has no price. */
+/** "GH₵8,500/month" or "GH₵350/day" for rentals, "US$250,000" or "GH₵1,200/m²" for sales; null
+ * when the listing has no price. The unit is the pricing basis, never the property's area. */
 export function formatListingPrice(listing: Pick<PublicListing, "listingType" | "pricing">) {
   const { pricing } = listing;
   const amount = listing.listingType === "RENT" ? pricing.rentAmountMinor : pricing.askingAmountMinor;
   if (!amount) return null;
-  const suffix = listing.listingType === "RENT" && pricing.frequency ? FREQUENCY_SUFFIX[pricing.frequency] ?? "" : "";
-  return `${formatMoney(amount, pricing.currencyCode)}${suffix}`;
+  return `${formatMoney(amount, pricing.currencyCode)}${priceUnitSuffix(listing.listingType, pricing.frequency)}`;
 }
 
 export function formatLocation(location: PublicListing["location"]) {

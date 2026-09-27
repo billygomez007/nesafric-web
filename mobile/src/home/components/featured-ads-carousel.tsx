@@ -8,7 +8,6 @@ import { FlatList, Pressable, StyleSheet, useWindowDimensions, View, type Native
 import { recordCampaignClick, recordCampaignImpression } from "@/api/home";
 import { useFeaturedCampaigns } from "@/api/home-queries";
 import { useApi } from "@/api/provider";
-import { useListingCollection } from "@/api/queries";
 import { AppText } from "@/components/ui";
 import { buildFeaturedSlides, type FeaturedSlide, type SlideTarget } from "@/home/featured";
 import { openSearch } from "@/marketplace/navigation";
@@ -25,24 +24,23 @@ export function openSlideTarget(target: SlideTarget) {
   else void WebBrowser.openBrowserAsync(target.url);
 }
 
-/** Wide featured carousel: sponsored campaigns, else the newest real listings (see `buildFeaturedSlides`). */
+/**
+ * Homepage advertising carousel: eligible campaigns only (see `buildFeaturedSlides`). Hidden when
+ * there are none or they can't be loaded — never filled with property listings.
+ */
 export function FeaturedAdsCarousel() {
   const { api, apiUrl } = useApi();
   const { width } = useWindowDimensions();
   const campaigns = useFeaturedCampaigns();
-  const newest = useListingCollection("newest", {});
   const [index, setIndex] = useState(0);
   const list = useRef<FlatList<FeaturedSlide>>(null);
 
   const cardWidth = Math.min(width - CARD_GUTTER * 2, 560);
   const cardHeight = Math.round(Math.min(Math.max(cardWidth * 0.55, 196), 300));
   const interval = cardWidth + GAP;
-  const pending = campaigns.isPending || (newest.isPending && !campaigns.data?.banners.length);
+  const pending = campaigns.isPending;
 
-  const slides = useMemo(
-    () => buildFeaturedSlides(campaigns.data?.banners ?? [], newest.data?.items ?? [], apiUrl),
-    [campaigns.data, newest.data, apiUrl],
-  );
+  const slides = useMemo(() => buildFeaturedSlides(campaigns.data?.banners ?? [], apiUrl), [campaigns.data, apiUrl]);
   const current = Math.min(index, slides.length - 1);
   const visible = slides[current];
 
@@ -65,13 +63,14 @@ export function FeaturedAdsCarousel() {
   }
 
   const press = useCallback((slide: FeaturedSlide) => {
-    if (slide.campaignId) recordCampaignClick(api, slide.campaignId).catch(() => undefined);
+    recordCampaignClick(api, slide.campaignId).catch(() => undefined);
     openSlideTarget(slide.target);
   }, [api]);
 
   if (pending) {
-    return <View accessibilityLabel="Loading featured properties" style={[styles.skeleton, { width: cardWidth, height: cardHeight }]} />;
+    return <View accessibilityLabel="Loading sponsored campaigns" style={[styles.skeleton, { width: cardWidth, height: cardHeight }]} />;
   }
+  if (slides.length === 0) return null;
 
   const multi = slides.length > 1;
   return (
@@ -90,7 +89,7 @@ export function FeaturedAdsCarousel() {
         ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
         onMomentumScrollEnd={settle}
         getItemLayout={(_, i) => ({ length: interval, offset: interval * i, index: i })}
-        accessibilityLabel="Featured properties"
+        accessibilityLabel="Sponsored campaigns"
       />
       {multi ? (
         <>
@@ -98,10 +97,10 @@ export function FeaturedAdsCarousel() {
             {slides.map((slide, i) => <View key={slide.key} style={[styles.dot, i === current && styles.dotActive]} />)}
           </View>
           <View style={[styles.arrows, { right: CARD_GUTTER + 14 }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Previous featured property" hitSlop={6} onPress={() => go(-1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Previous campaign" hitSlop={6} onPress={() => go(-1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
               <MaterialCommunityIcons name="chevron-left" size={24} color={colors.white} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Next featured property" hitSlop={6} onPress={() => go(1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Next campaign" hitSlop={6} onPress={() => go(1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
               <MaterialCommunityIcons name="chevron-right" size={24} color={colors.white} />
             </Pressable>
           </View>

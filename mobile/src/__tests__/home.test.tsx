@@ -6,7 +6,7 @@ import * as WebBrowser from "expo-web-browser";
 import { Animated, StyleSheet } from "react-native";
 
 import type { CampaignBanner } from "@/api/home";
-import { buildFeaturedSlides, resolveDestination } from "@/home/featured";
+import { buildFeaturedSlides, nativeCampaignCreative, resolveDestination } from "@/home/featured";
 import { wrapOffset } from "@/home/components/logo-rail";
 import { homeListings, isNewListing } from "@/home/components/properties-on-nesafric";
 import { railCompanies } from "@/home/components/trusted-companies";
@@ -79,9 +79,10 @@ describe("marketplace home", () => {
     await screen.findByLabelText("Properties on NesAfric");
     await screen.findByTestId("company-rail-placeholder");
     const texts = flatten(view.toJSON() as Node);
-    // Featured carousel (first "4 Bedroom House") → companies → properties rail (second) → Advanced Search.
-    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "View property", "Trusted by leading companies", "Properties on NesAfric", "4 Bedroom House", "Advanced Search"];
-    const positions = order.map((text, i) => (i === 7 ? texts.lastIndexOf(text) : texts.indexOf(text)));
+    // Hero → chips → companies → properties rail → Advanced Search. No campaign runs here, so
+    // there is no advertising carousel, and the listing appears only in the properties rail.
+    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "Trusted by leading companies", "Properties on NesAfric", "4 Bedroom House", "Advanced Search"];
+    const positions = order.map((text) => texts.indexOf(text));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     // The old lower "Search properties" cards are gone; the chips at the top remain the entry points.
@@ -100,12 +101,46 @@ describe("marketplace home", () => {
     expect(await screen.findByText("Verified property")).toBeTruthy();
   });
 
-  it("falls back to real listings (not ads) and each slide opens that listing", async () => {
+  it("hides the advertising carousel when no campaign is eligible — listings are never promoted into it", async () => {
     mockApi();
-    renderRouter(APP_DIR, { initialUrl: "/" });
-    fireEvent.press(await screen.findByText("View property"));
-    expect(await screen.findByText("Verified property")).toBeTruthy();
+    const view = renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByLabelText("Properties on NesAfric");
+    await waitFor(() => expect(calls.some((call) => call.url.pathname === "/api/public/campaigns")).toBe(true));
+    await waitFor(() => expect(screen.queryByLabelText("Loading sponsored campaigns")).toBeNull());
+    expect(screen.queryByLabelText("Sponsored campaigns")).toBeNull();
+    expect(screen.queryByText("Sponsored")).toBeNull();
+    expect(screen.queryByText("View property")).toBeNull();
+    expect(screen.queryByText("List your property on NesAfric")).toBeNull();
+    expect(flatten(view.toJSON() as Node).filter((text) => text === "4 Bedroom House")).toHaveLength(1);
     expect(calls.some((call) => call.method === "POST")).toBe(false);
+  });
+
+  it("hides the advertising carousel when campaigns can't be loaded", async () => {
+    mockApi();
+    const base = jest.mocked(globalThis.fetch).getMockImplementation()!;
+    jest.mocked(globalThis.fetch).mockImplementation((input, init) => (new URL(String(input)).pathname === "/api/public/campaigns" ? json(500, { error: { code: "INTERNAL", message: "Down" } }) : base(input, init)));
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByLabelText("Properties on NesAfric");
+    await waitFor(() => expect(screen.queryByLabelText("Loading sponsored campaigns")).toBeNull());
+    expect(screen.queryByLabelText("Sponsored campaigns")).toBeNull();
+  });
+
+  it("requests the homepage carousel placement for Ghana from the shared campaign API", async () => {
+    mockApi({ banners: [campaign] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByText("Airport Hills residences");
+    const request = calls.find((call) => call.url.pathname === "/api/public/campaigns")!;
+    expect(request.url.searchParams.get("placement")).toBe("MARKETPLACE_PRIMARY");
+    expect(request.url.searchParams.get("countryCode")).toBe("GH");
+  });
+
+  it("shows the native-app creative for a campaign", async () => {
+    mockApi({ banners: [{ ...campaign, nativeAppMediaUrl: "https://cdn.test/airport-hills-app.jpg" }] });
+    const view = renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByText("Airport Hills residences");
+    const texts = flatten(view.toJSON() as Node);
+    expect(texts).toContain("https://cdn.test/airport-hills-app.jpg");
+    expect(texts).not.toContain("https://cdn.test/airport-hills.jpg");
   });
 
   it("category chips and search cards open Search with the right filter", async () => {
@@ -185,11 +220,11 @@ describe("marketplace home", () => {
     await waitFor(() => expect(searchCalls().some((params) => params.get(key) === value && params.get("pageSize") === "20")).toBe(true));
   });
 
-  it("with the logo rail moving, featured View property still opens the listing", async () => {
-    mockApi();
+  it("with the logo rail moving, a campaign's call to action still opens its destination", async () => {
+    mockApi({ banners: [campaign] });
     renderRouter(APP_DIR, { initialUrl: "/" });
     await loopingRail();
-    fireEvent.press(await screen.findByText("View property"));
+    fireEvent.press(await screen.findByText("See the homes"));
     expect(await screen.findByText("Verified property")).toBeTruthy();
   });
 
@@ -314,11 +349,21 @@ describe("featured slides", () => {
     expect(resolveDestination("javascript:alert(1)", API)).toBeNull();
   });
 
-  it("prefers campaigns, then listings with photos, then one NesAfric slide — never sample properties", () => {
-    expect(buildFeaturedSlides([campaign], [house], API).map((slide) => slide.eyebrow)).toEqual(["Sponsored"]);
-    const fromListings = buildFeaturedSlides([], [house, listing({ id: "3f1c2a9e-5a55-4a1e-9f1c-000000000009", media: [] })], API);
-    expect(fromListings.map((slide) => slide.target)).toEqual([{ type: "listing", id: house.id }]);
-    expect(buildFeaturedSlides([], [], API)).toEqual([expect.objectContaining({ title: "List your property on NesAfric", target: { type: "web", url: `${API}/for-professionals` } })]);
+  it("builds slides from campaigns only, in server order — no listing or NesAfric fallback", () => {
+    const second = { ...campaign, id: "c0ffee00-0000-4000-8000-000000000002", headline: "Second" };
+    expect(buildFeaturedSlides([campaign, second], API).map((slide) => slide.campaignId)).toEqual([campaign.id, second.id]);
+    expect(buildFeaturedSlides([campaign], API).map((slide) => slide.eyebrow)).toEqual(["Sponsored"]);
+    expect(buildFeaturedSlides([], API)).toEqual([]);
+    // An unsafe destination drops that campaign rather than inventing a target.
+    expect(buildFeaturedSlides([{ ...campaign, destinationUrl: "javascript:alert(1)" }], API)).toEqual([]);
+  });
+
+  it("picks native-app artwork, then mobile web, then desktop", () => {
+    expect(nativeCampaignCreative({ nativeAppMediaUrl: "app", mobileMediaUrl: "mobile", desktopMediaUrl: "desktop" })).toBe("app");
+    expect(nativeCampaignCreative({ nativeAppMediaUrl: null, mobileMediaUrl: "mobile", desktopMediaUrl: "desktop" })).toBe("mobile");
+    expect(nativeCampaignCreative({ mobileMediaUrl: null, desktopMediaUrl: "desktop" })).toBe("desktop");
+    expect(nativeCampaignCreative({ nativeAppMediaUrl: null, mobileMediaUrl: null, desktopMediaUrl: null })).toBeNull();
+    expect(buildFeaturedSlides([{ ...campaign, nativeAppMediaUrl: "/uploads/app.jpg" }], API)[0].imageUrl).toBe(`${API}/uploads/app.jpg`);
   });
 
 });

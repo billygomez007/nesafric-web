@@ -1,7 +1,6 @@
 import type { CampaignBanner } from "@/api/home";
-import type { PublicListing } from "@/api/types";
 import { filtersFromParams, type SearchFilters } from "@/marketplace/filters";
-import { formatListingPrice, formatLocation, listingPhotos, resolveMediaUrl } from "@/marketplace/format";
+import { resolveMediaUrl } from "@/marketplace/format";
 
 /** Where a featured slide's call to action goes. Every slide resolves to a real destination. */
 export type SlideTarget =
@@ -11,8 +10,8 @@ export type SlideTarget =
 
 export type FeaturedSlide = {
   key: string;
-  /** Set only for paid campaign slides, which report impressions and clicks. */
-  campaignId?: string;
+  /** Every slide is a campaign; impressions and clicks are reported against it. */
+  campaignId: string;
   eyebrow: string;
   title: string;
   subtitle: string | null;
@@ -48,16 +47,24 @@ export function resolveDestination(destinationUrl: string, apiUrl: string): Slid
 }
 
 /**
- * Featured carousel content, most specific first:
- * 1. live MARKETPLACE_PRIMARY campaigns (labelled "Sponsored");
- * 2. otherwise the newest published listings that have a photo (real inventory, not ads);
- * 3. otherwise one NesAfric-owned slide inviting owners to list — never placeholder properties.
+ * Native-app artwork for a campaign, per the creative specification shown in Super Admin: the
+ * native creative, else mobile web, else desktop. Mirrors `selectCampaignCreative(…, "nativeApp")`
+ * in the web repo (`src/modules/campaigns/eligibility.ts`). `null` renders a text slide.
  */
-export function buildFeaturedSlides(campaigns: CampaignBanner[], listings: PublicListing[], apiUrl: string, max = 5): FeaturedSlide[] {
-  const sponsored = campaigns.flatMap((banner): FeaturedSlide[] => {
+export function nativeCampaignCreative(banner: Pick<CampaignBanner, "desktopMediaUrl" | "mobileMediaUrl" | "nativeAppMediaUrl">) {
+  return banner.nativeAppMediaUrl ?? banner.mobileMediaUrl ?? banner.desktopMediaUrl ?? null;
+}
+
+/**
+ * Advertising carousel slides: eligible campaigns only, in the server's priority order. Property
+ * listings are never turned into advertising slides, and there is no substitute slide — with no
+ * campaigns the result is empty and the carousel is hidden.
+ */
+export function buildFeaturedSlides(campaigns: CampaignBanner[], apiUrl: string, max = 5): FeaturedSlide[] {
+  return campaigns.flatMap((banner): FeaturedSlide[] => {
     const target = resolveDestination(banner.destinationUrl, apiUrl);
     if (!target) return [];
-    const media = banner.mobileMediaUrl ?? banner.desktopMediaUrl;
+    const media = nativeCampaignCreative(banner);
     return [{
       key: `campaign:${banner.id}`,
       campaignId: banner.id,
@@ -68,32 +75,5 @@ export function buildFeaturedSlides(campaigns: CampaignBanner[], listings: Publi
       ctaLabel: banner.ctaLabel ?? "Learn more",
       target,
     }];
-  });
-  if (sponsored.length) return sponsored.slice(0, max);
-
-  const properties = listings.flatMap((listing): FeaturedSlide[] => {
-    const photo = listingPhotos(listing.media, apiUrl)[0];
-    if (!photo) return [];
-    const details = [formatListingPrice(listing), formatLocation(listing.location)].filter(Boolean).join(" · ");
-    return [{
-      key: `listing:${listing.id}`,
-      eyebrow: listing.listingType === "RENT" ? "New to rent" : "New for sale",
-      title: listing.title,
-      subtitle: details || null,
-      imageUrl: photo.url,
-      ctaLabel: "View property",
-      target: { type: "listing", id: listing.id },
-    }];
-  });
-  if (properties.length) return properties.slice(0, max);
-
-  return [{
-    key: "nesafric:list-your-property",
-    eyebrow: "From NesAfric",
-    title: "List your property on NesAfric",
-    subtitle: "Reach renters and buyers across Ghana.",
-    imageUrl: null,
-    ctaLabel: "List a property",
-    target: { type: "web", url: `${apiUrl}/for-professionals` },
-  }];
+  }).slice(0, max);
 }

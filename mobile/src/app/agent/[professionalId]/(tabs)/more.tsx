@@ -7,7 +7,7 @@ export default function ProfessionalMore() {
   const id = useWorkspaceParam("professional");
   const { professional } = useWorkspaceGate("professional", id);
   return (
-    <WorkspaceMore kind="professional" webPath={`/pro/${encodeURIComponent(id ?? "")}`} webOnly="Creating and editing listings, replying to leads, team, promotions and billing are done on nesafric.com for now.">
+    <WorkspaceMore kind="professional" webPath={`/pro/${encodeURIComponent(id ?? "")}`} webOnly="Replying to leads, team, promotions and billing are done on nesafric.com for now. Listings are managed in the Listings tab.">
       {professional ? (
         <RowGroup>
           <ListRow icon="briefcase-outline" title={professional.displayName} detail={humanise(professional.type)} meta={`Your role: ${humanise(professional.myRole)} · ${humanise(professional.verificationStatus)}`} last />

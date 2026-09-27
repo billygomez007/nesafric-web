@@ -36,6 +36,14 @@
           "imageWidth": 160
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NesAfric uses your photo library so you can add photos to your property listings.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-secure-store"
     ],
     "experiments": {

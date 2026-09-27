@@ -10,6 +10,8 @@ export type CampaignBanner = {
   destinationUrl: string;
   desktopMediaUrl: string | null;
   mobileMediaUrl: string | null;
+  /** Native-app artwork (1200 x 792). Older API responses may omit it. */
+  nativeAppMediaUrl?: string | null;
 };
 
 /** A company in the homepage trusted-company rail (`GET /api/public/homepage-companies`). */
@@ -21,7 +23,11 @@ export type DirectoryCompany = {
   verificationStatus: string;
 };
 
-/** Marketplace hero placement — the same campaigns the website's homepage carousel shows. */
+/**
+ * Homepage advertising carousel (`MARKETPLACE_PRIMARY`) — the same placement, viewer country and
+ * server-side eligibility rules as the website's homepage carousel. The app never decides which
+ * campaigns are eligible; it only renders what this returns.
+ */
 export const getFeaturedCampaigns = (api: ApiClient, limit = 6) =>
   api.request<{ banners: CampaignBanner[] }>("/api/public/campaigns", { query: { placement: "MARKETPLACE_PRIMARY", countryCode: "GH", limit } });
 

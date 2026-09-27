@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ACCOUNT_QUERY_KEY, useSession } from "@/auth/session";
 import { workspaceCacheKey, type GateKind } from "@/workspace/inbox-ui";
 import type { ApiClient } from "./client";
+import * as actions from "./workspace-actions";
 import * as data from "./workspace-data";
 
 /**
@@ -26,6 +27,13 @@ export const usePmMaintenanceSummary = (id: string | null) => useWorkspaceQuery(
 
 export const useProDashboard = (id: string | null) => useWorkspaceQuery("professional", id, "dashboard", data.getProDashboard);
 export const useProListings = (id: string | null) => useWorkspaceQuery("professional", id, "listings", data.listProListings);
+export const useProListing = (id: string | null, listingId: string | null) =>
+  useWorkspaceQuery("professional", listingId ? id : null, `listing:${listingId}`, (api, professionalId, signal) => actions.getProListing(api, professionalId, listingId!, signal));
+
+export const usePmProperty = (id: string | null, propertyId: string | null) =>
+  useWorkspaceQuery("organisation", propertyId ? id : null, `property:${propertyId}`, (api, organisationId, signal) => actions.getPmProperty(api, organisationId, propertyId!, signal));
+export const usePmTenant = (id: string | null, tenantId: string | null) =>
+  useWorkspaceQuery("organisation", tenantId ? id : null, `tenant:${tenantId}`, (api, organisationId, signal) => actions.getPmTenant(api, organisationId, tenantId!, signal));
 
 export const useProviderProfile = (id: string | null) => useWorkspaceQuery("provider", id, "profile", data.getProviderProfile);
 export const useProviderMetrics = (id: string | null) => useWorkspaceQuery("provider", id, "metrics", data.getProviderMetrics);

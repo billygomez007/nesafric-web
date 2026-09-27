@@ -21,3 +21,7 @@ jest.mock("expo-secure-store", () => {
     deleteItemAsync: jest.fn(async (key: string) => void store.delete(key)),
   };
 });
+
+// expo-image-picker opens the native photo library. In Jest, a stub that tests configure with the
+// photos the "user" picks (`launchImageLibraryAsync.mockResolvedValueOnce(...)`).
+jest.mock("expo-image-picker", () => ({ launchImageLibraryAsync: jest.fn(async () => ({ canceled: true, assets: null })) }));

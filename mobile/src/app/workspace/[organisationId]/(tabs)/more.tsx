@@ -5,7 +5,7 @@ export default function PropertyManagementMore() {
     <WorkspaceMore
       kind="organisation"
       webPath="/dashboard"
-      webOnly="Leases, rent, replying to enquiries, assigning maintenance and team management are done on nesafric.com for now."
+      webOnly="Executing leases, rent, replying to enquiries, assigning maintenance and team management are done on nesafric.com for now. Properties, units and tenants are managed in their tabs."
     />
   );
 }

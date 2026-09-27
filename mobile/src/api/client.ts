@@ -26,7 +26,7 @@ export class ApiError extends Error {
 export const NETWORK_ERROR = "NETWORK_ERROR";
 
 export type RequestOptions = {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   query?: Record<string, string | number | undefined>;
   body?: unknown;
   headers?: Record<string, string>;

@@ -4,7 +4,8 @@
  * serialised as strings.
  */
 export type ListingType = "RENT" | "SALE";
-export type Frequency = "MONTHLY" | "QUARTERLY" | "ANNUAL" | "CUSTOM";
+/** Listing price unit (`ListingPriceUnit` on the server; the field keeps its historic name). */
+export type Frequency = "DAILY" | "MONTHLY" | "QUARTERLY" | "ANNUAL" | "CUSTOM" | "PER_SQM" | "PER_KM";
 
 export type ListingMedia = {
   id: string;
