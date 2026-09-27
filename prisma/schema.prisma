@@ -838,6 +838,8 @@ model User {
   homepageCompanyLogosCreated        HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoCreator")
   homepageCompanyLogosUpdated        HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoUpdater")
   voiceCallsInitiated                VoiceCall[]                                @relation("VoiceCallInitiator")
+  tenantAccessInvitationsCreated     TenantAccessInvitation[]                   @relation("TenantAccessInvitationCreatedBy")
+  tenantAccessInvitationsRedeemed    TenantAccessInvitation[]                   @relation("TenantAccessInvitationRedeemedBy")
 }
 
 model Session {
@@ -1243,27 +1245,48 @@ model Tenant {
   organisations TenantOrganisation[]
 }
 
+model TenantAccessInvitation {
+  id                   String    @id @default(uuid()) @db.Uuid
+  tenantOrganisationId String    @db.Uuid
+  tokenHash            String    @unique
+  createdByUserId      String    @db.Uuid
+  redeemedByUserId     String?   @db.Uuid
+  createdAt            DateTime  @default(now())
+  expiresAt            DateTime
+  redeemedAt           DateTime?
+  revokedAt            DateTime?
+
+  tenantOrganisation TenantOrganisation @relation(fields: [tenantOrganisationId], references: [id], onDelete: Cascade)
+  createdBy          User               @relation("TenantAccessInvitationCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  redeemedBy         User?              @relation("TenantAccessInvitationRedeemedBy", fields: [redeemedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantOrganisationId, createdAt])
+  @@index([tenantOrganisationId, revokedAt, redeemedAt, expiresAt])
+  @@index([createdByUserId])
+  @@index([redeemedByUserId])
+}
+
 model TenantOrganisation {
-  id                           String                  @id @default(uuid()) @db.Uuid
-  tenantId                     String                  @db.Uuid
-  organisationId               String                  @db.Uuid
-  userId                       String?                 @db.Uuid
-  email                        String?                 @db.Citext
+  id                           String                   @id @default(uuid()) @db.Uuid
+  tenantId                     String                   @db.Uuid
+  organisationId               String                   @db.Uuid
+  userId                       String?                  @db.Uuid
+  email                        String?                  @db.Citext
   phone                        String?
   addressLine1                 String?
   city                         String?
-  countryCode                  String?                 @db.Char(2)
+  countryCode                  String?                  @db.Char(2)
   notes                        String?
-  communicationEmailAllowed    Boolean                 @default(true)
-  communicationSmsAllowed      Boolean                 @default(false)
-  communicationWhatsappAllowed Boolean                 @default(false)
-  communicationInAppAllowed    Boolean                 @default(true)
-  createdAt                    DateTime                @default(now())
-  updatedAt                    DateTime                @updatedAt
+  communicationEmailAllowed    Boolean                  @default(true)
+  communicationSmsAllowed      Boolean                  @default(false)
+  communicationWhatsappAllowed Boolean                  @default(false)
+  communicationInAppAllowed    Boolean                  @default(true)
+  createdAt                    DateTime                 @default(now())
+  updatedAt                    DateTime                 @updatedAt
   archivedAt                   DateTime?
-  tenant                       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  organisation                 Organisation            @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  user                         User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant                       Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  organisation                 Organisation             @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  user                         User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
   leaseParties                 LeaseParty[]
   notifications                Notification[]
   paymentIntents               PaymentIntent[]
@@ -1272,13 +1295,14 @@ model TenantOrganisation {
   receipts                     Receipt[]
   securityDeposits             SecurityDeposit[]
   maintenanceRequests          MaintenanceRequest[]
-  leaseSignatureRequests       LeaseSignatureRequest[] @relation("TenantSignatureRelationship")
-  keyHandovers                 MoveInKeyHandover[]     @relation("MoveInKeyRecipient")
+  leaseSignatureRequests       LeaseSignatureRequest[]  @relation("TenantSignatureRelationship")
+  keyHandovers                 MoveInKeyHandover[]      @relation("MoveInKeyRecipient")
   rentalApplications           RentalApplication[]
   noticesToVacate              NoticeToVacate[]
   depositSettlements           DepositSettlement[]
   conversations                Conversation[]
   generatedDocuments           GeneratedDocument[]
+  accessInvitations            TenantAccessInvitation[]
 
   @@unique([tenantId, organisationId])
   @@unique([organisationId, userId])
