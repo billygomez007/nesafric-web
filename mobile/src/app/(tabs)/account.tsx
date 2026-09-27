@@ -281,6 +281,21 @@ function SignedInAccount() {
 
       <HomesSection tenancies={tenancies.data} error={tenancies.error} onRetry={() => tenancies.refetch()} />
 
+      <View style={styles.section} testID="tenant-access-section">
+        <AppText variant="heading" accessibilityRole="header">
+          Renting with NesAfric?
+        </AppText>
+        <AppText variant="caption">
+          If your landlord or property manager gave you a tenant access code, connect it to this account.
+        </AppText>
+        <Button
+          label="Enter tenant access code"
+          variant="secondary"
+          onPress={() => router.push("/tenant-access")}
+          testID="open-tenant-access"
+        />
+      </View>
+
       <View style={styles.section}>
         <AppText variant="heading" accessibilityRole="header">
           Your workspaces

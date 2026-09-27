@@ -81,6 +81,7 @@ export default function RootLayout() {
                 <Stack.Screen name="listing/[id]/index" options={{ headerShown: true, title: "", headerBackTitle: "Back" }} />
                 <Stack.Screen name="listing/[id]/enquire" options={{ headerShown: true, presentation: "modal", title: "Contact" }} />
                 <Stack.Screen name="sign-in" options={{ headerShown: true, presentation: "modal", title: "Sign in" }} />
+                <Stack.Screen name="tenant-access" options={{ headerShown: true, presentation: "modal", title: "Connect your home" }} />
                 {/* Workspaces bring their own tabs and headers; each is gated on the server's workspace list. */}
                 <Stack.Screen name="workspace/[organisationId]" />
                 <Stack.Screen name="agent/[professionalId]" />
