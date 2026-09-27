@@ -13,6 +13,18 @@ export const createUnitSchema = unitSchema.extend({
   status: z.enum(["AVAILABLE", "OCCUPIED", "RESERVED", "MAINTENANCE", "INACTIVE"]).default("AVAILABLE"),
 });
 
+export const updateUnitSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    unitType: z.string().trim().max(80).nullable().optional(),
+    floor: z.string().trim().max(30).nullable().optional(),
+    bedrooms: z.number().int().min(0).max(99).nullable().optional(),
+    bathrooms: z.number().int().min(0).max(99).nullable().optional(),
+    status: z.enum(["AVAILABLE", "OCCUPIED", "RESERVED", "MAINTENANCE", "INACTIVE"]).optional(),
+  })
+  .strict()
+  .refine((input) => Object.keys(input).length > 0, "At least one unit field must be provided.");
+
 export const createPortfolioSchema = z.object({
   name: z.string().trim().min(2).max(160),
   description: z.string().trim().max(1000).optional(),

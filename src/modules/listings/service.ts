@@ -1170,7 +1170,7 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   if (filters.currencyCode) conditions.push(Prisma.sql`l."currencyCode" = ${filters.currencyCode}`);
   if (filters.minPriceMinor) conditions.push(Prisma.sql`${price} >= ${filters.minPriceMinor}::numeric`);
   if (filters.maxPriceMinor) conditions.push(Prisma.sql`${price} <= ${filters.maxPriceMinor}::numeric`);
-  if (filters.frequency) conditions.push(Prisma.sql`l."frequency" = ${filters.frequency}::"RentFrequency"`);
+  if (filters.frequency) conditions.push(Prisma.sql`l."frequency" = ${filters.frequency}::"ListingPriceUnit"`);
   if (filters.availableOn) conditions.push(Prisma.sql`l."availableFrom" <= ${filters.availableOn}`);
   if (filters.bedroomsMin !== undefined) conditions.push(Prisma.sql`l."bedrooms" >= ${filters.bedroomsMin}`);
   if (filters.bedroomsMax !== undefined) conditions.push(Prisma.sql`l."bedrooms" <= ${filters.bedroomsMax}`);

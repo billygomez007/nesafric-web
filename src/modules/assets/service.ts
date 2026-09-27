@@ -5,7 +5,7 @@ import { requirePermission, PERMISSIONS } from "@/platform/authorization/permiss
 import { recordAudit } from "@/modules/audit/service";
 import { assertOperational, assertWithinLimit } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
-import { createPortfolioSchema, createPropertySchema, createUnitSchema, updatePropertySchema } from "./schemas";
+import { createPortfolioSchema, createPropertySchema, createUnitSchema, updatePropertySchema, updateUnitSchema } from "./schemas";
 import { activePropertyScope } from "./repository";
 
 export async function createPortfolio(userId: string, organisationId: string, input: unknown) {
@@ -137,6 +137,23 @@ export async function createUnit(userId: string, organisationId: string, propert
       },
     });
 
+    return unit;
+  });
+}
+
+/** Edits a unit of an active property in this organisation. The property scope is checked in the
+ * same transaction, so a unit id from another organisation or property is never found. */
+export async function updateUnit(userId: string, organisationId: string, propertyId: string, unitId: string, input: unknown) {
+  await requirePermission(userId, organisationId, PERMISSIONS.propertyUpdate);
+  const data = updateUnitSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    const property = await tx.property.findFirst({ where: activePropertyScope(organisationId, propertyId), select: { id: true } });
+    if (!property) throw notFound();
+    const result = await tx.unit.updateMany({ where: { id: unitId, propertyId: property.id, archivedAt: null }, data });
+    if (result.count !== 1) throw notFound();
+    const unit = await tx.unit.findUniqueOrThrow({ where: { id: unitId } });
+    await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "unit.updated", entityType: "unit", entityId: unit.id, metadata: { propertyId: property.id, changedFields: Object.keys(data) } } });
+    await tx.domainEvent.create({ data: { organisationId, name: "unit.updated", aggregateType: "unit", aggregateId: unit.id, payload: { propertyId: property.id, changedFields: Object.keys(data) } } });
     return unit;
   });
 }

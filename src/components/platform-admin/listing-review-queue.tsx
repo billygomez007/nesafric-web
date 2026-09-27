@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { buttonClass } from "@/components/ui/button-styles";
 import { fieldLabelClass, textareaClass } from "@/components/ui/field-styles";
+import { priceUnitText } from "@/lib/listing-display";
 
 export type ReviewListing = {
   id: string;
@@ -42,7 +43,6 @@ const EVIDENCE_LABELS: Record<string, string> = {
   developer_authority: "Developer authority",
   ownership_reference: "Ownership reference",
 };
-const FREQUENCY_SUFFIX: Record<string, string> = { MONTHLY: "month", QUARTERLY: "quarter", ANNUAL: "year" };
 
 function humanize(value: string) {
   const words = value.replace(/_/g, " ").toLowerCase();
@@ -59,7 +59,7 @@ function price(listing: ReviewListing) {
   } catch {
     text = `${listing.currencyCode} ${value.toLocaleString("en")}`;
   }
-  const suffix = listing.listingType === "RENT" && listing.frequency ? FREQUENCY_SUFFIX[listing.frequency] : undefined;
+  const suffix = priceUnitText(listing.listingType, listing.frequency);
   return suffix ? `${text} / ${suffix}` : text;
 }
 

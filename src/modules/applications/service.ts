@@ -1,4 +1,5 @@
 import { Prisma, RentalApplicationStatus } from "@/platform/database/generated/client";
+import { isLeaseRentPeriod } from "@/lib/price-units";
 import { db } from "@/platform/database/client";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { AppError, notFound } from "@/platform/errors";
@@ -555,6 +556,12 @@ export async function createDraftLeaseFromApplication(userId: string, organisati
       throw new AppError("LISTING_RENT_TERMS_REQUIRED", 409, "The rental listing does not have complete default rent terms.");
     }
     if (!application.listing.propertyId) throw new AppError("PROPERTYOS_LISTING_REQUIRED", 422, "Marketplace-native listings cannot be converted into NesAfric leases.");
+    // A listing priced per day, per m² or per km has no lease rent period to inherit; the lease
+    // period must then be chosen explicitly.
+    const listingRentPeriod = isLeaseRentPeriod(application.listing.frequency) ? application.listing.frequency : undefined;
+    if (!request.rentFrequency && !listingRentPeriod) {
+      throw new AppError("LEASE_RENT_FREQUENCY_REQUIRED", 422, "This listing is not priced per month, quarter or year. Choose the lease rent frequency.");
+    }
     const property = await tx.property.findFirst({
       where: { id: application.listing.propertyId, organisationId, archivedAt: null, status: "ACTIVE" },
       select: { id: true },
@@ -581,7 +588,7 @@ export async function createDraftLeaseFromApplication(userId: string, organisati
       endDate: request.endDate,
       rentAmountMinor: request.rentAmountMinor ?? application.listing.rentAmountMinor.toString(),
       currencyCode: request.currencyCode ?? application.listing.currencyCode,
-      rentFrequency: request.rentFrequency ?? application.listing.frequency,
+      rentFrequency: request.rentFrequency ?? listingRentPeriod,
       customFrequency: request.customFrequency ?? undefined,
       depositAmountMinor: request.depositAmountMinor,
       status: "DRAFT",

@@ -3,7 +3,6 @@ import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { HeroSearch } from "@/components/marketplace-home/hero-search";
 import { MarketplaceCarousel } from "@/components/marketplace-carousel";
-import { PlatformBanner } from "@/components/marketplace-home/platform-banner";
 import { MarketplaceHome } from "@/components/marketplace-home/marketplace-home";
 import { CompaniesCarouselSection } from "@/components/marketing/companies-carousel-section";
 import { BRAND } from "@/platform/brand";
@@ -78,11 +77,9 @@ export default function Home() {
               <HeroSearch />
             </div>
 
-            {/* Advertising stays directly below search and property categories:
-                real campaigns when available, otherwise NesAfric's own banner. */}
-            <div className="mt-4 overflow-hidden rounded-[var(--radius-panel)] border border-white/10">
-              <MarketplaceCarousel fallback={<PlatformBanner />} placement="MARKETPLACE_PRIMARY" />
-            </div>
+            {/* Advertising sits directly below search and property categories. It shows eligible
+                campaigns only; with none, the slot is hidden (never filled with listings). */}
+            <MarketplaceCarousel frameClassName="mt-4 overflow-hidden rounded-[var(--radius-panel)] border border-white/10" placement="MARKETPLACE_PRIMARY" />
           </div>
         </section>
 

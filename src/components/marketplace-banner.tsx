@@ -17,7 +17,7 @@ type Banner = {
  * leaves a visible gap in the page. Full-bleed hero treatment: this is the marketplace's primary
  * promotional slot, not an inline ad strip — see `MarketplaceCarousel` for the secondary,
  * multi-campaign placement. */
-export function MarketplaceBanner({ placement, countryCode }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "PROFESSIONAL_FEATURED" | "SEARCH_FEATURED"; countryCode?: string }) {
+export function MarketplaceBanner({ placement, countryCode = "GH" }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "PROFESSIONAL_FEATURED" | "SEARCH_FEATURED"; countryCode?: string }) {
   const [banner, setBanner] = useState<Banner | null>(null);
   const trackedImpression = useRef(false);
 

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 /**
  * Homepage order: hero copy → search/categories → promoted carousel → trusted companies →
- * properties → places → professionals → service providers → business gateway. The ad area and company section always
- * stay in place, with honest NesAfric-owned content when there is nothing real to show.
+ * properties → places → professionals → service providers → business gateway. The advertising
+ * carousel shows campaigns only and is hidden when none is eligible; the company section keeps an
+ * honest empty state.
  */
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/" }));
@@ -78,34 +79,52 @@ describe("marketplace homepage order", () => {
     }
   });
 
-  it("keeps the ad area with NesAfric's own banner when no campaign is running", async () => {
-    mockApi({ banners: [], companies: [] });
+  it("hides the advertising carousel cleanly when no campaign is eligible — no listing or NesAfric slide stands in", async () => {
+    mockApi({ banners: [], companies: [], listings: [LISTING] });
     const { container } = render(<Home />);
-    const banner = await screen.findByTestId("platform-banner");
-    expect(banner.textContent).toContain("List your property on NesAfric");
-    expect(banner.textContent).toContain("Reach renters and buyers across Ghana.");
-    expect(banner.textContent).not.toMatch(/Promoted/);
-    expect(screen.getByRole("link", { name: "List a property" }).getAttribute("href")).toBe("/for-professionals");
+    await screen.findByText("Two-bedroom flat");
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/api/public/campaigns?"))).toBe(true));
     expect(container.querySelector("[aria-roledescription='carousel']")).toBeNull();
-    // Search and quick property discovery sit above the banner.
-    const search = container.querySelector("form[aria-label='Search property']")!;
-    expect(search.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/Promoted/)).toBeNull();
+    expect(screen.queryByTestId("platform-banner")).toBeNull();
+    expect(screen.queryByText("List your property on NesAfric")).toBeNull();
+    // The listing appears only in Properties on NesAfric, never as an advertising slide.
+    expect(screen.getAllByText("Two-bedroom flat")).toHaveLength(1);
   });
 
-  it("keeps the ad area when campaigns can't be loaded", async () => {
+  it("hides the advertising carousel when campaigns can't be loaded", async () => {
     mockApi({ banners: [], companies: [] });
     const base = vi.mocked(fetch).getMockImplementation()!;
     vi.mocked(fetch).mockImplementation(async (input, init) => String(input).includes("/api/public/campaigns?") ? ({ ok: false, json: async () => ({}) } as Response) : base(input, init));
-    render(<Home />);
-    expect(await screen.findByTestId("platform-banner")).toBeTruthy();
+    const { container } = render(<Home />);
+    await screen.findByText("Trusted by leading companies");
+    expect(container.querySelector("[aria-roledescription='carousel']")).toBeNull();
   });
 
-  it("shows the real campaign carousel, not the fallback, when a campaign is running", async () => {
+  it("asks the shared campaign API for the homepage carousel placement in Ghana", async () => {
+    mockApi({ banners: [BANNER], companies: [] });
+    render(<Home />);
+    await screen.findByText("New homes at Airport Hills");
+    const call = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost")).find((url) => url.pathname === "/api/public/campaigns" && url.searchParams.has("limit"))!;
+    expect(call.searchParams.get("placement")).toBe("MARKETPLACE_PRIMARY");
+    expect(call.searchParams.get("countryCode")).toBe("GH");
+  });
+
+  it("shows the real campaign carousel when a campaign is running", async () => {
     mockApi({ banners: [BANNER], companies: [] });
     const { container } = render(<Home />);
     await screen.findByText("New homes at Airport Hills");
     expect(container.querySelector("[aria-roledescription='carousel']")).not.toBeNull();
-    expect(screen.queryByTestId("platform-banner")).toBeNull();
+  });
+
+  it("uses each campaign's desktop artwork on desktop and mobile artwork (else desktop) on mobile web", async () => {
+    mockApi({ banners: [{ ...BANNER, desktopMediaUrl: "https://cdn.example.com/desktop.jpg", mobileMediaUrl: "https://cdn.example.com/mobile.jpg", nativeAppMediaUrl: "https://cdn.example.com/app.jpg" }], companies: [] });
+    const { container } = render(<Home />);
+    await screen.findByText("New homes at Airport Hills");
+    const styles = [...container.querySelectorAll<HTMLElement>("[aria-roledescription='carousel'] [style]")].map((node) => node.style.backgroundImage);
+    expect(styles).toContain('url("https://cdn.example.com/desktop.jpg")');
+    expect(styles).toContain('url("https://cdn.example.com/mobile.jpg")');
+    expect(styles.join(" ")).not.toContain("app.jpg");
   });
 
   it("keeps the company section with an empty state, never placeholder companies, when none are verified", async () => {
@@ -129,13 +148,12 @@ describe("marketplace homepage order", () => {
     expect(screen.queryByTestId("companies-empty")).toBeNull();
   });
 
-  it("keeps the empty-state order: hero, search, NesAfric banner, trusted companies, properties", async () => {
+  it("keeps the empty-state order: hero, search, trusted companies, properties", async () => {
     mockApi({ banners: [], companies: [], listings: [] });
     const { container } = render(<Home />);
-    await screen.findByTestId("platform-banner");
     await screen.findByTestId("companies-empty");
     await screen.findByText(/Listings appear here as soon as/);
-    const nodes = ["h1", "form[aria-label='Search property']", "[data-testid='platform-banner']", "#companies-heading", "#discover-heading"].map((selector) => container.querySelector(selector)!);
+    const nodes = ["h1", "form[aria-label='Search property']", "#companies-heading", "#discover-heading"].map((selector) => container.querySelector(selector)!);
     nodes.forEach((node) => expect(node).not.toBeNull());
     for (let i = 1; i < nodes.length; i += 1) expect(nodes[i - 1].compareDocumentPosition(nodes[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

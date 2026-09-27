@@ -3,9 +3,10 @@
  * buyer would use. Display only — never used for filtering, analytics or API payloads.
  */
 
+import { priceUnitSuffix } from "@/lib/price-units";
+
 const LISTING_TYPE_LABELS: Record<string, string> = { RENT: "For rent", SALE: "For sale" };
 const SCOPE_LABELS: Record<string, string> = { PROPERTY: "Whole property", UNIT: "Unit" };
-const FREQUENCY_SUFFIX: Record<string, string> = { MONTHLY: "month", QUARTERLY: "quarter", ANNUAL: "year" };
 
 /** "SERVICED_APARTMENT" / "serviced apartment" -> "Serviced apartment". */
 export function humanize(value: string | null | undefined): string {
@@ -22,9 +23,12 @@ export function scopeLabel(value: string): string {
   return SCOPE_LABELS[value] ?? humanize(value);
 }
 
-/** Suffix for a rent price, e.g. "month". CUSTOM/unknown frequencies return "". */
-export function frequencySuffix(value: string | null | undefined): string {
-  return value ? FREQUENCY_SUFFIX[value] ?? "" : "";
+/**
+ * Unit after a price, without the slash: "month", "day", "m²", "km". "" for a total sale price,
+ * CUSTOM terms or an unknown value. Rendered as "GH₵1,200 / m²".
+ */
+export function priceUnitText(listingType: string, unit: string | null | undefined): string {
+  return priceUnitSuffix(listingType, unit).replace(/^\//, "");
 }
 
 /**

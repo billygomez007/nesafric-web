@@ -9,8 +9,10 @@ import { getPublicBanner, getPublicBanners } from "@/modules/campaigns/service";
 export async function GET(request: Request) {
   try {
     const query = Object.fromEntries(new URL(request.url).searchParams);
-    if ("limit" in query) return NextResponse.json({ banners: await getPublicBanners(query) });
-    return NextResponse.json({ banner: await getPublicBanner(query) });
+    // Never cached: publishing, pausing or ending a campaign must show on the next request.
+    const headers = { "cache-control": "no-store" };
+    if ("limit" in query) return NextResponse.json({ banners: await getPublicBanners(query) }, { headers });
+    return NextResponse.json({ banner: await getPublicBanner(query) }, { headers });
   } catch (error) {
     return errorResponse(error);
   }

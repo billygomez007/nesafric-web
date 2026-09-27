@@ -1,6 +1,7 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { selectCampaignCreative } from "@/modules/campaigns/eligibility";
 
 type Banner = {
   id: string;
@@ -22,11 +23,12 @@ const AUTO_ROTATE_MS = 7000;
  * two or more. Auto-rotation is restrained, pauses on hover/focus/touch, and is skipped entirely
  * under `prefers-reduced-motion`, per item 25's accessibility requirements.
  *
- * `fallback` (opt-in, e.g. the homepage's platform-owned banner) is shown instead of nothing when
- * no campaign is eligible or campaigns can't be loaded; until the answer is known a same-height
- * placeholder holds the space, so a real campaign never flashes behind the fallback.
+ * Advertising slots are campaigns only: with no eligible campaign (or when campaigns can't be
+ * loaded) nothing renders — never a property listing or other substitute content. `frameClassName`
+ * wraps the carousel only when it renders, so an empty slot leaves no empty frame behind.
+ * Eligibility is decided by the server (`GET /api/public/campaigns`), the same API the app uses.
  */
-export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallback }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; fallback?: ReactNode }) {
+export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, frameClassName }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; frameClassName?: string }) {
   const [banners, setBanners] = useState<Banner[] | null>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -45,7 +47,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
     const params = new URLSearchParams({ placement, limit: String(limit) });
     if (countryCode) params.set("countryCode", countryCode);
     let cancelled = false;
-    fetch(`/api/public/campaigns?${params}`).then(async (response) => {
+    fetch(`/api/public/campaigns?${params}`, { cache: "no-store" }).then(async (response) => {
       if (cancelled) return;
       if (!response.ok) { setBanners([]); return; }
       const body = await response.json();
@@ -75,12 +77,11 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
     return () => clearInterval(timer);
   }, [canRotate, paused, reducedMotion, banners]);
 
-  if (!banners || banners.length === 0) {
-    if (!fallback) return null;
-    return banners ? <>{fallback}</> : <div aria-busy="true" aria-label="Loading featured content" className="h-36 bg-forest-deep sm:h-40 lg:h-44" role="status" />;
-  }
+  if (!banners || banners.length === 0) return null;
 
   const multi = banners.length > 1;
+  const desktopArt = active ? selectCampaignCreative(active, "desktopWeb") : null;
+  const mobileArt = active ? selectCampaignCreative(active, "mobileWeb") : null;
 
   function onTouchStart(event: React.TouchEvent) {
     touchStartX.current = event.touches[0]?.clientX ?? null;
@@ -98,7 +99,7 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
     if (event.key === "ArrowLeft") { event.preventDefault(); goTo(index - 1); }
   }
 
-  return (
+  const carousel = (
     <div
       aria-label="Featured marketplace campaigns"
       aria-roledescription="carousel"
@@ -123,11 +124,11 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
           rel="noopener"
           role="group"
         >
-          {active.desktopMediaUrl && (
-            <div className="absolute inset-0 hidden bg-cover bg-center sm:block" style={{ backgroundImage: `url("${active.desktopMediaUrl}")` }} />
+          {desktopArt && (
+            <div className="absolute inset-0 hidden bg-cover bg-center sm:block" style={{ backgroundImage: `url("${desktopArt}")` }} />
           )}
-          {(active.mobileMediaUrl ?? active.desktopMediaUrl) && (
-            <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${active.mobileMediaUrl ?? active.desktopMediaUrl}")` }} />
+          {mobileArt && (
+            <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${mobileArt}")` }} />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-forest-deep/95 via-forest-deep/60 to-transparent" />
           <div className={`relative flex h-full max-w-xl flex-col justify-center gap-1.5 py-4 ${multi ? "pl-5 pr-12 sm:pl-12 sm:pr-14" : "px-5 sm:px-8"}`}>
@@ -177,4 +178,6 @@ export function MarketplaceCarousel({ placement, countryCode, limit = 6, fallbac
       )}
     </div>
   );
+
+  return frameClassName ? <div className={frameClassName}>{carousel}</div> : carousel;
 }

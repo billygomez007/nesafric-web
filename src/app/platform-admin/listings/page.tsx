@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { PlatformAdminShell } from "@/components/platform-admin/shell";
 import { buttonClass } from "@/components/ui/button-styles";
+import { priceUnitSuffix } from "@/lib/price-units";
 
 type ListingRow = {
   id: string;
@@ -95,14 +96,15 @@ function amount(listing: ListingRow) {
   if (!raw) return "—";
 
   const value = Number(raw) / 100;
+  const unit = priceUnitSuffix(listing.listingType, listing.frequency);
 
   try {
-    return new Intl.NumberFormat("en-GH", {
+    return `${new Intl.NumberFormat("en-GH", {
       style: "currency",
       currency: listing.currencyCode,
-    }).format(value);
+    }).format(value)}${unit}`;
   } catch {
-    return `${listing.currencyCode} ${value.toFixed(2)}`;
+    return `${listing.currencyCode} ${value.toFixed(2)}${unit}`;
   }
 }
 

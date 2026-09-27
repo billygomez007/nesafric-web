@@ -14,7 +14,7 @@ export function HomepageAnnouncementBar() {
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
-    fetch("/api/public/campaigns?placement=HOMEPAGE_ANNOUNCEMENT").then(async (response) => {
+    fetch("/api/public/campaigns?placement=HOMEPAGE_ANNOUNCEMENT&countryCode=GH", { cache: "no-store" }).then(async (response) => {
       if (!response.ok) return;
       const body = await response.json();
       if (!body.banner) return;

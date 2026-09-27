@@ -309,6 +309,21 @@ enum RentFrequency {
   CUSTOM
 }
 
+/// Pricing basis of a marketplace listing's price: a rent period (DAILY, MONTHLY, QUARTERLY,
+/// ANNUAL, CUSTOM) or a rate per measured quantity (PER_SQM, PER_KM). Listing-only, so values that
+/// are not rent periods can never reach leases or rent schedules, which keep `RentFrequency`.
+/// A sale listing has no unit (a total price) or a per-quantity unit; see the
+/// `Listing_type_price_check` constraint.
+enum ListingPriceUnit {
+  DAILY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  CUSTOM
+  PER_SQM
+  PER_KM
+}
+
 enum LeasePartyRole {
   TENANT
   GUARANTOR
@@ -3059,7 +3074,7 @@ model Listing {
   askingAmountMinor  Decimal?       @db.Decimal(19, 0)
   rentAmountMinor    Decimal?       @db.Decimal(19, 0)
   currencyCode       String         @db.Char(3)
-  frequency          RentFrequency?
+  frequency          ListingPriceUnit?
   availableFrom      DateTime
   bedrooms           Int?
   bathrooms          Decimal?       @db.Decimal(4, 1)

@@ -17,6 +17,7 @@ import {
   publicBannerListQuerySchema,
   campaignListSchema,
 } from "./schemas";
+import { campaignEligibility, creativeReadiness, LIVE_CAMPAIGN_STATUSES } from "./eligibility";
 
 function requirePermission(principal: PlatformPrincipal, permission: PlatformPermission) {
   if (!platformRoleHasPermission(principal.role, permission)) throw new AppError("FORBIDDEN", 403, "You do not have permission to manage campaigns.");
@@ -38,8 +39,8 @@ const safePublicFields = {
   desktopMediaUrl: true, mobileMediaUrl: true, nativeAppMediaUrl: true,
 } as const;
 
-function isLive(campaign: { status: string; startAt: Date | null; endAt: Date | null }, now = new Date()) {
-  if (!["APPROVED", "SCHEDULED", "ACTIVE"].includes(campaign.status)) return false;
+function isLive(campaign: { status: string; startAt: Date | null; endAt: Date | null; archivedAt: Date | null }, now = new Date()) {
+  if (campaign.archivedAt || !(LIVE_CAMPAIGN_STATUSES as readonly string[]).includes(campaign.status)) return false;
   if (campaign.startAt && campaign.startAt > now) return false;
   if (campaign.endAt && campaign.endAt < now) return false;
   return true;
@@ -85,7 +86,8 @@ export async function createPlatformCampaign(principal: PlatformPrincipal, input
   return campaign;
 }
 
-/** Edits a platform-owned campaign's descriptive content (Phase 24 "Edit") — deliberately never
+/** Edits a platform-owned campaign's descriptive content and placement (Phase 24 "Edit") — so a
+ * campaign created in the wrong placement can be moved without recreating it. Deliberately never
  * touches `status`/`priority`/`startAt`/`endAt`/media (those have their own dedicated, more
  * carefully guarded actions below) or a self-service campaign (those belong to their advertiser). */
 export async function updatePlatformCampaign(principal: PlatformPrincipal, campaignId: string, input: unknown) {
@@ -99,7 +101,10 @@ export async function updatePlatformCampaign(principal: PlatformPrincipal, campa
     if (!provider) throw notFound();
   }
   const updated = await db.campaign.update({ where: { id: campaignId }, data });
-  await recordPlatformAudit(principal, "platform_admin.campaign_edited", "campaign", campaignId, undefined, { fields: Object.keys(data) });
+  await recordPlatformAudit(principal, "platform_admin.campaign_edited", "campaign", campaignId, undefined, {
+    fields: Object.keys(data),
+    ...(data.placement && data.placement !== campaign.placement ? { placement: { from: campaign.placement, to: data.placement } } : {}),
+  });
   return updated;
 }
 
@@ -190,6 +195,12 @@ export async function deleteCampaign(principal: PlatformPrincipal, campaignId: s
   await recordPlatformAudit(principal, "platform_admin.campaign_deleted", "campaign", campaignId, undefined, { name: campaign.name, placement: campaign.placement });
 }
 
+/** Adds what the Super Admin needs to see about public visibility: whether the campaign is showing
+ * right now (same rules as the public query) and which artwork each surface uses. */
+function withPublicState<T extends Parameters<typeof campaignEligibility>[0] & Parameters<typeof creativeReadiness>[0]>(campaign: T, now = new Date()) {
+  return { ...campaign, publicEligibility: campaignEligibility(campaign, now), creativeReadiness: creativeReadiness(campaign) };
+}
+
 export async function listCampaignsForPlatform(principal: PlatformPrincipal, query: unknown = {}) {
   requirePermission(principal, PLATFORM_PERMISSIONS.campaignReview);
   const filters = campaignListSchema.parse(query);
@@ -198,14 +209,15 @@ export async function listCampaignsForPlatform(principal: PlatformPrincipal, que
     db.campaign.findMany({
       where,
       include: {
-        advertiser: { select: { displayName: true, slug: true } },
-        advertiserProvider: { select: { displayName: true, slug: true, verificationStatus: true } },
+        advertiser: { select: { displayName: true, slug: true, status: true, archivedAt: true } },
+        advertiserProvider: { select: { displayName: true, slug: true, verificationStatus: true, suspendedAt: true } },
       },
       orderBy: [{ createdAt: "desc" }], skip: (filters.page - 1) * filters.pageSize, take: filters.pageSize,
     }),
     db.campaign.count({ where }),
   ]);
-  return { items, total, page: filters.page, pageSize: filters.pageSize };
+  const now = new Date();
+  return { items: items.map((campaign) => withPublicState(campaign, now)), total, page: filters.page, pageSize: filters.pageSize };
 }
 
 export async function getCampaignForPlatform(principal: PlatformPrincipal, campaignId: string) {
@@ -213,12 +225,12 @@ export async function getCampaignForPlatform(principal: PlatformPrincipal, campa
   const campaign = await db.campaign.findUnique({
     where: { id: campaignId },
     include: {
-      advertiser: { select: { displayName: true, slug: true } },
-      advertiserProvider: { select: { displayName: true, slug: true, verificationStatus: true } },
+      advertiser: { select: { displayName: true, slug: true, status: true, archivedAt: true } },
+      advertiserProvider: { select: { displayName: true, slug: true, verificationStatus: true, suspendedAt: true } },
     },
   });
   if (!campaign) throw notFound();
-  return campaign;
+  return withPublicState(campaign);
 }
 
 /** Platform review of a self-service submission (item 21). Never available for `isPlatformOwned`
@@ -285,7 +297,7 @@ export async function setCampaignStatus(principal: PlatformPrincipal, campaignId
  * publicly eligible only while live (`APPROVED`/`SCHEDULED`/`ACTIVE`, i.e. never `DRAFT`,
  * `PENDING_APPROVAL`, `REJECTED`, `PAUSED`, `COMPLETED`, or `ARCHIVED`), never archived, within its
  * scheduling window, and — when a viewer country is supplied — either untargeted or matching it. */
-const LIVE_STATUSES: $Enums.CampaignStatus[] = ["APPROVED", "SCHEDULED", "ACTIVE"];
+const LIVE_STATUSES: $Enums.CampaignStatus[] = [...LIVE_CAMPAIGN_STATUSES];
 
 function eligibleCampaignWhere(placement: $Enums.CampaignPlacement, countryCode: string | undefined, now: Date) {
   return {
@@ -342,13 +354,13 @@ export async function getPublicBanners(query: unknown) {
 }
 
 export async function recordCampaignImpression(campaignId: string) {
-  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { status: true, startAt: true, endAt: true } });
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { status: true, startAt: true, endAt: true, archivedAt: true } });
   if (!campaign || !isLive(campaign)) throw notFound();
   await db.campaign.update({ where: { id: campaignId }, data: { impressionCount: { increment: 1 } } });
 }
 
 export async function recordCampaignClick(campaignId: string) {
-  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { status: true, startAt: true, endAt: true } });
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { status: true, startAt: true, endAt: true, archivedAt: true } });
   if (!campaign || !isLive(campaign)) throw notFound();
   await db.campaign.update({ where: { id: campaignId }, data: { clickCount: { increment: 1 } } });
 }

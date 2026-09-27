@@ -13,6 +13,7 @@ import {
   uploadListingImagePhotos,
 } from "@/lib/listing-image-upload";
 import { formatMegabytes, MAX_LISTING_PHOTO_SOURCE_BYTES } from "@/lib/listing-media-rules";
+import { PRICE_UNIT_LABELS, priceUnitsFor } from "@/lib/price-units";
 
 
 const PROPERTY_TYPES = [
@@ -297,10 +298,11 @@ export function MarketplaceListingForm({
 
       askingAmountMinor: purpose === "SALE" ? priceMinor : null,
       rentAmountMinor: purpose === "RENT" ? priceMinor : null,
+      // Price unit: required for a rental, optional for a sale (none means a total price).
       frequency:
         purpose === "RENT"
           ? String(form.get("frequency") || "MONTHLY")
-          : null,
+          : String(form.get("frequency") || "") || null,
 
       availableFrom,
 
@@ -893,17 +895,21 @@ export function MarketplaceListingForm({
             />
           </label>
 
-          {purpose === "RENT" && (
-            <label className="text-sm font-medium">
-              Payment frequency
-              <select className={input} defaultValue={existing?.frequency ?? "MONTHLY"} name="frequency">
-                <option value="MONTHLY">Monthly</option>
-                <option value="QUARTERLY">Quarterly</option>
-                <option value="ANNUAL">Annual</option>
-                <option value="CUSTOM">Custom</option>
-              </select>
-            </label>
-          )}
+          <label className="text-sm font-medium">
+            Price unit
+            <select
+              className={input}
+              defaultValue={existing?.listingType === purpose ? existing.frequency ?? "" : purpose === "RENT" ? "MONTHLY" : ""}
+              key={purpose}
+              name="frequency"
+            >
+              {purpose === "SALE" && <option value="">Total price</option>}
+              {priceUnitsFor(purpose).map((unit) => (
+                <option key={unit} value={unit}>{PRICE_UNIT_LABELS[unit]}</option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs font-normal text-muted">How the price is charged. Property size is entered separately.</span>
+          </label>
 
           <label className="text-sm font-medium">
             Available from

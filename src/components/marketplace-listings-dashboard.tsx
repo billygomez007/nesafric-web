@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { SubmitForReviewDialog } from "@/components/listing-submit-review-dialog";
 import { buttonClass } from "@/components/ui/button-styles";
 import { listingReadinessProblems } from "@/modules/listings/readiness";
+import { priceUnitText } from "@/lib/listing-display";
 
 type Listing = {
   id: string; title: string; status: string; verificationStatus: string; listingType: string;
@@ -33,7 +34,6 @@ function reviewerNote(item: Listing): { title: string; note: string } | null {
 }
 
 const EDITABLE_STATUSES = ["DRAFT", "REJECTED", "PAUSED"];
-const FREQUENCY_SUFFIX: Record<string, string> = { MONTHLY: "month", QUARTERLY: "quarter", ANNUAL: "year" };
 
 function formatPrice(item: Listing) {
   const minor = item.rentAmountMinor ?? item.askingAmountMinor;
@@ -46,7 +46,7 @@ function formatPrice(item: Listing) {
   } catch {
     text = `${currency} ${value.toLocaleString("en")}`;
   }
-  const suffix = item.listingType === "RENT" && item.frequency ? FREQUENCY_SUFFIX[item.frequency] : undefined;
+  const suffix = priceUnitText(item.listingType, item.frequency);
   return suffix ? `${text} / ${suffix}` : text;
 }
 

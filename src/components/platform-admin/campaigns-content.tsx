@@ -10,26 +10,33 @@ type Campaign = {
   advertiser: { displayName: string; slug: string } | null;
   advertiserProvider: { displayName: string; slug: string; verificationStatus: string } | null;
   rejectionReason: string | null; startAt: string | null; endAt: string | null;
+  /** Server-computed with the public carousel rules (`src/modules/campaigns/eligibility.ts`). */
+  publicEligibility: { eligible: boolean; reason: string | null };
+  creativeReadiness: { note: string | null };
 };
 type ProviderOption = { id: string; displayName: string; type: string; verificationStatus: string };
 
+// Labels name where each placement actually renders. MARKETPLACE_PRIMARY is the homepage
+// advertising carousel on the website and in the native app; MARKETPLACE_INLINE is the carousel
+// on the property search page. (These were once swapped, which sent "carousel" campaigns to the
+// search page instead of the homepage and app.)
 const PLACEMENT_LABELS: Record<string, string> = {
-  HOMEPAGE_ANNOUNCEMENT: "Homepage Announcement",
-  MARKETPLACE_INLINE: "Marketplace Primary Carousel (Property Marketplace)",
-  MARKETPLACE_PRIMARY: "Property Services Marketplace",
+  MARKETPLACE_PRIMARY: "Homepage Advertising Carousel (web + app)",
+  MARKETPLACE_INLINE: "Property Search Carousel",
+  HOMEPAGE_ANNOUNCEMENT: "Homepage Announcement Bar",
   PROFESSIONAL_FEATURED: "Professional Directory",
-  DEVELOPMENT_FEATURED: "Development Feature",
-  SEARCH_FEATURED: "Search Results Feature",
+  DEVELOPMENT_FEATURED: "Development Feature (not yet public)",
+  SEARCH_FEATURED: "Search Results Feature (not yet public)",
 };
 const PLACEMENTS = Object.keys(PLACEMENT_LABELS);
 
 const PLACEMENT_DESCRIPTIONS: Record<string, string> = {
   HOMEPAGE_ANNOUNCEMENT: "Thin NesAfric-owned announcement bar on the corporate homepage. Text only — no promotional image is used.",
-  MARKETPLACE_INLINE: "Premium carousel placement at the top of the Property Marketplace.",
-  MARKETPLACE_PRIMARY: "Promotional carousel inside the Property Services Marketplace.",
-  PROFESSIONAL_FEATURED: "Featured placement for real estate professionals and companies.",
-  DEVELOPMENT_FEATURED: "Featured placement for property developments.",
-  SEARCH_FEATURED: "Promoted placement within relevant marketplace search results.",
+  MARKETPLACE_PRIMARY: "The advertising carousel below the search on the nesafric.com homepage and on the NesAfric app home screen.",
+  MARKETPLACE_INLINE: "Carousel at the top of the property search page on nesafric.com.",
+  PROFESSIONAL_FEATURED: "Banner on the professional directory for real estate professionals and companies.",
+  DEVELOPMENT_FEATURED: "Reserved for property developments. Not shown publicly yet.",
+  SEARCH_FEATURED: "Reserved for promoted search results. Not shown publicly yet.",
 };
 
 const CTA_PRESETS = [
@@ -125,13 +132,24 @@ function displayStatus(campaign: Campaign, now: Date): string {
   return "LIVE";
 }
 
+/** `datetime-local` values are in the admin's own time zone; the API stores UTC instants. */
+function fromLocalInput(value: string) {
+  return value ? new Date(value).toISOString() : undefined;
+}
+
+function toLocalInput(iso: string | null) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 function ctr(campaign: Campaign) {
   if (!campaign.impressionCount) return null;
   return (campaign.clickCount / campaign.impressionCount) * 100;
 }
 
 const emptyDraft = {
-  name: "", type: "GENERAL", placement: "MARKETPLACE_INLINE", headline: "", supportingText: "",
+  name: "", type: "GENERAL", placement: "MARKETPLACE_PRIMARY", headline: "", supportingText: "",
   ctaLabel: "", destinationUrl: "", priority: "0", startAt: "", endAt: "", advertiserServiceProviderId: "",
 };
 
@@ -345,7 +363,7 @@ export function CampaignsAdminContent() {
       name: campaign.name, type: campaign.type ?? "GENERAL", placement: campaign.placement,
       headline: campaign.headline, supportingText: campaign.supportingText ?? "",
       ctaLabel: campaign.ctaLabel ?? "", destinationUrl: campaign.destinationUrl,
-      priority: String(campaign.priority), startAt: campaign.startAt?.slice(0, 16) ?? "", endAt: campaign.endAt?.slice(0, 16) ?? "",
+      priority: String(campaign.priority), startAt: toLocalInput(campaign.startAt), endAt: toLocalInput(campaign.endAt),
       advertiserServiceProviderId: "",
     });
     setSelectedProvider(campaign.advertiserProvider ? { id: "", displayName: campaign.advertiserProvider.displayName, type: "", verificationStatus: campaign.advertiserProvider.verificationStatus } : null);
@@ -361,7 +379,7 @@ export function CampaignsAdminContent() {
         const response = await fetch(`/api/platform-admin/campaigns/${editingId}`, {
           method: "PATCH", headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            name: draft.name, type: draft.type, headline: draft.headline,
+            name: draft.name, type: draft.type, placement: draft.placement, headline: draft.headline,
             supportingText: draft.supportingText || undefined, ctaLabel: draft.ctaLabel || undefined,
             destinationUrl: draft.destinationUrl,
             advertiserServiceProviderId: selectedProvider?.id || undefined,
@@ -379,7 +397,7 @@ export function CampaignsAdminContent() {
             name: draft.name, type: draft.type, placement: draft.placement, headline: draft.headline,
             supportingText: draft.supportingText || undefined, ctaLabel: draft.ctaLabel || undefined,
             destinationUrl: draft.destinationUrl, priority: Number(draft.priority || 0),
-            startAt: draft.startAt || undefined, endAt: draft.endAt || undefined,
+            startAt: fromLocalInput(draft.startAt), endAt: fromLocalInput(draft.endAt),
             advertiserServiceProviderId: selectedProvider?.id || undefined,
             saveAsDraft: true,
           }),
@@ -624,6 +642,7 @@ export function CampaignsAdminContent() {
               <th className="px-4 py-3">Placement</th>
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Public visibility</th>
               <th className="px-4 py-3">Schedule</th>
               <th className="px-4 py-3">Priority</th>
               <th className="px-4 py-3">Impressions</th>
@@ -634,11 +653,11 @@ export function CampaignsAdminContent() {
           </thead>
           <tbody className="divide-y">
             {!campaigns ? (
-              <tr><td className="px-4 py-10 text-center text-sm text-muted" colSpan={11}>Loading campaign operations…</td></tr>
+              <tr><td className="px-4 py-10 text-center text-sm text-muted" colSpan={12}>Loading campaign operations…</td></tr>
             ) : campaigns.length === 0 ? (
-              <tr><td className="px-4 py-12 text-center" colSpan={11}><p className="font-semibold text-forest">No campaigns yet</p><p className="mt-1 text-sm text-muted">Create the first NesAfric-owned promotion to start using campaign inventory.</p></td></tr>
+              <tr><td className="px-4 py-12 text-center" colSpan={12}><p className="font-semibold text-forest">No campaigns yet</p><p className="mt-1 text-sm text-muted">Create the first NesAfric-owned promotion to start using campaign inventory.</p></td></tr>
             ) : visible.length === 0 ? (
-              <tr><td className="px-4 py-10 text-center" colSpan={11}><p className="font-semibold text-forest">No matching campaigns</p><p className="mt-1 text-sm text-muted">Change the status or placement filter to see other campaign records.</p></td></tr>
+              <tr><td className="px-4 py-10 text-center" colSpan={12}><p className="font-semibold text-forest">No matching campaigns</p><p className="mt-1 text-sm text-muted">Change the status or placement filter to see other campaign records.</p></td></tr>
             ) : visible.map(({ campaign, status }) => {
               const rate = ctr(campaign);
               const thumb = campaign.desktopMediaUrl ?? campaign.mobileMediaUrl;
@@ -664,6 +683,14 @@ export function CampaignsAdminContent() {
                   <td className="px-4 py-3 text-muted">{campaign.type ? TYPE_LABELS[campaign.type] ?? campaign.type : "—"}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[status] ?? "bg-surface text-muted"}`}>{status.replaceAll("_", " ")}</span>
+                  </td>
+                  <td className="max-w-[15rem] px-4 py-3 text-xs" data-testid={`campaign-visibility-${campaign.id}`}>
+                    {campaign.publicEligibility.eligible ? (
+                      <p className="font-semibold text-teal">Showing in {PLACEMENT_LABELS[campaign.placement] ?? campaign.placement}</p>
+                    ) : (
+                      <p className="font-semibold text-ink">Not currently showing: <span className="font-normal">{campaign.publicEligibility.reason}</span></p>
+                    )}
+                    {campaign.creativeReadiness.note && <p className="mt-1 leading-5 text-muted">{campaign.creativeReadiness.note}</p>}
                   </td>
                   <td className="px-4 py-3 text-xs text-muted">
                     {campaign.startAt ? new Date(campaign.startAt).toLocaleDateString() : "—"} → {campaign.endAt ? new Date(campaign.endAt).toLocaleDateString() : "—"}
@@ -838,7 +865,7 @@ export function CampaignsAdminContent() {
               <select className="rounded-xl border border-hairline p-2 text-sm" onChange={(event) => setDraft({ ...draft, type: event.target.value })} value={draft.type}>
                 {CAMPAIGN_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
               </select>
-              <select className="rounded-xl border border-hairline p-2 text-sm disabled:bg-surface" disabled={!!editingId} onChange={(event) => setDraft({ ...draft, placement: event.target.value })} value={draft.placement}>
+              <select aria-label="Placement" className="rounded-xl border border-hairline p-2 text-sm disabled:bg-surface" onChange={(event) => setDraft({ ...draft, placement: event.target.value })} value={draft.placement}>
                 {PLACEMENTS.map((placement) => <option key={placement} value={placement}>{PLACEMENT_LABELS[placement]}</option>)}
               </select>
               <div className="rounded-xl border border-hairline bg-warm-white p-3 text-xs sm:col-span-2">

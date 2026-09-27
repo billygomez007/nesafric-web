@@ -55,10 +55,11 @@ export const createPlatformCampaignSchema = z.object({
   /// campaign ever becomes publicly eligible, then either leave it a draft or call `publish`
   /// itself once the upload has actually succeeded.
   saveAsDraft: z.boolean().optional(),
-}).strict();
+}).strict().refine((value) => !value.startAt || !value.endAt || value.endAt > value.startAt, { path: ["endAt"], message: "The end date must be after the start date." });
 
 export const updatePlatformCampaignSchema = z.object({
   name: text(200).optional(),
+  placement: z.enum(ALL_PLACEMENTS).optional(),
   type: z.enum(CAMPAIGN_TYPES).nullable().optional(),
   headline: text(200).optional(),
   supportingText: z.string().trim().max(500).nullable().optional(),

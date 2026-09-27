@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { safeHttpUrl } from "@/platform/validation/url";
+import { isSalePriceUnit, LISTING_PRICE_UNITS, type ListingPriceUnit } from "@/lib/price-units";
 
 const id = z.string().uuid();
 const optionalText = (max: number) => z.string().trim().min(1).max(max).nullable().optional();
@@ -53,7 +54,8 @@ const listingFields = {
   askingAmountMinor: minorUnits.nullable().optional(),
   rentAmountMinor: minorUnits.nullable().optional(),
   currencyCode: currency,
-  frequency: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL", "CUSTOM"]).nullable().optional(),
+  /// Price unit (`ListingPriceUnit`), kept under the historic `frequency` name for API stability.
+  frequency: z.enum(LISTING_PRICE_UNITS).nullable().optional(),
   availableFrom: z.coerce.date(),
   bedrooms: z.number().int().min(0).max(100).nullable().optional(),
   bathrooms: z.number().min(0).max(100).multipleOf(0.5).nullable().optional(),
@@ -100,7 +102,7 @@ function validateListing(
     listingType?: "RENT" | "SALE";
     askingAmountMinor?: string | null;
     rentAmountMinor?: string | null;
-    frequency?: "MONTHLY" | "QUARTERLY" | "ANNUAL" | "CUSTOM" | null;
+    frequency?: ListingPriceUnit | null;
     mapLatitude?: number | null;
     mapLongitude?: number | null;
     mapPrecision?: "APPROXIMATE" | "DISTRICT" | "CITY" | "REGION" | null;
@@ -120,13 +122,15 @@ function validateListing(
   }
   if (listing.listingType === "RENT") {
     if (!listing.rentAmountMinor) context.addIssue({ code: "custom", path: ["rentAmountMinor"], message: "Rent amount is required for rental listings." });
-    if (!listing.frequency) context.addIssue({ code: "custom", path: ["frequency"], message: "Frequency is required for rental listings." });
+    if (!listing.frequency) context.addIssue({ code: "custom", path: ["frequency"], message: "Choose a price unit for rental listings." });
     if (listing.askingAmountMinor != null) context.addIssue({ code: "custom", path: ["askingAmountMinor"], message: "Asking amount is only valid for sale listings." });
   }
   if (listing.listingType === "SALE") {
     if (!listing.askingAmountMinor) context.addIssue({ code: "custom", path: ["askingAmountMinor"], message: "Asking amount is required for sale listings." });
     if (listing.rentAmountMinor != null) context.addIssue({ code: "custom", path: ["rentAmountMinor"], message: "Rent amount is only valid for rental listings." });
-    if (listing.frequency != null) context.addIssue({ code: "custom", path: ["frequency"], message: "Frequency is only valid for rental listings." });
+    if (listing.frequency != null && !isSalePriceUnit(listing.frequency)) {
+      context.addIssue({ code: "custom", path: ["frequency"], message: "A sale price is a total price, per square metre, or per kilometre." });
+    }
   }
   if ((listing.mapLatitude == null) !== (listing.mapLongitude == null)) {
     context.addIssue({ code: "custom", path: ["mapLatitude"], message: "Map latitude and longitude must be provided together." });
@@ -241,7 +245,7 @@ export const publicListingSearchSchema = z.object({
   minPriceMinor: minorUnits.optional(),
   maxPriceMinor: minorUnits.optional(),
   currencyCode: currency.optional(),
-  frequency: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL", "CUSTOM"]).optional(),
+  frequency: z.enum(LISTING_PRICE_UNITS).optional(),
   availableOn: z.coerce.date().optional(),
   bedroomsMin: z.coerce.number().int().min(0).max(100).optional(),
   bedroomsMax: z.coerce.number().int().min(0).max(100).optional(),
