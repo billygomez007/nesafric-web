@@ -38,27 +38,33 @@ export function resolveAvailableWorkspaces(session: WorkspaceSession): Available
   if (session.status !== "signedIn" || !workspaces) return [MARKETPLACE];
   return [
     MARKETPLACE,
-    ...workspaces.propertyOsOrganisations.map((organisation) => ({
-      kind: "property_management" as const,
-      id: organisation.id,
-      name: organisation.name,
-      subtitle: WORKSPACE_KIND_LABEL.property_management,
-      route: { pathname: "/workspace/[organisationId]", params: { organisationId: organisation.id } } as const,
-    })),
-    ...workspaces.marketplaceProfessionals.map((professional) => ({
-      kind: "professional" as const,
-      id: professional.id,
-      name: professional.displayName,
-      subtitle: `${WORKSPACE_KIND_LABEL.professional} · ${humanise(professional.type)} · ${humanise(professional.myRole)}`,
-      route: { pathname: "/agent/[professionalId]", params: { professionalId: professional.id } } as const,
-    })),
-    ...providerWorkspaces(workspaces).map((provider) => ({
-      kind: "service_provider" as const,
-      id: provider.id,
-      name: provider.displayName,
-      subtitle: `${WORKSPACE_KIND_LABEL.service_provider} · ${humanise(provider.verificationStatus)}`,
-      route: { pathname: "/provider/[providerId]", params: { providerId: provider.id } } as const,
-    })),
+    ...workspaces.propertyOsOrganisations
+      .filter((organisation) => typeof organisation.id === "string" && organisation.id.trim().length > 0)
+      .map((organisation) => ({
+        kind: "property_management" as const,
+        id: organisation.id,
+        name: organisation.name,
+        subtitle: WORKSPACE_KIND_LABEL.property_management,
+        route: { pathname: "/workspace/[organisationId]", params: { organisationId: organisation.id } } as const,
+      })),
+    ...workspaces.marketplaceProfessionals
+      .filter((professional) => typeof professional.id === "string" && professional.id.trim().length > 0)
+      .map((professional) => ({
+        kind: "professional" as const,
+        id: professional.id,
+        name: professional.displayName,
+        subtitle: `${WORKSPACE_KIND_LABEL.professional} · ${humanise(professional.type)} · ${humanise(professional.myRole)}`,
+        route: { pathname: "/agent/[professionalId]", params: { professionalId: professional.id } } as const,
+      })),
+    ...providerWorkspaces(workspaces)
+      .filter((provider) => typeof provider.id === "string" && provider.id.trim().length > 0)
+      .map((provider) => ({
+        kind: "service_provider" as const,
+        id: provider.id,
+        name: provider.displayName,
+        subtitle: `${WORKSPACE_KIND_LABEL.service_provider} · ${humanise(provider.verificationStatus)}`,
+        route: { pathname: "/provider/[providerId]", params: { providerId: provider.id } } as const,
+      })),
   ];
 }
 

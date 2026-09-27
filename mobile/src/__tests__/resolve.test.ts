@@ -46,6 +46,25 @@ describe("resolveAvailableWorkspaces", () => {
     const legacy = { propertyOsOrganisations: [ORG], marketplaceProfessionals: [] } as Workspaces;
     expect(resolveAvailableWorkspaces({ status: "signedIn", workspaces: legacy }).map((workspace) => workspace.kind)).toEqual(["marketplace", "property_management"]);
   });
+
+  it("ignores malformed server workspaces whose ids are null or empty", () => {
+    const malformed = {
+      propertyOsOrganisations: [
+        { ...ORG, id: null },
+        { ...ORG, id: "" },
+      ],
+      marketplaceProfessionals: [
+        { ...PRO, id: null },
+        { ...PRO, id: "   " },
+      ],
+      serviceProviders: [
+        { ...PROVIDER, id: null },
+        { ...PROVIDER, id: "" },
+      ],
+    } as unknown as Workspaces;
+
+    expect(resolveAvailableWorkspaces({ status: "signedIn", workspaces: malformed })).toEqual([MARKETPLACE]);
+  });
 });
 
 describe("resolveInitialWorkspace", () => {

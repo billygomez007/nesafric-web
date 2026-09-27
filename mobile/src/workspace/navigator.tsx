@@ -44,7 +44,36 @@ const LAUNCH_WAIT_MS = 2500;
 function go(destination: Destination) {
   // Marketplace: stay where the person already is (Home, Search, Saved or Account are all the
   // marketplace), rather than pulling them to another tab.
-  if (destination.type !== "marketplace") router.push(destinationHref(destination));
+  if (destination.type === "marketplace") return;
+
+  const href = destinationHref(destination);
+
+  // Expo Router stringifies dynamic params internally. A malformed or stale server payload with
+  // a null route parameter must never crash the app during launch restoration.
+  if (typeof href === "string") {
+    if (!href.trim()) return;
+    router.push(href);
+    return;
+  }
+
+  if (!href || typeof href !== "object") return;
+
+  const pathname = "pathname" in href ? href.pathname : undefined;
+  if (pathname == null || String(pathname).trim().length === 0) return;
+
+  const params = "params" in href ? href.params : undefined;
+  if (
+    params &&
+    Object.values(params).some(
+      (value) =>
+        value == null ||
+        (typeof value === "string" && value.trim().length === 0),
+    )
+  ) {
+    return;
+  }
+
+  router.push(href);
 }
 
 export function WorkspaceNavigator() {
