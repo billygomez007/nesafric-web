@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { trackEvent } from "@/platform/analytics";
+import { safeReturnTo } from "@/platform/auth/return-to";
 import { buttonClass } from "@/components/ui/button-styles";
 import { controlClass } from "@/components/ui/field-styles";
 
@@ -109,10 +110,16 @@ export function AuthForm({
         method: "email",
       });
 
+      // `?returnTo=/path` lets a caller that cannot set the return-to cookie (the mobile app's
+      // in-app browser) choose where a new account lands, e.g. a specific onboarding step.
+      // Same-origin paths only (`safeReturnTo`).
+      const queryReturnTo = safeReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
       const destination =
         typeof body.returnTo === "string" &&
         body.returnTo.startsWith("/")
           ? body.returnTo
+          : queryReturnTo
+            ? queryReturnTo
           : mode === "register"
             ? "/onboarding"
             : resolveWorkspace(

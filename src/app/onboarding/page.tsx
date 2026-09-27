@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { MarketplaceProfessionalOnboardingForm } from "@/components/marketplace-professional-onboarding-form";
@@ -18,8 +18,16 @@ const choices: Array<{ key: Exclude<Choice, null>; title: string; description: s
   { key: "SERVICES" as const, title: "Offer property services", description: "For artisans, contractors and service businesses receiving property-related work through NesAfric.", event: "offer_property_services_selected" },
 ];
 
+const START_PARAM: Record<string, Exclude<Choice, null>> = { manage: "MANAGE", market: "MARKET", services: "SERVICES" };
+
 export default function OnboardingPage() {
   const [choice, setChoice] = useState<Choice>(null);
+  // `?start=manage|market|services` opens one setup directly (used by the mobile app's role cards).
+  useEffect(() => {
+    const start = START_PARAM[new URLSearchParams(window.location.search).get("start") ?? ""];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the URL after hydration
+    if (start) setChoice(start);
+  }, []);
   const select = (next: Exclude<Choice, null>, event: CampaignEvent) => { trackCampaignEvent(event); trackEvent("onboarding_started", { onboarding_type: next === "MANAGE" ? "manage_properties" : next === "MARKET" ? "market_properties" : "offer_property_services" }); setChoice(next); };
   const heading = choice === "MARKET" ? "Set up your marketplace profile" : choice === "SERVICES" ? "Set up your service-professional profile" : "Set up your organisation";
 

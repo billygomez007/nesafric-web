@@ -304,6 +304,8 @@ export const marketplaceLeadListSchema = z.object({
   assigneeMemberId: id.optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  /** Response shape (`lead-responses.ts`); validated here so the strict schema accepts it. */
+  view: z.enum(["full", "inbox"]).optional(),
 }).strict();
 
 export const updateMarketplaceLeadSchema = z.object({
@@ -335,6 +337,8 @@ export const viewingRequestListSchema = z.object({
   assigneeMemberId: id.optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  /** Response shape (`lead-responses.ts`); validated here so the strict schema accepts it. */
+  view: z.enum(["full", "inbox"]).optional(),
 }).strict();
 
 export const updateViewingRequestSchema = z.object({

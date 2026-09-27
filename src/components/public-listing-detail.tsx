@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { photosCoverFirst } from "@/lib/listing-cover";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { idempotencyKeyFor, type IdempotencySlot } from "@/lib/idempotency-key";
 import type { PublicListing } from "@/components/property-marketplace-search";
 import { ErrorState, Skeleton, SuccessNotice } from "@/components/ui/states";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -25,6 +26,10 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
   const [submitting, setSubmitting] = useState(false);
   // Captured once so "Available now" is stable across re-renders.
   const [now] = useState(() => Date.now());
+  // Retrying an identical submission (e.g. after the viewing step failed) replays the same lead
+  // instead of creating a duplicate; see src/lib/idempotency-key.ts.
+  const leadKey = useRef<IdempotencySlot>(null);
+  const viewingKey = useRef<IdempotencySlot>(null);
   useEffect(() => {
     fetch(`/api/public/listings/${listingId}`).then(async (response) => {
       if (!response.ok) throw new Error((await response.json()).error?.message ?? "This listing is unavailable.");
@@ -46,15 +51,17 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
     }
     setSubmitting(true);
     try {
-      const leadResponse = await fetch(`/api/public/listings/${listingId}/leads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: data.get("name"), email: data.get("email") || undefined, phone: data.get("phone") || undefined, message: data.get("message") || undefined, source: "PROPERTY_MARKETPLACE", marketingConsent: data.get("marketingConsent") === "on" }) });
+      const leadBody = JSON.stringify({ name: data.get("name"), email: data.get("email") || undefined, phone: data.get("phone") || undefined, message: data.get("message") || undefined, source: "PROPERTY_MARKETPLACE", marketingConsent: data.get("marketingConsent") === "on" });
+      const leadResponse = await fetch(`/api/public/listings/${listingId}/leads`, { method: "POST", headers: { "content-type": "application/json", "idempotency-key": idempotencyKeyFor(leadKey, leadBody) }, body: leadBody });
       if (!leadResponse.ok) return setError((await leadResponse.json()).error?.message ?? "Unable to send enquiry.");
       const lead = await leadResponse.json();
       const requestedViewing = data.get("requestViewing") === "on";
       if (requestedViewing) {
-        const viewingResponse = await fetch(`/api/public/listings/${listingId}/viewings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ leadId: lead.id, preferredTimes: [{ startsAt: data.get("startsAt"), endsAt: data.get("endsAt"), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }], requesterNote: data.get("message") || undefined }) });
+        const viewingBody = JSON.stringify({ leadId: lead.id, preferredTimes: [{ startsAt: data.get("startsAt"), endsAt: data.get("endsAt"), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }], requesterNote: data.get("message") || undefined });
+        const viewingResponse = await fetch(`/api/public/listings/${listingId}/viewings`, { method: "POST", headers: { "content-type": "application/json", "idempotency-key": idempotencyKeyFor(viewingKey, viewingBody) }, body: viewingBody });
         if (!viewingResponse.ok) return setError((await viewingResponse.json()).error?.message ?? "Enquiry sent, but viewing request failed.");
       }
-      form.reset(); setError(""); setSuccess(requestedViewing ? "Enquiry and viewing request sent." : "Enquiry sent.");
+      form.reset(); leadKey.current = null; viewingKey.current = null; setError(""); setSuccess(requestedViewing ? "Enquiry and viewing request sent." : "Enquiry sent.");
       trackEvent("property_enquiry", { ...listingEventParams(listing), requested_viewing: requestedViewing });
     } finally {
       setSubmitting(false);

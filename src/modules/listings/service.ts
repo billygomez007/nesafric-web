@@ -59,13 +59,8 @@ export const PUBLIC_LISTING_RATE_LIMIT = {
   enforcement: "gateway-ready",
 } as const;
 
-export const PUBLIC_LISTING_WRITE_RATE_LIMIT = {
-  policy: "public-listing-enquiry",
-  limit: 20,
-  windowSeconds: 60,
-  keyStrategy: "ip+listing",
-  enforcement: "gateway-ready",
-} as const;
+// Guest enquiry / viewing write limits are enforced (not just advertised) by
+// `src/platform/security/public-write-limit.ts` at the public HTTP routes.
 
 const listingInclude = {
   property: { select: { id: true, name: true, referenceNumber: true, status: true, archivedAt: true } },
@@ -524,8 +519,20 @@ export async function listMarketplaceProfessionalListings(userId: string, market
   return { items, total, page: filters.page, pageSize: filters.pageSize };
 }
 
-export async function listMarketplaceProfessionalLeads(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
+/**
+ * Read access to a marketplace professional's enquiry inbox: an ACTIVE member (any role) of a
+ * professional profile that isn't archived. Owning or creating a profile grants nothing by itself.
+ * Enquiries and viewings are then scoped by the listing's `marketplaceProfessionalId`, never by a
+ * client-supplied organisation.
+ */
+async function requireProfessionalInboxAccess(userId: string, marketplaceProfessionalId: string) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  const professional = await db.marketplaceProfessional.findFirst({ where: { id: marketplaceProfessionalId, archivedAt: null }, select: { id: true } });
+  if (!professional) throw notFound();
+}
+
+export async function listMarketplaceProfessionalLeads(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
   // Scope by the listing's `marketplaceProfessionalId`, not by `organisationId`: a third-party
   // listing (brokerage marketing a landlord's property) attributes its lead to the landlord's
   // organisation, so filtering on `organisationId` alone would silently drop those leads from
@@ -540,7 +547,7 @@ export async function listMarketplaceProfessionalLeads(userId: string, marketpla
   const [items, total] = await db.$transaction([
     db.marketplaceLead.findMany({
       where,
-      include: leadInclude,
+      include: leadListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,
@@ -554,7 +561,7 @@ export async function listMarketplaceProfessionalLeads(userId: string, marketpla
 }
 
 export async function getMarketplaceProfessionalLead(userId: string, marketplaceProfessionalId: string, leadId: string) {
-  await requireMarketplaceMember(userId, marketplaceProfessionalId);
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
   leadId = leadIdSchema.parse(leadId);
   const lead = await db.marketplaceLead.findFirst({ where: { id: leadId, listing: { marketplaceProfessionalId } }, include: leadInclude });
   if (!lead) throw notFound();
@@ -570,10 +577,40 @@ export async function updateMarketplaceProfessionalLead(userId: string, marketpl
 }
 
 export async function listMarketplaceProfessionalViewings(userId: string, marketplaceProfessionalId: string, query: unknown = {}) {
-  await requireMarketplaceMember(userId, marketplaceProfessionalId);
-  const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { backingOrganisationId: true } });
-  if (!professional) throw notFound();
-  return listViewingRequests(userId, professional.backingOrganisationId, query);
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
+  // Same scope as the professional's leads: the listing's professional, so viewings for a
+  // third-party listing (attributed to the landlord's organisation) are included, and the backing
+  // organisation's other rows are not.
+  const filters = viewingRequestListSchema.parse(query);
+  const where: Prisma.ViewingRequestWhereInput = {
+    listing: { marketplaceProfessionalId },
+    ...(filters.listingId ? { listingId: filters.listingId } : {}),
+    ...(filters.leadId ? { leadId: filters.leadId } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.assigneeMemberId ? { assigneeMemberId: filters.assigneeMemberId } : {}),
+  };
+  const [items, total] = await db.$transaction([
+    db.viewingRequest.findMany({
+      where,
+      include: viewingListInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (filters.page - 1) * filters.pageSize,
+      take: filters.pageSize,
+    }),
+    db.viewingRequest.count({ where }),
+  ]);
+  return {
+    items,
+    pagination: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.ceil(total / filters.pageSize) },
+  };
+}
+
+export async function getMarketplaceProfessionalViewing(userId: string, marketplaceProfessionalId: string, viewingRequestId: string) {
+  await requireProfessionalInboxAccess(userId, marketplaceProfessionalId);
+  viewingRequestId = viewingRequestIdSchema.parse(viewingRequestId);
+  const viewing = await db.viewingRequest.findFirst({ where: { id: viewingRequestId, listing: { marketplaceProfessionalId } }, include: viewingInclude });
+  if (!viewing) throw notFound();
+  return viewing;
 }
 
 export async function getMarketplaceProfessionalListing(userId: string, marketplaceProfessionalId: string, listingId: string) {
@@ -1327,7 +1364,22 @@ const leadInclude = {
   },
 } satisfies Prisma.MarketplaceLeadInclude;
 
-export async function createMarketplaceLead(listingId: string, userId: string | undefined, input: unknown) {
+/** List rows only need what `leadListItem` returns — not full history, activities or notes. */
+const leadListInclude = {
+  listing: { select: { id: true, title: true, listingType: true, status: true } },
+  assignee: { select: { id: true, user: { select: { displayName: true } } } },
+  viewingRequests: { select: { id: true, status: true, confirmedStartsAt: true, createdAt: true }, orderBy: { createdAt: "desc" as const } },
+  rentalApplications: { select: { id: true, status: true }, orderBy: { createdAt: "desc" as const } },
+} satisfies Prisma.MarketplaceLeadInclude;
+
+/**
+ * Binds a public-form submission (`Idempotency-Key`) to the row it creates. Stored in the same
+ * transaction as the lead / viewing, under a unique (listingId, idempotencyKeyHash) constraint, so a
+ * retried submission can never create a second row or notification — however long after.
+ */
+export type SubmissionBinding = { keyHash: string; fingerprint: string };
+
+export async function createMarketplaceLead(listingId: string, userId: string | undefined, input: unknown, options: { submission?: SubmissionBinding } = {}) {
   listingId = listingIdSchema.parse(listingId);
   const data = createMarketplaceLeadSchema.parse(input);
   const result = await db.$transaction(async (tx) => {
@@ -1341,6 +1393,8 @@ export async function createMarketplaceLead(listingId: string, userId: string | 
         listingId,
         userId,
         ...data,
+        idempotencyKeyHash: options.submission?.keyHash,
+        idempotencyFingerprint: options.submission?.fingerprint,
         history: { create: { actorUserId: userId, toStatus: "NEW" } },
         activities: { create: { actorUserId: userId, type: "lead.created" } },
       },
@@ -1384,7 +1438,7 @@ export async function listMarketplaceLeads(userId: string, organisationId: strin
   const [items, total] = await db.$transaction([
     db.marketplaceLead.findMany({
       where,
-      include: leadInclude,
+      include: leadListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,
@@ -1507,10 +1561,19 @@ const viewingInclude = {
   history: { orderBy: { createdAt: "asc" as const } },
 } satisfies Prisma.ViewingRequestInclude;
 
+/** List rows only need what `viewingListItem` returns (no history, no requester contact). */
+const viewingListInclude = {
+  listing: { select: { id: true, title: true, listingType: true, status: true } },
+  lead: { select: { id: true, name: true, status: true } },
+  assignee: { select: { id: true, user: { select: { displayName: true } } } },
+  preferredTimes: { orderBy: { startsAt: "asc" as const } },
+} satisfies Prisma.ViewingRequestInclude;
+
 export async function createViewingRequest(
   listingId: string,
   userId: string | undefined,
   input: unknown,
+  options: { submission?: SubmissionBinding } = {},
 ) {
   listingId = listingIdSchema.parse(listingId);
   const data = createViewingRequestSchema.parse(input);
@@ -1534,6 +1597,8 @@ export async function createViewingRequest(
         leadId: lead.id,
         createdByUserId: userId,
         requesterNote: data.requesterNote,
+        idempotencyKeyHash: options.submission?.keyHash,
+        idempotencyFingerprint: options.submission?.fingerprint,
         preferredTimes: { create: data.preferredTimes },
         history: { create: { actorUserId: userId, toStatus: "REQUESTED" } },
       },
@@ -1604,7 +1669,7 @@ export async function listViewingRequests(userId: string, organisationId: string
   const [items, total] = await db.$transaction([
     db.viewingRequest.findMany({
       where,
-      include: viewingInclude,
+      include: viewingListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,
@@ -1747,4 +1812,38 @@ export async function updateViewingRequest(
     }
     return updated;
   });
+}
+
+/**
+ * Finds the lead a public-form submission already created on this listing. Returns the same public
+ * result shape as `createMarketplaceLead`, or null. Matching needs the client's secret random key AND
+ * an identical submission fingerprint, so knowing someone's phone number or email never reveals
+ * their lead; the same key with different contents is rejected.
+ */
+export async function findLeadForSubmission(listingId: string, submission: SubmissionBinding) {
+  const lead = await db.marketplaceLead.findUnique({
+    where: { listingId_idempotencyKeyHash: { listingId, idempotencyKeyHash: submission.keyHash } },
+    select: { id: true, listingId: true, status: true, createdAt: true, idempotencyFingerprint: true },
+  });
+  if (!lead) return null;
+  if (lead.idempotencyFingerprint !== submission.fingerprint) throw idempotencyKeyReused();
+  return { id: lead.id, listingId: lead.listingId, status: lead.status, createdAt: lead.createdAt };
+}
+
+/** As `findLeadForSubmission`, for viewing requests (same result shape as `createViewingRequest`). */
+export async function findViewingForSubmission(listingId: string, submission: SubmissionBinding) {
+  const viewing = await db.viewingRequest.findUnique({
+    where: { listingId_idempotencyKeyHash: { listingId, idempotencyKeyHash: submission.keyHash } },
+    select: {
+      id: true, listingId: true, leadId: true, status: true, createdAt: true, idempotencyFingerprint: true,
+      preferredTimes: { orderBy: { startsAt: "asc" } },
+    },
+  });
+  if (!viewing) return null;
+  if (viewing.idempotencyFingerprint !== submission.fingerprint) throw idempotencyKeyReused();
+  return { id: viewing.id, listingId: viewing.listingId, leadId: viewing.leadId, status: viewing.status, preferredTimes: viewing.preferredTimes, createdAt: viewing.createdAt };
+}
+
+function idempotencyKeyReused() {
+  return new AppError("IDEMPOTENCY_KEY_REUSED", 422, "This request key was already used for a different submission. Start a new submission instead of reusing the key.");
 }

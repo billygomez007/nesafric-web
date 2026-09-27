@@ -67,30 +67,44 @@ const providerInclude = {
   verificationHistory: { orderBy: { createdAt: "asc" as const } },
 } satisfies Prisma.ServiceProviderInclude;
 
-export async function ownsProvider(userId: string, providerId: string, tx: Tx | typeof db = db) {
-  const provider = await tx.serviceProvider.findFirst({
-    where: {
-      id: providerId,
-      archivedAt: null,
-      OR: [
-        { individualUserId: userId },
-        { administratorUserId: userId },
-        {
-          companyOrganisation: {
-            members: {
-              some: {
-                userId,
-                status: "ACTIVE",
-                archivedAt: null,
-                roles: { some: { role: { key: { in: ["organisation_owner", "administrator"] } } } },
-              },
+/** Who may act as a provider's owner: the individual, its administrator, or an active owner or
+ * administrator of its company organisation. Archived providers are never owned. */
+function ownedProviderWhere(userId: string): Prisma.ServiceProviderWhereInput {
+  return {
+    archivedAt: null,
+    OR: [
+      { individualUserId: userId },
+      { administratorUserId: userId },
+      {
+        companyOrganisation: {
+          members: {
+            some: {
+              userId,
+              status: "ACTIVE",
+              archivedAt: null,
+              roles: { some: { role: { key: { in: ["organisation_owner", "administrator"] } } } },
             },
           },
         },
-      ],
-    },
-  });
+      },
+    ],
+  };
+}
+
+export async function ownsProvider(userId: string, providerId: string, tx: Tx | typeof db = db) {
+  const provider = await tx.serviceProvider.findFirst({ where: { id: providerId, ...ownedProviderWhere(userId) } });
   return provider;
+}
+
+/** The provider profiles this user owns, for the workspace list. Status fields only — no
+ * contact, legal, evidence or review data. */
+export async function listOwnedProviders(userId: string) {
+  const providers = await db.serviceProvider.findMany({
+    where: ownedProviderWhere(userId),
+    select: { id: true, displayName: true, type: true, slug: true, verificationStatus: true, availabilityStatus: true, suspendedAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return providers.map(({ suspendedAt, ...provider }) => ({ ...provider, suspended: suspendedAt !== null }));
 }
 
 async function requireProviderOwner(userId: string, providerId: string, tx: Tx | typeof db = db) {
