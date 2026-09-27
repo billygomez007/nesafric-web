@@ -41,7 +41,11 @@ export const updateMarketplaceProfileSchema = z.object({
   serviceAreas: z.array(marketplaceServiceAreaSchema).max(100).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
+/** Free text: whitespace-only means "no search"; longer input is refused rather than truncated. */
+const searchText = z.string().max(200).transform((value) => value.trim().replace(/\s+/g, " ")).transform((value) => value || undefined);
+
 export const publicMarketplaceDiscoverySchema = z.object({
+  q: searchText.optional(),
   // Underscore is a real, existing part of several seeded category keys (e.g. "pest_control",
   // "facility_maintenance") — hyphen-only previously rejected a working "?category=" filter for
   // any of them.

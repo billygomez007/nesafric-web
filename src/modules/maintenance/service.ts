@@ -13,12 +13,16 @@ import {
   maintenanceNoteSchema,
   recordWorkOrderCostSchema,
   requestMaintenanceApprovalSchema,
+  providerCancellationReasonSchema,
   transitionMaintenanceSchema,
   updateWorkOrderSchema,
 } from "./schemas";
+import type { z } from "zod";
+import { attributionForReason } from "@/modules/providers/reputation";
 import { toTenantMaintenanceView } from "./tenant-view";
 
 type Tx = Prisma.TransactionClient;
+type ProviderCancellationReason = z.infer<typeof providerCancellationReasonSchema>;
 type RequestRecord = { id: string; organisationId: string; propertyId: string; unitId: string | null; status: MaintenanceStatus };
 
 const transitions: Record<MaintenanceStatus, readonly MaintenanceStatus[]> = {
@@ -164,6 +168,58 @@ async function appendWorkOrderHistory(tx: Tx, workOrder: {
   });
 }
 
+/**
+ * Cancels the work order's open provider assignment(s), recording the actor (server-derived), the
+ * stated reason, and the responsibility derived from it — never taken from the client. Each
+ * cancellation is audited with before/after status, reason and attribution. Only provider-caused,
+ * post-acceptance cancellations affect reputation (see `@/modules/providers/reputation`).
+ */
+async function cancelActiveProviderAssignments(
+  tx: Tx,
+  organisationId: string,
+  workOrderId: string,
+  actorUserId: string,
+  cancelledAt: Date,
+  reason: ProviderCancellationReason | undefined,
+  note: string | undefined,
+) {
+  const active = await tx.providerAssignment.findMany({ where: { workOrderId, status: { in: ["PENDING", "ACCEPTED"] } } });
+  const attribution = attributionForReason(reason);
+  for (const assignment of active) {
+    // Guarded on the status just read, so a concurrent change is never overwritten.
+    const { count } = await tx.providerAssignment.updateMany({
+      where: { id: assignment.id, status: assignment.status },
+      data: {
+        status: "CANCELLED",
+        cancelledAt,
+        cancelledByUserId: actorUserId,
+        cancellationReason: reason ?? null,
+        cancellationNote: note ?? null,
+        cancellationAttribution: attribution,
+      },
+    });
+    if (!count) continue;
+    const payload = {
+      assignmentId: assignment.id,
+      workOrderId,
+      providerId: assignment.providerId,
+      actorUserId,
+      fromStatus: assignment.status,
+      toStatus: "CANCELLED",
+      reason: reason ?? null,
+      attribution,
+      acceptedBeforeCancellation: assignment.acceptedAt !== null,
+      cancelledAt: cancelledAt.toISOString(),
+    };
+    await tx.auditEvent.create({
+      data: { organisationId, actorUserId, action: "provider.assignment_cancelled", entityType: "provider_assignment", entityId: assignment.id, metadata: json(payload) },
+    });
+    await tx.domainEvent.create({
+      data: { organisationId, name: "provider.assignment_cancelled", aggregateType: "provider_assignment", aggregateId: assignment.id, payload: json(payload) },
+    });
+  }
+}
+
 async function transitionInTransaction(
   tx: Tx,
   request: RequestRecord,
@@ -171,6 +227,7 @@ async function transitionInTransaction(
   target: MaintenanceStatus,
   note?: string,
   metadata?: unknown,
+  cancellation: { reason?: ProviderCancellationReason } = {},
 ) {
   if (!transitions[request.status].includes(target)) {
     throw new AppError("INVALID_MAINTENANCE_TRANSITION", 409, `Cannot transition maintenance from ${request.status} to ${target}.`);
@@ -236,10 +293,7 @@ async function transitionInTransaction(
     for (const current of workOrders) {
       const workOrder = await tx.workOrder.update({ where: { id: current.id }, data: { status: "CANCELLED" } });
       await appendWorkOrderHistory(tx, workOrder, actorUserId, note, { maintenanceStatus: target });
-      await tx.providerAssignment.updateMany({
-        where: { workOrderId: current.id, status: { in: ["PENDING", "ACCEPTED"] } },
-        data: { status: "CANCELLED" },
-      });
+      await cancelActiveProviderAssignments(tx, request.organisationId, current.id, actorUserId, now, cancellation.reason, note);
     }
   }
   const updated = await tx.maintenanceRequest.update({
@@ -397,7 +451,7 @@ export async function transitionMaintenanceRequest(userId: string, organisationI
   return db.$transaction(async (tx) => {
     const request = await tx.maintenanceRequest.findFirst({ where: { id: requestId, organisationId } });
     if (!request) throw notFound();
-    return transitionInTransaction(tx, request, userId, data.status, data.note, data.metadata);
+    return transitionInTransaction(tx, request, userId, data.status, data.note, data.metadata, { reason: data.cancellationReason });
   });
 }
 

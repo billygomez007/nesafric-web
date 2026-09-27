@@ -5,18 +5,35 @@ import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, NETWORK_ERROR } from "@/api/client";
+import { MarketplaceModeSwitch } from "@/components/marketplace-mode-switch";
 import { AppText, Button, Card, Loading, Notice } from "@/components/ui";
+import type { MarketplaceMode } from "@/marketplace/mode";
 import { openSearch } from "@/marketplace/navigation";
 import { useSaved } from "@/marketplace/saved";
 import { SavedListingCard } from "@/marketplace/saved-card";
+import { SavedProviders } from "@/services/components/saved-providers";
 import { colors, spacing } from "@/theme/tokens";
+
+/**
+ * Saved, in two sections matching the marketplace selector: Properties (the default) and Service
+ * Providers. The choice here is local to Saved and doesn't move Home or Search.
+ */
+export default function SavedScreen() {
+  const [section, setSection] = useState<MarketplaceMode>("properties");
+  return (
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
+      <MarketplaceModeSwitch value={section} onChange={setSection} label="Saved" testIDPrefix="saved-section" style={styles.switch} />
+      {section === "services" ? <SavedProviders /> : <SavedProperties />}
+    </SafeAreaView>
+  );
+}
 
 /**
  * Saved properties. Works without an account (saves live on this device; there is no server-side
  * favourites API yet). Each card re-checks its listing with the public API, so prices stay current
  * and listings that have left the marketplace are shown as no longer available.
  */
-export default function SavedScreen() {
+function SavedProperties() {
   const { ready, items, error, dismissError } = useSaved();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -41,7 +58,7 @@ export default function SavedScreen() {
   const count = items.length;
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
+    <View style={styles.flex}>
       <View style={styles.header}>
         <AppText variant="title" accessibilityRole="header">
           Saved properties
@@ -76,7 +93,7 @@ export default function SavedScreen() {
           testID="saved-list"
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -99,6 +116,8 @@ function EmptySaved() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
+  switch: { marginHorizontal: spacing.xl, marginTop: spacing.sm },
   header: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.xs },
   notice: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, gap: spacing.sm },
   list: { padding: spacing.xl, paddingTop: spacing.md, gap: spacing.lg, flexGrow: 1 },

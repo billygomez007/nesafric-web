@@ -7,6 +7,8 @@ import {
 import { db } from "@/platform/database/client";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { AppError, forbidden, notFound } from "@/platform/errors";
+import { providerLogoView } from "@/modules/providers/logo";
+import { completionRate, reputationSql } from "@/modules/providers/reputation";
 import {
   createMarketplaceEnquirySchema,
   marketplaceEnquiryListSchema,
@@ -29,7 +31,7 @@ export const PUBLIC_MARKETPLACE_RATE_LIMIT = {
 } as const;
 
 const profileInclude = {
-  provider: true,
+  provider: { include: { logo: { select: { storageKey: true, classification: true, archivedAt: true } } } },
   categories: { include: { category: true }, orderBy: { category: { name: "asc" as const } } },
   serviceAreas: { orderBy: [{ countryCode: "asc" as const }, { region: "asc" as const }, { city: "asc" as const }] },
 } satisfies Prisma.ProviderMarketplaceProfileInclude;
@@ -317,7 +319,50 @@ type RankRow = {
   average_rating: number | null;
   rating_count: bigint;
   completed_jobs: bigint;
+  completion_basis: bigint;
 };
+
+// Completion rate and completed jobs follow the single reputation definition in
+// `@/modules/providers/reputation` (re-exported for existing callers).
+export { completionRate, MIN_COMPLETION_RATE_BASIS } from "@/modules/providers/reputation";
+
+const MAX_SEARCH_TERMS = 6;
+const escapeLike = (value: string) => value.replace(/[\\%_]/g, (match) => `\\${match}`);
+
+/**
+ * Splits free text into search terms. Each term matches as a case-insensitive substring, and
+ * trade nouns also match their stem ("plumber" → "plumb" finds Plumbing, "electricians" →
+ * "electric" finds Electrical). Every term must match somewhere (so "Accra electrician" means an
+ * electrician serving Accra); within a term any searchable field may match.
+ */
+export function providerSearchTerms(q: string | undefined) {
+  if (!q) return [];
+  const words = [...new Set(q.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 2))].slice(0, MAX_SEARCH_TERMS);
+  return words.map((word) => {
+    const stem = word.replace(/(ians|ian|ers|er|ing|s)$/u, "");
+    const variants = stem.length >= 3 && stem !== word ? [word, stem] : [word];
+    return variants.map((variant) => `%${escapeLike(variant)}%`);
+  });
+}
+
+function searchCondition(patterns: string[]) {
+  const any = Prisma.sql`ANY(${patterns}::text[])`;
+  return Prisma.sql`(
+    p."displayName" ILIKE ${any}
+    OR mp."publicDescription" ILIKE ${any}
+    OR EXISTS (
+      SELECT 1 FROM "ProviderMarketplaceCategory" smpc
+      JOIN "ServiceCategory" sc ON sc."id" = smpc."categoryId"
+      WHERE smpc."providerId" = p."id" AND sc."active" = true
+        AND (sc."name" ILIKE ${any} OR sc."key" ILIKE ${any})
+    )
+    OR EXISTS (
+      SELECT 1 FROM "ProviderMarketplaceServiceArea" smsa
+      WHERE smsa."providerId" = p."id"
+        AND (smsa."region" ILIKE ${any} OR smsa."city" ILIKE ${any} OR smsa."district" ILIKE ${any} OR smsa."label" ILIKE ${any})
+    )
+  )`;
+}
 
 const publicProfile = (
   profile: Prisma.ProviderMarketplaceProfileGetPayload<{ include: typeof profileInclude }>,
@@ -329,7 +374,15 @@ const publicProfile = (
   type: profile.provider.type,
   description: profile.publicDescription,
   availability: profile.provider.availabilityStatus,
+  logo: providerLogoView(profile.provider.logo),
   verification: profile.provider.verificationStatus,
+  // Each level is set only by a platform reviewer approving the matching evidence, never by the
+  // provider, so the public badges are exactly what NesAfric has checked. Timestamps stay private.
+  verificationBadges: {
+    identity: profile.provider.identityVerifiedAt !== null,
+    business: profile.provider.businessVerifiedAt !== null,
+    skill: profile.provider.skillVerifiedAt !== null,
+  },
   acceptingWork: profile.provider.acceptingWork,
   categories: profile.categories.map(({ category }) => ({
     id: category.id,
@@ -358,6 +411,8 @@ const publicProfile = (
   aggregateRating: rank.average_rating === null ? null : Number(rank.average_rating),
   ratingCount: Number(rank.rating_count),
   completedJobs: Number(rank.completed_jobs),
+  completionRate: completionRate(Number(rank.completed_jobs), Number(rank.completion_basis)),
+  completionRateBasis: Number(rank.completion_basis),
   ranking: {
     score: Number(rank.score),
     signals: {
@@ -372,7 +427,12 @@ const publicProfile = (
   },
 });
 
-function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchema.parse>, page: boolean) {
+type RankingScope = {
+  /** Internal only (never a public filter): restricts the ranked set to these providers. */
+  providerIds?: string[];
+};
+
+function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchema.parse>, page: boolean, scope: RankingScope = {}) {
   const region = filters.region ?? filters.state;
   const conditions: Prisma.Sql[] = [
     Prisma.sql`mp."listed" = true`,
@@ -407,6 +467,9 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
   if (filters.availability) conditions.push(Prisma.sql`p."availabilityStatus" = ${filters.availability}::"ProviderAvailabilityStatus"`);
   if (filters.verification) conditions.push(Prisma.sql`p."verificationStatus" = ${filters.verification}::"ProviderVerificationStatus"`);
   if (filters.providerType) conditions.push(Prisma.sql`p."type" = ${filters.providerType}::"ServiceProviderType"`);
+  // Search only ever narrows the already-gated set above; it never relaxes a gate.
+  for (const patterns of providerSearchTerms(filters.q)) conditions.push(searchCondition(patterns));
+  if (scope.providerIds) conditions.push(Prisma.sql`p."id" = ANY(${scope.providerIds}::uuid[])`);
   if (filters.minimumRating !== undefined) {
     conditions.push(Prisma.sql`COALESCE((SELECT avg(r."score") FROM "ProviderRating" r WHERE r."providerId" = p."id"), 0) >= ${filters.minimumRating}`);
   }
@@ -429,7 +492,7 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
         CASE p."verificationStatus" WHEN 'VERIFIED' THEN 15 WHEN 'PENDING' THEN 5 ELSE 0 END::int AS verification_score,
         CASE p."availabilityStatus" WHEN 'AVAILABLE' THEN 10 WHEN 'LIMITED' THEN 5 ELSE 0 END::int AS availability_score,
         round(COALESCE((SELECT avg(r."score") FROM "ProviderRating" r WHERE r."providerId" = p."id"), 0) * 4)::int AS rating_score,
-        LEAST((SELECT count(*) FROM "ProviderAssignment" a WHERE a."providerId" = p."id" AND a."status" = 'COMPLETED'), 10)::int AS completed_score,
+        LEAST(${reputationSql.completedJobs}, 10)::int AS completed_score,
         (
           CASE WHEN p."acceptingWork" THEN 3 ELSE 0 END
           + CASE WHEN p."contactReady" THEN 2 ELSE 0 END
@@ -438,7 +501,8 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
         )::int AS readiness_score,
         (SELECT avg(r."score")::float FROM "ProviderRating" r WHERE r."providerId" = p."id") AS average_rating,
         (SELECT count(*) FROM "ProviderRating" r WHERE r."providerId" = p."id") AS rating_count,
-        (SELECT count(*) FROM "ProviderAssignment" a WHERE a."providerId" = p."id" AND a."status" = 'COMPLETED') AS completed_jobs
+        ${reputationSql.completedJobs} AS completed_jobs,
+        ${reputationSql.concludedJobs} AS completion_basis
       FROM "ServiceProvider" p
       JOIN "ProviderMarketplaceProfile" mp ON mp."providerId" = p."id"
       WHERE ${Prisma.join(conditions, " AND ")}
@@ -470,11 +534,12 @@ const rankingMetadata = {
     ratesAndResponseReadiness: 10,
   },
   privateSignalsUsed: false,
+  // `q` narrows the eligible set only; it adds no score, so the order stays the trust ranking.
+  textSearch: "filter-only",
 } as const;
 
-export async function discoverMarketplaceProviders(query: unknown = {}) {
-  const filters = publicMarketplaceDiscoverySchema.parse(query);
-  const ranks = await db.$queryRaw<RankRow[]>(rankingQuery(filters, true));
+/** Public payloads for already-ranked rows, in rank order (one profile query, no N+1). */
+async function publicProfiles(ranks: RankRow[]) {
   const profiles = ranks.length
     ? await db.providerMarketplaceProfile.findMany({
       where: { providerId: { in: ranks.map(({ id }) => id) }, listed: true },
@@ -482,10 +547,29 @@ export async function discoverMarketplaceProviders(query: unknown = {}) {
     })
     : [];
   const byId = new Map(profiles.map((profile) => [profile.providerId, profile]));
-  const items = ranks.flatMap((rank) => {
+  return ranks.flatMap((rank) => {
     const profile = byId.get(rank.id);
     return profile ? [publicProfile(profile, rank)] : [];
   });
+}
+
+export type PublicMarketplaceProvider = Awaited<ReturnType<typeof publicProfiles>>[number];
+
+/**
+ * The given providers that are publicly listed right now (same gates as discovery), keyed by id.
+ * Anything unlisted, unverified, suspended or archived is simply absent.
+ */
+export async function publicMarketplaceProvidersById(providerIds: string[]) {
+  if (!providerIds.length) return new Map<string, PublicMarketplaceProvider>();
+  const filters = publicMarketplaceDiscoverySchema.parse({});
+  const ranks = await db.$queryRaw<RankRow[]>(rankingQuery(filters, false, { providerIds }));
+  return new Map((await publicProfiles(ranks)).map((provider) => [provider.id, provider]));
+}
+
+export async function discoverMarketplaceProviders(query: unknown = {}) {
+  const filters = publicMarketplaceDiscoverySchema.parse(query);
+  const ranks = await db.$queryRaw<RankRow[]>(rankingQuery(filters, true));
+  const items = await publicProfiles(ranks);
   const firstMatch = !ranks.length && filters.page > 1
     ? (await db.$queryRaw<RankRow[]>(rankingQuery({ ...filters, page: 1, pageSize: 1 }, true)))[0]
     : undefined;

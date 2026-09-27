@@ -24,6 +24,41 @@ const transitionActions: Record<string, { status: string; label: string }[]> = {
   COMPLETED: [{ status: "CLOSED", label: "Close request" }],
 };
 
+const CANCELLABLE = ["REPORTED", "TRIAGED", "AWAITING_APPROVAL", "APPROVED", "ASSIGNED", "IN_PROGRESS"];
+
+/** User-facing cancellation reasons. The server decides who is responsible from the reason; only
+ * a provider-caused cancellation of accepted work can affect a provider's public completion rate. */
+export const CANCELLATION_REASON_OPTIONS = [
+  { value: "WORK_NO_LONGER_REQUIRED", label: "Work no longer required" },
+  { value: "CHANGED_PLANS", label: "Changed plans" },
+  { value: "FOUND_ANOTHER_PROVIDER", label: "Found another provider" },
+  { value: "TENANT_WITHDREW", label: "Tenant withdrew the request" },
+  { value: "PROVIDER_FAILED_TO_ATTEND", label: "Provider unavailable or failed to attend" },
+  { value: "PROVIDER_WITHDREW", label: "Provider withdrew from the job" },
+  { value: "SCHEDULING_ISSUE", label: "Scheduling issue" },
+  { value: "MUTUAL_AGREEMENT", label: "Mutual agreement with the provider" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
+function CancelRequestForm({ busy, onSubmit }: { busy: boolean; onSubmit: (body: { cancellationReason: string; note?: string }) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <button className="rounded-xl border border-hairline border-red-300 px-4 py-2 text-sm font-semibold text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest" disabled={busy} onClick={() => setOpen(true)} type="button">Cancel request…</button>;
+  return <form aria-label="Cancel maintenance request" className="grid gap-2 rounded-xl border border-red-200 p-3" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); onSubmit({ cancellationReason: String(data.get("cancellationReason")), note: String(data.get("note") || "") || undefined }); }}>
+    <p className="text-sm font-semibold">Cancel this request?</p>
+    <p className="text-xs text-muted">Any provider still assigned is released. The reason is recorded with the provider&apos;s job history.</p>
+    <label className="text-sm font-medium" htmlFor="cancellation-reason">Reason</label>
+    <select className="rounded-xl border border-hairline p-2 text-sm" defaultValue="" id="cancellation-reason" name="cancellationReason" required>
+      <option disabled value="">Choose a reason</option>
+      {CANCELLATION_REASON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+    <input aria-label="Cancellation note (optional)" className="rounded-xl border border-hairline p-2 text-sm" maxLength={2000} name="note" placeholder="Note (optional)" />
+    <div className="flex gap-2">
+      <button className="rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:bg-surface disabled:text-muted" disabled={busy}>Confirm cancellation</button>
+      <button className="rounded-xl border border-hairline px-3 py-2 text-sm font-semibold" disabled={busy} onClick={() => setOpen(false)} type="button">Keep request</button>
+    </div>
+  </form>;
+}
+
 export function MaintenanceDetail({ requestId }: { requestId: string }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
@@ -67,7 +102,7 @@ export function MaintenanceDetail({ requestId }: { requestId: string }) {
     </div>
     <aside className="grid content-start gap-6">
       {(error || success) && <p className={`rounded-xl p-4 text-sm ${error ? "bg-red-50 text-red-800" : "bg-teal/10 text-teal"}`}>{error || success}</p>}
-      <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm"><h2 className="font-semibold">Request actions</h2><div className="mt-4 grid gap-3">{transitionActions[detail.status]?.map((action) => <button className="rounded-lg bg-forest px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={busy} key={action.status} onClick={() => mutate(`/api/maintenance/requests/${detail.id}/transition`, "PATCH", { status: action.status }, action.label)}>{action.label}</button>)}{detail.status === "TRIAGED" && <ApprovalRequestForm busy={busy} currency={detail.property.currencyCode} onSubmit={(body) => mutate(`/api/maintenance/requests/${detail.id}/approval`, "POST", body, "Approval requested.")} />}{detail.status === "APPROVED" && <WorkOrderForm busy={busy} currency={detail.property.currencyCode} onSubmit={(body) => mutate(`/api/maintenance/requests/${detail.id}/work-orders`, "POST", body, "Work order created.")} />}<NoteForm busy={busy} onSubmit={(note) => mutate(`/api/maintenance/requests/${detail.id}/notes`, "POST", { note }, "Note added.")} /></div></section>
+      <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm"><h2 className="font-semibold">Request actions</h2><div className="mt-4 grid gap-3">{transitionActions[detail.status]?.map((action) => <button className="rounded-lg bg-forest px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={busy} key={action.status} onClick={() => mutate(`/api/maintenance/requests/${detail.id}/transition`, "PATCH", { status: action.status }, action.label)}>{action.label}</button>)}{detail.status === "TRIAGED" && <ApprovalRequestForm busy={busy} currency={detail.property.currencyCode} onSubmit={(body) => mutate(`/api/maintenance/requests/${detail.id}/approval`, "POST", body, "Approval requested.")} />}{detail.status === "APPROVED" && <WorkOrderForm busy={busy} currency={detail.property.currencyCode} onSubmit={(body) => mutate(`/api/maintenance/requests/${detail.id}/work-orders`, "POST", body, "Work order created.")} />}<NoteForm busy={busy} onSubmit={(note) => mutate(`/api/maintenance/requests/${detail.id}/notes`, "POST", { note }, "Note added.")} />{CANCELLABLE.includes(detail.status) && <CancelRequestForm busy={busy} onSubmit={(body) => mutate(`/api/maintenance/requests/${detail.id}/transition`, "PATCH", { status: "CANCELLED", ...body }, "Maintenance request cancelled.")} />}</div></section>
       {pendingApproval && <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm"><h2 className="font-semibold">Pending approval</h2><p className="mt-2 text-2xl font-semibold">{formatMoney(pendingApproval.requestedAmountMinor, pendingApproval.currencyCode)}</p>{pendingApproval.requestReason && <p className="mt-2 text-sm text-muted">{pendingApproval.requestReason}</p>}<div className="mt-4 grid grid-cols-2 gap-2"><button className="rounded-lg bg-forest px-3 py-2 text-sm font-semibold text-white" disabled={busy} onClick={() => mutate(`/api/maintenance/requests/${detail.id}/approval/approve`, "POST", {}, "Approval granted.")}>Approve</button><button className="rounded-xl border border-hairline border-red-300 px-3 py-2 text-sm font-semibold text-red-700" disabled={busy} onClick={() => mutate(`/api/maintenance/requests/${detail.id}/approval/reject`, "POST", {}, "Approval rejected.")}>Reject</button></div></section>}
       <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm"><h2 className="font-semibold">Approvals</h2>{detail.approvals.length ? <div className="mt-3 grid gap-3">{detail.approvals.map((approval) => <div className="rounded-xl border border-hairline p-3 text-sm" key={approval.id}><div className="flex justify-between gap-2"><strong>{approval.status}</strong><span>{formatMoney(approval.approvedAmountMinor ?? approval.requestedAmountMinor, approval.currencyCode)}</span></div>{(approval.decisionReason || approval.requestReason) && <p className="mt-1 text-muted">{approval.decisionReason || approval.requestReason}</p>}</div>)}</div> : <p className="mt-3 text-sm text-muted">No approval decisions.</p>}</section>
       {detail.attachments.length > 0 && <section className="rounded-2xl border border-hairline bg-white p-5 shadow-sm"><h2 className="font-semibold">Attachments</h2><div className="mt-3 grid gap-2">{detail.attachments.map((attachment) => <div className="rounded-xl border border-hairline p-3 text-sm" key={attachment.id}><p className="font-medium">{attachment.fileName}</p><p className="truncate text-muted">{attachment.contentType ?? attachment.fileKey}</p></div>)}</div></section>}

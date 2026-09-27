@@ -667,6 +667,34 @@ enum ProviderAssignmentStatus {
   COMPLETED
 }
 
+/// Who is responsible for a cancelled provider assignment — distinct from who performed the
+/// cancellation (`ProviderAssignment.cancelledByUserId`). Derived on the server from the stated
+/// cancellation reason, never taken directly from a client. Only PROVIDER counts against a
+/// provider's public completion rate; UNKNOWN (including every cancellation recorded before
+/// attribution existed) never does.
+enum ProviderCancellationAttribution {
+  PROVIDER
+  LANDLORD
+  TENANT
+  MUTUAL
+  SYSTEM
+  UNKNOWN
+}
+
+/// The reason a landlord gives when cancelling work that has a provider assigned. Each maps to
+/// exactly one `ProviderCancellationAttribution` in `src/modules/providers/reputation.ts`.
+enum ProviderCancellationReason {
+  PROVIDER_FAILED_TO_ATTEND
+  PROVIDER_WITHDREW
+  WORK_NO_LONGER_REQUIRED
+  CHANGED_PLANS
+  FOUND_ANOTHER_PROVIDER
+  TENANT_WITHDREW
+  SCHEDULING_ISSUE
+  MUTUAL_AGREEMENT
+  OTHER
+}
+
 enum MarketplaceEnquiryStatus {
   NEW
   VIEWED
@@ -855,6 +883,8 @@ model User {
   voiceCallsInitiated                VoiceCall[]                                @relation("VoiceCallInitiator")
   tenantAccessInvitationsCreated     TenantAccessInvitation[]                   @relation("TenantAccessInvitationCreatedBy")
   tenantAccessInvitationsRedeemed    TenantAccessInvitation[]                   @relation("TenantAccessInvitationRedeemedBy")
+  savedServiceProviders              SavedServiceProvider[]                     @relation("SavedServiceProviders")
+  providerAssignmentsCancelled       ProviderAssignment[]                       @relation("ProviderAssignmentCanceller")
 }
 
 model Session {
@@ -2633,6 +2663,10 @@ model ServiceProvider {
   suspendedAt           DateTime?
   suspensionReason      String?
   suspendedByUserId     String?                       @db.Uuid
+  /// Public logo / profile image. Always a PUBLIC `StorageObject` uploaded through the controlled
+  /// `SERVICE_PROVIDER_LOGO` upload target by the provider's owner; never a free-form URL. Public
+  /// payloads render it only while the object is PUBLIC and not archived.
+  logoStorageObjectId   String?                       @db.Uuid
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
   archivedAt            DateTime?
@@ -2640,6 +2674,7 @@ model ServiceProvider {
   companyOrganisation   Organisation?                 @relation("CompanyProviderOrganisation", fields: [companyOrganisationId], references: [id], onDelete: Restrict)
   administrator         User                          @relation("ProviderAdministrator", fields: [administratorUserId], references: [id], onDelete: Restrict)
   suspendedBy           User?                         @relation("ProviderSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
+  logo                  StorageObject?                @relation("ServiceProviderLogo", fields: [logoStorageObjectId], references: [id], onDelete: SetNull)
   categories            ServiceProviderCategory[]
   serviceAreas          ProviderServiceArea[]
   evidence              ProviderEvidence[]
@@ -2655,9 +2690,27 @@ model ServiceProvider {
   conversations         Conversation[]
   dispatchAttempts      MaintenanceDispatchAttempt[]
   campaigns             Campaign[]
+  savedBy               SavedServiceProvider[]
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
   @@index([identityVerifiedAt])
+}
+
+/// A user's saved (bookmarked) marketplace service provider. User-scoped preference only: it never
+/// affects ranking, verification or eligibility, and the saved list re-applies the public
+/// marketplace gates on every read, so a provider that is later unlisted, unverified or suspended
+/// is reported only as unavailable.
+model SavedServiceProvider {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @db.Uuid
+  providerId String          @db.Uuid
+  createdAt  DateTime        @default(now())
+  user       User            @relation("SavedServiceProviders", fields: [userId], references: [id], onDelete: Cascade)
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerId])
+  @@index([userId, createdAt])
+  @@index([providerId])
 }
 
 model ServiceCategory {
@@ -2903,31 +2956,41 @@ model ProviderQuotationReview {
 }
 
 model ProviderAssignment {
-  id                     String                   @id @default(uuid()) @db.Uuid
-  landlordOrganisationId String                   @db.Uuid
-  workOrderId            String                   @db.Uuid
-  providerId             String                   @db.Uuid
-  quotationId            String?                  @db.Uuid
-  status                 ProviderAssignmentStatus @default(PENDING)
-  assignedByUserId       String                   @db.Uuid
-  respondedByUserId      String?                  @db.Uuid
-  assignedAt             DateTime                 @default(now())
-  respondedAt            DateTime?
-  expectedStartAt        DateTime?
-  expectedCompletionAt   DateTime?
-  acceptedAt             DateTime?
-  declinedAt             DateTime?
-  declineReason          String?
-  completedAt            DateTime?
-  landlordOrganisation   Organisation             @relation("LandlordProviderAssignments", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
-  workOrder              WorkOrder                @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
-  provider               ServiceProvider          @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  quotation              ProviderQuotation?       @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  assignedBy             User                     @relation("ProviderAssignmentCreator", fields: [assignedByUserId], references: [id], onDelete: Restrict)
-  respondedBy            User?                    @relation("ProviderAssignmentResponder", fields: [respondedByUserId], references: [id], onDelete: Restrict)
+  id                      String                           @id @default(uuid()) @db.Uuid
+  landlordOrganisationId  String                           @db.Uuid
+  workOrderId             String                           @db.Uuid
+  providerId              String                           @db.Uuid
+  quotationId             String?                          @db.Uuid
+  status                  ProviderAssignmentStatus         @default(PENDING)
+  assignedByUserId        String                           @db.Uuid
+  respondedByUserId       String?                          @db.Uuid
+  assignedAt              DateTime                         @default(now())
+  respondedAt             DateTime?
+  expectedStartAt         DateTime?
+  expectedCompletionAt    DateTime?
+  acceptedAt              DateTime?
+  declinedAt              DateTime?
+  declineReason           String?
+  completedAt             DateTime?
+  /// Set only when the assignment is cancelled (null for every other status).
+  cancelledAt             DateTime?
+  /// The user who performed the cancellation (the actor) — not necessarily the party at fault.
+  cancelledByUserId       String?                          @db.Uuid
+  cancellationReason      ProviderCancellationReason?
+  cancellationNote        String?
+  /// The party responsible (see `ProviderCancellationAttribution`). UNKNOWN for historical rows.
+  cancellationAttribution ProviderCancellationAttribution?
+  landlordOrganisation    Organisation                     @relation("LandlordProviderAssignments", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  workOrder               WorkOrder                        @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  provider                ServiceProvider                  @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  quotation               ProviderQuotation?               @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  assignedBy              User                             @relation("ProviderAssignmentCreator", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+  respondedBy             User?                            @relation("ProviderAssignmentResponder", fields: [respondedByUserId], references: [id], onDelete: Restrict)
+  cancelledBy             User?                            @relation("ProviderAssignmentCanceller", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
 
   @@index([landlordOrganisationId, status, assignedAt])
   @@index([providerId, status, assignedAt])
+  @@index([providerId, status, cancellationAttribution])
   @@index([workOrderId, assignedAt])
 }
 
@@ -3061,30 +3124,30 @@ model MarketplaceEnquiryStatusHistory {
 }
 
 model Listing {
-  id                 String         @id @default(uuid()) @db.Uuid
-  organisationId     String         @db.Uuid
-  propertyId         String?        @db.Uuid
-  marketplaceAssetId String?        @db.Uuid
-  unitId             String?        @db.Uuid
-  createdByUserId    String         @db.Uuid
+  id                 String            @id @default(uuid()) @db.Uuid
+  organisationId     String            @db.Uuid
+  propertyId         String?           @db.Uuid
+  marketplaceAssetId String?           @db.Uuid
+  unitId             String?           @db.Uuid
+  createdByUserId    String            @db.Uuid
   listingType        ListingType
   category           String
   title              String
   publicDescription  String
-  askingAmountMinor  Decimal?       @db.Decimal(19, 0)
-  rentAmountMinor    Decimal?       @db.Decimal(19, 0)
-  currencyCode       String         @db.Char(3)
+  askingAmountMinor  Decimal?          @db.Decimal(19, 0)
+  rentAmountMinor    Decimal?          @db.Decimal(19, 0)
+  currencyCode       String            @db.Char(3)
   frequency          ListingPriceUnit?
   availableFrom      DateTime
   bedrooms           Int?
-  bathrooms          Decimal?       @db.Decimal(4, 1)
-  sizeSqm            Decimal?       @db.Decimal(12, 2)
-  landSizeSqm        Decimal?       @db.Decimal(14, 2)
+  bathrooms          Decimal?          @db.Decimal(4, 1)
+  sizeSqm            Decimal?          @db.Decimal(12, 2)
+  landSizeSqm        Decimal?          @db.Decimal(14, 2)
   toilets            Int?
   parkingSpaces      Int?
   furnishing         String?
   propertyCondition  String?
-  negotiable         Boolean        @default(false)
+  negotiable         Boolean           @default(false)
   yearBuilt          Int?
 
   countryCode                 String                        @db.Char(2)
@@ -4255,34 +4318,35 @@ enum IntegrationStatus {
 /// (non company-backed) service provider's verification evidence has no owning organisation —
 /// every other target type always sets it, and every organisation-scoped query filters on it.
 model StorageObject {
-  id                  String                 @id @default(uuid()) @db.Uuid
-  organisationId      String?                @db.Uuid
-  storageKey          String                 @unique
-  origin              StorageOrigin
-  classification      StorageClassification  @default(PRIVATE)
-  targetType          String
-  targetId            String?                @db.Uuid
-  originalFileName    String
-  safeFileName        String
-  declaredContentType String?
-  contentType         String
-  sizeBytes           Int
-  sha256              String
-  uploadedByUserId    String?                @db.Uuid
-  malwareScanStatus   MalwareScanStatus      @default(SKIPPED)
-  malwareScanDetail   String?
-  malwareScannedAt    DateTime?
-  archivedAt          DateTime?
-  archivedByUserId    String?                @db.Uuid
-  archiveReason       String?
-  metadata            Json?
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
-  organisation        Organisation?          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  uploadedBy          User?                  @relation("StorageObjectUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  archivedBy          User?                  @relation("StorageObjectArchiver", fields: [archivedByUserId], references: [id], onDelete: SetNull)
-  history             StorageObjectHistory[]
-  generatedDocument   GeneratedDocument?
+  id                   String                 @id @default(uuid()) @db.Uuid
+  organisationId       String?                @db.Uuid
+  storageKey           String                 @unique
+  origin               StorageOrigin
+  classification       StorageClassification  @default(PRIVATE)
+  targetType           String
+  targetId             String?                @db.Uuid
+  originalFileName     String
+  safeFileName         String
+  declaredContentType  String?
+  contentType          String
+  sizeBytes            Int
+  sha256               String
+  uploadedByUserId     String?                @db.Uuid
+  malwareScanStatus    MalwareScanStatus      @default(SKIPPED)
+  malwareScanDetail    String?
+  malwareScannedAt     DateTime?
+  archivedAt           DateTime?
+  archivedByUserId     String?                @db.Uuid
+  archiveReason        String?
+  metadata             Json?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  organisation         Organisation?          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  uploadedBy           User?                  @relation("StorageObjectUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  archivedBy           User?                  @relation("StorageObjectArchiver", fields: [archivedByUserId], references: [id], onDelete: SetNull)
+  history              StorageObjectHistory[]
+  generatedDocument    GeneratedDocument?
+  serviceProviderLogos ServiceProvider[]      @relation("ServiceProviderLogo")
 
   @@index([organisationId, targetType, targetId])
   @@index([organisationId, classification, archivedAt])
