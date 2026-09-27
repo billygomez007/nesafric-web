@@ -2,9 +2,11 @@
 
 import { useId, useRef, useState } from "react";
 import { buttonClass } from "@/components/ui/button-styles";
+import { LOGO_MIME_TYPES, MAX_LOGO_BYTES } from "@/modules/marketplace-professionals/logo";
 
-const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-const MAX_BYTES = 2 * 1024 * 1024;
+// The exact types and size the server's logo upload targets accept (it re-checks the bytes).
+const ACCEPTED: readonly string[] = LOGO_MIME_TYPES;
+const MAX_BYTES = MAX_LOGO_BYTES;
 
 function readAsBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -25,17 +27,31 @@ async function readError(response: Response, fallback: string) {
 }
 
 /**
- * Upload, preview, replace and remove a marketplace company's logo. Used by both the business's
- * own profile page and the platform admin; only `endpoint` differs (each has its own
- * authorization). Both endpoints write `MarketplaceProfessional.logoUrl`.
+ * Upload, preview, replace and remove a logo. Used by a marketplace company's own profile page, the
+ * platform admin, and a service provider's own workspace; only `endpoint` (each with its own
+ * server-side authorization) and the wording differ. The endpoint's JSON `{ logoUrl }` is the
+ * source of truth — nothing here changes until the server has accepted the change.
  */
-export function MarketplaceLogoUploader({ name, logoUrl, endpoint, canEdit, onChange }: {
+export function MarketplaceLogoUploader({
+  name,
+  logoUrl,
+  endpoint,
+  canEdit,
+  onChange,
+  usage = "This logo appears on the public profile, in the directory and, for featured companies, on the NesAfric homepage.",
+  emptyTitle = "Add your company logo",
+  emptyHint = "A logo helps buyers and tenants recognise the company.",
+}: {
   name: string;
   logoUrl: string | null;
   /** POST uploads/replaces, DELETE removes. */
   endpoint: string;
   canEdit: boolean;
   onChange: (logoUrl: string | null) => void;
+  /** Where the current logo is shown (read by everyone who sees the preview). */
+  usage?: string;
+  emptyTitle?: string;
+  emptyHint?: string;
 }) {
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -99,11 +115,11 @@ export function MarketplaceLogoUploader({ name, logoUrl, endpoint, canEdit, onCh
       </div>
       <div className="min-w-0 flex-1">
         {logoUrl ? (
-          <p className="text-sm text-muted">This logo appears on the public profile, in the directory and, for featured companies, on the NesAfric homepage.</p>
+          <p className="text-sm text-muted">{usage}</p>
         ) : (
           <>
-            <p className="font-semibold text-forest-deep">{canEdit ? "Add your company logo" : "No logo uploaded"}</p>
-            <p className="mt-1 text-sm text-muted">A logo helps buyers and tenants recognise the company. PNG, JPG, WebP or GIF, up to 2 MB. A square or wide logo on a transparent or white background works best.</p>
+            <p className="font-semibold text-forest-deep">{canEdit ? emptyTitle : "No logo uploaded"}</p>
+            <p className="mt-1 text-sm text-muted">{emptyHint} PNG, JPG, WebP or GIF, up to 2 MB. A square or wide logo on a transparent or white background works best.</p>
           </>
         )}
         {canEdit && (

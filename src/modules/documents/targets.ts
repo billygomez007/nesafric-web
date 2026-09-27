@@ -7,6 +7,7 @@ import { ownsProvider } from "@/modules/providers/service";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/platform-admin/permissions";
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { archivePreviousLogos, LOGO_MIME_TYPES } from "@/modules/marketplace-professionals/logo";
+import { archivePreviousProviderLogos } from "@/modules/providers/logo";
 import { DOCUMENT_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, getObjectStorageAdapter, buildInternalPublicMediaUrl } from "@/platform/storage";
 import type { z } from "zod";
 import { MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
@@ -328,6 +329,42 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
         },
       });
       return { id: professional.id, displayName: professional.displayName, logoUrl: professional.logoUrl };
+    },
+  },
+
+  /** A service provider's public logo / profile image — `targetId` is a `ServiceProvider.id`. Only
+   * the provider's owner (individual, administrator, or company owner/administrator — the same
+   * `ownsProvider` rule as verification evidence) may upload. Always PUBLIC; the previous logo is
+   * archived so only one is ever current. */
+  SERVICE_PROVIDER_LOGO: {
+    allowedMimeTypes: LOGO_MIME_TYPES,
+    allowedClassifications: ["PUBLIC"],
+    authorize: async (tx, { userId, targetId }) => {
+      const provider = await ownsProvider(userId, targetId, tx);
+      if (!provider) throw forbidden();
+      return { organisationId: provider.companyOrganisationId };
+    },
+    attach: async (tx, { targetId, storageObject, uploadedByUserId }) => {
+      const replaced = await archivePreviousProviderLogos(tx, targetId, uploadedByUserId, "Replaced by a new logo.", storageObject.id);
+      const provider = await tx.serviceProvider.update({
+        where: { id: targetId },
+        data: { logoStorageObjectId: storageObject.id },
+        select: { id: true, displayName: true, companyOrganisationId: true },
+      });
+      if (provider.companyOrganisationId) {
+        await tx.auditEvent.create({
+          data: {
+            organisationId: provider.companyOrganisationId,
+            actorUserId: uploadedByUserId,
+            action: "provider.logo_updated",
+            entityType: "service_provider",
+            entityId: targetId,
+            metadata: { storageObjectId: storageObject.id, replacedObjects: replaced },
+          },
+        });
+      }
+      const adapter = getObjectStorageAdapter();
+      return { id: provider.id, displayName: provider.displayName, logoUrl: adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey) };
     },
   },
 

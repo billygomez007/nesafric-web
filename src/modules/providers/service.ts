@@ -5,6 +5,8 @@ import { db } from "@/platform/database/client";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { requirePlatformPrincipal, PLATFORM_PERMISSIONS } from "@/platform/platform-admin/auth";
 import { AppError, forbidden, notFound } from "@/platform/errors";
+import { providerLogoView } from "@/modules/providers/logo";
+import { getProviderReputation } from "@/modules/providers/reputation";
 import {
   addProviderToDirectorySchema,
   assignProviderSchema,
@@ -421,7 +423,18 @@ export async function getProvider(userId: string, organisationId: string | null,
   if (!directory && !own) throw notFound();
   const provider = directory?.provider ?? await db.serviceProvider.findUnique({ where: { id: providerId }, include: providerInclude });
   if (!provider) throw notFound();
-  return { provider, directory: directory ?? null, metrics: await getProviderMetrics(userId, organisationId, providerId) };
+  const logoObject = provider.logoStorageObjectId
+    ? await db.storageObject.findUnique({ where: { id: provider.logoStorageObjectId }, select: { storageKey: true, classification: true, archivedAt: true } })
+    : null;
+  return {
+    provider,
+    directory: directory ?? null,
+    metrics: await getProviderMetrics(userId, organisationId, providerId),
+    // The same render URL the public marketplace uses (null once archived or removed).
+    logo: providerLogoView(logoObject),
+    // Whether the caller may manage this provider's own profile (logo, availability, verification).
+    viewerIsOwner: Boolean(own),
+  };
 }
 
 export async function submitProviderVerification(userId: string, providerId: string, input: unknown) {
@@ -1379,5 +1392,8 @@ export async function getProviderMetrics(userId: string, organisationId: string 
     averageQuality: ratings._avg.qualityScore,
     averageTimeliness: ratings._avg.timelinessScore,
     averageCommunication: ratings._avg.communicationScore,
+    // The authoritative completion figures (same definition as the public marketplace; scoped
+    // like the rest of these metrics). Clients display these and never compute a rate themselves.
+    reputation: await getProviderReputation(providerId, own ? {} : { landlordOrganisationId: organisationId as string }),
   };
 }

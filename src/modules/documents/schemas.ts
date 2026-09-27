@@ -14,6 +14,7 @@ export const uploadTargetTypeSchema = z.enum([
   "CAMPAIGN_CREATIVE",
   "ORGANISATION_LOGO",
   "MARKETPLACE_PROFESSIONAL_LOGO",
+  "SERVICE_PROVIDER_LOGO",
 ]);
 export type UploadTargetType = z.infer<typeof uploadTargetTypeSchema>;
 

@@ -28,6 +28,7 @@ import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { assertWritableMarketplaceProfessional } from "@/modules/marketplace-professionals/entitlements";
 import { clearMarketplaceProfessionalLogo, MARKETPLACE_PROFESSIONAL_LOGO_TARGET, MAX_LOGO_BYTES } from "@/modules/marketplace-professionals/logo";
+import { clearServiceProviderLogo, SERVICE_PROVIDER_LOGO_TARGET } from "@/modules/providers/logo";
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -121,7 +122,7 @@ async function performUpload(params: {
   if (!descriptor.allowedMimeTypes.includes(sniffed.mimeType)) {
     throw new AppError("UNSUPPORTED_FILE_TYPE", 422, `Files of type '${sniffed.mimeType}' are not accepted for this upload target.`);
   }
-  if (targetType === MARKETPLACE_PROFESSIONAL_LOGO_TARGET && bytes.length > MAX_LOGO_BYTES) {
+  if ((targetType === MARKETPLACE_PROFESSIONAL_LOGO_TARGET || targetType === SERVICE_PROVIDER_LOGO_TARGET) && bytes.length > MAX_LOGO_BYTES) {
     throw new AppError("LOGO_TOO_LARGE", 413, `This logo is ${formatMegabytes(bytes.length)}. Logos must be ${formatMegabytes(MAX_LOGO_BYTES)} or smaller.`);
   }
   if (targetType === "LISTING_MEDIA") {
@@ -451,6 +452,32 @@ export async function uploadMarketplaceListingMedia(
 export async function uploadProviderEvidenceDocument(userId: string, providerId: string, input: unknown) {
   const data = uploadDocumentSchema.parse({ ...(input as object), targetType: "PROVIDER_EVIDENCE", targetId: providerId });
   return performUpload({ userId, organisationId: null, targetType: "PROVIDER_EVIDENCE", input: data });
+}
+
+/** A service provider's owner uploads or replaces its public logo: `{ fileName, contentType,
+ * dataBase64 }`. Always PUBLIC (forced here, never trusted from the request); ownership is checked
+ * by the upload target inside the transaction. Not plan-metered, like provider evidence. */
+export async function uploadServiceProviderLogo(userId: string, providerId: string, input: unknown) {
+  if (!isUuid(providerId)) throw notFound();
+  const raw = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
+  const data = uploadDocumentSchema.parse({
+    fileName: raw.fileName,
+    contentType: raw.contentType,
+    dataBase64: raw.dataBase64,
+    targetType: SERVICE_PROVIDER_LOGO_TARGET,
+    targetId: providerId,
+    classification: "PUBLIC",
+  });
+  const result = await performUpload({ userId, organisationId: null, targetType: SERVICE_PROVIDER_LOGO_TARGET, input: data });
+  return result.attached;
+}
+
+export async function removeServiceProviderLogo(userId: string, providerId: string) {
+  if (!isUuid(providerId)) throw notFound();
+  const provider = await ownsProvider(userId, providerId);
+  if (!provider) throw forbidden();
+  await db.$transaction((tx) => clearServiceProviderLogo(tx, providerId, userId));
+  return { id: providerId, logo: null };
 }
 
 /** Campaign creative is always PUBLIC regardless of what a caller sends — forced here rather

@@ -46,10 +46,30 @@ export const maintenanceListQuerySchema = z.object({
   priority: z.enum(["EMERGENCY", "URGENT", "NORMAL", "LOW"]).optional(),
 });
 
+/** Reasons a landlord can give when cancelling work with a provider assigned. The server maps each
+ * to who is responsible (`CANCELLATION_REASON_ATTRIBUTION`); the client never sends responsibility. */
+export const providerCancellationReasonSchema = z.enum([
+  "PROVIDER_FAILED_TO_ATTEND",
+  "PROVIDER_WITHDREW",
+  "WORK_NO_LONGER_REQUIRED",
+  "CHANGED_PLANS",
+  "FOUND_ANOTHER_PROVIDER",
+  "TENANT_WITHDREW",
+  "SCHEDULING_ISSUE",
+  "MUTUAL_AGREEMENT",
+  "OTHER",
+]);
+
 export const transitionMaintenanceSchema = z.object({
   status: z.enum(["TRIAGED", "IN_PROGRESS", "COMPLETED", "CLOSED", "CANCELLED"]),
   note: note.optional(),
   metadata,
+  /** Only meaningful with CANCELLED; omitted means the responsibility is UNKNOWN. */
+  cancellationReason: providerCancellationReasonSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.cancellationReason && value.status !== "CANCELLED") {
+    context.addIssue({ code: "custom", path: ["cancellationReason"], message: "A cancellation reason is only accepted when cancelling." });
+  }
 });
 
 export const maintenanceNoteSchema = z.object({ note, metadata });

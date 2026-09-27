@@ -1,4 +1,4 @@
-import type { PublicListing } from "@/api/types";
+import type { PublicListing, PublicProvider, ServiceCategory } from "@/api/types";
 
 export function listing(overrides: Partial<PublicListing> = {}): PublicListing {
   return {
@@ -29,6 +29,46 @@ export function listing(overrides: Partial<PublicListing> = {}): PublicListing {
     verification: { status: "VERIFIED" },
     attribution: { listedBy: "Agent", professional: { displayName: "ABC Realty", slug: "abc-realty", verificationStatus: "VERIFIED" } },
     publishedAt: "2026-09-20T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const category = (id: string, key: string, name: string, group: string, sortOrder: number): ServiceCategory => ({ id, key, name, description: null, group, sortOrder });
+
+/** Server order (`group`, `sortOrder`, `name`), including one category an admin added later. */
+export const serviceCategories: ServiceCategory[] = [
+  category("c0000000-0000-4000-8000-000000000010", "masonry", "Masonry", "BUILDING_CONSTRUCTION", 10),
+  category("c0000000-0000-4000-8000-000000000001", "plumbing", "Plumbing", "REPAIRS_MAINTENANCE", 10),
+  category("c0000000-0000-4000-8000-000000000002", "electrical", "Electrical", "REPAIRS_MAINTENANCE", 20),
+  category("c0000000-0000-4000-8000-000000000003", "cleaning", "Cleaning Services", "PROPERTY_CARE", 10),
+  category("c0000000-0000-4000-8000-000000000011", "solar", "Solar installation / maintenance", "SECURITY_SYSTEMS", 30),
+];
+
+export function provider(overrides: Partial<PublicProvider> = {}): PublicProvider {
+  return {
+    id: "5c9e0a11-0000-4000-8000-000000000001",
+    slug: "kwame-plumbing",
+    displayName: "Kwame Plumbing Services",
+    type: "COMPANY",
+    description: "Leak repairs, pipe replacement and bathroom installations.",
+    availability: "AVAILABLE",
+    verification: "VERIFIED",
+    verificationBadges: { identity: true, business: true, skill: false },
+    acceptingWork: true,
+    categories: [{ id: serviceCategories[1].id, key: "plumbing", name: "Plumbing" }],
+    serviceAreas: [
+      { countryCode: "GH", region: "Greater Accra", city: "Accra", district: "East Legon", label: null },
+      { countryCode: "GH", region: "Greater Accra", city: "Tema", district: null, label: null },
+    ],
+    contact: { email: null, phone: null },
+    pricing: { startingRateMinor: "25000", currencyCode: "GHS" },
+    responseTimeHours: 4,
+    aggregateRating: 4.8,
+    ratingCount: 84,
+    completedJobs: 127,
+    completionRate: 0.96,
+    completionRateBasis: 132,
+    logo: { url: "/api/public/media/providers/kwame-logo.png" },
     ...overrides,
   };
 }

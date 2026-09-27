@@ -1,23 +1,48 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams } from "expo-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useListingSearch } from "@/api/queries";
 import { Chip } from "@/components/chip";
 import { ListingCard } from "@/components/listing-card";
+import { MarketplaceModeSwitch } from "@/components/marketplace-mode-switch";
 import { QueryState } from "@/components/query-state";
 import { AppText, Button, StateMessage, TextField } from "@/components/ui";
 import { activeFilterCount, filtersFromParams, PROPERTY_TYPES, validateFilters, type SearchFilters } from "@/marketplace/filters";
+import { modeFromParam, setMarketplaceMode, useMarketplaceMode } from "@/marketplace/mode";
+import { providerFiltersFromParams } from "@/marketplace/provider-filters";
+import { ProviderSearchView } from "@/services/components/provider-search";
 import { colors, fonts, radii, spacing } from "@/theme/tokens";
 
+/**
+ * Search follows the marketplace selected at the top (shared with Home): property listings, or
+ * service providers. `?marketplace=services|properties` in the route selects one on arrival.
+ */
 export default function SearchScreen() {
   const params = useLocalSearchParams();
+  const { mode } = useMarketplaceMode();
   // Home chips and "See all" navigate here with new params: remount with those as the start state.
   const paramsKey = JSON.stringify(params);
-  // Home's "Advanced search" arrives with `advanced` set: open the filter sheet straight away.
-  return <SearchView key={paramsKey} initial={filtersFromParams(params)} openFilters={typeof params.advanced === "string"} />;
+  const requested = modeFromParam(params.marketplace);
+  // Applied once per arrival; afterwards the selector (which the person can change here) decides.
+  useEffect(() => {
+    if (requested) setMarketplaceMode(requested);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new arrival (new params) re-applies it
+  }, [paramsKey]);
+
+  return (
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
+      <MarketplaceModeSwitch style={styles.modeSwitch} />
+      {mode === "services" ? (
+        <ProviderSearchView key={paramsKey} initial={providerFiltersFromParams(params)} />
+      ) : (
+        // Home's "Advanced search" arrives with `advanced` set: open the filter sheet straight away.
+        <SearchView key={paramsKey} initial={filtersFromParams(params)} openFilters={typeof params.advanced === "string"} />
+      )}
+    </SafeAreaView>
+  );
 }
 
 function SearchView({ initial, openFilters = false }: { initial: SearchFilters; openFilters?: boolean }) {
@@ -37,7 +62,7 @@ function SearchView({ initial, openFilters = false }: { initial: SearchFilters; 
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
+    <View style={styles.flex}>
       <View style={styles.header}>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={20} color={colors.muted} />
@@ -104,7 +129,7 @@ function SearchView({ initial, openFilters = false }: { initial: SearchFilters; 
         }}
         />
       ) : null}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -181,6 +206,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
+  modeSwitch: { marginHorizontal: spacing.xl, marginTop: spacing.sm },
   header: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   searchBox: {
     flex: 1,
