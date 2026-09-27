@@ -1261,7 +1261,7 @@ model TenantAccessInvitation {
   redeemedBy         User?              @relation("TenantAccessInvitationRedeemedBy", fields: [redeemedByUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantOrganisationId, createdAt])
-  @@index([tenantOrganisationId, revokedAt, redeemedAt, expiresAt])
+  @@index([tenantOrganisationId, revokedAt, redeemedAt, expiresAt], map: "TenantAccessInvitation_tenantOrg_status_expiry_idx")
   @@index([createdByUserId])
   @@index([redeemedByUserId])
 }

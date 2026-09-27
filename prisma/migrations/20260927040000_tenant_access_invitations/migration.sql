@@ -18,7 +18,7 @@ ON "TenantAccessInvitation"("tokenHash");
 CREATE INDEX "TenantAccessInvitation_tenantOrganisationId_createdAt_idx"
 ON "TenantAccessInvitation"("tenantOrganisationId", "createdAt");
 
-CREATE INDEX "TenantAccessInvitation_tenantOrganisationId_revokedAt_redeemedAt_expiresAt_idx"
+CREATE INDEX "TenantAccessInvitation_tenantOrg_status_expiry_idx"
 ON "TenantAccessInvitation"(
     "tenantOrganisationId",
     "revokedAt",
