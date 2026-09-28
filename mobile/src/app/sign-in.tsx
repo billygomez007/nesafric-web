@@ -9,6 +9,7 @@ import { ApiError } from "@/api/client";
 import { signInErrorMessage } from "@/auth/errors";
 import { GoogleSignInError } from "@/auth/google";
 import { useSession } from "@/auth/session";
+import { BrandLogo } from "@/components/brand-logo";
 import { AppText, Button, Notice, TextField } from "@/components/ui";
 import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { requestPostSignInRouting } from "@/workspace/navigator";
@@ -174,6 +175,7 @@ export default function SignInScreen() {
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + insets.bottom }]} keyboardShouldPersistTaps="handled">
+        <BrandLogo height={40} style={styles.logo} />
         <AppText variant="title" accessibilityRole="header" testID="sign-in-title">
           {mode === "register" ? "Create your NesAfric account" : entry.title}
         </AppText>
@@ -358,6 +360,7 @@ function Segmented<T extends string>({ value, options, onChange, disabled, testI
 }
 
 const styles = StyleSheet.create({
+  logo: { marginBottom: 4 },
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, gap: spacing.lg },
   center: { textAlign: "center" },

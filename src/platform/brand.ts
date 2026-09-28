@@ -12,13 +12,17 @@ export const BRAND = {
   siteUrl: SITE_URL,
 
   logo: {
-    /** Official five-part NesAfric identity supplied September 2026. */
-    onLight: "/brand/nesafric-official-logo.png",
-    onDark: "/brand/nesafric-official-logo.png",
-    square: "/brand/nesafric-official-mark.png",
-    og: "/brand/nesafric-official-logo.png",
-    width: 2048,
-    height: 682,
+    /** Official NesAfric logo supplied 2026-09-28. Source: `brand/nesafric-logo.png`; every file
+     * here is generated from it by `scripts/generate-brand-assets.mjs`. */
+    onLight: "/brand/nesafric-logo.png",
+    onDark: "/brand/nesafric-logo.png",
+    /** The logo's own house mark, for square slots (PWA icon). */
+    square: "/brand/nesafric-mark.png",
+    /** 1200 x 630 social card: the full logo on the brand canvas. */
+    og: "/brand/nesafric-og.png",
+    /** Intrinsic size of `onLight`/`onDark`, for aspect-correct rendering. */
+    width: 2046,
+    height: 567,
   },
 
   contact: {
