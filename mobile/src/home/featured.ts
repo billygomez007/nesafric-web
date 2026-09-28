@@ -2,21 +2,21 @@ import type { CampaignBanner } from "@/api/home";
 import { filtersFromParams, type SearchFilters } from "@/marketplace/filters";
 import { resolveMediaUrl } from "@/marketplace/format";
 
-/** Where a featured slide's call to action goes. Every slide resolves to a real destination. */
+/** Where a campaign's artwork opens when tapped. Every slide resolves to a real destination. */
 export type SlideTarget =
   | { type: "listing"; id: string }
   | { type: "search"; filters: SearchFilters }
   | { type: "web"; url: string };
 
+/**
+ * A campaign slide: the advertiser's uploaded artwork is the whole ad and is shown untouched, with
+ * nothing drawn over it. The headline is kept only as the accessible name, never rendered.
+ */
 export type FeaturedSlide = {
   key: string;
-  /** Every slide is a campaign; impressions and clicks are reported against it. */
   campaignId: string;
-  eyebrow: string;
-  title: string;
-  subtitle: string | null;
-  imageUrl: string | null;
-  ctaLabel: string;
+  headline: string;
+  imageUrl: string;
   target: SlideTarget;
 };
 
@@ -48,32 +48,24 @@ export function resolveDestination(destinationUrl: string, apiUrl: string): Slid
 
 /**
  * Native-app artwork for a campaign, per the creative specification shown in Super Admin: the
- * native creative, else mobile web, else desktop. Mirrors `selectCampaignCreative(…, "nativeApp")`
- * in the web repo (`src/modules/campaigns/eligibility.ts`). `null` renders a text slide.
+ * native creative (1200 x 792), else mobile web, else desktop. Blank URLs count as missing. Mirrors
+ * `selectCampaignCreative(…, "nativeApp")` in the web repo (`src/modules/campaigns/eligibility.ts`).
  */
 export function nativeCampaignCreative(banner: Pick<CampaignBanner, "desktopMediaUrl" | "mobileMediaUrl" | "nativeAppMediaUrl">) {
-  return banner.nativeAppMediaUrl ?? banner.mobileMediaUrl ?? banner.desktopMediaUrl ?? null;
+  return [banner.nativeAppMediaUrl, banner.mobileMediaUrl, banner.desktopMediaUrl].find((url): url is string => Boolean(url?.trim())) ?? null;
 }
 
 /**
- * Advertising carousel slides: eligible campaigns only, in the server's priority order. Property
- * listings are never turned into advertising slides, and there is no substitute slide — with no
- * campaigns the result is empty and the carousel is hidden.
+ * Advertising carousel slides: eligible campaigns with usable artwork only, in the server's
+ * priority order. A campaign without artwork or a safe destination is skipped. Property listings
+ * are never turned into advertising slides, and there is no substitute or text-only slide — with no
+ * campaigns left the result is empty and the carousel is hidden.
  */
 export function buildFeaturedSlides(campaigns: CampaignBanner[], apiUrl: string, max = 5): FeaturedSlide[] {
   return campaigns.flatMap((banner): FeaturedSlide[] => {
     const target = resolveDestination(banner.destinationUrl, apiUrl);
-    if (!target) return [];
     const media = nativeCampaignCreative(banner);
-    return [{
-      key: `campaign:${banner.id}`,
-      campaignId: banner.id,
-      eyebrow: "Sponsored",
-      title: banner.headline,
-      subtitle: banner.supportingText,
-      imageUrl: media ? resolveMediaUrl(media, apiUrl) : null,
-      ctaLabel: banner.ctaLabel ?? "Learn more",
-      target,
-    }];
+    if (!target || !media) return [];
+    return [{ key: `campaign:${banner.id}`, campaignId: banner.id, headline: banner.headline, imageUrl: resolveMediaUrl(media, apiUrl), target }];
   }).slice(0, max);
 }
