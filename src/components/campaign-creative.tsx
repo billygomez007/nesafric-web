@@ -29,7 +29,7 @@ const MOBILE_ASPECT_FROM_DESKTOP_ART = "aspect-[80/11]";
  * label and image alt text) and is never drawn; no "Promoted"/"Sponsored" label is added.
  */
 export function CampaignCreative({ campaign, onClick, priority = false }: { campaign: CampaignCreativeData; onClick?: () => void; priority?: boolean }) {
-  const desktopArt = selectCampaignCreative(campaign, "desktopWeb") ?? campaign.mobileMediaUrl;
+  const desktopArt = selectCampaignCreative(campaign, "desktopWeb");
   const mobileArt = selectCampaignCreative(campaign, "mobileWeb");
   if (!desktopArt && !mobileArt) return null;
 

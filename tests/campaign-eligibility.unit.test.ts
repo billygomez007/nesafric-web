@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { campaignEligibility, creativeReadiness, selectCampaignCreative } from "@/modules/campaigns/eligibility";
+import { campaignEligibility, creativeReadiness, hasPlacementArtwork, selectCampaignCreative } from "@/modules/campaigns/eligibility";
 import { publicBannerListQuerySchema, updatePlatformCampaignSchema, createPlatformCampaignSchema } from "@/modules/campaigns/schemas";
 
 const NOW = new Date("2026-09-27T12:00:00.000Z");
-const base = { status: "APPROVED", placement: "MARKETPLACE_PRIMARY", startAt: null, endAt: null, archivedAt: null, countryCode: null };
+const art = { desktopMediaUrl: "https://cdn.example.com/d.jpg", mobileMediaUrl: "https://cdn.example.com/m.jpg", nativeAppMediaUrl: null };
+const base = { status: "APPROVED", placement: "MARKETPLACE_PRIMARY", startAt: null, endAt: null, archivedAt: null, countryCode: null, ...art };
 
 describe("campaign eligibility (shared by the public carousels and Super Admin)", () => {
   it("a live platform-owned homepage campaign is eligible in APPROVED, SCHEDULED or ACTIVE", () => {
@@ -39,6 +40,21 @@ describe("campaign eligibility (shared by the public carousels and Super Admin)"
     expect(campaignEligibility({ ...base, advertiserMarketplaceProfessionalId: "m1", advertiser: { status: "ACTIVE", archivedAt: null } }, NOW).eligible).toBe(true);
     expect(campaignEligibility({ ...base, placement: "SEARCH_FEATURED" }, NOW)).toEqual({ eligible: false, reason: "This placement is not shown publicly yet" });
   });
+
+  it("a live campaign without artwork its placement can show is not reported as showing", () => {
+    const none = { desktopMediaUrl: null, mobileMediaUrl: null, nativeAppMediaUrl: null };
+    const reason = "No artwork uploaded — only the uploaded creative is shown";
+    expect(campaignEligibility({ ...base, ...none }, NOW)).toEqual({ eligible: false, reason });
+    expect(campaignEligibility({ ...base, ...none, desktopMediaUrl: " " }, NOW)).toEqual({ eligible: false, reason });
+    // The homepage carousel also runs in the app, so app-only artwork is enough there…
+    expect(campaignEligibility({ ...base, ...none, nativeAppMediaUrl: "https://cdn.example.com/n.jpg" }, NOW).eligible).toBe(true);
+    // …but a web-only placement needs desktop or mobile web artwork.
+    expect(campaignEligibility({ ...base, ...none, placement: "PROFESSIONAL_FEATURED", nativeAppMediaUrl: "https://cdn.example.com/n.jpg" }, NOW)).toEqual({ eligible: false, reason });
+    expect(campaignEligibility({ ...base, ...none, placement: "MARKETPLACE_INLINE", mobileMediaUrl: "https://cdn.example.com/m.jpg" }, NOW).eligible).toBe(true);
+    // The announcement bar is text by design and needs no artwork.
+    expect(campaignEligibility({ ...base, ...none, placement: "HOMEPAGE_ANNOUNCEMENT" }, NOW)).toEqual({ eligible: true, reason: null });
+    expect(hasPlacementArtwork({ ...none, placement: "HOMEPAGE_ANNOUNCEMENT" })).toBe(true);
+  });
 });
 
 describe("campaign creative selection", () => {
@@ -48,16 +64,21 @@ describe("campaign creative selection", () => {
     expect(selectCampaignCreative(all, "mobileWeb")).toBe("m");
     expect(selectCampaignCreative(all, "nativeApp")).toBe("n");
   });
-  it("falls back per the specification: mobile web → desktop; app → mobile web → desktop", () => {
+  it("falls back per the specification: desktop → mobile web; mobile web → desktop; app → mobile web → desktop", () => {
     expect(selectCampaignCreative({ desktopMediaUrl: "d", mobileMediaUrl: null, nativeAppMediaUrl: null }, "mobileWeb")).toBe("d");
     expect(selectCampaignCreative({ desktopMediaUrl: "d", mobileMediaUrl: "m", nativeAppMediaUrl: null }, "nativeApp")).toBe("m");
     expect(selectCampaignCreative({ desktopMediaUrl: "d", mobileMediaUrl: null }, "nativeApp")).toBe("d");
-    // Desktop never borrows the mobile creative (a 2.5:1 image would crop badly at 7:1).
-    expect(selectCampaignCreative({ desktopMediaUrl: null, mobileMediaUrl: "m", nativeAppMediaUrl: "n" }, "desktopWeb")).toBeNull();
+    // Desktop may borrow the mobile creative: it is shown whole at its own proportions, never cropped.
+    expect(selectCampaignCreative({ desktopMediaUrl: null, mobileMediaUrl: "m", nativeAppMediaUrl: "n" }, "desktopWeb")).toBe("m");
+    // App artwork is never used on the web.
+    expect(selectCampaignCreative({ desktopMediaUrl: null, mobileMediaUrl: null, nativeAppMediaUrl: "n" }, "desktopWeb")).toBeNull();
+    expect(selectCampaignCreative({ desktopMediaUrl: null, mobileMediaUrl: null, nativeAppMediaUrl: "n" }, "mobileWeb")).toBeNull();
   });
   it("reports readiness for Super Admin", () => {
     expect(creativeReadiness({ ...all, placement: "MARKETPLACE_PRIMARY" }).note).toBeNull();
-    expect(creativeReadiness({ desktopMediaUrl: null, mobileMediaUrl: null, nativeAppMediaUrl: null, placement: "MARKETPLACE_PRIMARY" }).note).toBe("No artwork: shows as a text slide on every surface.");
+    expect(creativeReadiness({ desktopMediaUrl: null, mobileMediaUrl: null, nativeAppMediaUrl: null, placement: "MARKETPLACE_PRIMARY" }).note).toBe("No artwork: not shown anywhere until artwork is uploaded.");
+    expect(creativeReadiness({ desktopMediaUrl: null, mobileMediaUrl: null, nativeAppMediaUrl: "n", placement: "MARKETPLACE_PRIMARY" }).note).toBe("No artwork for desktop web or mobile web: not shown there.");
+    expect(creativeReadiness({ desktopMediaUrl: null, mobileMediaUrl: null, nativeAppMediaUrl: "n", placement: "PROFESSIONAL_FEATURED" }).note).toBe("No artwork: not shown anywhere until artwork is uploaded.");
     expect(creativeReadiness({ desktopMediaUrl: "d", mobileMediaUrl: "m", nativeAppMediaUrl: null, placement: "MARKETPLACE_PRIMARY" }).note).toBe("No own app artwork: uses the next available creative.");
     expect(creativeReadiness({ desktopMediaUrl: null, mobileMediaUrl: null, placement: "HOMEPAGE_ANNOUNCEMENT" }).note).toBeNull();
   });
