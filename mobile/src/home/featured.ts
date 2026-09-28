@@ -48,7 +48,7 @@ export function resolveDestination(destinationUrl: string, apiUrl: string): Slid
 
 /**
  * Native-app artwork for a campaign, per the creative specification shown in Super Admin: the
- * native creative (1200 x 792), else mobile web, else desktop. Blank URLs count as missing. Mirrors
+ * native creative (1200 x 480), else mobile web, else desktop. Blank URLs count as missing. Mirrors
  * `selectCampaignCreative(…, "nativeApp")` in the web repo (`src/modules/campaigns/eligibility.ts`).
  */
 export function nativeCampaignCreative(banner: Pick<CampaignBanner, "desktopMediaUrl" | "mobileMediaUrl" | "nativeAppMediaUrl">) {
@@ -68,4 +68,21 @@ export function buildFeaturedSlides(campaigns: CampaignBanner[], apiUrl: string,
     if (!target || !media) return [];
     return [{ key: `campaign:${banner.id}`, campaignId: banner.id, headline: banner.headline, imageUrl: resolveMediaUrl(media, apiUrl), target }];
   }).slice(0, max);
+}
+
+/**
+ * Native campaign card proportions: the 1200 x 480 (2.5:1) upload canvas from Super Admin's
+ * creative spec (`src/modules/campaigns/creative-spec.ts`). Artwork is always drawn with
+ * `contentFit="contain"`, so an older 1200 x 792 upload still shows whole, centred, never cropped.
+ */
+export const NATIVE_CAMPAIGN_ASPECT = 480 / 1200;
+
+/** Seconds per slide, as set in Super Admin for the placement. Mirrors `modules/campaigns/rotation.ts`. */
+export const ROTATION_SECONDS_OPTIONS = [5, 8, 10] as const;
+export const DEFAULT_ROTATION_SECONDS = 5;
+
+/** The API's `rotationSeconds` when it is one of the allowed values, else the 5 second default. */
+export function rotationMs(rotationSeconds: unknown) {
+  const seconds = ROTATION_SECONDS_OPTIONS.includes(rotationSeconds as 5) ? (rotationSeconds as number) : DEFAULT_ROTATION_SECONDS;
+  return seconds * 1000;
 }

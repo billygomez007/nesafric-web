@@ -1,12 +1,13 @@
 /// <reference types="node" />
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, renderHook, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 import path from "path";
 import * as WebBrowser from "expo-web-browser";
 import { Animated, StyleSheet } from "react-native";
 
 import type { CampaignBanner } from "@/api/home";
-import { buildFeaturedSlides, nativeCampaignCreative, resolveDestination } from "@/home/featured";
+import { buildFeaturedSlides, NATIVE_CAMPAIGN_ASPECT, nativeCampaignCreative, resolveDestination, rotationMs } from "@/home/featured";
+import { useCarouselAutoplay } from "@/home/use-carousel-autoplay";
 import { wrapOffset } from "@/home/components/logo-rail";
 import { homeListings, isNewListing } from "@/home/components/properties-on-nesafric";
 import { railCompanies } from "@/home/components/trusted-companies";
@@ -444,5 +445,123 @@ describe("home rails", () => {
     expect(isNewListing({ publishedAt: "2026-09-20T10:00:00.000Z" }, now)).toBe(true);
     expect(isNewListing({ publishedAt: "2026-08-01T10:00:00.000Z" }, now)).toBe(false);
     expect(isNewListing({ publishedAt: null }, now)).toBe(false);
+  });
+});
+
+describe("advertising carousel size and controls", () => {
+  it("keeps the full width and draws a 2.5:1 card (1200 x 480), about 60% of the old 1200 x 792 height", async () => {
+    mockApi({ banners: [campaign] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    const artwork = await screen.findByTestId(`campaign-artwork-${campaign.id}`);
+    const { width, height } = StyleSheet.flatten(artwork.props.style) as { width: number; height: number };
+    // Width is unchanged: the screen minus the 16pt gutters, capped at 560.
+    expect(width).toBe(560);
+    expect(height).toBe(Math.round(width * 0.4));
+    expect(width / height).toBeCloseTo(2.5, 1);
+    const oldHeight = Math.round(Math.min(width * (792 / 1200), 320));
+    expect(height / oldHeight).toBeGreaterThanOrEqual(0.55);
+    expect(height / oldHeight).toBeLessThanOrEqual(0.72);
+    const image = artwork.findAll((node) => typeof node.type === "string" && node.props.source != null)[0];
+    expect(image.props.contentFit ?? image.props.resizeMode).toBe("contain");
+  });
+
+  it("on an iPhone-width screen the card is ~60% of its old height", () => {
+    const cardWidth = 402 - 32;
+    const before = Math.round(Math.min(cardWidth * (792 / 1200), 320));
+    const after = Math.round(cardWidth * NATIVE_CAMPAIGN_ASPECT);
+    expect([cardWidth, before, after]).toEqual([370, 244, 148]);
+    expect(after / before).toBeCloseTo(0.61, 2);
+  });
+
+  it("has no arrow buttons; one dot per campaign, and none for a single campaign", async () => {
+    const second = { ...campaign, id: "c0ffee00-0000-4000-8000-00000000a002", headline: "Second campaign", mobileMediaUrl: "https://cdn.test/second.jpg" };
+    const artless = { ...campaign, id: "c0ffee00-0000-4000-8000-00000000a003", mobileMediaUrl: null, desktopMediaUrl: null, nativeAppMediaUrl: null };
+    mockApi({ banners: [campaign, artless, second] });
+    const view = renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByTestId(`campaign-artwork-${campaign.id}`);
+    expect(screen.queryByLabelText(/(Previous|Next) (advertisement|campaign)/)).toBeNull();
+    expect(screen.queryByTestId(`campaign-artwork-${artless.id}`)).toBeNull();
+    expect(screen.getAllByTestId(/^featured-dot/, { includeHiddenElements: true })).toHaveLength(2);
+    expect(screen.getByTestId("featured-dot-active", { includeHiddenElements: true })).toBeTruthy();
+    view.unmount();
+
+    mockApi({ banners: [campaign] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByTestId(`campaign-artwork-${campaign.id}`);
+    expect(screen.queryAllByTestId(/^featured-dot/, { includeHiddenElements: true })).toHaveLength(0);
+  });
+
+  it("uses the API's placement rotation, else 5 seconds", () => {
+    expect(rotationMs(undefined)).toBe(5000);
+    expect(rotationMs(5)).toBe(5000);
+    expect(rotationMs(8)).toBe(8000);
+    expect(rotationMs(10)).toBe(10000);
+    expect(rotationMs(1)).toBe(5000);
+    expect(rotationMs("8")).toBe(5000);
+  });
+});
+
+describe("carousel autoplay timer", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  function setup(initial: { count: number; delayMs?: number; paused?: boolean }) {
+    const onAdvance = jest.fn();
+    const hook = renderHook((props: { count: number; current: number; delayMs: number; paused: boolean }) => useCarouselAutoplay({ ...props, onAdvance: (next) => { onAdvance(next); hook.rerender({ ...props, current: next }); } }), {
+      initialProps: { count: initial.count, current: 0, delayMs: initial.delayMs ?? 5000, paused: initial.paused ?? false },
+    });
+    return { onAdvance, hook };
+  }
+
+  it("advances every 5 seconds, loops back to the first campaign", () => {
+    const { onAdvance } = setup({ count: 3 });
+    act(() => { jest.advanceTimersByTime(4999); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onAdvance).toHaveBeenLastCalledWith(1);
+    act(() => { jest.advanceTimersByTime(5000); });
+    expect(onAdvance).toHaveBeenLastCalledWith(2);
+    act(() => { jest.advanceTimersByTime(5000); });
+    expect(onAdvance).toHaveBeenLastCalledWith(0);
+    expect(onAdvance).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([8000, 10000])("honours a %i ms rotation", (delayMs) => {
+    const { onAdvance } = setup({ count: 2, delayMs });
+    act(() => { jest.advanceTimersByTime(delayMs - 1); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onAdvance).toHaveBeenCalledWith(1);
+  });
+
+  it("never rotates a single campaign", () => {
+    const { onAdvance } = setup({ count: 1 });
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it("holds while paused (a finger on it, reduced motion, off screen) and resumes with a full wait", () => {
+    const { onAdvance, hook } = setup({ count: 3 });
+    act(() => { jest.advanceTimersByTime(3000); });
+    hook.rerender({ count: 3, current: 0, delayMs: 5000, paused: true });
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+    // A swipe lands on slide 1 and the finger lifts.
+    hook.rerender({ count: 3, current: 1, delayMs: 5000, paused: false });
+    act(() => { jest.advanceTimersByTime(4999); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onAdvance).toHaveBeenCalledWith(2);
+  });
+
+  it("keeps one timer only and clears it on unmount", () => {
+    const { hook } = setup({ count: 3 });
+    expect(jest.getTimerCount()).toBe(1);
+    hook.rerender({ count: 3, current: 2, delayMs: 5000, paused: false });
+    expect(jest.getTimerCount()).toBe(1);
+    hook.unmount();
+    expect(jest.getTimerCount()).toBe(0);
   });
 });
