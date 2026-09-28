@@ -83,7 +83,18 @@ export const hasWorkspaceKind = (available: AvailableWorkspace[], kind: Workspac
 const INTENTS = ["property_management", "professional", "service_provider"] as const;
 export type WorkspaceIntent = (typeof INTENTS)[number];
 
-/** The card tapped on the signed-out Account screen. Only ever used to highlight, never to grant. */
-export function parseIntent(value: unknown): WorkspaceIntent | null {
-  return typeof value === "string" && (INTENTS as readonly string[]).includes(value) ? (value as WorkspaceIntent) : null;
+/**
+ * The card tapped on the signed-out Account screen: a workspace kind, or "tenant". A tenancy is not
+ * an organisation workspace, so "tenant" is an entry intent only; the homes a person rents come
+ * from the server's own tenancy list. Only ever used to word and highlight, never to grant.
+ */
+export type EntryIntent = WorkspaceIntent | "tenant";
+
+const ENTRY_INTENTS: readonly string[] = [...INTENTS, "tenant"];
+
+export function parseIntent(value: unknown): EntryIntent | null {
+  return typeof value === "string" && ENTRY_INTENTS.includes(value) ? (value as EntryIntent) : null;
 }
+
+export const isWorkspaceIntent = (intent: EntryIntent | null | undefined): intent is WorkspaceIntent =>
+  typeof intent === "string" && (INTENTS as readonly string[]).includes(intent);

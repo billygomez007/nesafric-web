@@ -5,14 +5,16 @@ import { CampaignCreative, hasCampaignArtwork, type CampaignCreativeData } from 
 
 type Banner = CampaignCreativeData;
 
-const AUTO_ROTATE_MS = 7000;
+/** Used until the API says otherwise; mirrors `DEFAULT_ROTATION_SECONDS` in `modules/campaigns/rotation.ts`. */
+const DEFAULT_ROTATION_SECONDS = 5;
+const ROTATION_OPTIONS = [5, 8, 10];
 
 /**
  * Secondary, multi-campaign sliding placement (item 25 "sliding marketplace banner/carousel") —
  * distinct from the single-campaign `MarketplaceBanner` hero. Renders nothing when zero campaigns
  * are eligible; renders a single static card (no controls) when exactly one is, since prev/next/dot
  * controls for a one-item carousel would be pointless chrome; only shows the full carousel UI for
- * two or more. Auto-rotation is restrained, pauses on hover/focus/touch, and is skipped entirely
+ * two or more. Auto-rotation uses the placement's Super Admin setting (5, 8 or 10 seconds), pauses on hover/focus/touch, and is skipped entirely
  * under `prefers-reduced-motion`, per item 25's accessibility requirements.
  *
  * Advertising slots are campaigns only: with no eligible campaign (or when campaigns can't be
@@ -23,6 +25,7 @@ const AUTO_ROTATE_MS = 7000;
 export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, frameClassName }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; frameClassName?: string }) {
   const [banners, setBanners] = useState<Banner[] | null>(null);
   const [index, setIndex] = useState(0);
+  const [rotationSeconds, setRotationSeconds] = useState(DEFAULT_ROTATION_SECONDS);
   const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const trackedImpressions = useRef(new Set<string>());
@@ -45,6 +48,7 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
       const body = await response.json();
       // No artwork, nothing to show: the image is the whole ad.
       setBanners(Array.isArray(body.banners) ? body.banners.filter(hasCampaignArtwork) : []);
+      if (ROTATION_OPTIONS.includes(body.rotationSeconds)) setRotationSeconds(body.rotationSeconds);
     }).catch(() => { if (!cancelled) setBanners([]); });
     return () => { cancelled = true; };
   }, [placement, countryCode, limit]);
@@ -64,11 +68,12 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
 
   const canRotate = !!banners && banners.length > 1;
 
+  // One timer per shown slide: moving to a slide (automatically or by hand) restarts the full wait.
   useEffect(() => {
     if (!canRotate || paused || reducedMotion) return;
-    const timer = setInterval(() => setIndex((current) => (banners ? (current + 1) % banners.length : 0)), AUTO_ROTATE_MS);
-    return () => clearInterval(timer);
-  }, [canRotate, paused, reducedMotion, banners]);
+    const timer = setTimeout(() => setIndex((current) => (banners ? (current + 1) % banners.length : 0)), rotationSeconds * 1000);
+    return () => clearTimeout(timer);
+  }, [canRotate, paused, reducedMotion, banners, index, rotationSeconds]);
 
   if (!banners || banners.length === 0) return null;
 

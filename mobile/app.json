@@ -10,7 +10,10 @@
     "backgroundColor": "#fcfbf8",
     "ios": {
       "bundleIdentifier": "com.nesafric.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.nesafric.app",

@@ -8,6 +8,7 @@ import path from "path";
 
 import { SIGNED_OUT_FLAG, setActiveToken } from "@/auth/token-store";
 import { listing } from "@/test-utils/fixtures";
+import { OTP_CHALLENGE, OTP_REQUEST_PATH, OTP_VERIFY_PATH, signInWithEmailCode } from "@/test-utils/otp";
 
 const APP_DIR = path.join(__dirname, "../app");
 const SESSION_KEY = "nesafric.session.v1";
@@ -34,7 +35,9 @@ function mockApi(overrides: Overrides = {}) {
     switch (url.pathname) {
       case "/api/public/listings":
         return json(200, { items: [house], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
-      case "/api/auth/mobile/session":
+      case OTP_REQUEST_PATH:
+        return json(200, OTP_CHALLENGE);
+      case OTP_VERIFY_PATH:
         return overrides.signIn?.() ?? json(200, { token: TOKEN, tokenType: "Bearer", expiresAt: new Date(Date.now() + 86_400_000).toISOString(), user: { id: "u1", email: "ama@example.com", displayName: "Ama Mensah" } });
       case "/api/auth/logout":
         return overrides.logout?.() ?? json(204);
@@ -88,9 +91,7 @@ function storeSession(expiresAt = new Date(Date.now() + 86_400_000).toISOString(
 
 async function signInThroughUi() {
   renderRouter(APP_DIR, { initialUrl: "/sign-in" });
-  fireEvent.changeText(await screen.findByLabelText("Email"), "ama@example.com");
-  fireEvent.changeText(screen.getByLabelText("Password"), "correct-horse-battery-1");
-  await act(async () => fireEvent.press(screen.getByTestId("sign-in-submit")));
+  await signInWithEmailCode();
 }
 
 beforeEach(async () => {
@@ -119,7 +120,10 @@ describe("optional account access", () => {
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(SESSION_KEY, expect.stringContaining(TOKEN), { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY });
     const asyncEntries = await AsyncStorage.multiGet(await AsyncStorage.getAllKeys());
     expect(asyncEntries.some(([, value]) => value?.includes(TOKEN))).toBe(false);
-    expect(JSON.parse(String(callsTo("/api/auth/mobile/session")[0].init.body))).toEqual({ email: "ama@example.com", password: "correct-horse-battery-1" });
+    expect(JSON.parse(String(callsTo(OTP_REQUEST_PATH)[0].init.body))).toEqual({ mode: "login", channel: "email", identifier: "ama@example.com" });
+    expect(JSON.parse(String(callsTo(OTP_VERIFY_PATH)[0].init.body))).toEqual({ challengeId: OTP_CHALLENGE.challengeId, channel: "email", identifier: "ama@example.com", code: "123456" });
+    // No password is ever asked for or sent.
+    expect(calls.some((call) => String(call.init.body ?? "").includes("password"))).toBe(false);
 
     renderRouter(APP_DIR, { initialUrl: "/account" });
     expect(await screen.findByLabelText("Signed in as Ama Mensah")).toBeTruthy();
@@ -136,17 +140,17 @@ describe("optional account access", () => {
   });
 
   it("shows readable sign-in errors and stores nothing on failure", async () => {
-    mockApi({ signIn: () => json(401, { error: { code: "INVALID_CREDENTIALS", message: "Email or password is incorrect." } }) });
+    mockApi({ signIn: () => json(400, { error: { code: "OTP_INVALID", message: "That code is incorrect or has expired. Check it, or send a new code." } }) });
     await signInThroughUi();
-    expect(await screen.findByText(/don’t match/)).toBeTruthy();
+    expect(await screen.findByText("That code is incorrect or has expired. Check it, or send a new code.")).toBeTruthy();
     expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
 
-    mockApi({ signIn: () => json(429, { error: { code: "LOGIN_RATE_LIMITED", message: "Too many failed login attempts. Try again in a few minutes." } }) });
-    await act(async () => fireEvent.press(screen.getByTestId("sign-in-submit")));
-    expect(await screen.findByText("Too many failed login attempts. Try again in a few minutes.")).toBeTruthy();
+    mockApi({ signIn: () => json(429, { error: { code: "OTP_RATE_LIMITED", message: "Too many incorrect codes. Please wait an hour and request a new code." } }) });
+    await act(async () => fireEvent.press(screen.getByTestId("sign-in-verify")));
+    expect(await screen.findByText("Too many incorrect codes. Please wait an hour and request a new code.")).toBeTruthy();
 
     mockApi({ signIn: () => Promise.reject(new TypeError("Network request failed")) });
-    await act(async () => fireEvent.press(screen.getByTestId("sign-in-submit")));
+    await act(async () => fireEvent.press(screen.getByTestId("sign-in-verify")));
     expect(await screen.findByText(/Can’t reach NesAfric/)).toBeTruthy();
     expect(secureStore.size).toBe(0);
   });

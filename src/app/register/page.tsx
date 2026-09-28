@@ -55,7 +55,7 @@ export default function RegisterPage() {
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-muted">
-              One secure identity for properties, marketplace work and service profiles.
+              One secure identity for properties, marketplace work and service profiles. Sign up with your phone number or email — we’ll send you a code.
             </p>
 
             <AuthForm mode="register" />

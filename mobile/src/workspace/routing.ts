@@ -1,13 +1,13 @@
 import type { Href } from "expo-router";
 
-import { MARKETPLACE, sameWorkspace, type AvailableWorkspace, type WorkspaceIntent, type WorkspaceRef } from "./resolve";
+import { MARKETPLACE, sameWorkspace, type AvailableWorkspace, type EntryIntent, type WorkspaceIntent, type WorkspaceRef } from "./resolve";
 
 /**
  * Where the app goes after sign-in or at launch. Pure functions over the list produced by
  * `resolveAvailableWorkspaces` (the server's `/api/workspaces` answer), so neither the tapped card
  * (intent) nor the remembered last workspace can ever open a workspace the server didn't list.
  */
-export type SignInIntent = WorkspaceIntent | "customer";
+export type SignInIntent = EntryIntent | "customer";
 
 export type Destination =
   | { type: "marketplace" }
@@ -19,6 +19,9 @@ export function resolvePostSignInDestination(intent: SignInIntent, available: Av
   // Marketplace-first: a property seeker stays in the marketplace (where they signed in from),
   // whatever else they belong to; their workspaces stay one tap away under Account.
   if (intent === "customer") return { type: "marketplace" };
+  // Tenant: stay on Account, which lists the homes the server links to this account (or offers the
+  // tenant access code when there are none). Tapping the card never creates a tenancy.
+  if (intent === "tenant") return { type: "marketplace" };
   const matching = available.filter((workspace) => workspace.kind === intent);
   if (!matching.length) return { type: "setup", kind: intent };
   // Several of that kind: prefer the one used last, otherwise the first the server lists.
@@ -46,5 +49,5 @@ export const SETUP_PATH: Record<WorkspaceIntent, string> = {
 
 /** New accounts: register on the website, then land on the matching set-up step. */
 export function registerPath(intent: SignInIntent) {
-  return intent === "customer" ? "/register" : `/register?returnTo=${encodeURIComponent(SETUP_PATH[intent])}`;
+  return intent === "customer" || intent === "tenant" ? "/register" : `/register?returnTo=${encodeURIComponent(SETUP_PATH[intent])}`;
 }

@@ -101,46 +101,52 @@ function HomePropertyCard({ listing, width }: { listing: PublicListing; width: n
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={[listing.title, type, price, location].filter(Boolean).join(", ")}
-        style={({ pressed }) => [styles.card, { width }, pressed && styles.pressed]}
+        // Expo Router's `Link asChild` merges the child's style as an object, which silently drops
+        // a function style — so the card style is a flat object and press feedback lives inside.
+        style={StyleSheet.flatten([styles.card, { width }])}
       >
-        <View style={styles.photo}>
-          {photo ? (
-            <Image
-              source={{ uri: photo.url }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={150}
-              cachePolicy="memory-disk"
-              recyclingKey={listing.id}
-              accessibilityLabel={photo.altText ?? listing.title}
-            />
-          ) : (
-            <View style={styles.noPhoto}>
-              <MaterialCommunityIcons name="image-outline" size={26} color={colors.muted} />
+        {({ pressed }) => (
+          <View style={pressed && styles.pressed}>
+            <View style={styles.photo}>
+              {photo ? (
+                <Image
+                  source={{ uri: photo.url }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={150}
+                  cachePolicy="memory-disk"
+                  recyclingKey={listing.id}
+                  accessibilityLabel={photo.altText ?? listing.title}
+                />
+              ) : (
+                <View style={styles.noPhoto}>
+                  <MaterialCommunityIcons name="image-outline" size={26} color={colors.muted} />
+                </View>
+              )}
+              <View style={styles.badges}>
+                <AppText style={styles.typeBadge}>{type}</AppText>
+                {isNewListing(listing) ? <AppText style={styles.newBadge}>New</AppText> : null}
+              </View>
+              <View style={styles.save}>
+                <SaveButton listing={listing} size={18} />
+              </View>
             </View>
-          )}
-          <View style={styles.badges}>
-            <AppText style={styles.typeBadge}>{type}</AppText>
-            {isNewListing(listing) ? <AppText style={styles.newBadge}>New</AppText> : null}
-          </View>
-          <View style={styles.save}>
-            <SaveButton listing={listing} size={18} />
-          </View>
-        </View>
-        <View style={styles.body}>
-          <AppText style={styles.price} numberOfLines={1}>{price ?? "Price on request"}</AppText>
-          <AppText style={styles.title} numberOfLines={1}>{listing.title}</AppText>
-          {location ? (
-            <View style={styles.locationRow}>
-              <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.muted} />
-              <AppText style={styles.meta} numberOfLines={1}>{location}</AppText>
+            <View style={styles.body}>
+              <AppText style={styles.price} numberOfLines={1}>{price ?? "Price on request"}</AppText>
+              <AppText style={styles.title} numberOfLines={1}>{listing.title}</AppText>
+              {location ? (
+                <View style={styles.locationRow}>
+                  <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.muted} />
+                  <AppText style={styles.meta} numberOfLines={1}>{location}</AppText>
+                </View>
+              ) : null}
+              <View style={styles.footer}>
+                <AppText style={[styles.meta, styles.facts]} numberOfLines={1}>{facts ?? ""}</AppText>
+                {isVerified(listing) ? <VerifiedBadge /> : null}
+              </View>
             </View>
-          ) : null}
-          <View style={styles.footer}>
-            <AppText style={[styles.meta, styles.facts]} numberOfLines={1}>{facts ?? ""}</AppText>
-            {isVerified(listing) ? <VerifiedBadge /> : null}
           </View>
-        </View>
+        )}
       </Pressable>
     </Link>
   );

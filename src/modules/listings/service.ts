@@ -1109,12 +1109,21 @@ export const PUBLIC_LISTING_WHERE = {
   ],
 } satisfies Prisma.ListingWhereInput;
 
-type ListingSearchRow = { id: string; total: bigint };
+type ListingSearchRow = { id: string; total: bigint; isTopAd: boolean };
 
-function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.parse>) {
-  const region = filters.region ?? filters.state;
-  const price = Prisma.sql`COALESCE(l."rentAmountMinor", l."askingAmountMinor")`;
-  const conditions: Prisma.Sql[] = [
+/** Joins for `PUBLIC_LISTING_ELIGIBILITY_SQL` (alias `l` is the listing). */
+const PUBLIC_LISTING_JOINS = Prisma.sql`
+    LEFT JOIN "Property" p ON p."id" = l."propertyId"
+    LEFT JOIN "Unit" u ON u."id" = l."unitId"
+    LEFT JOIN "MarketplaceAsset" ma ON ma."id" = l."marketplaceAssetId"`;
+
+/**
+ * Every rule a listing must meet to be shown publicly: the SQL twin of `PUBLIC_LISTING_WHERE` plus
+ * `isAssetAvailable`. Shared by public search and by Top Ads, so a pinned listing is held to
+ * exactly the same bar as every other result.
+ */
+function publicListingEligibilitySql(): Prisma.Sql[] {
+  return [
     Prisma.sql`l."status" = 'PUBLISHED'::"ListingStatus"`,
     Prisma.sql`l."verificationStatus" = 'VERIFIED'::"ListingVerificationStatus"`,
     Prisma.sql`(l."marketplaceProfessionalId" IS NULL OR EXISTS (
@@ -1159,6 +1168,22 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
       )
     )`,
   ];
+}
+
+/**
+ * A Top Ad row that is switched on and inside its schedule right now. Timestamps are stored as UTC
+ * `timestamp(3)`, so "now" is compared in UTC too.
+ */
+const ACTIVE_TOP_AD_JOIN = Prisma.sql`
+    LEFT JOIN "MarketplaceTopAd" ta ON ta."listingId" = l."id"
+      AND ta."isActive" = true
+      AND (ta."startsAt" IS NULL OR ta."startsAt" <= (now() AT TIME ZONE 'UTC'))
+      AND (ta."endsAt" IS NULL OR ta."endsAt" > (now() AT TIME ZONE 'UTC'))`;
+
+function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.parse>) {
+  const region = filters.region ?? filters.state;
+  const price = Prisma.sql`COALESCE(l."rentAmountMinor", l."askingAmountMinor")`;
+  const conditions = publicListingEligibilitySql();
   if (filters.q) conditions.push(Prisma.sql`(
     to_tsvector('simple', l."title" || ' ' || l."publicDescription" || ' ' || l."category")
       @@ plainto_tsquery('simple', ${filters.q})
@@ -1166,7 +1191,7 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   if (filters.listingType) conditions.push(Prisma.sql`l."listingType" = ${filters.listingType}::"ListingType"`);
   if (filters.category) conditions.push(Prisma.sql`lower(l."category") = lower(${filters.category})`);
   if (filters.scope === "PROPERTY") conditions.push(Prisma.sql`l."unitId" IS NULL AND l."marketplaceAssetId" IS NULL`);
-  if (filters.scope === "UNIT") conditions.push(Prisma.sql`l."unitId" IS NOT NULL OR l."marketplaceAssetId" IS NOT NULL`);
+  if (filters.scope === "UNIT") conditions.push(Prisma.sql`(l."unitId" IS NOT NULL OR l."marketplaceAssetId" IS NOT NULL)`);
   if (filters.currencyCode) conditions.push(Prisma.sql`l."currencyCode" = ${filters.currencyCode}`);
   if (filters.minPriceMinor) conditions.push(Prisma.sql`${price} >= ${filters.minPriceMinor}::numeric`);
   if (filters.maxPriceMinor) conditions.push(Prisma.sql`${price} <= ${filters.maxPriceMinor}::numeric`);
@@ -1195,21 +1220,60 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
     )`);
   }
   const offset = (filters.page - 1) * filters.pageSize;
+  // Top Ads are ranked inside this one ordered query rather than prepended: a pinned listing must
+  // pass the same eligibility rules and the visitor's filters, appears once, and offset paging
+  // stays stable (page 2 continues exactly where page 1 ended).
   return Prisma.sql`
-    SELECT l."id", count(*) OVER() AS total
+    SELECT l."id", count(*) OVER() AS total, (ta."id" IS NOT NULL) AS "isTopAd"
     FROM "Listing" l
-    LEFT JOIN "Property" p ON p."id" = l."propertyId"
-    LEFT JOIN "Unit" u ON u."id" = l."unitId"
-    LEFT JOIN "MarketplaceAsset" ma ON ma."id" = l."marketplaceAssetId"
+    ${PUBLIC_LISTING_JOINS}
+    ${ACTIVE_TOP_AD_JOIN}
     WHERE ${Prisma.join(conditions, " AND ")}
-    ORDER BY l."publishedAt" DESC NULLS LAST, l."availableFrom" ASC, l."id" ASC
+    ORDER BY (ta."id" IS NULL) ASC, ta."sortOrder" ASC NULLS LAST, ta."createdAt" ASC NULLS LAST,
+      l."publishedAt" DESC NULLS LAST, l."availableFrom" ASC, l."id" ASC
     LIMIT ${filters.pageSize} OFFSET ${offset}
   `;
 }
 
-function publicProjection(listing: Prisma.ListingGetPayload<{ include: typeof publicListingInclude }>) {
+/** Which of `listingIds` are publicly eligible right now (same rules as public search). */
+export async function publiclyEligibleListingIds(listingIds: string[]): Promise<Set<string>> {
+  if (!listingIds.length) return new Set();
+  const rows = await db.$queryRaw<{ id: string }[]>(Prisma.sql`
+    SELECT l."id"
+    FROM "Listing" l
+    ${PUBLIC_LISTING_JOINS}
+    WHERE l."id" IN (${Prisma.join(listingIds.map((id) => Prisma.sql`${id}::uuid`))})
+      AND ${Prisma.join(publicListingEligibilitySql(), " AND ")}
+  `);
+  return new Set(rows.map(({ id }) => id));
+}
+
+/** Publicly eligible listings matching an admin's search, for the Top Ads picker. */
+export async function searchEligibleListingsForPinning(search: string | undefined, take = 20) {
+  const conditions = publicListingEligibilitySql();
+  const term = search?.trim().slice(0, 100);
+  if (term) {
+    const like = `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+    conditions.push(Prisma.sql`(
+      l."title" ILIKE ${like} OR l."city" ILIKE ${like} OR l."publicLocationLabel" ILIKE ${like} OR l."id"::text = ${term}
+    )`);
+  }
+  const rows = await db.$queryRaw<{ id: string }[]>(Prisma.sql`
+    SELECT l."id"
+    FROM "Listing" l
+    ${PUBLIC_LISTING_JOINS}
+    WHERE ${Prisma.join(conditions, " AND ")}
+    ORDER BY l."publishedAt" DESC NULLS LAST, l."id" ASC
+    LIMIT ${Math.min(Math.max(take, 1), 50)}
+  `);
+  return rows.map(({ id }) => id);
+}
+
+function publicProjection(listing: Prisma.ListingGetPayload<{ include: typeof publicListingInclude }>, options: { isTopAd?: boolean } = {}) {
   return {
     id: listing.id,
+    /** Admin-pinned Top Ad in this result set (search only). Organic listings are always false. */
+    isTopAd: options.isTopAd ?? false,
     listingType: listing.listingType,
     scope: listing.marketplaceAssetId ? "MARKETPLACE_ASSET" : listing.unitId ? "UNIT" : "PROPERTY",
     source: listing.marketplaceAssetId ? "MARKETPLACE_NATIVE" : "PROPERTY_OS",
@@ -1293,9 +1357,9 @@ export async function searchPublicListings(query: unknown = {}) {
     ? await db.listing.findMany({ where: { id: { in: rows.map(({ id }) => id) } }, include: publicListingInclude })
     : [];
   const byId = new Map(listings.map((listing) => [listing.id, listing]));
-  const items = rows.flatMap(({ id }) => {
+  const items = rows.flatMap(({ id, isTopAd }) => {
     const listing = byId.get(id);
-    return listing ? [publicProjection(listing)] : [];
+    return listing ? [publicProjection(listing, { isTopAd: Boolean(isTopAd) })] : [];
   });
   let total = rows.length ? Number(rows[0].total) : 0;
   if (!rows.length && filters.page > 1) {

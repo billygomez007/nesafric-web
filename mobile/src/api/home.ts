@@ -10,7 +10,7 @@ export type CampaignBanner = {
   destinationUrl: string;
   desktopMediaUrl: string | null;
   mobileMediaUrl: string | null;
-  /** Native-app artwork (1200 x 792). Older API responses may omit it. */
+  /** Native-app artwork (1200 x 480; older uploads may be 1200 x 792). Older API responses may omit it. */
   nativeAppMediaUrl?: string | null;
 };
 
@@ -29,7 +29,7 @@ export type DirectoryCompany = {
  * campaigns are eligible; it only renders what this returns.
  */
 export const getFeaturedCampaigns = (api: ApiClient, limit = 6) =>
-  api.request<{ banners: CampaignBanner[] }>("/api/public/campaigns", { query: { placement: "MARKETPLACE_PRIMARY", countryCode: "GH", limit } });
+  api.request<{ banners: CampaignBanner[]; /** Placement-wide Super Admin setting: 5, 8 or 10. Older APIs omit it. */ rotationSeconds?: number }>("/api/public/campaigns", { query: { placement: "MARKETPLACE_PRIMARY", countryCode: "GH", limit } });
 
 export const recordCampaignImpression = (api: ApiClient, campaignId: string) =>
   api.request<unknown>(`/api/public/campaigns/${encodeURIComponent(campaignId)}/impression`, { method: "POST" });

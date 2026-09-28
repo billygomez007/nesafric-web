@@ -26,8 +26,10 @@ import {
   resolveAvailableWorkspaces,
   resolveInitialWorkspace,
   sameWorkspace,
+  isWorkspaceIntent,
   WORKSPACE_KIND_LABEL,
   type AvailableWorkspace,
+  type EntryIntent,
   type WorkspaceIntent,
   type WorkspaceKind,
   type WorkspaceRef,
@@ -173,6 +175,24 @@ function SignedOutAccount() {
 
       <View style={styles.section}>
         <AppText style={styles.eyebrow} accessibilityRole="header">
+          RENTING A HOME
+        </AppText>
+        <GatewayCard
+          icon="key-outline"
+          title="Tenant / Renter"
+          description="Sign in to view your rented home, lease details, payments, maintenance and messages."
+          highlighted={intent === "tenant"}
+          testID="gateway-tenant"
+          onPress={() => {
+            // Wording only: the homes shown after sign-in are the ones the server links to this account.
+            setWorkspaceIntent("tenant");
+            router.push({ pathname: "/sign-in", params: { intent: "tenant" } });
+          }}
+        />
+      </View>
+
+      <View style={styles.section}>
+        <AppText style={styles.eyebrow} accessibilityRole="header">
           MANAGE ON NESAFRIC
         </AppText>
         {GATEWAY.map((card) => (
@@ -231,13 +251,14 @@ function SignedInAccount() {
   }, [user, workspaces.data]);
 
   const displayName = profile.data?.displayName ?? user?.displayName ?? "";
-  const email = profile.data?.email ?? user?.email ?? "";
+  // A phone-only account has no email: show the phone number instead.
+  const email = profile.data?.email ?? user?.email ?? profile.data?.phone ?? user?.phone ?? "";
   const session = { status, workspaces: workspaces.data };
   const available = resolveAvailableWorkspaces(session);
   const continueIn = resolveInitialWorkspace(session, lastWorkspace);
   const missing = (Object.keys(OFFERS) as WorkspaceIntent[]).filter((kind) => !hasWorkspaceKind(available, kind));
   // The tapped card only reorders and highlights; it never adds a workspace.
-  const offers = intent && missing.includes(intent) ? [intent, ...missing.filter((kind) => kind !== intent)] : missing;
+  const offers = isWorkspaceIntent(intent) && missing.includes(intent) ? [intent, ...missing.filter((kind) => kind !== intent)] : missing;
 
   async function openOffer(kind: WorkspaceIntent) {
     await WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${OFFERS[kind].path}`));
@@ -259,7 +280,8 @@ function SignedInAccount() {
         </View>
       </Card>
 
-      {intent && workspaces.data ? <IntentNotice intent={intent} available={available} /> : null}
+      {isWorkspaceIntent(intent) && workspaces.data ? <IntentNotice intent={intent} available={available} /> : null}
+      {intent === "tenant" && tenancies.data ? <TenantIntentNotice tenancies={tenancies.data} /> : null}
 
       {workspaces.data ? (
         <View style={styles.section} testID="current-workspace">
@@ -359,13 +381,43 @@ function IntentNotice({ intent, available }: { intent: WorkspaceIntent; availabl
   );
 }
 
+/**
+ * After signing in from the Tenant card: the homes come only from the server's tenancy list. With
+ * none linked yet, the next step is the tenant access code from the landlord — nothing is assumed.
+ */
+function TenantIntentNotice({ tenancies }: { tenancies: Tenancy[] }) {
+  const only = tenancies.length === 1 ? tenancies[0] : null;
+  return (
+    <View style={styles.notices} testID="tenant-intent-notice">
+      {tenancies.length ? (
+        <>
+          <Notice tone="info" message={only ? "Your rented home is linked to this account." : `You have ${tenancies.length} rented homes linked to this account. Choose one under Your homes.`} />
+          {only ? (
+            <Button
+              label="Open your home"
+              onPress={() => router.push({ pathname: "/home/[tenancyId]", params: { tenancyId: only.tenantOrganisationId } })}
+              testID="tenant-intent-open"
+            />
+          ) : null}
+        </>
+      ) : (
+        <>
+          <Notice tone="info" message="No rented home is linked to this account yet. Enter the tenant access code your landlord or property manager gave you to connect it." />
+          <Button label="Enter tenant access code" onPress={() => router.push("/tenant-access")} testID="tenant-intent-access-code" />
+        </>
+      )}
+      <Button label="Dismiss" variant="secondary" onPress={() => setWorkspaceIntent(null)} testID="tenant-intent-dismiss" />
+    </View>
+  );
+}
+
 function WorkspaceList(props: {
   available: AvailableWorkspace[] | undefined;
   isPending: boolean;
   error: unknown;
   onRetry: () => void;
   lastWorkspace: WorkspaceRef | null;
-  intent: WorkspaceIntent | null;
+  intent: EntryIntent | null;
 }) {
   const { available, isPending, error, onRetry, lastWorkspace, intent } = props;
   const userId = useSession().user?.id;

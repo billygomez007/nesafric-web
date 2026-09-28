@@ -1,16 +1,16 @@
 import { useSyncExternalStore } from "react";
 
-import type { WorkspaceIntent } from "./resolve";
+import type { EntryIntent } from "./resolve";
 
 /**
- * Which "Manage on NesAfric" card a signed-out person tapped. Memory only, never stored, never
+ * Which entry card (Tenant, or a "Manage on NesAfric" card) a signed-out person tapped. Memory only, never stored, never
  * sent to the server, and never a source of access: after sign-in it only decides what the Account
  * screen highlights (the matching workspace if the server lists one, otherwise the matching offer).
  */
-let intent: WorkspaceIntent | null = null;
+let intent: EntryIntent | null = null;
 const listeners = new Set<() => void>();
 
-export function setWorkspaceIntent(next: WorkspaceIntent | null) {
+export function setWorkspaceIntent(next: EntryIntent | null) {
   intent = next;
   listeners.forEach((listener) => listener());
 }

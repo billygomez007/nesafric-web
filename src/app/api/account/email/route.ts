@@ -16,6 +16,17 @@ export async function PATCH(request: Request) {
     const user = await requireUser();
     const data = changeEmailSchema.parse(await request.json());
 
+    // Accounts without a password (code or Google sign-in) add or change their email by proving
+    // ownership of the new address instead: `POST /api/auth/otp/request` (mode "link") then
+    // `POST /api/account/identifiers/verify`.
+    if (!user.passwordHash) {
+      throw new AppError(
+        "PASSWORD_NOT_SET",
+        400,
+        "This account signs in without a password. Verify the new email with a one-time code instead.",
+      );
+    }
+
     const passwordValid = await verifyPassword(
       user.passwordHash,
       data.currentPassword,
@@ -40,7 +51,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const emailChanged = email !== user.email.toLowerCase();
+    const emailChanged = email !== user.email?.toLowerCase();
 
     const updated = await db.user.update({
       where: { id: user.id },

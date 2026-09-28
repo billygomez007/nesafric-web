@@ -27,7 +27,11 @@ export function formatListingPrice(listing: Pick<PublicListing, "listingType" | 
 
 export function formatLocation(location: PublicListing["location"]) {
   if (location.label) return location.label;
-  const parts = [location.locality ?? location.district, location.city ?? location.region].filter(Boolean);
+  const area = location.locality ?? location.district;
+  const town = location.city ?? location.region;
+  // A town is often its own locality ("Oyibi, Oyibi"): say it once.
+  const parts = [area, town].map((part) => part?.trim()).filter((part): part is string => Boolean(part));
+  if (parts.length === 2 && parts[0]!.toLowerCase() === parts[1]!.toLowerCase()) parts.pop();
   return parts.length ? parts.join(", ") : null;
 }
 

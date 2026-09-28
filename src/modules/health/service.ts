@@ -1,3 +1,4 @@
+import { arkeselStatus } from "@/modules/messaging/config";
 import { getObjectStorageAdapter } from "@/platform/storage/registry";
 import { db } from "@/platform/database/client";
 import { getMalwareScanner } from "@/platform/storage";
@@ -122,6 +123,11 @@ function checkCommunications(): ProviderHealthEntry[] {
   const email = getEmailProviderStatus();
   return [
     { name: "sms", readiness: envPresent("SMS_PROVIDER_SEND_URL", "SMS_PROVIDER_API_KEY") ? "CONFIGURED" : "TEST_MODE", detail: "Provider-neutral SMS transport." },
+    {
+      name: "smsOtp",
+      readiness: arkeselStatus().configured ? "CONFIGURED" : "UNCONFIGURED",
+      detail: arkeselStatus().configured ? "Arkesel SMS codes (sign-in by phone)." : "Arkesel not configured: phone sign-in codes are refused.",
+    },
     { name: "whatsapp", readiness: envPresent("WHATSAPP_PROVIDER_SEND_URL", "WHATSAPP_PROVIDER_ACCESS_TOKEN") ? "CONFIGURED" : "TEST_MODE", detail: "Provider-neutral WhatsApp transport." },
     {
       name: "email",

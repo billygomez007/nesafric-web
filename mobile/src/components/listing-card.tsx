@@ -26,51 +26,63 @@ export function ListingCard({ listing, variant = "full" }: { listing: PublicList
     <Link href={{ pathname: "/listing/[id]", params: { id: listing.id } }} asChild>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel={[price, listing.title, location].filter(Boolean).join(", ")}
-        style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        accessibilityLabel={[listing.isTopAd ? "Top Ad" : null, price, listing.title, location].filter(Boolean).join(", ")}
+        // Expo Router's `Link asChild` spreads the child's style into an object, which silently
+        // drops a style *function* (the card lost its surface, border and radius). Keep the card
+        // style a flat object and apply press feedback inside.
+        style={StyleSheet.flatten(styles.card)}
       >
-        <View style={[styles.photoWrap, compact && styles.photoCompact]}>
-          {photo ? (
-            <Image
-              source={{ uri: photo.url }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={150}
-              cachePolicy="memory-disk"
-              recyclingKey={listing.id}
-              accessibilityLabel={photo.altText ?? listing.title}
-            />
-          ) : (
-            <View style={styles.noPhoto}>
-              <Ionicons name="image-outline" size={28} color={colors.muted} />
-              <AppText variant="caption">No photos yet</AppText>
+        {({ pressed }) => (
+          <View style={pressed && styles.pressed}>
+            <View style={[styles.photoWrap, compact && styles.photoCompact]}>
+              {photo ? (
+                <Image
+                  source={{ uri: photo.url }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={150}
+                  cachePolicy="memory-disk"
+                  recyclingKey={listing.id}
+                  accessibilityLabel={photo.altText ?? listing.title}
+                />
+              ) : (
+                <View style={styles.noPhoto}>
+                  <Ionicons name="image-outline" size={28} color={colors.muted} />
+                  <AppText variant="caption">No photos yet</AppText>
+                </View>
+              )}
+              <View style={styles.saveSlot}>
+                <SaveButton listing={listing} />
+              </View>
             </View>
-          )}
-          <View style={styles.saveSlot}>
-            <SaveButton listing={listing} />
-          </View>
-        </View>
-        <View style={styles.body}>
-          {price ? <AppText variant="heading">{price}</AppText> : <AppText variant="label">Price on request</AppText>}
-          <AppText variant="label" numberOfLines={1}>
-            {listing.title}
-          </AppText>
-          {location ? (
-            <AppText variant="caption" numberOfLines={1}>
-              {location}
-            </AppText>
-          ) : null}
-          <View style={styles.footer}>
-            {facts ? (
-              <AppText variant="caption" numberOfLines={1} style={styles.facts}>
-                {facts}
+            <View style={styles.body}>
+              {price ? <AppText variant="heading">{price}</AppText> : <AppText variant="label">Price on request</AppText>}
+              <AppText variant="label" numberOfLines={1}>
+                {listing.title}
               </AppText>
-            ) : (
-              <View style={styles.facts} />
-            )}
-            {isVerified(listing) ? <VerifiedBadge /> : null}
+              {location ? (
+                <AppText variant="caption" numberOfLines={1}>
+                  {location}
+                </AppText>
+              ) : null}
+              <View style={styles.footer}>
+                {facts ? (
+                  <AppText variant="caption" numberOfLines={1} style={styles.facts}>
+                    {facts}
+                  </AppText>
+                ) : (
+                  <View style={styles.facts} />
+                )}
+                {listing.isTopAd ? (
+                  <AppText style={styles.topAd} testID="top-ad-badge">
+                    Top Ad
+                  </AppText>
+                ) : null}
+                {isVerified(listing) ? <VerifiedBadge /> : null}
+              </View>
+            </View>
           </View>
-        </View>
+        )}
       </Pressable>
     </Link>
   );
@@ -106,4 +118,15 @@ const styles = StyleSheet.create({
   facts: { flex: 1 },
   badge: { flexDirection: "row", alignItems: "center", gap: 3 },
   badgeText: { fontSize: 12, lineHeight: 16, color: colors.brandStrong, fontFamily: "NotoSans-Bold" },
+  topAd: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.muted,
+    fontFamily: "NotoSans-Bold",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+  },
 });

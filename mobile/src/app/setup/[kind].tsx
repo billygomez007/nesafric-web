@@ -9,7 +9,7 @@ import { useApi } from "@/api/provider";
 import { useSession } from "@/auth/session";
 import { AppText, Button, Card, Loading } from "@/components/ui";
 import { colors, spacing } from "@/theme/tokens";
-import { parseIntent, resolveAvailableWorkspaces, type WorkspaceIntent } from "@/workspace/resolve";
+import { isWorkspaceIntent, parseIntent, resolveAvailableWorkspaces, type WorkspaceIntent } from "@/workspace/resolve";
 import { SETUP_PATH } from "@/workspace/routing";
 
 const COPY: Record<WorkspaceIntent, { title: string; body: string; action: string }> = {
@@ -36,7 +36,9 @@ const COPY: Record<WorkspaceIntent, { title: string; body: string; action: strin
  * lists it (re-checked when the person comes back).
  */
 export default function SetupScreen() {
-  const kind = parseIntent(useLocalSearchParams<{ kind?: string }>().kind);
+  // Set-up exists only for workspace kinds; a tenancy is never "set up" by the tenant.
+  const parsed = parseIntent(useLocalSearchParams<{ kind?: string }>().kind);
+  const kind = isWorkspaceIntent(parsed) ? parsed : null;
   const { status } = useSession();
   const { apiUrl } = useApi();
   const workspaces = useWorkspaces();

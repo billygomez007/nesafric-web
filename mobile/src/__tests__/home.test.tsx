@@ -1,12 +1,13 @@
 /// <reference types="node" />
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, renderHook, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 import path from "path";
 import * as WebBrowser from "expo-web-browser";
 import { Animated, StyleSheet } from "react-native";
 
 import type { CampaignBanner } from "@/api/home";
-import { buildFeaturedSlides, nativeCampaignCreative, resolveDestination } from "@/home/featured";
+import { buildFeaturedSlides, NATIVE_CAMPAIGN_ASPECT, nativeCampaignCreative, resolveDestination, rotationMs } from "@/home/featured";
+import { useCarouselAutoplay } from "@/home/use-carousel-autoplay";
 import { wrapOffset } from "@/home/components/logo-rail";
 import { homeListings, isNewListing } from "@/home/components/properties-on-nesafric";
 import { railCompanies } from "@/home/components/trusted-companies";
@@ -90,15 +91,40 @@ describe("marketplace home", () => {
     expect(screen.queryByLabelText(/^(For rent|For sale|Land|Commercial)\. /)).toBeNull();
   });
 
-  it("shows sponsored campaigns first, reports the impression and click, and opens the destination in the app", async () => {
+  it("shows a campaign's artwork, reports the impression and click, and opens the destination in the app", async () => {
     mockApi({ banners: [campaign] });
     renderRouter(APP_DIR, { initialUrl: "/" });
-    expect(await screen.findByText("Airport Hills residences")).toBeTruthy();
-    expect(screen.getByText("Sponsored")).toBeTruthy();
+    // The accessible name is the headline alone, with no "Sponsored:"/"Promoted:" prefix.
+    const artwork = await screen.findByLabelText("Airport Hills residences");
+    expect(artwork).toBe(screen.getByTestId(`campaign-artwork-${campaign.id}`));
     await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.url.pathname === `/api/public/campaigns/${campaign.id}/impression`)).toBe(true));
-    fireEvent.press(screen.getByText("See the homes"));
+    expect(calls.some((call) => call.method === "POST" && call.url.pathname.endsWith("/click"))).toBe(false);
+    fireEvent.press(artwork);
     await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.url.pathname === `/api/public/campaigns/${campaign.id}/click`)).toBe(true));
     expect(await screen.findByText("Verified property")).toBeTruthy();
+  });
+
+  it("shows the uploaded artwork untouched: no label, headline, copy, button, shade or crop, controls outside", async () => {
+    const second = { ...campaign, id: "c0ffee00-0000-4000-8000-000000000002", headline: "Second campaign", mobileMediaUrl: "https://cdn.test/second.jpg" };
+    mockApi({ banners: [campaign, second] });
+    const view = renderRouter(APP_DIR, { initialUrl: "/" });
+    const artwork = await screen.findByTestId(`campaign-artwork-${campaign.id}`);
+    for (const text of ["Sponsored", "Promoted", "Featured", "Airport Hills residences", "Second campaign", "Two- and three-bedroom homes", "See the homes", "Learn more", "Learn More"]) {
+      expect(screen.queryByText(text)).toBeNull();
+    }
+    expect(screen.queryByLabelText(/^(Sponsored|Promoted)/)).toBeNull();
+    // The card holds the artwork and nothing else, uncropped and unstretched.
+    const images = artwork.findAll((node) => typeof node.type === "string" && node.props.source != null);
+    expect(images).toHaveLength(1);
+    expect(images[0].props.contentFit ?? images[0].props.resizeMode).toBe("contain");
+    expect(artwork.findAll((node) => typeof node.type === "string" && typeof node.props.children === "string")).toHaveLength(0);
+    // No shade, gradient or tint drawn over the artwork.
+    expect(JSON.stringify(artwork.findAll(() => true).map((node) => node.props.style))).not.toMatch(/gradient|rgba\(0,22,20/);
+    // Dots and arrows sit below the card, not over it.
+    const controls = screen.getByTestId("featured-controls");
+    expect(artwork.findAll((node) => node === controls)).toHaveLength(0);
+    expect(controls.findAll((node) => node === artwork)).toHaveLength(0);
+    expect(flatten(view.toJSON() as Node)).not.toContain("Second campaign");
   });
 
   it("hides the advertising carousel when no campaign is eligible — listings are never promoted into it", async () => {
@@ -106,8 +132,7 @@ describe("marketplace home", () => {
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
     await screen.findByLabelText("Properties on NesAfric");
     await waitFor(() => expect(calls.some((call) => call.url.pathname === "/api/public/campaigns")).toBe(true));
-    await waitFor(() => expect(screen.queryByLabelText("Loading sponsored campaigns")).toBeNull());
-    expect(screen.queryByLabelText("Sponsored campaigns")).toBeNull();
+    expect(screen.queryByTestId("advertising-carousel")).toBeNull();
     expect(screen.queryByText("Sponsored")).toBeNull();
     expect(screen.queryByText("View property")).toBeNull();
     expect(screen.queryByText("List your property on NesAfric")).toBeNull();
@@ -121,14 +146,29 @@ describe("marketplace home", () => {
     jest.mocked(globalThis.fetch).mockImplementation((input, init) => (new URL(String(input)).pathname === "/api/public/campaigns" ? json(500, { error: { code: "INTERNAL", message: "Down" } }) : base(input, init)));
     renderRouter(APP_DIR, { initialUrl: "/" });
     await screen.findByLabelText("Properties on NesAfric");
-    await waitFor(() => expect(screen.queryByLabelText("Loading sponsored campaigns")).toBeNull());
-    expect(screen.queryByLabelText("Sponsored campaigns")).toBeNull();
+    await waitFor(() => expect(jest.mocked(globalThis.fetch).mock.calls.some(([input]) => new URL(String(input)).pathname === "/api/public/campaigns")).toBe(true));
+    expect(screen.queryByTestId("advertising-carousel")).toBeNull();
+  });
+
+  it("hides the carousel when no campaign has usable artwork — never a text-only ad; listings stay in their rail", async () => {
+    mockApi({ banners: [{ ...campaign, mobileMediaUrl: null, desktopMediaUrl: "   ", nativeAppMediaUrl: "" }] });
+    const view = renderRouter(APP_DIR, { initialUrl: "/" });
+    const card = await screen.findByLabelText(/^4 Bedroom House, For rent/);
+    await waitFor(() => expect(calls.some((call) => call.url.pathname === "/api/public/campaigns")).toBe(true));
+    expect(screen.queryByTestId("advertising-carousel")).toBeNull();
+    const texts = flatten(view.toJSON() as Node);
+    for (const text of ["Airport Hills residences", "Two- and three-bedroom homes", "See the homes", "Sponsored", "View property", "List your property on NesAfric"]) expect(texts).not.toContain(text);
+    expect(texts.filter((text) => text === "4 Bedroom House")).toHaveLength(1);
+    expect(calls.some((call) => call.method === "POST")).toBe(false);
+    // The listing rail still works on its own.
+    fireEvent.press(card);
+    expect(await screen.findByText("Verified property")).toBeTruthy();
   });
 
   it("requests the homepage carousel placement for Ghana from the shared campaign API", async () => {
     mockApi({ banners: [campaign] });
     renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByText("Airport Hills residences");
+    await screen.findByTestId(`campaign-artwork-${campaign.id}`);
     const request = calls.find((call) => call.url.pathname === "/api/public/campaigns")!;
     expect(request.url.searchParams.get("placement")).toBe("MARKETPLACE_PRIMARY");
     expect(request.url.searchParams.get("countryCode")).toBe("GH");
@@ -137,7 +177,7 @@ describe("marketplace home", () => {
   it("shows the native-app creative for a campaign", async () => {
     mockApi({ banners: [{ ...campaign, nativeAppMediaUrl: "https://cdn.test/airport-hills-app.jpg" }] });
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByText("Airport Hills residences");
+    await screen.findByTestId(`campaign-artwork-${campaign.id}`);
     const texts = flatten(view.toJSON() as Node);
     expect(texts).toContain("https://cdn.test/airport-hills-app.jpg");
     expect(texts).not.toContain("https://cdn.test/airport-hills.jpg");
@@ -220,11 +260,11 @@ describe("marketplace home", () => {
     await waitFor(() => expect(searchCalls().some((params) => params.get(key) === value && params.get("pageSize") === "20")).toBe(true));
   });
 
-  it("with the logo rail moving, a campaign's call to action still opens its destination", async () => {
+  it("with the logo rail moving, campaign artwork still opens its destination", async () => {
     mockApi({ banners: [campaign] });
     renderRouter(APP_DIR, { initialUrl: "/" });
     await loopingRail();
-    fireEvent.press(await screen.findByText("See the homes"));
+    fireEvent.press(await screen.findByTestId(`campaign-artwork-${campaign.id}`));
     expect(await screen.findByText("Verified property")).toBeTruthy();
   });
 
@@ -352,10 +392,23 @@ describe("featured slides", () => {
   it("builds slides from campaigns only, in server order — no listing or NesAfric fallback", () => {
     const second = { ...campaign, id: "c0ffee00-0000-4000-8000-000000000002", headline: "Second" };
     expect(buildFeaturedSlides([campaign, second], API).map((slide) => slide.campaignId)).toEqual([campaign.id, second.id]);
-    expect(buildFeaturedSlides([campaign], API).map((slide) => slide.eyebrow)).toEqual(["Sponsored"]);
+    // Artwork, headline (for accessibility only) and destination: no label, copy or CTA to draw.
+    expect(buildFeaturedSlides([campaign], API)).toEqual([{
+      key: `campaign:${campaign.id}`,
+      campaignId: campaign.id,
+      headline: "Airport Hills residences",
+      imageUrl: "https://cdn.test/airport-hills.jpg",
+      target: { type: "listing", id: house.id },
+    }]);
     expect(buildFeaturedSlides([], API)).toEqual([]);
     // An unsafe destination drops that campaign rather than inventing a target.
     expect(buildFeaturedSlides([{ ...campaign, destinationUrl: "javascript:alert(1)" }], API)).toEqual([]);
+    // A campaign without usable artwork is skipped; the rest keep their order.
+    const artless = { ...campaign, id: "c0ffee00-0000-4000-8000-000000000003", mobileMediaUrl: null, desktopMediaUrl: null, nativeAppMediaUrl: null };
+    expect(buildFeaturedSlides([artless, second], API).map((slide) => slide.campaignId)).toEqual([second.id]);
+    expect(buildFeaturedSlides([artless], API)).toEqual([]);
+    // Campaigns are the only input: real listings can never become advertising slides.
+    expect(buildFeaturedSlides.length).toBe(2);
   });
 
   it("picks native-app artwork, then mobile web, then desktop", () => {
@@ -363,6 +416,10 @@ describe("featured slides", () => {
     expect(nativeCampaignCreative({ nativeAppMediaUrl: null, mobileMediaUrl: "mobile", desktopMediaUrl: "desktop" })).toBe("mobile");
     expect(nativeCampaignCreative({ mobileMediaUrl: null, desktopMediaUrl: "desktop" })).toBe("desktop");
     expect(nativeCampaignCreative({ nativeAppMediaUrl: null, mobileMediaUrl: null, desktopMediaUrl: null })).toBeNull();
+    // Blank or whitespace-only URLs count as missing.
+    expect(nativeCampaignCreative({ nativeAppMediaUrl: "  ", mobileMediaUrl: "mobile", desktopMediaUrl: "desktop" })).toBe("mobile");
+    expect(nativeCampaignCreative({ nativeAppMediaUrl: "", mobileMediaUrl: " ", desktopMediaUrl: "desktop" })).toBe("desktop");
+    expect(nativeCampaignCreative({ nativeAppMediaUrl: " ", mobileMediaUrl: "", desktopMediaUrl: "\t" })).toBeNull();
     expect(buildFeaturedSlides([{ ...campaign, nativeAppMediaUrl: "/uploads/app.jpg" }], API)[0].imageUrl).toBe(`${API}/uploads/app.jpg`);
   });
 
@@ -388,5 +445,123 @@ describe("home rails", () => {
     expect(isNewListing({ publishedAt: "2026-09-20T10:00:00.000Z" }, now)).toBe(true);
     expect(isNewListing({ publishedAt: "2026-08-01T10:00:00.000Z" }, now)).toBe(false);
     expect(isNewListing({ publishedAt: null }, now)).toBe(false);
+  });
+});
+
+describe("advertising carousel size and controls", () => {
+  it("keeps the full width and draws a 2.5:1 card (1200 x 480), about 60% of the old 1200 x 792 height", async () => {
+    mockApi({ banners: [campaign] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    const artwork = await screen.findByTestId(`campaign-artwork-${campaign.id}`);
+    const { width, height } = StyleSheet.flatten(artwork.props.style) as { width: number; height: number };
+    // Width is unchanged: the screen minus the 16pt gutters, capped at 560.
+    expect(width).toBe(560);
+    expect(height).toBe(Math.round(width * 0.4));
+    expect(width / height).toBeCloseTo(2.5, 1);
+    const oldHeight = Math.round(Math.min(width * (792 / 1200), 320));
+    expect(height / oldHeight).toBeGreaterThanOrEqual(0.55);
+    expect(height / oldHeight).toBeLessThanOrEqual(0.72);
+    const image = artwork.findAll((node) => typeof node.type === "string" && node.props.source != null)[0];
+    expect(image.props.contentFit ?? image.props.resizeMode).toBe("contain");
+  });
+
+  it("on an iPhone-width screen the card is ~60% of its old height", () => {
+    const cardWidth = 402 - 32;
+    const before = Math.round(Math.min(cardWidth * (792 / 1200), 320));
+    const after = Math.round(cardWidth * NATIVE_CAMPAIGN_ASPECT);
+    expect([cardWidth, before, after]).toEqual([370, 244, 148]);
+    expect(after / before).toBeCloseTo(0.61, 2);
+  });
+
+  it("has no arrow buttons; one dot per campaign, and none for a single campaign", async () => {
+    const second = { ...campaign, id: "c0ffee00-0000-4000-8000-00000000a002", headline: "Second campaign", mobileMediaUrl: "https://cdn.test/second.jpg" };
+    const artless = { ...campaign, id: "c0ffee00-0000-4000-8000-00000000a003", mobileMediaUrl: null, desktopMediaUrl: null, nativeAppMediaUrl: null };
+    mockApi({ banners: [campaign, artless, second] });
+    const view = renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByTestId(`campaign-artwork-${campaign.id}`);
+    expect(screen.queryByLabelText(/(Previous|Next) (advertisement|campaign)/)).toBeNull();
+    expect(screen.queryByTestId(`campaign-artwork-${artless.id}`)).toBeNull();
+    expect(screen.getAllByTestId(/^featured-dot/, { includeHiddenElements: true })).toHaveLength(2);
+    expect(screen.getByTestId("featured-dot-active", { includeHiddenElements: true })).toBeTruthy();
+    view.unmount();
+
+    mockApi({ banners: [campaign] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByTestId(`campaign-artwork-${campaign.id}`);
+    expect(screen.queryAllByTestId(/^featured-dot/, { includeHiddenElements: true })).toHaveLength(0);
+  });
+
+  it("uses the API's placement rotation, else 5 seconds", () => {
+    expect(rotationMs(undefined)).toBe(5000);
+    expect(rotationMs(5)).toBe(5000);
+    expect(rotationMs(8)).toBe(8000);
+    expect(rotationMs(10)).toBe(10000);
+    expect(rotationMs(1)).toBe(5000);
+    expect(rotationMs("8")).toBe(5000);
+  });
+});
+
+describe("carousel autoplay timer", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  function setup(initial: { count: number; delayMs?: number; paused?: boolean }) {
+    const onAdvance = jest.fn();
+    const hook = renderHook((props: { count: number; current: number; delayMs: number; paused: boolean }) => useCarouselAutoplay({ ...props, onAdvance: (next) => { onAdvance(next); hook.rerender({ ...props, current: next }); } }), {
+      initialProps: { count: initial.count, current: 0, delayMs: initial.delayMs ?? 5000, paused: initial.paused ?? false },
+    });
+    return { onAdvance, hook };
+  }
+
+  it("advances every 5 seconds, loops back to the first campaign", () => {
+    const { onAdvance } = setup({ count: 3 });
+    act(() => { jest.advanceTimersByTime(4999); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onAdvance).toHaveBeenLastCalledWith(1);
+    act(() => { jest.advanceTimersByTime(5000); });
+    expect(onAdvance).toHaveBeenLastCalledWith(2);
+    act(() => { jest.advanceTimersByTime(5000); });
+    expect(onAdvance).toHaveBeenLastCalledWith(0);
+    expect(onAdvance).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([8000, 10000])("honours a %i ms rotation", (delayMs) => {
+    const { onAdvance } = setup({ count: 2, delayMs });
+    act(() => { jest.advanceTimersByTime(delayMs - 1); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onAdvance).toHaveBeenCalledWith(1);
+  });
+
+  it("never rotates a single campaign", () => {
+    const { onAdvance } = setup({ count: 1 });
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it("holds while paused (a finger on it, reduced motion, off screen) and resumes with a full wait", () => {
+    const { onAdvance, hook } = setup({ count: 3 });
+    act(() => { jest.advanceTimersByTime(3000); });
+    hook.rerender({ count: 3, current: 0, delayMs: 5000, paused: true });
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+    // A swipe lands on slide 1 and the finger lifts.
+    hook.rerender({ count: 3, current: 1, delayMs: 5000, paused: false });
+    act(() => { jest.advanceTimersByTime(4999); });
+    expect(onAdvance).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onAdvance).toHaveBeenCalledWith(2);
+  });
+
+  it("keeps one timer only and clears it on unmount", () => {
+    const { hook } = setup({ count: 3 });
+    expect(jest.getTimerCount()).toBe(1);
+    hook.rerender({ count: 3, current: 2, delayMs: 5000, paused: false });
+    expect(jest.getTimerCount()).toBe(1);
+    hook.unmount();
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

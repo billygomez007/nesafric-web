@@ -11,6 +11,7 @@ import { setActiveToken } from "@/auth/token-store";
 import { resetMarketplaceMode } from "@/marketplace/mode";
 import { listing, provider, serviceCategories } from "@/test-utils/fixtures";
 import { resetWorkspaceNavigator } from "@/workspace/navigator";
+import { OTP_CHALLENGE, signInWithEmailCode } from "@/test-utils/otp";
 
 jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn(async () => ({ type: "dismiss" })) }));
 
@@ -130,7 +131,9 @@ function mockServer(server: Server = {}) {
         return json(200, { banners: [] });
       case "/api/public/homepage-companies":
         return json(200, { items: [] });
-      case "/api/auth/mobile/session":
+      case "/api/auth/otp/request":
+        return json(200, OTP_CHALLENGE);
+      case "/api/auth/mobile/otp/verify":
         return json(200, { token: TOKEN, tokenType: "Bearer", expiresAt: new Date(Date.now() + 86_400_000).toISOString(), user: { id: "u1", email: "ama@example.com", displayName: "Ama Mensah" } });
       case "/api/workspaces":
         return authed ? json(200, server.workspaces ?? NONE) : json(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
@@ -388,9 +391,7 @@ describe("request service", () => {
     expect(callsTo("/api/marketplace/enquiries")).toHaveLength(0);
 
     fireEvent.press(screen.getByTestId("request-sign-in"));
-    fireEvent.changeText(await screen.findByLabelText("Email"), "ama@example.com");
-    fireEvent.changeText(screen.getByLabelText("Password"), "correct-horse-battery-1");
-    await act(async () => fireEvent.press(screen.getByTestId("sign-in-submit")));
+    await signInWithEmailCode();
     expect(await screen.findByText("What do you need done?")).toBeTruthy();
     expect(screen.getByText("Kwame Plumbing Services")).toBeTruthy();
   });

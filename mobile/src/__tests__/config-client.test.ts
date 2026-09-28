@@ -1,4 +1,4 @@
-import { ApiError, buildQuery, createApiClient, NETWORK_ERROR } from "@/api/client";
+import { API_REDIRECTED, ApiError, buildQuery, createApiClient, NETWORK_ERROR } from "@/api/client";
 import { ConfigError, parseApiUrl, previewBypassSecret, websiteUrl } from "@/config";
 
 describe("parseApiUrl", () => {
@@ -41,6 +41,23 @@ describe("api client", () => {
     expect(error).toMatchObject({ status: 400, code: "VALIDATION_ERROR", issues: [{ path: "email", message: "Invalid email" }] });
   });
 
+  it("reports an API origin that redirects (bare domain → www) as a clear configuration error", async () => {
+    // Android's HTTP stack returns a 308 to a POST instead of replaying it, which used to surface as
+    // an unexplained "Something went wrong" on sign-in.
+    const fetchImpl = jest.fn().mockResolvedValue({ ok: false, status: 308, type: "default", json: async () => { throw new SyntaxError("not json"); } } as unknown as Response);
+    const api = createApiClient({ baseUrl: "https://nesafric.com", fetchImpl });
+    const error = await api.request("/api/auth/mobile/session", { method: "POST", body: { email: "a@b.co", password: "x" } }).catch((caught) => caught);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 308, code: API_REDIRECTED });
+  });
+
+  it("production builds use the canonical www API host, never the redirecting bare domain", () => {
+    const eas = require("../../eas.json") as { build: Record<string, { env?: { EXPO_PUBLIC_API_URL?: string } }> };
+    for (const profile of ["preview", "production"]) {
+      expect(parseApiUrl(eas.build[profile].env?.EXPO_PUBLIC_API_URL)).toBe("https://www.nesafric.com");
+    }
+  });
+
   it("reports network failures distinctly", async () => {
     const api = createApiClient({ baseUrl: "https://api.test", fetchImpl: jest.fn().mockRejectedValue(new TypeError("Network request failed")) });
     await expect(api.request("/x")).rejects.toMatchObject({ status: 0, code: NETWORK_ERROR });
@@ -51,7 +68,7 @@ describe("api client", () => {
       baseUrl: "https://api.test",
       fetchImpl: jest.fn().mockResolvedValue({ ok: false, status: 502, json: async () => { throw new SyntaxError("bad"); } } as unknown as Response),
     });
-    await expect(api.request("/x")).rejects.toMatchObject({ status: 502, code: "HTTP_502" });
+    await expect(api.request("/x")).rejects.toMatchObject({ status: 502, code: "SERVICE_UNAVAILABLE" });
   });
 
   it("uses an explicit token for a revocation call without reporting the current session as lost", async () => {
