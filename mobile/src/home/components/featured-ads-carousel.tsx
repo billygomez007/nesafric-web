@@ -8,12 +8,15 @@ import { FlatList, Pressable, StyleSheet, useWindowDimensions, View, type Native
 import { recordCampaignClick, recordCampaignImpression } from "@/api/home";
 import { useFeaturedCampaigns } from "@/api/home-queries";
 import { useApi } from "@/api/provider";
-import { buildFeaturedSlides, NATIVE_CREATIVE_RATIO, type FeaturedSlide, type SlideTarget } from "@/home/featured";
+import { buildFeaturedSlides, type FeaturedSlide, type SlideTarget } from "@/home/featured";
 import { openSearch } from "@/marketplace/navigation";
 import { colors, radii } from "@/theme/tokens";
 
 const CARD_GUTTER = 16;
 const GAP = 16;
+/** Native campaign upload canvas, 1200 × 792 (see `modules/campaigns/creative-spec.ts`). */
+const CAMPAIGN_ASPECT = 792 / 1200;
+const CAMPAIGN_MAX_HEIGHT = 320;
 /** Impressions are reported once per campaign per app session, like the website carousel. */
 const reportedImpressions = new Set<string>();
 
@@ -24,11 +27,10 @@ export function openSlideTarget(target: SlideTarget) {
 }
 
 /**
- * Homepage advertising carousel: eligible campaigns only (see `buildFeaturedSlides`). Hidden when
- * there are none or they can't be loaded — never filled with property listings.
- *
- * A campaign's uploaded artwork is the finished creative. Nothing is painted over it or added
- * around it as campaign copy. Navigation controls remain platform UI; the headline is accessibility-only.
+ * The homepage advertising carousel: live campaigns only (see `buildFeaturedSlides`). With no
+ * campaign that has artwork, nothing renders, not even a placeholder. Each campaign's artwork is
+ * shown exactly as uploaded, uncropped, in a card of the native upload's proportions; the carousel
+ * controls sit below the card, never over the artwork.
  */
 export function FeaturedAdsCarousel() {
   const { api, apiUrl } = useApi();
@@ -38,22 +40,20 @@ export function FeaturedAdsCarousel() {
   const list = useRef<FlatList<FeaturedSlide>>(null);
 
   const cardWidth = Math.min(width - CARD_GUTTER * 2, 560);
-  // The native creative canvas ratio, so the uploaded art is neither cropped nor letterboxed.
-  const cardHeight = Math.round(cardWidth * NATIVE_CREATIVE_RATIO);
+  const cardHeight = Math.round(Math.min(cardWidth * CAMPAIGN_ASPECT, CAMPAIGN_MAX_HEIGHT));
   const interval = cardWidth + GAP;
-  const pending = campaigns.isPending;
 
   const slides = useMemo(() => buildFeaturedSlides(campaigns.data?.banners ?? [], apiUrl), [campaigns.data, apiUrl]);
   const current = Math.min(index, slides.length - 1);
   const visible = slides[current];
 
-  // Report a sponsored slide's impression once it is actually on screen (once per session).
+  // Report a campaign's impression once it is actually on screen (once per session).
   useEffect(() => {
-    const campaignId = pending ? undefined : visible?.campaignId;
+    const campaignId = visible?.campaignId;
     if (!campaignId || reportedImpressions.has(campaignId)) return;
     reportedImpressions.add(campaignId);
     recordCampaignImpression(api, campaignId).catch(() => reportedImpressions.delete(campaignId));
-  }, [api, pending, visible]);
+  }, [api, visible]);
 
   function settle(event: NativeSyntheticEvent<NativeScrollEvent>) {
     setIndex(Math.max(0, Math.round(event.nativeEvent.contentOffset.x / interval)));
@@ -70,44 +70,40 @@ export function FeaturedAdsCarousel() {
     openSlideTarget(slide.target);
   }, [api]);
 
-  if (pending) {
-    return <View accessibilityLabel="Loading sponsored campaigns" style={[styles.skeleton, { width: cardWidth, height: cardHeight }]} />;
-  }
+  // Loading, failed, or no campaign with artwork: the advertising slot is simply absent.
   if (slides.length === 0) return null;
 
   const multi = slides.length > 1;
   return (
-    <View>
-      <View style={{ height: cardHeight }}>
-        <FlatList
-          ref={list}
-          horizontal
-          data={slides}
-          keyExtractor={(slide) => slide.key}
-          renderItem={({ item }) => <Slide slide={item} width={cardWidth} height={cardHeight} onPress={press} />}
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={interval}
-          decelerationRate="fast"
-          disableIntervalMomentum
-          contentContainerStyle={styles.track}
-          ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
-          onMomentumScrollEnd={settle}
-          getItemLayout={(_, i) => ({ length: interval, offset: interval * i, index: i })}
-          accessibilityLabel="Advertising campaigns"
-        />
-      </View>
-
+    <View testID="advertising-carousel">
+      <FlatList
+        ref={list}
+        style={{ height: cardHeight }}
+        horizontal
+        data={slides}
+        keyExtractor={(slide) => slide.key}
+        renderItem={({ item }) => <CampaignArtwork slide={item} width={cardWidth} height={cardHeight} onPress={press} />}
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={interval}
+        decelerationRate="fast"
+        disableIntervalMomentum
+        contentContainerStyle={styles.track}
+        ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
+        onMomentumScrollEnd={settle}
+        getItemLayout={(_, i) => ({ length: interval, offset: interval * i, index: i })}
+        accessibilityLabel="Advertisements"
+      />
       {multi ? (
-        <View style={[styles.footer, { marginHorizontal: CARD_GUTTER, width: cardWidth }]}>
-          <View style={styles.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <View style={styles.controls} testID="featured-controls">
+          <View pointerEvents="none" style={styles.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             {slides.map((slide, i) => <View key={slide.key} style={[styles.dot, i === current && styles.dotActive]} />)}
           </View>
           <View style={styles.arrows}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Previous campaign" hitSlop={8} onPress={() => go(-1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
-              <MaterialCommunityIcons name="chevron-left" size={22} color={colors.ink} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Previous advertisement" hitSlop={6} onPress={() => go(-1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.forest} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Next campaign" hitSlop={8} onPress={() => go(1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
-              <MaterialCommunityIcons name="chevron-right" size={22} color={colors.ink} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Next advertisement" hitSlop={6} onPress={() => go(1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
+              <MaterialCommunityIcons name="chevron-right" size={24} color={colors.forest} />
             </Pressable>
           </View>
         </View>
@@ -116,39 +112,33 @@ export function FeaturedAdsCarousel() {
   );
 }
 
-function Slide({ slide, width, height, onPress }: { slide: FeaturedSlide; width: number; height: number; onPress: (slide: FeaturedSlide) => void }) {
+/**
+ * A campaign is its uploaded artwork and nothing else: no overlay, label, headline or button. The
+ * whole card opens the destination; the headline is the accessible name and is never drawn.
+ */
+function CampaignArtwork({ slide, width, height, onPress }: { slide: FeaturedSlide; width: number; height: number; onPress: (slide: FeaturedSlide) => void }) {
   return (
     <Pressable
-      testID={`campaign-slide-${slide.campaignId}`}
-      accessibilityRole="button"
-      // Advertising disclosure for screen readers only; nothing is drawn over the artwork.
-      accessibilityLabel={`Sponsored: ${slide.title}`}
-      accessibilityHint={slide.target.type === "web" ? "Opens advertiser page" : "Opens on NesAfric"}
+      accessibilityRole="link"
+      accessibilityLabel={slide.headline}
       onPress={() => onPress(slide)}
-      style={({ pressed }) => [styles.slide, { width, height }, pressed && styles.slidePressed]}
+      style={[styles.card, { width, height }]}
+      testID={`campaign-artwork-${slide.campaignId}`}
     >
-      <Image
-        testID="campaign-art"
-        source={{ uri: slide.imageUrl }}
-        style={StyleSheet.absoluteFill}
-        contentFit="contain"
-        transition={150}
-        accessibilityIgnoresInvertColors
-      />
+      <Image source={{ uri: slide.imageUrl }} style={StyleSheet.absoluteFill} contentFit="contain" transition={150} accessibilityIgnoresInvertColors />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   track: { paddingHorizontal: CARD_GUTTER },
-  skeleton: { marginHorizontal: CARD_GUTTER, borderRadius: radii.shell, backgroundColor: colors.cream },
-  slide: { borderRadius: radii.shell, overflow: "hidden", backgroundColor: colors.cream, justifyContent: "center" },
-  slidePressed: { opacity: 0.96 },
-  footer: { marginTop: 8, minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 12 },
+  card: { borderRadius: radii.shell, overflow: "hidden", backgroundColor: colors.forestDeep },
+  // Below the card, so nothing is drawn over campaign artwork.
+  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, paddingHorizontal: CARD_GUTTER },
   dots: { flexDirection: "row", gap: 6 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.hairline },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "rgba(0,63,58,0.25)" },
   dotActive: { backgroundColor: colors.forest },
   arrows: { flexDirection: "row", gap: 8 },
-  arrow: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.elevated },
-  arrowPressed: { backgroundColor: colors.surface },
+  arrow: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,63,58,0.08)" },
+  arrowPressed: { backgroundColor: "rgba(0,63,58,0.18)" },
 });
