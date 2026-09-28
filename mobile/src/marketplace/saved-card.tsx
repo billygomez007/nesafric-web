@@ -50,61 +50,68 @@ function AvailableCard({ listing, savedAt }: { listing: PublicListing; savedAt: 
         accessibilityRole="link"
         accessibilityLabel={[price ?? "Price on request", listing.title, location, facts, isVerified(listing) ? "Verified" : null].filter(Boolean).join(", ")}
         accessibilityHint="Opens the property details"
-        style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        // Expo Router's `Link asChild` spreads the child's style into an object, which silently
+        // drops a style *function* (the card lost its surface, border and radius). Keep the card
+        // style a flat object and apply press feedback inside.
+        style={StyleSheet.flatten(styles.card)}
         testID={`saved-card-${listing.id}`}
       >
-        <View style={styles.photoWrap}>
-          {photo && failedUrl !== photo.url ? (
-            <Image
-              source={{ uri: photo.url }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={150}
-              cachePolicy="memory-disk"
-              recyclingKey={listing.id}
-              accessibilityLabel={photo.altText ?? listing.title}
-              onError={() => setFailedUrl(photo.url)}
-              testID={`saved-photo-${listing.id}`}
-            />
-          ) : (
-            <View style={styles.noPhoto} testID={`saved-no-photo-${listing.id}`}>
-              <Ionicons name="image-outline" size={28} color={colors.muted} />
-              <AppText variant="caption">{photo ? "Photo unavailable" : "No photos yet"}</AppText>
+        {({ pressed }) => (
+          <View style={pressed && styles.pressed}>
+            <View style={styles.photoWrap}>
+              {photo && failedUrl !== photo.url ? (
+                <Image
+                  source={{ uri: photo.url }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={150}
+                  cachePolicy="memory-disk"
+                  recyclingKey={listing.id}
+                  accessibilityLabel={photo.altText ?? listing.title}
+                  onError={() => setFailedUrl(photo.url)}
+                  testID={`saved-photo-${listing.id}`}
+                />
+              ) : (
+                <View style={styles.noPhoto} testID={`saved-no-photo-${listing.id}`}>
+                  <Ionicons name="image-outline" size={28} color={colors.muted} />
+                  <AppText variant="caption">{photo ? "Photo unavailable" : "No photos yet"}</AppText>
+                </View>
+              )}
+              <View style={styles.saveSlot}>
+                <SaveButton listing={listing} />
+              </View>
             </View>
-          )}
-          <View style={styles.saveSlot}>
-            <SaveButton listing={listing} />
-          </View>
-        </View>
-        <View style={styles.body}>
-          {price ? <AppText variant="heading">{price}</AppText> : <AppText variant="label">Price on request</AppText>}
-          <AppText variant="label" numberOfLines={2}>
-            {listing.title}
-          </AppText>
-          {location ? (
-            <View style={styles.inline}>
-              <Ionicons name="location-outline" size={14} color={colors.muted} />
-              <AppText variant="caption" numberOfLines={1} style={styles.flex}>
-                {location}
+            <View style={styles.body}>
+              {price ? <AppText variant="heading">{price}</AppText> : <AppText variant="label">Price on request</AppText>}
+              <AppText variant="label" numberOfLines={2}>
+                {listing.title}
               </AppText>
+              {location ? (
+                <View style={styles.inline}>
+                  <Ionicons name="location-outline" size={14} color={colors.muted} />
+                  <AppText variant="caption" numberOfLines={1} style={styles.flex}>
+                    {location}
+                  </AppText>
+                </View>
+              ) : null}
+              <View style={styles.footer}>
+                {facts ? (
+                  <AppText variant="caption" numberOfLines={1} style={styles.flex}>
+                    {facts}
+                  </AppText>
+                ) : (
+                  <View style={styles.flex} />
+                )}
+                {isVerified(listing) ? <VerifiedBadge /> : null}
+              </View>
+              {savedOn ? (
+                <AppText variant="caption" style={styles.savedOn}>
+                  Saved {savedOn}
+                </AppText>
+              ) : null}
             </View>
-          ) : null}
-          <View style={styles.footer}>
-            {facts ? (
-              <AppText variant="caption" numberOfLines={1} style={styles.flex}>
-                {facts}
-              </AppText>
-            ) : (
-              <View style={styles.flex} />
-            )}
-            {isVerified(listing) ? <VerifiedBadge /> : null}
           </View>
-          {savedOn ? (
-            <AppText variant="caption" style={styles.savedOn}>
-              Saved {savedOn}
-            </AppText>
-          ) : null}
-        </View>
+        )}
       </Pressable>
     </Link>
   );

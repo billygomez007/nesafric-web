@@ -36,6 +36,9 @@ export const PLATFORM_PERMISSIONS = {
   /// and other homepage presentation controls. Kept separate from campaign.review
   /// so advertising operations and homepage editorial control can diverge safely.
   homepageMediaManage: "homepage_media.manage",
+  /// Top Ads: pinning already-published marketplace listings to the top of the public property
+  /// marketplace. A paid-placement decision, so SUPER_ADMIN only (not granted to any other role).
+  topAdsManage: "top_ads.manage",
   /// Phase 23: reviewing mandatory identity/business/credential evidence (Ghana Card etc.) for a
   /// Property Service Professional and setting `ServiceProvider.identityVerifiedAt` /
   /// `businessVerifiedAt` / `skillVerifiedAt`. Deliberately separate from `marketplaceVerify`

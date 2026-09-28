@@ -448,6 +448,11 @@ export async function sendAccountEmail(payload: AccountEmailPayload) {
     : user?.displayName ?? "there";
 
   if (!recipientEmail) {
+    if (!invitationDelivery) {
+      // A phone-only account has no email yet: nothing to send, and nothing to retry.
+      console.log(JSON.stringify({ event: "account-email.skipped", template: payload.template, reason: "no-email-on-account" }));
+      return;
+    }
     throw new Error("Account email has no recipient email address.");
   }
 

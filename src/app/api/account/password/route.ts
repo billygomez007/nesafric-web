@@ -21,6 +21,9 @@ export async function PATCH(request: Request) {
     const user = await requireUser();
     const data = changePasswordSchema.parse(await request.json());
 
+    if (!user.passwordHash) {
+      throw new AppError("PASSWORD_NOT_SET", 400, "This account signs in with a one-time code or Google and has no password to change.");
+    }
     const passwordValid = await verifyPassword(user.passwordHash, data.currentPassword);
     if (!passwordValid) {
       throw new AppError("INVALID_CURRENT_PASSWORD", 401, "Your current password is incorrect.");

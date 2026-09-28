@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 import path from "path";
 import * as WebBrowser from "expo-web-browser";
@@ -93,12 +93,67 @@ describe("marketplace home", () => {
   it("shows sponsored campaigns first, reports the impression and click, and opens the destination in the app", async () => {
     mockApi({ banners: [campaign] });
     renderRouter(APP_DIR, { initialUrl: "/" });
-    expect(await screen.findByText("Airport Hills residences")).toBeTruthy();
-    expect(screen.getByText("Sponsored")).toBeTruthy();
+    const slide = await screen.findByLabelText("Sponsored: Airport Hills residences");
+    // Disclosure is screen-reader only: the whole card is one button named "Sponsored: …", and no
+    // visible caption or badge is drawn over or around the artwork.
+    expect(slide).toHaveProp("accessibilityRole", "button");
+    expect(screen.queryByTestId("campaign-disclosure")).toBeNull();
+    expect(screen.queryByText("Sponsored")).toBeNull();
     await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.url.pathname === `/api/public/campaigns/${campaign.id}/impression`)).toBe(true));
-    fireEvent.press(screen.getByText("See the homes"));
+    fireEvent.press(slide);
     await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.url.pathname === `/api/public/campaigns/${campaign.id}/click`)).toBe(true));
     expect(await screen.findByText("Verified property")).toBeTruthy();
+  });
+
+  it("shows a campaign's artwork cleanly: no headline, supporting text, CTA or badge painted over it", async () => {
+    mockApi({ banners: [campaign] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    const slide = await screen.findByLabelText("Sponsored: Airport Hills residences");
+    expect(within(slide).getByTestId("campaign-art")).toBeTruthy();
+    expect(within(slide).queryByTestId("campaign-text-fallback")).toBeNull();
+    expect(screen.queryByText("Airport Hills residences")).toBeNull();
+    expect(screen.queryByText("Two- and three-bedroom homes")).toBeNull();
+    expect(screen.queryByText("See the homes")).toBeNull();
+    expect(within(slide).queryByText("Sponsored")).toBeNull();
+    expect(within(slide).queryByText("Promoted")).toBeNull();
+  });
+
+  it("never renders a campaign without artwork: no text fallback slide, and the carousel stays hidden", async () => {
+    const withoutArt = { ...campaign, mobileMediaUrl: null, desktopMediaUrl: null, nativeAppMediaUrl: null };
+    mockApi({ banners: [withoutArt] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    await screen.findByLabelText("Properties on NesAfric");
+    await waitFor(() => expect(calls.some((call) => call.url.pathname === "/api/public/campaigns")).toBe(true));
+    await waitFor(() => expect(screen.queryByLabelText("Loading sponsored campaigns")).toBeNull());
+    expect(screen.queryByLabelText("Advertising campaigns")).toBeNull();
+    expect(screen.queryByLabelText("Sponsored: Airport Hills residences")).toBeNull();
+    expect(screen.queryByTestId("campaign-text-fallback")).toBeNull();
+    expect(screen.queryByText("Airport Hills residences")).toBeNull();
+    expect(screen.queryByText("See the homes")).toBeNull();
+    // Nothing shown, so nothing is counted.
+    expect(calls.some((call) => call.method === "POST" && call.url.pathname.startsWith("/api/public/campaigns/"))).toBe(false);
+  });
+
+  it("shows only the campaigns that have artwork when some don't", async () => {
+    const withoutArt = { ...campaign, id: "c0ffee00-0000-4000-8000-000000000009", headline: "No artwork campaign", mobileMediaUrl: null, desktopMediaUrl: null, nativeAppMediaUrl: null };
+    mockApi({ banners: [withoutArt, campaign] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    const slide = await screen.findByLabelText("Sponsored: Airport Hills residences");
+    expect(within(slide).getByTestId("campaign-art")).toBeTruthy();
+    expect(screen.queryByLabelText("Sponsored: No artwork campaign")).toBeNull();
+    // One slide left: no dots or arrows.
+    expect(screen.queryByLabelText("Next campaign")).toBeNull();
+    // The skipped campaign is never tracked (impressions are once per app session, so the shown
+    // campaign's own impression is covered by the first carousel test).
+    expect(calls.some((call) => call.url.pathname.includes(withoutArt.id))).toBe(false);
+  });
+
+  it("opens an external campaign destination in the in-app browser and still records the click", async () => {
+    mockApi({ banners: [{ ...campaign, destinationUrl: "https://developer.example/airport-hills" }] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    fireEvent.press(await screen.findByLabelText("Sponsored: Airport Hills residences"));
+    await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.url.pathname === `/api/public/campaigns/${campaign.id}/click`)).toBe(true));
+    await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith("https://developer.example/airport-hills"));
   });
 
   it("hides the advertising carousel when no campaign is eligible — listings are never promoted into it", async () => {
@@ -128,7 +183,7 @@ describe("marketplace home", () => {
   it("requests the homepage carousel placement for Ghana from the shared campaign API", async () => {
     mockApi({ banners: [campaign] });
     renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByText("Airport Hills residences");
+    await screen.findByLabelText("Sponsored: Airport Hills residences");
     const request = calls.find((call) => call.url.pathname === "/api/public/campaigns")!;
     expect(request.url.searchParams.get("placement")).toBe("MARKETPLACE_PRIMARY");
     expect(request.url.searchParams.get("countryCode")).toBe("GH");
@@ -137,7 +192,7 @@ describe("marketplace home", () => {
   it("shows the native-app creative for a campaign", async () => {
     mockApi({ banners: [{ ...campaign, nativeAppMediaUrl: "https://cdn.test/airport-hills-app.jpg" }] });
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByText("Airport Hills residences");
+    await screen.findByLabelText("Sponsored: Airport Hills residences");
     const texts = flatten(view.toJSON() as Node);
     expect(texts).toContain("https://cdn.test/airport-hills-app.jpg");
     expect(texts).not.toContain("https://cdn.test/airport-hills.jpg");
@@ -224,7 +279,7 @@ describe("marketplace home", () => {
     mockApi({ banners: [campaign] });
     renderRouter(APP_DIR, { initialUrl: "/" });
     await loopingRail();
-    fireEvent.press(await screen.findByText("See the homes"));
+    fireEvent.press(await screen.findByLabelText("Sponsored: Airport Hills residences"));
     expect(await screen.findByText("Verified property")).toBeTruthy();
   });
 
@@ -291,8 +346,23 @@ describe("marketplace home", () => {
     expect(background.props.accessibilityElementsHidden).toBe(true);
     // It is the first child of the Home root, so everything else paints above it…
     expect(background.parent?.children[0]).toBe(background);
+    // The skyline motif is still drawn inside it, anchored near the top of the screen.
+    const skyline = within(background).getByTestId("home-skyline", { includeHiddenElements: true });
+    expect(skyline.findAll((node) => node.props?.style && JSON.stringify(node.props.style).includes("borderColor")).length).toBeGreaterThanOrEqual(7);
     // …and it holds no Home content.
     expect(background.findAll((node) => node.props?.accessibilityRole === "button" || node.props?.accessibilityRole === "link")).toHaveLength(0);
+  });
+
+  it("property cards keep their white surface and width through Link asChild", async () => {
+    mockApi();
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    const card = await screen.findByLabelText(/^4 Bedroom House, For rent/);
+    // Expo Router's Slot spreads the child's style into an object, so a style *function* would
+    // vanish and the premium background would show through the card.
+    const style = StyleSheet.flatten(card.props.style);
+    expect(style.backgroundColor).toBe("#ffffff");
+    expect(style.borderWidth).toBe(1);
+    expect(typeof style.width).toBe("number");
   });
 
   it("with the premium background, Speak to AI opens and the Rent chip still navigates", async () => {
@@ -352,7 +422,7 @@ describe("featured slides", () => {
   it("builds slides from campaigns only, in server order — no listing or NesAfric fallback", () => {
     const second = { ...campaign, id: "c0ffee00-0000-4000-8000-000000000002", headline: "Second" };
     expect(buildFeaturedSlides([campaign, second], API).map((slide) => slide.campaignId)).toEqual([campaign.id, second.id]);
-    expect(buildFeaturedSlides([campaign], API).map((slide) => slide.eyebrow)).toEqual(["Sponsored"]);
+    expect(buildFeaturedSlides([campaign], API).map((slide) => slide.title)).toEqual(["Airport Hills residences"]);
     expect(buildFeaturedSlides([], API)).toEqual([]);
     // An unsafe destination drops that campaign rather than inventing a target.
     expect(buildFeaturedSlides([{ ...campaign, destinationUrl: "javascript:alert(1)" }], API)).toEqual([]);

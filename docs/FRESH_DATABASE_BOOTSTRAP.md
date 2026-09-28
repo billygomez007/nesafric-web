@@ -27,3 +27,19 @@ left those triggers out of every freshly bootstrapped database.
 Existing production databases must continue using the normal migration deployment workflow.
 
 Do not use the fresh bootstrap command against an existing database containing application data.
+
+## Disposable local test databases
+
+`scripts/create-isolated-test-database.sh <name> [role]` drops and recreates a local database
+(name must start with `nesafric_` and contain `test`, the same rule some integration suites
+enforce), owned by `role` (default `propertyos`), runs the bootstrap above and seeds reference data:
+
+```bash
+scripts/create-isolated-test-database.sh nesafric_release_20260928_verify_test
+DATABASE_URL='postgresql://propertyos@localhost:5432/nesafric_release_20260928_verify_test?schema=public' npx vitest run
+```
+
+Always put the role in the URL. `postgresql://localhost/<db>` works for `psql` (libpq falls back
+to the OS user) but Prisma's schema engine sends no user name at all; PostgreSQL rejects that
+("no PostgreSQL user name specified in startup packet") and Prisma reports it as
+`P1010: User was denied access on the database`.

@@ -11,6 +11,7 @@ import type { Workspaces } from "@/api/account";
 import { setActiveToken } from "@/auth/token-store";
 import { setWorkspaceIntent } from "@/workspace/intent";
 import { resetWorkspaceNavigator } from "@/workspace/navigator";
+import { OTP_CHALLENGE, signInWithEmailCode } from "@/test-utils/otp";
 import { listing } from "@/test-utils/fixtures";
 
 jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn(async () => ({ type: "dismiss" })) }));
@@ -91,7 +92,9 @@ function mockServer(server: Server = {}) {
     switch (url.pathname) {
       case "/api/public/listings":
         return json(200, { items: [house], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } });
-      case "/api/auth/mobile/session":
+      case "/api/auth/otp/request":
+        return json(200, OTP_CHALLENGE);
+      case "/api/auth/mobile/otp/verify":
         return json(200, { token: TOKEN, tokenType: "Bearer", expiresAt: new Date(Date.now() + 86_400_000).toISOString(), user: { id: user.id, email: user.email, displayName: user.name } });
       case "/api/auth/logout":
         return json(204);
@@ -131,9 +134,7 @@ function signedIn(userId = "u1") {
 }
 
 async function signInThroughUi() {
-  fireEvent.changeText(await screen.findByLabelText("Email"), "ama@example.com");
-  fireEvent.changeText(screen.getByLabelText("Password"), "correct-horse-battery-1");
-  await act(async () => fireEvent.press(screen.getByTestId("sign-in-submit")));
+  await signInWithEmailCode();
 }
 
 beforeEach(async () => {
@@ -183,16 +184,16 @@ describe("signed out: marketplace first, with a gateway for people who manage", 
     fireEvent.press(await screen.findByTestId("gateway-service_provider"));
     await waitFor(() => expect(app.getPathname()).toBe("/sign-in"));
     expect(await screen.findByTestId("sign-in-title")).toHaveTextContent("Continue as Service Provider");
-    await act(async () => fireEvent.press(screen.getByTestId("sign-in-register")));
-    expect(screen.getByTestId("sign-in-register")).toHaveProp("accessibilityLabel", "Register as a Service Provider");
-    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith(`https://api.test/register?returnTo=${encodeURIComponent("/onboarding?start=services")}`);
+    // Creating an account is native now (phone or email code), not a website hand-off.
+    fireEvent.press(screen.getByTestId("sign-in-mode-register"));
+    expect(await screen.findByTestId("sign-in-title")).toHaveTextContent("Create your NesAfric account");
+    expect(screen.getByTestId("sign-up-name")).toBeTruthy();
+    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
 
     act(() => router.back());
     fireEvent.press(await screen.findByTestId("open-sign-in"));
     await waitFor(() => expect(app.getPathname()).toBe("/sign-in"));
     expect(await screen.findByTestId("sign-in-title")).toHaveTextContent("Sign in to NesAfric");
-    await act(async () => fireEvent.press(screen.getByTestId("sign-in-register")));
-    expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith("https://api.test/register");
   });
 });
 

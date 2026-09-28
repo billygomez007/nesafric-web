@@ -782,10 +782,17 @@ enum ApplicationDocumentType {
 
 model User {
   id                                 String                                     @id @default(uuid()) @db.Uuid
-  email                              String                                     @unique @db.Citext
-  passwordHash                       String
+  /// Nullable: an account may sign in with a verified phone number only. Unique when present
+  /// (Postgres unique indexes allow any number of NULLs). Never a synthetic placeholder.
+  email                              String?                                    @unique @db.Citext
+  /// Legacy password credential. Kept for existing accounts and the retained password endpoints;
+  /// passwordless (OTP) and Google accounts have none.
+  passwordHash                       String?
   displayName                        String
   emailVerifiedAt                    DateTime?
+  /// Canonical E.164 phone (`+233241234567`), set only once verified by SMS code. Unique when present.
+  phoneE164                          String?                                    @unique
+  phoneVerifiedAt                    DateTime?
   createdAt                          DateTime                                   @default(now())
   updatedAt                          DateTime                                   @updatedAt
   sessions                           Session[]
@@ -885,6 +892,10 @@ model User {
   tenantAccessInvitationsRedeemed    TenantAccessInvitation[]                   @relation("TenantAccessInvitationRedeemedBy")
   savedServiceProviders              SavedServiceProvider[]                     @relation("SavedServiceProviders")
   providerAssignmentsCancelled       ProviderAssignment[]                       @relation("ProviderAssignmentCanceller")
+  mobileAuthHandoffs                 MobileAuthHandoff[]
+  authOtpChallenges                  AuthOtpChallenge[]
+  marketplaceTopAdsCreated           MarketplaceTopAd[]                         @relation("MarketplaceTopAdCreator")
+  marketplaceTopAdsUpdated           MarketplaceTopAd[]                         @relation("MarketplaceTopAdUpdater")
 }
 
 model Session {
@@ -3212,6 +3223,7 @@ model Listing {
   rentalApplications          RentalApplication[]
   conversations               Conversation[]
   attributionHistory          ListingAttributionHistory[]
+  topAd                       MarketplaceTopAd?
 
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
@@ -5780,4 +5792,101 @@ model HomepageCompanyLogo {
   updatedBy               User                    @relation("HomepageCompanyLogoUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
 
   @@index([isPublished, sortOrder])
+}
+
+/// Mobile Google sign-in handoff. After the shared Google callback verifies the person, it issues
+/// a one-time code that the native app exchanges (with its PKCE verifier) for an ordinary mobile
+/// `Session`. Only the SHA-256 of the code is stored; rows expire within minutes and are consumed
+/// atomically, so a code can never be replayed or used without the app's verifier.
+model MobileAuthHandoff {
+  id            String    @id @default(uuid()) @db.Uuid
+  codeHash      String    @unique
+  userId        String    @db.Uuid
+  codeChallenge String
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+/// "Top Ads": published marketplace listings a platform admin pins to the top of the public
+/// property marketplace. Selection only — eligibility is never stored here. Public search joins
+/// this table and still applies every marketplace eligibility rule and the visitor's filters, so a
+/// listing that stops being eligible stops appearing at once.
+model MarketplaceTopAd {
+  id              String    @id @default(uuid()) @db.Uuid
+  listingId       String    @unique @db.Uuid
+  sortOrder       Int       @default(0)
+  isActive        Boolean   @default(true)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  createdByUserId String    @db.Uuid
+  updatedByUserId String    @db.Uuid
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("MarketplaceTopAdCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy User    @relation("MarketplaceTopAdUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([isActive, sortOrder])
+}
+
+enum AuthOtpChannel {
+  EMAIL
+  SMS
+}
+
+/// Who checks the code: NesAfric (email — the code's HMAC is stored) or Arkesel (SMS — Arkesel
+/// generates, texts and verifies it; NesAfric stores the HMAC only after Arkesel confirms it).
+enum AuthOtpVerifier {
+  NESAFRIC
+  ARKESEL
+}
+
+enum AuthOtpPurpose {
+  /// Sign in to an existing account.
+  LOGIN
+  /// Create an account (or, if the verified identifier already has one, sign in to it).
+  REGISTER
+  /// Add a verified email/phone to the signed-in account (`userId`).
+  LINK
+}
+
+/// A one-time sign-in / sign-up / link code sent by email or SMS. Nothing reversible is stored:
+/// the destination and the code are HMAC-SHA256 digests keyed by a server secret, so a database
+/// read can't reveal who was sent a code or brute-force the 6-digit code offline. SMS codes are
+/// generated and checked by Arkesel; this row still carries the limits and single-use state. A challenge is
+/// consumed at most once (atomic conditional update), dies after `maxAttempts` wrong guesses, and
+/// is superseded when a newer code is sent to the same destination.
+model AuthOtpChallenge {
+  id                String          @id @default(uuid()) @db.Uuid
+  purpose           AuthOtpPurpose
+  channel           AuthOtpChannel
+  identifierHash    String
+  verifier          AuthOtpVerifier @default(NESAFRIC)
+  /// HMAC of the code. Null for an Arkesel challenge until Arkesel has confirmed the code.
+  codeHash          String?
+  /// LINK only: the account the identifier will be added to.
+  userId            String?         @db.Uuid
+  /// Rate-limit identity of the requester (HMAC of the trusted client IP), when one is available.
+  requesterHash     String?
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  supersededAt      DateTime?
+  failedAttempts    Int             @default(0)
+  /// Provider message id (e.g. `arkesel:…`, `resend:…`) for support investigations; never used to authenticate.
+  providerReference String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([identifierHash, createdAt])
+  @@index([requesterHash, createdAt])
+  @@index([channel, createdAt])
+  @@index([expiresAt])
 }

@@ -62,7 +62,7 @@ export default async function LoginPage({
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-muted">
-              Use your email and password to continue to your workspace.
+              Get a one-time code by text message or email. No password needed.
             </p>
 
             {googleError && (

@@ -461,6 +461,7 @@ export async function listUsersForPlatform(
       ? {
           OR: [
             { email: { contains: search, mode: "insensitive" } },
+            { phoneE164: { contains: search.replace(/[^\d+]/g, "") || search } },
             { displayName: { contains: search, mode: "insensitive" } },
           ],
         }
@@ -470,6 +471,8 @@ export async function listUsersForPlatform(
       email: true,
       displayName: true,
       emailVerifiedAt: true,
+      phoneE164: true,
+      phoneVerifiedAt: true,
       createdAt: true,
       platformPrincipal: {
         select: {

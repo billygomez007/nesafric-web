@@ -125,7 +125,9 @@ export function WorkspaceNavigator() {
       launchDecided = true;
       void loadLastWorkspace(user.id, data).then((last) => {
         if (!mounted.current) return;
-        setWorkspaceIntent(null);
+        // Tenant has no workspace to open: Account keeps the tenant focus (your homes, or the
+        // access-code step) until the person dismisses it.
+        if (intent !== "tenant") setWorkspaceIntent(null);
         go(resolvePostSignInDestination(intent, available, last));
       });
     } else if (!launchDecided) {

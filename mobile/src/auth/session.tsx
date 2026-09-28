@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { createMobileSession, revokeSession } from "@/api/account";
+import { createMobileSession, revokeSession, verifyOtpForSession, type MobileSessionResponse, type OtpVerifyInput } from "@/api/account";
 import { ApiError, createApiClient, type ApiClient } from "@/api/client";
 import {
   clearLocalSession,
@@ -14,6 +14,7 @@ import {
   type LocalClearResult,
   type StoredUser,
 } from "./token-store";
+import { completeGoogleRedirect as completeGoogle, signInWithGoogle as runGoogleSignIn } from "./google";
 import { clearLastWorkspaces } from "./workspaces";
 
 /**
@@ -44,6 +45,12 @@ type SessionContextValue = {
   /** Client for account calls (`auth: true`); marketplace code keeps using the public client. */
   api: ApiClient;
   signIn: (input: { email: string; password: string }) => Promise<void>;
+  /** Verifies a one-time code (and, with `displayName`, creates the account) and signs in. */
+  signInWithCode: (input: OtpVerifyInput) => Promise<void>;
+  /** Google sign-in in the system auth session. Throws `GoogleSignInError` (`cancelled` when closed). */
+  signInWithGoogle: () => Promise<void>;
+  /** Finishes a Google sign-in from a `nesafric://auth/google` link; `false` if there was nothing to finish. */
+  completeGoogleRedirect: (url: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   /** Retries whatever the last sign-out couldn't finish (server revocation and/or device deletion). */
   retrySignOut: () => Promise<void>;
@@ -123,9 +130,11 @@ export function SessionProvider({ apiUrl, children }: { apiUrl: string; children
     };
   }, []);
 
-  const signIn = useCallback(
-    async (input: { email: string; password: string }) => {
-      const session = await createMobileSession(api, input);
+  /** Stores and starts using a new session: the same path for password and Google sign-in. */
+  const adoptSession = useCallback(
+    async (session: MobileSessionResponse) => {
+      // Both deliveries of one Google redirect resolve to the same session: adopt it once.
+      if (getActiveToken() === session.token) return;
       await saveSession({ token: session.token, expiresAt: session.expiresAt, user: session.user });
       generationRef.current += 1;
       queryClient.removeQueries({ queryKey: ACCOUNT_QUERY_KEY });
@@ -136,7 +145,29 @@ export function SessionProvider({ apiUrl, children }: { apiUrl: string; children
       setNotice(null);
       setStatus("signedIn");
     },
-    [api, queryClient],
+    [queryClient],
+  );
+
+  const signIn = useCallback(
+    async (input: { email: string; password: string }) => adoptSession(await createMobileSession(api, input)),
+    [api, adoptSession],
+  );
+
+  const signInWithCode = useCallback(
+    async (input: OtpVerifyInput) => adoptSession(await verifyOtpForSession(api, input)),
+    [api, adoptSession],
+  );
+
+  const signInWithGoogle = useCallback(async () => adoptSession(await runGoogleSignIn(api, apiUrl)), [api, apiUrl, adoptSession]);
+
+  const completeGoogleRedirect = useCallback(
+    async (url: string) => {
+      const session = await completeGoogle(api, url);
+      if (!session) return false;
+      await adoptSession(session);
+      return true;
+    },
+    [api, adoptSession],
   );
 
   const signOut = useCallback(async () => {
@@ -171,8 +202,8 @@ export function SessionProvider({ apiUrl, children }: { apiUrl: string; children
   }, []);
 
   const value = useMemo<SessionContextValue>(
-    () => ({ status, user, notice, dismissNotice, api, signIn, signOut, retrySignOut }),
-    [status, user, notice, dismissNotice, api, signIn, signOut, retrySignOut],
+    () => ({ status, user, notice, dismissNotice, api, signIn, signInWithCode, signInWithGoogle, completeGoogleRedirect, signOut, retrySignOut }),
+    [status, user, notice, dismissNotice, api, signIn, signInWithCode, signInWithGoogle, completeGoogleRedirect, signOut, retrySignOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

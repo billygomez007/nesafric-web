@@ -153,7 +153,7 @@ const emptyDraft = {
   ctaLabel: "", destinationUrl: "", priority: "0", startAt: "", endAt: "", advertiserServiceProviderId: "",
 };
 
-/** Renders a campaign's creative + headline/supporting text/CTA at the real measured aspect ratio
+/** Renders a campaign's creative (or, with no artwork, its headline/supporting text/CTA) at the real measured aspect ratio
  * for the given device and placement, so "Live preview" and the standalone "Preview" action both
  * show something proportionally honest to how the public carousel actually renders — not just an
  * arbitrary decorative box. */
@@ -199,14 +199,17 @@ function CampaignPreview({
   return (
     <div className="overflow-hidden rounded-2xl border border-hairline bg-forest" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
       <div className="relative h-full w-full">
-        {mediaUrl && <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${mediaUrl}")` }} />}
-        <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/70 to-transparent" />
-        <div className={`relative flex h-full flex-col justify-center gap-1.5 px-5 ${device === "mobile" ? "max-w-[85%]" : "max-w-md"}`}>
-          <span className="w-fit rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/75">Promoted</span>
-          <h3 className="text-sm font-semibold text-white sm:text-base">{headline || "Headline preview"}</h3>
-          {supportingText && <p className="line-clamp-2 text-xs text-white/75">{supportingText}</p>}
-          {ctaLabel && <span className="mt-1 w-fit rounded-lg bg-gold px-2.5 py-1 text-xs font-semibold text-forest">{ctaLabel}</span>}
-        </div>
+        {/* Same rule as the public carousels: uploaded artwork is the finished creative and is
+            shown as-is. The headline, copy and CTA only render when there is no artwork. */}
+        {mediaUrl ? (
+          <div className="absolute inset-0 bg-cover bg-center" role="img" aria-label={headline || "Campaign artwork"} style={{ backgroundImage: `url("${mediaUrl}")` }} />
+        ) : (
+          <div className={`relative flex h-full flex-col justify-center gap-1.5 px-5 ${device === "mobile" ? "max-w-[85%]" : "max-w-md"}`}>
+            <h3 className="text-sm font-semibold text-white sm:text-base">{headline || "Headline preview"}</h3>
+            {supportingText && <p className="line-clamp-2 text-xs text-white/75">{supportingText}</p>}
+            {ctaLabel && <span className="mt-1 w-fit rounded-lg bg-gold px-2.5 py-1 text-xs font-semibold text-forest">{ctaLabel}</span>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -902,7 +905,7 @@ export function CampaignsAdminContent() {
 
               <div className="mt-2 border-t border-hairline pt-4 sm:col-span-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">2. Promoted content</p>
-                <p className="mt-1 text-xs leading-5 text-muted">Write the customer-facing message and decide where the call to action leads.</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Write the customer-facing message and decide where the call to action leads. When artwork is uploaded it is shown on its own, exactly as designed; the headline is then used for screen readers and as the text version if no artwork is available.</p>
               </div>
               <label className="grid gap-1.5 text-xs font-semibold text-ink sm:col-span-2">
                 Headline

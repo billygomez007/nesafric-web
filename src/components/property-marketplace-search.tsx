@@ -10,7 +10,7 @@ import { buttonClass } from "@/components/ui/button-styles";
 import { formatListingPrice, humanize, listingLocation, listingTypeLabel, priceUnitText, scopeLabel, specLine } from "@/lib/listing-display";
 import { categorical, compactParams, trackEvent } from "@/platform/analytics";
 
-export type PublicListing = { id: string; listingType: string; scope: string; category: string; title: string; description: string; pricing: { askingAmountMinor: string | null; rentAmountMinor: string | null; currencyCode: string; frequency: string | null }; availability: { availableFrom: string; actual: boolean }; attributes: { bedrooms: number | null; bathrooms: string | null; sizeSqm: string | null }; location: { countryCode: string; region: string | null; city: string | null; district: string | null; locality: string | null; label: string | null; map: { latitude: string | null; longitude: string | null; precision: string | null; geocodingRequired: boolean } }; amenities: { key: string; label: string; category: string | null }[]; media: { id: string; type: string; url: string; altText: string | null; title: string | null; isCover?: boolean }[]; contact: { name: string | null; email: string | null; phone: string | null; enquiryEnabled: boolean }; verification: { status: string; evidenceReady: boolean }; attribution: { listedBy: string; professional: { displayName: string; slug: string; type: string; verificationStatus: string } | null }; publishedAt: string };
+export type PublicListing = { id: string; isTopAd?: boolean; listingType: string; scope: string; category: string; title: string; description: string; pricing: { askingAmountMinor: string | null; rentAmountMinor: string | null; currencyCode: string; frequency: string | null }; availability: { availableFrom: string; actual: boolean }; attributes: { bedrooms: number | null; bathrooms: string | null; sizeSqm: string | null }; location: { countryCode: string; region: string | null; city: string | null; district: string | null; locality: string | null; label: string | null; map: { latitude: string | null; longitude: string | null; precision: string | null; geocodingRequired: boolean } }; amenities: { key: string; label: string; category: string | null }[]; media: { id: string; type: string; url: string; altText: string | null; title: string | null; isCover?: boolean }[]; contact: { name: string | null; email: string | null; phone: string | null; enquiryEnabled: boolean }; verification: { status: string; evidenceReady: boolean }; attribution: { listedBy: string; professional: { displayName: string; slug: string; type: string; verificationStatus: string } | null }; publishedAt: string };
 type Result = { items: PublicListing[]; pagination: { page: number; pageSize: number; total: number; totalPages: number }; meta: { availability: string; map: { countryNeutral: boolean } } };
 
 const fieldClass =
@@ -346,6 +346,9 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
               <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
               Verified
             </span>
+          )}
+          {listing.isTopAd && (
+            <span className="rounded-full border border-hairline bg-white px-2 py-1 font-medium text-muted" data-testid="top-ad-badge">Top Ad</span>
           )}
           <span className="truncate">Listed by {lister}</span>
         </p>

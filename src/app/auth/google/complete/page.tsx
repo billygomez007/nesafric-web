@@ -6,16 +6,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-type Workspaces = {
-  propertyOsOrganisations: Array<{
-    id: string;
-    name: string;
-  }>;
-  marketplaceProfessionals: Array<{
-    id: string;
-    displayName: string;
-  }>;
-};
+import { resolveSignInDestination, type SignInWorkspaces } from "@/lib/workspace-destination";
 
 export default function GoogleAuthCompletePage() {
   const router = useRouter();
@@ -47,44 +38,17 @@ export default function GoogleAuthCompletePage() {
         }
 
         const workspaces =
-          (await response.json()) as Workspaces;
+          (await response.json()) as SignInWorkspaces;
 
         if (cancelled) return;
 
-        const organisation =
-          workspaces
-            .propertyOsOrganisations?.[0];
+        const destination = resolveSignInDestination(workspaces);
 
-        if (organisation) {
-          localStorage.setItem(
-            "propertyos.activeOrganisationId",
-            organisation.id,
-          );
-
-          router.replace("/dashboard");
-          router.refresh();
-          return;
+        if (destination.remember) {
+          localStorage.setItem(destination.remember.key, destination.remember.value);
         }
 
-        const professional =
-          workspaces
-            .marketplaceProfessionals?.[0];
-
-        if (professional) {
-          localStorage.setItem(
-            "nesafric.activeMarketplaceProfessionalId",
-            professional.id,
-          );
-
-          router.replace(
-            `/pro/${professional.id}`,
-          );
-
-          router.refresh();
-          return;
-        }
-
-        router.replace("/onboarding");
+        router.replace(destination.path);
         router.refresh();
       } catch (cause) {
         if (cancelled) return;

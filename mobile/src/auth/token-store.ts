@@ -12,7 +12,8 @@ import { Platform } from "react-native";
  * While the flag is set the stored credential is never restored, so a failed secure-store deletion
  * can't quietly sign the person back in on the next launch; the deletion is retried at launch.
  */
-export type StoredUser = { id: string; email: string; displayName: string };
+/** `email` is null for a phone-only account; sessions saved before phone sign-in have no `phone`. */
+export type StoredUser = { id: string; email: string | null; phone?: string | null; displayName: string };
 export type StoredSession = { token: string; expiresAt: string; user: StoredUser };
 
 const KEY = "nesafric.session.v1";
@@ -36,7 +37,8 @@ export function isStoredSession(value: unknown): value is StoredSession {
       typeof candidate.token === "string" &&
       typeof candidate.expiresAt === "string" &&
       typeof candidate.user?.id === "string" &&
-      typeof candidate.user.email === "string" &&
+      (typeof candidate.user.email === "string" || candidate.user.email === null) &&
+      (candidate.user.phone === undefined || candidate.user.phone === null || typeof candidate.user.phone === "string") &&
       typeof candidate.user.displayName === "string",
   );
 }
