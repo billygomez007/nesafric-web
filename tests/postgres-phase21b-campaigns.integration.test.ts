@@ -43,7 +43,9 @@ async function platformAdmin() {
   return requirePlatformPrincipal(user);
 }
 
-const requestFields = { headline: "Feature listing", supportingText: "See it first", destinationUrl: "https://example.com/listing/1" };
+// Uploaded artwork is the whole ad: a campaign needs artwork to be publicly shown (see
+// `placementArtworkFields`), so the shared fixture carries some.
+const requestFields = { headline: "Feature listing", supportingText: "See it first", destinationUrl: "https://example.com/listing/1", desktopMediaUrl: "https://cdn.example.com/feature-desktop.jpg" };
 
 describe("PostgreSQL Phase 21B campaigns & promotions", () => {
   beforeEach(cleanDatabase);

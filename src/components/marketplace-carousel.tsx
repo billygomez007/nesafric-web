@@ -1,17 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { selectCampaignCreative } from "@/modules/campaigns/eligibility";
+import { CampaignCreative, hasCampaignArtwork, type CampaignCreativeData } from "@/components/campaign-creative";
 
-type Banner = {
-  id: string;
-  headline: string;
-  supportingText: string | null;
-  ctaLabel: string | null;
-  destinationUrl: string;
-  desktopMediaUrl: string | null;
-  mobileMediaUrl: string | null;
-};
+type Banner = CampaignCreativeData;
 
 const AUTO_ROTATE_MS = 7000;
 
@@ -51,7 +43,8 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
       if (cancelled) return;
       if (!response.ok) { setBanners([]); return; }
       const body = await response.json();
-      setBanners(Array.isArray(body.banners) ? body.banners : []);
+      // No artwork, nothing to show: the image is the whole ad.
+      setBanners(Array.isArray(body.banners) ? body.banners.filter(hasCampaignArtwork) : []);
     }).catch(() => { if (!cancelled) setBanners([]); });
     return () => { cancelled = true; };
   }, [placement, countryCode, limit]);
@@ -80,8 +73,6 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
   if (!banners || banners.length === 0) return null;
 
   const multi = banners.length > 1;
-  const desktopArt = active ? selectCampaignCreative(active, "desktopWeb") : null;
-  const mobileArt = active ? selectCampaignCreative(active, "mobileWeb") : null;
 
   function onTouchStart(event: React.TouchEvent) {
     touchStartX.current = event.touches[0]?.clientX ?? null;
@@ -99,11 +90,13 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
     if (event.key === "ArrowLeft") { event.preventDefault(); goTo(index - 1); }
   }
 
+  // The uploaded artwork is the whole ad: nothing is drawn over it. Carousel controls sit in a
+  // slim bar below the image instead of on top of it.
   const carousel = (
     <div
-      aria-label="Featured marketplace campaigns"
+      aria-label="Marketplace campaigns"
       aria-roledescription="carousel"
-      className="relative overflow-hidden rounded-[var(--radius-panel)] bg-forest-deep"
+      className="overflow-hidden rounded-[var(--radius-panel)] bg-forest-deep"
       onBlur={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onKeyDown={onKeyDown}
@@ -114,53 +107,25 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
       role="region"
     >
       {active && (
-        <a
-          aria-label={`Promoted: ${active.headline}`}
-          aria-roledescription="slide"
-          className="group relative block h-36 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-gold-soft sm:h-40 lg:h-44"
-          href={active.destinationUrl}
+        <CampaignCreative
+          campaign={active}
           key={active.id}
           onClick={() => void fetch(`/api/public/campaigns/${active.id}/click`, { method: "POST" })}
-          rel="noopener"
-          role="group"
-        >
-          {desktopArt && (
-            <div className="absolute inset-0 hidden bg-cover bg-center sm:block" style={{ backgroundImage: `url("${desktopArt}")` }} />
-          )}
-          {mobileArt && (
-            <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${mobileArt}")` }} />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-r from-forest-deep/95 via-forest-deep/60 to-transparent" />
-          <div className={`relative flex h-full max-w-xl flex-col justify-center gap-1.5 py-4 ${multi ? "pl-5 pr-12 sm:pl-12 sm:pr-14" : "px-5 sm:px-8"}`}>
-            <span className="w-fit text-xs font-semibold text-gold-soft">
-              Promoted
-            </span>
-            <h3 className="font-display text-lg font-semibold leading-tight text-white sm:text-xl">{active.headline}</h3>
-            {active.supportingText && <p className="line-clamp-2 max-w-md text-sm leading-6 text-white/80">{active.supportingText}</p>}
-            {active.ctaLabel && <span className="mt-2 inline-flex min-h-10 w-fit items-center rounded-[var(--radius-control)] bg-gold px-4 text-sm font-semibold text-forest-deep transition-colors group-hover:bg-gold-soft">{active.ctaLabel}</span>}
-          </div>
-        </a>
+          priority={index === 0}
+        />
       )}
 
       {multi && (
-        <>
+        <div className="flex items-center justify-between gap-2 px-2 py-1" data-testid="campaign-controls">
           <button
             aria-label="Previous campaign"
-            className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-[var(--radius-control)] bg-forest-deep/60 text-white outline-offset-2 transition hover:bg-forest-deep/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft max-sm:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] text-white/80 outline-offset-2 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft"
             onClick={() => goTo(index - 1)}
             type="button"
           >
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <button
-            aria-label="Next campaign"
-            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-[var(--radius-control)] bg-forest-deep/60 text-white outline-offset-2 transition hover:bg-forest-deep/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft max-sm:hidden"
-            onClick={() => goTo(index + 1)}
-            type="button"
-          >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
-          <div className="absolute bottom-3 left-6 flex gap-1.5 sm:left-1/2 sm:-translate-x-1/2">
+          <div className="flex gap-1.5">
             {banners.map((banner, slideIndex) => (
               <button
                 aria-current={slideIndex === index ? "true" : undefined}
@@ -174,7 +139,15 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
               </button>
             ))}
           </div>
-        </>
+          <button
+            aria-label="Next campaign"
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] text-white/80 outline-offset-2 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft"
+            onClick={() => goTo(index + 1)}
+            type="button"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+        </div>
       )}
     </div>
   );

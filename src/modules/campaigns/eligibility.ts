@@ -31,14 +31,33 @@ type Creative = { desktopMediaUrl: string | null; mobileMediaUrl: string | null;
 
 /**
  * The artwork a surface shows, following the creative specification the Super Admin upload form
- * states: desktop web uses the desktop creative; mobile web uses the mobile creative, else desktop;
- * the native app uses the native creative, else mobile web, else desktop. `null` means the slide
- * renders as text on the brand background — still a valid campaign, never a hidden one.
+ * states: desktop web uses the desktop creative, else mobile web (shown at its own proportions);
+ * mobile web uses the mobile creative, else desktop; the native app uses the native creative, else
+ * mobile web, else desktop. The uploaded artwork is the whole ad: `null` means the campaign is not
+ * shown on that surface at all — there is no text-only substitute.
  */
 export function selectCampaignCreative(campaign: Creative, surface: CampaignSurface): string | null {
-  if (surface === "desktopWeb") return campaign.desktopMediaUrl ?? null;
+  if (surface === "desktopWeb") return campaign.desktopMediaUrl ?? campaign.mobileMediaUrl ?? null;
   if (surface === "mobileWeb") return campaign.mobileMediaUrl ?? campaign.desktopMediaUrl ?? null;
   return campaign.nativeAppMediaUrl ?? campaign.mobileMediaUrl ?? campaign.desktopMediaUrl ?? null;
+}
+
+/**
+ * The creative fields that can put a campaign on screen in a placement. The homepage announcement
+ * bar is text by design and needs none; web-only placements need desktop or mobile web artwork; the
+ * homepage carousel, shown on web and in the app, can show any of the three. The public query and
+ * the Super Admin status both use this, so an artless campaign never takes a slot from one that
+ * can actually be shown, and is never reported as showing.
+ */
+export function placementArtworkFields(placement: string): ("desktopMediaUrl" | "mobileMediaUrl" | "nativeAppMediaUrl")[] {
+  if (placement === "HOMEPAGE_ANNOUNCEMENT") return [];
+  if (placement === "MARKETPLACE_PRIMARY") return ["desktopMediaUrl", "mobileMediaUrl", "nativeAppMediaUrl"];
+  return ["desktopMediaUrl", "mobileMediaUrl"];
+}
+
+export function hasPlacementArtwork(campaign: Creative & { placement: string }) {
+  const fields = placementArtworkFields(campaign.placement);
+  return fields.length === 0 || fields.some((field) => Boolean(campaign[field]?.trim()));
 }
 
 export type CreativeReadiness = {
@@ -60,15 +79,17 @@ export function creativeReadiness(campaign: Creative & { placement: string }): C
   })) as CreativeReadiness["surfaces"];
 
   if (campaign.placement === "HOMEPAGE_ANNOUNCEMENT") return { surfaces, note: null };
-  const missing = (Object.keys(surfaces) as CampaignSurface[]).filter((surface) => surfaces[surface].source !== "own");
-  if (missing.length === 0) return { surfaces, note: null };
-  if (missing.length === 3) return { surfaces, note: "No artwork: shows as a text slide on every surface." };
   const names: Record<CampaignSurface, string> = { desktopWeb: "desktop web", mobileWeb: "mobile web", nativeApp: "app" };
-  const fallbacks = missing.map((surface) => names[surface]);
-  return { surfaces, note: `No own ${fallbacks.join(" or ")} artwork: uses the next available creative.` };
+  const all = Object.keys(surfaces) as CampaignSurface[];
+  if (!hasPlacementArtwork(campaign)) return { surfaces, note: "No artwork: not shown anywhere until artwork is uploaded." };
+  const hidden = all.filter((surface) => surfaces[surface].source === "none");
+  if (hidden.length > 0) return { surfaces, note: `No artwork for ${hidden.map((surface) => names[surface]).join(" or ")}: not shown there.` };
+  const missing = all.filter((surface) => surfaces[surface].source !== "own");
+  if (missing.length === 0) return { surfaces, note: null };
+  return { surfaces, note: `No own ${missing.map((surface) => names[surface]).join(" or ")} artwork: uses the next available creative.` };
 }
 
-type EligibilityInput = {
+type EligibilityInput = Partial<Creative> & {
   status: string;
   placement: string;
   startAt: Date | string | null;
@@ -132,5 +153,8 @@ export function campaignEligibility(campaign: EligibilityInput, now = new Date()
     if (!advertiser || advertiser.status !== "ACTIVE" || advertiser.archivedAt) return { eligible: false, reason: "Advertiser account is not active" };
   }
   if (!RENDERED_PLACEMENTS.has(campaign.placement)) return { eligible: false, reason: "This placement is not shown publicly yet" };
+  if (!hasPlacementArtwork({ desktopMediaUrl: campaign.desktopMediaUrl ?? null, mobileMediaUrl: campaign.mobileMediaUrl ?? null, nativeAppMediaUrl: campaign.nativeAppMediaUrl ?? null, placement: campaign.placement })) {
+    return { eligible: false, reason: "No artwork uploaded — only the uploaded creative is shown" };
+  }
   return { eligible: true, reason: null };
 }

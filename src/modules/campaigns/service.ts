@@ -17,7 +17,7 @@ import {
   publicBannerListQuerySchema,
   campaignListSchema,
 } from "./schemas";
-import { campaignEligibility, creativeReadiness, LIVE_CAMPAIGN_STATUSES } from "./eligibility";
+import { campaignEligibility, creativeReadiness, LIVE_CAMPAIGN_STATUSES, placementArtworkFields } from "./eligibility";
 
 function requirePermission(principal: PlatformPrincipal, permission: PlatformPermission) {
   if (!platformRoleHasPermission(principal.role, permission)) throw new AppError("FORBIDDEN", 403, "You do not have permission to manage campaigns.");
@@ -300,6 +300,7 @@ export async function setCampaignStatus(principal: PlatformPrincipal, campaignId
 const LIVE_STATUSES: $Enums.CampaignStatus[] = [...LIVE_CAMPAIGN_STATUSES];
 
 function eligibleCampaignWhere(placement: $Enums.CampaignPlacement, countryCode: string | undefined, now: Date) {
+  const artwork = placementArtworkFields(placement);
   return {
     placement,
     status: { in: LIVE_STATUSES },
@@ -318,6 +319,10 @@ function eligibleCampaignWhere(placement: $Enums.CampaignPlacement, countryCode:
       // A suspended or archived marketplace professional's self-service campaigns stop showing,
       // the same way its listings leave the public marketplace.
       { OR: [{ advertiserMarketplaceProfessionalId: null }, { advertiser: { is: { status: "ACTIVE" as const, archivedAt: null } } }] },
+      // The uploaded artwork is the whole ad, so a campaign without artwork this placement can show
+      // is skipped here, before priority ordering and the limit — it never takes a slot from one
+      // that can be shown. (`gt: ""` excludes both null and empty.)
+      ...(artwork.length ? [{ OR: artwork.map((field) => ({ [field]: { gt: "" } })) }] : []),
     ],
   };
 }

@@ -170,4 +170,39 @@ describe("homepage advertising carousel", () => {
     });
     expect(admin.creativeReadiness.note).toBe("No own mobile web or app artwork: uses the next available creative.");
   });
+
+  it("skips campaigns without artwork before priority and limit, so they never take a slot from one that can be shown", async () => {
+    const principal = await platformAdmin();
+    const none = { desktopMediaUrl: undefined, mobileMediaUrl: undefined, nativeAppMediaUrl: undefined };
+    const artless = await createPlatformCampaign(principal, { name: "Artless", placement: HOMEPAGE, ...fields, ...none, priority: 100 });
+    const shown = await createPlatformCampaign(principal, { name: "Artwork", placement: HOMEPAGE, ...fields, priority: 1 });
+    const appOnly = await createPlatformCampaign(principal, { name: "App only", placement: HOMEPAGE, ...fields, ...none, nativeAppMediaUrl: creative.nativeAppMediaUrl, priority: 0 });
+
+    // Carousel list: the artless top-priority campaign is not returned at all; app-only artwork is
+    // still a valid homepage campaign (the app shows it; the web skips it).
+    expect((await carousel()).map((banner) => banner.id)).toEqual([shown.id, appOnly.id]);
+    const limited = await publicCampaignsRoute(new Request(`http://localhost/api/public/campaigns?placement=${HOMEPAGE}&countryCode=GH&limit=1`));
+    expect(((await limited.json()) as { banners: { id: string }[] }).banners.map((banner) => banner.id)).toEqual([shown.id]);
+    // Single banner: the next campaign with artwork, not an empty slot.
+    const single = await publicCampaignsRoute(new Request(`http://localhost/api/public/campaigns?placement=${HOMEPAGE}&countryCode=GH`));
+    expect(((await single.json()) as { banner: { id: string } | null }).banner?.id).toBe(shown.id);
+
+    // Super Admin is told the artless one is not showing, and why.
+    const admin = await getCampaignForPlatform(principal, artless.id);
+    expect(admin.publicEligibility).toEqual({ eligible: false, reason: "No artwork uploaded — only the uploaded creative is shown" });
+    expect(admin.creativeReadiness.note).toBe("No artwork: not shown anywhere until artwork is uploaded.");
+  });
+
+  it("web-only placements need web artwork; the text announcement bar needs none", async () => {
+    const principal = await platformAdmin();
+    const none = { desktopMediaUrl: undefined, mobileMediaUrl: undefined, nativeAppMediaUrl: undefined };
+    await createPlatformCampaign(principal, { name: "App-only directory ad", placement: "PROFESSIONAL_FEATURED", ...fields, ...none, nativeAppMediaUrl: creative.nativeAppMediaUrl, priority: 50 });
+    const web = await createPlatformCampaign(principal, { name: "Directory ad", placement: "PROFESSIONAL_FEATURED", ...fields, ...none, mobileMediaUrl: creative.mobileMediaUrl });
+    const directory = await publicCampaignsRoute(new Request("http://localhost/api/public/campaigns?placement=PROFESSIONAL_FEATURED&countryCode=GH"));
+    expect(((await directory.json()) as { banner: { id: string } | null }).banner?.id).toBe(web.id);
+
+    const announcement = await createPlatformCampaign(principal, { name: "Notice", placement: "HOMEPAGE_ANNOUNCEMENT", ...fields, ...none });
+    const bar = await publicCampaignsRoute(new Request("http://localhost/api/public/campaigns?placement=HOMEPAGE_ANNOUNCEMENT&countryCode=GH"));
+    expect(((await bar.json()) as { banner: { id: string } | null }).banner?.id).toBe(announcement.id);
+  });
 });
