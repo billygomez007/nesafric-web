@@ -2,6 +2,8 @@
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { selectCampaignCreative } from "@/modules/campaigns/eligibility";
+
 type Campaign = {
   id: string; name: string; placement: string; type: string | null; status: string; priority: number;
   headline: string; supportingText: string | null; ctaLabel: string | null; destinationUrl: string;
@@ -153,10 +155,11 @@ const emptyDraft = {
   ctaLabel: "", destinationUrl: "", priority: "0", startAt: "", endAt: "", advertiserServiceProviderId: "",
 };
 
-/** Renders a campaign's creative (or, with no artwork, its headline/supporting text/CTA) at the real measured aspect ratio
- * for the given device and placement, so "Live preview" and the standalone "Preview" action both
- * show something proportionally honest to how the public carousel actually renders — not just an
- * arbitrary decorative box. */
+/** Renders a campaign exactly as the public placement will, at the real measured aspect ratio for
+ * the given device, so "Live preview" and the standalone "Preview" action are honest. Artwork
+ * placements show the uploaded creative only, uncropped and with nothing drawn over it — headline,
+ * supporting text and CTA are not painted on the ad (the headline is its accessible name). Only the
+ * text-based homepage announcement bar renders the copy fields. */
 function CampaignPreview({
   placement, headline, supportingText, ctaLabel, desktopMediaUrl, mobileMediaUrl, nativeAppMediaUrl, device,
 }: {
@@ -170,12 +173,8 @@ function CampaignPreview({
       : device === "mobile"
         ? (spec?.mobile ?? { width: 800, height: 320 })
         : (spec?.desktop ?? { width: 1600, height: 220 });
-  const mediaUrl =
-    device === "nativeApp"
-      ? (nativeAppMediaUrl ?? mobileMediaUrl ?? desktopMediaUrl)
-      : device === "mobile"
-        ? (mobileMediaUrl ?? desktopMediaUrl)
-        : desktopMediaUrl;
+  const creative = { desktopMediaUrl, mobileMediaUrl, nativeAppMediaUrl };
+  const mediaUrl = selectCampaignCreative(creative, device === "nativeApp" ? "nativeApp" : device === "mobile" ? "mobileWeb" : "desktopWeb");
 
   if (placement === "HOMEPAGE_ANNOUNCEMENT") {
     return (
@@ -196,21 +195,18 @@ function CampaignPreview({
     );
   }
 
-  return (
-    <div className="overflow-hidden rounded-2xl border border-hairline bg-forest" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
-      <div className="relative h-full w-full">
-        {/* Same rule as the public carousels: uploaded artwork is the finished creative and is
-            shown as-is. The headline, copy and CTA only render when there is no artwork. */}
-        {mediaUrl ? (
-          <div className="absolute inset-0 bg-cover bg-center" role="img" aria-label={headline || "Campaign artwork"} style={{ backgroundImage: `url("${mediaUrl}")` }} />
-        ) : (
-          <div className={`relative flex h-full flex-col justify-center gap-1.5 px-5 ${device === "mobile" ? "max-w-[85%]" : "max-w-md"}`}>
-            <h3 className="text-sm font-semibold text-white sm:text-base">{headline || "Headline preview"}</h3>
-            {supportingText && <p className="line-clamp-2 text-xs text-white/75">{supportingText}</p>}
-            {ctaLabel && <span className="mt-1 w-fit rounded-lg bg-gold px-2.5 py-1 text-xs font-semibold text-forest">{ctaLabel}</span>}
-          </div>
-        )}
+  if (!mediaUrl) {
+    return (
+      <div className="flex items-center justify-center rounded-2xl border border-dashed border-hairline bg-cream px-4 text-center text-xs text-muted" data-testid="campaign-preview-empty" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
+        No artwork for this device yet — the campaign is not shown here until artwork is uploaded.
       </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-hairline bg-forest-deep" data-testid="campaign-preview-artwork" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- the same plain <img> the public renderer uses */}
+      <img alt={headline || "Campaign artwork"} className="block h-full w-full object-contain" src={mediaUrl} />
     </div>
   );
 }
@@ -905,7 +901,7 @@ export function CampaignsAdminContent() {
 
               <div className="mt-2 border-t border-hairline pt-4 sm:col-span-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">2. Promoted content</p>
-                <p className="mt-1 text-xs leading-5 text-muted">Write the customer-facing message and decide where the call to action leads. When artwork is uploaded it is shown on its own, exactly as designed; the headline is then used for screen readers and as the text version if no artwork is available.</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Write the customer-facing message and decide where the call to action leads.</p>
               </div>
               <label className="grid gap-1.5 text-xs font-semibold text-ink sm:col-span-2">
                 Headline

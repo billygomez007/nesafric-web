@@ -1,17 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { selectCampaignCreative } from "@/modules/campaigns/eligibility";
+import { CampaignCreative, hasCampaignArtwork, type CampaignCreativeData } from "@/components/campaign-creative";
 
-type Banner = {
-  id: string;
-  headline: string;
-  supportingText: string | null;
-  ctaLabel: string | null;
-  destinationUrl: string;
-  desktopMediaUrl: string | null;
-  mobileMediaUrl: string | null;
-};
+type Banner = CampaignCreativeData;
 
 const AUTO_ROTATE_MS = 7000;
 
@@ -51,15 +43,13 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
       if (cancelled) return;
       if (!response.ok) { setBanners([]); return; }
       const body = await response.json();
-      setBanners(Array.isArray(body.banners) ? body.banners : []);
+      // No artwork, nothing to show: the image is the whole ad.
+      setBanners(Array.isArray(body.banners) ? body.banners.filter(hasCampaignArtwork) : []);
     }).catch(() => { if (!cancelled) setBanners([]); });
     return () => { cancelled = true; };
   }, [placement, countryCode, limit]);
 
-  // Carousel placements require uploaded artwork. Campaign text must never be manufactured
-  // into a substitute banner because the uploaded creative is the complete advertisement.
-  const visualBanners = banners?.filter((banner) => Boolean(banner.desktopMediaUrl || banner.mobileMediaUrl)) ?? null;
-  const active = visualBanners && visualBanners.length > 0 ? visualBanners[index % visualBanners.length] : null;
+  const active = banners && banners.length > 0 ? banners[index % banners.length] : null;
 
   useEffect(() => {
     if (!active || trackedImpressions.current.has(active.id)) return;
@@ -68,23 +58,21 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
   }, [active]);
 
   const goTo = useCallback((next: number) => {
-    if (!visualBanners || visualBanners.length === 0) return;
-    setIndex(((next % visualBanners.length) + visualBanners.length) % visualBanners.length);
-  }, [visualBanners]);
+    if (!banners || banners.length === 0) return;
+    setIndex(((next % banners.length) + banners.length) % banners.length);
+  }, [banners]);
 
-  const canRotate = !!visualBanners && visualBanners.length > 1;
+  const canRotate = !!banners && banners.length > 1;
 
   useEffect(() => {
     if (!canRotate || paused || reducedMotion) return;
-    const timer = setInterval(() => setIndex((current) => (visualBanners ? (current + 1) % visualBanners.length : 0)), AUTO_ROTATE_MS);
+    const timer = setInterval(() => setIndex((current) => (banners ? (current + 1) % banners.length : 0)), AUTO_ROTATE_MS);
     return () => clearInterval(timer);
-  }, [canRotate, paused, reducedMotion, visualBanners]);
+  }, [canRotate, paused, reducedMotion, banners]);
 
-  if (!visualBanners || visualBanners.length === 0) return null;
+  if (!banners || banners.length === 0) return null;
 
-  const multi = visualBanners.length > 1;
-  const desktopArt = active ? selectCampaignCreative(active, "desktopWeb") : null;
-  const mobileArt = active ? selectCampaignCreative(active, "mobileWeb") : null;
+  const multi = banners.length > 1;
 
   function onTouchStart(event: React.TouchEvent) {
     touchStartX.current = event.touches[0]?.clientX ?? null;
@@ -102,11 +90,13 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
     if (event.key === "ArrowLeft") { event.preventDefault(); goTo(index - 1); }
   }
 
+  // The uploaded artwork is the whole ad: nothing is drawn over it. Carousel controls sit in a
+  // slim bar below the image instead of on top of it.
   const carousel = (
     <div
-      aria-label="Featured marketplace campaigns"
+      aria-label="Marketplace campaigns"
       aria-roledescription="carousel"
-      className="relative overflow-hidden rounded-[var(--radius-panel)] bg-forest-deep"
+      className="overflow-hidden rounded-[var(--radius-panel)] bg-forest-deep"
       onBlur={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onKeyDown={onKeyDown}
@@ -117,66 +107,29 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
       role="region"
     >
       {active && (
-        <a
-          // Advertising disclosure for assistive technology only; nothing is drawn over the artwork.
-          aria-label={`Sponsored: ${active.headline}`}
-          aria-roledescription="slide"
-          className="group relative block h-36 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-gold-soft sm:h-40 lg:h-44"
-          data-testid="campaign-slide"
-          href={active.destinationUrl}
+        <CampaignCreative
+          campaign={active}
           key={active.id}
           onClick={() => void fetch(`/api/public/campaigns/${active.id}/click`, { method: "POST" })}
-          rel="noopener"
-          role="group"
-        >
-          <>
-            {desktopArt && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 hidden h-full w-full object-contain sm:block"
-                data-testid="campaign-art"
-                src={desktopArt}
-              />
-            )}
-            {mobileArt && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 h-full w-full object-contain sm:hidden"
-                data-testid="campaign-art"
-                src={mobileArt}
-              />
-            )}
-          </>
-        </a>
+          priority={index === 0}
+        />
       )}
 
       {multi && (
-        <>
+        <div className="flex items-center justify-between gap-2 px-2 py-1" data-testid="campaign-controls">
           <button
             aria-label="Previous campaign"
-            className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-[var(--radius-control)] bg-forest-deep/60 text-white outline-offset-2 transition hover:bg-forest-deep/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft max-sm:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] text-white/80 outline-offset-2 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft"
             onClick={() => goTo(index - 1)}
             type="button"
           >
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <button
-            aria-label="Next campaign"
-            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-[var(--radius-control)] bg-forest-deep/60 text-white outline-offset-2 transition hover:bg-forest-deep/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft max-sm:hidden"
-            onClick={() => goTo(index + 1)}
-            type="button"
-          >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
-          <div className="absolute bottom-3 left-6 flex gap-1.5 sm:left-1/2 sm:-translate-x-1/2">
-            {visualBanners.map((banner, slideIndex) => (
+          <div className="flex gap-1.5">
+            {banners.map((banner, slideIndex) => (
               <button
                 aria-current={slideIndex === index ? "true" : undefined}
-                aria-label={`Show campaign ${slideIndex + 1} of ${visualBanners.length}: ${banner.headline}`}
+                aria-label={`Show campaign ${slideIndex + 1} of ${banners.length}: ${banner.headline}`}
                 className="group/dot flex h-6 items-center px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft"
                 key={banner.id}
                 onClick={() => goTo(slideIndex)}
@@ -186,7 +139,15 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
               </button>
             ))}
           </div>
-        </>
+          <button
+            aria-label="Next campaign"
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] text-white/80 outline-offset-2 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft"
+            onClick={() => goTo(index + 1)}
+            type="button"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+        </div>
       )}
     </div>
   );

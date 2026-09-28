@@ -14,8 +14,7 @@ vi.mock("@/components/marketing/site-nav", () => ({ SiteNav: () => <nav data-sec
 vi.mock("@/components/property-marketplace-search", () => ({ ListingCard: ({ listing }: { listing: { title: string } }) => <article>{listing.title}</article> }));
 vi.mock("@/components/marketing/site-footer", () => ({ SiteFooter: () => <footer data-section="footer" /> }));
 
-// Campaigns render only with artwork; the headline is the slide's accessible name ("Sponsored: …").
-const BANNER = { id: "c1", headline: "New homes at Airport Hills", supportingText: null, ctaLabel: "View", destinationUrl: "https://example.com", desktopMediaUrl: "https://cdn.example.com/desktop.jpg", mobileMediaUrl: null };
+const BANNER = { id: "c1", headline: "New homes at Airport Hills", supportingText: null, ctaLabel: "View", destinationUrl: "https://example.com", desktopMediaUrl: "https://cdn.example.com/c1-desktop.jpg", mobileMediaUrl: "https://cdn.example.com/c1-mobile.jpg" };
 const COMPANY = { slug: "accra-homes", displayName: "Accra Homes", type: "BROKERAGE", logoUrl: null, verificationStatus: "VERIFIED", _count: { listings: 1, developments: 0 } };
 
 const LISTING = { id: "l1", title: "Two-bedroom flat", listingType: "RENT", location: { city: "Accra", district: "East Legon", region: "Greater Accra" } };
@@ -59,7 +58,7 @@ describe("marketplace homepage order", () => {
   it("renders hero, search, ads, trusted companies, properties, places, professionals, services, gateway, footer in order", async () => {
     mockApi({ banners: [BANNER], companies: [COMPANY] });
     const { container } = render(<Home />);
-    await screen.findByLabelText("Sponsored: New homes at Airport Hills");
+    await screen.findByAltText("New homes at Airport Hills");
     await screen.findByText("Trusted by leading companies");
     const marks = order(container);
     const index = (label: string) => marks.findIndex((mark) => mark === label || mark.startsWith(label));
@@ -93,13 +92,12 @@ describe("marketplace homepage order", () => {
     expect(screen.getAllByText("Two-bedroom flat")).toHaveLength(1);
   });
 
-  it("hides the advertising carousel when the only campaign has no artwork — no text fallback", async () => {
+  it("hides the advertising carousel when the only campaign has no artwork", async () => {
     mockApi({ banners: [{ ...BANNER, desktopMediaUrl: null, mobileMediaUrl: null }], companies: [] });
     const { container } = render(<Home />);
-    await screen.findByText("Trusted by leading companies");
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/api/public/campaigns?"))).toBe(true));
+    await screen.findByText("Trusted by leading companies");
     expect(container.querySelector("[aria-roledescription='carousel']")).toBeNull();
-    expect(screen.queryByText("New homes at Airport Hills")).toBeNull();
   });
 
   it("hides the advertising carousel when campaigns can't be loaded", async () => {
@@ -114,7 +112,7 @@ describe("marketplace homepage order", () => {
   it("asks the shared campaign API for the homepage carousel placement in Ghana", async () => {
     mockApi({ banners: [BANNER], companies: [] });
     render(<Home />);
-    await screen.findByLabelText("Sponsored: New homes at Airport Hills");
+    await screen.findByAltText("New homes at Airport Hills");
     const call = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost")).find((url) => url.pathname === "/api/public/campaigns" && url.searchParams.has("limit"))!;
     expect(call.searchParams.get("placement")).toBe("MARKETPLACE_PRIMARY");
     expect(call.searchParams.get("countryCode")).toBe("GH");
@@ -123,21 +121,20 @@ describe("marketplace homepage order", () => {
   it("shows the real campaign carousel when a campaign is running", async () => {
     mockApi({ banners: [BANNER], companies: [] });
     const { container } = render(<Home />);
-    await screen.findByLabelText("Sponsored: New homes at Airport Hills");
+    await screen.findByAltText("New homes at Airport Hills");
     expect(container.querySelector("[aria-roledescription='carousel']")).not.toBeNull();
   });
 
   it("uses each campaign's desktop artwork on desktop and mobile artwork (else desktop) on mobile web", async () => {
     mockApi({ banners: [{ ...BANNER, desktopMediaUrl: "https://cdn.example.com/desktop.jpg", mobileMediaUrl: "https://cdn.example.com/mobile.jpg", nativeAppMediaUrl: "https://cdn.example.com/app.jpg" }], companies: [] });
     const { container } = render(<Home />);
-    // Artwork is shown on its own; the headline is the slide's accessible name, not text over the art.
-    await screen.findByLabelText("Sponsored: New homes at Airport Hills");
-    expect(screen.queryByText("New homes at Airport Hills")).toBeNull();
-    // The artwork is shown whole (<img>, object-contain): desktop art at sm+, mobile art below.
-    const art = [...container.querySelectorAll<HTMLImageElement>("[aria-roledescription='carousel'] img[data-testid='campaign-art']")];
-    const byViewport = Object.fromEntries(art.map((image) => [image.className.includes("sm:hidden") ? "mobile" : "desktop", image.getAttribute("src")]));
-    expect(byViewport).toEqual({ desktop: "https://cdn.example.com/desktop.jpg", mobile: "https://cdn.example.com/mobile.jpg" });
-    expect(art.map((image) => image.getAttribute("src")).join(" ")).not.toContain("app.jpg");
+    await screen.findByAltText("New homes at Airport Hills");
+    const carousel = container.querySelector("[aria-roledescription='carousel']")!;
+    expect(carousel.querySelector("source")!.getAttribute("srcset")).toBe("https://cdn.example.com/desktop.jpg");
+    expect(carousel.querySelector("img")!.getAttribute("src")).toBe("https://cdn.example.com/mobile.jpg");
+    expect(carousel.innerHTML).not.toContain("app.jpg");
+    // The artwork is shown untouched: no headline, label or button drawn over it.
+    expect(carousel.textContent).toBe("");
   });
 
   it("keeps the company section with an empty state, never placeholder companies, when none are verified", async () => {

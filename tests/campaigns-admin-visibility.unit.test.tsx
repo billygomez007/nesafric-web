@@ -39,6 +39,39 @@ describe("Super Admin campaign visibility", () => {
     expect(screen.getAllByText("Property Search Carousel").length).toBeGreaterThan(0);
   });
 
+  it("Preview shows the uploaded artwork exactly as the public carousel does: no label, copy, CTA or gradient", async () => {
+    mockCampaigns([campaign({
+      supportingText: "Two- and three-bedroom homes", ctaLabel: "Learn More",
+      desktopMediaUrl: "https://cdn.example.com/d.jpg", mobileMediaUrl: "https://cdn.example.com/m.jpg", nativeAppMediaUrl: null,
+    })]);
+    render(<CampaignsAdminContent />);
+    await screen.findByTestId("campaign-visibility-c1");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    const preview = await screen.findByTestId("campaign-preview-artwork");
+    const image = preview.querySelector("img")!;
+    expect(image.getAttribute("src")).toBe("https://cdn.example.com/d.jpg");
+    expect(image.className).toContain("object-contain");
+    expect(image.getAttribute("alt")).toBe("Airport Hills");
+    expect(preview.textContent).toBe("");
+    expect(preview.innerHTML).not.toMatch(/gradient|Promoted|Sponsored|Learn More|bg-cover/);
+    fireEvent.click(screen.getByRole("button", { name: "Mobile" }));
+    expect(screen.getByTestId("campaign-preview-artwork").querySelector("img")!.getAttribute("src")).toBe("https://cdn.example.com/m.jpg");
+    // The app falls back to the mobile web artwork.
+    fireEvent.click(screen.getByRole("button", { name: "Native App" }));
+    expect(screen.getByTestId("campaign-preview-artwork").querySelector("img")!.getAttribute("src")).toBe("https://cdn.example.com/m.jpg");
+  });
+
+  it("Preview of an artless campaign says it will not be shown, instead of drawing a text ad", async () => {
+    mockCampaigns([campaign({ ctaLabel: "Learn More", publicEligibility: { eligible: false, reason: "No artwork uploaded — only the uploaded creative is shown" }, creativeReadiness: { note: "No artwork: not shown anywhere until artwork is uploaded." } })]);
+    render(<CampaignsAdminContent />);
+    const visibility = await screen.findByTestId("campaign-visibility-c1");
+    expect(visibility.textContent).toContain("Not currently showing: No artwork uploaded");
+    expect(visibility.textContent).not.toContain("Showing in");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect((await screen.findByTestId("campaign-preview-empty")).textContent).toContain("not shown here until artwork is uploaded");
+    expect(screen.queryByText("Learn More")).toBeNull();
+  });
+
   it("new campaigns default to the homepage advertising carousel", async () => {
     const fetch = mockCampaigns([]);
     render(<CampaignsAdminContent />);
