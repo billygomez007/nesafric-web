@@ -10,13 +10,13 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://nesafric.com"
+        "EXPO_PUBLIC_API_URL": "https://www.nesafric.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://nesafric.com"
+        "EXPO_PUBLIC_API_URL": "https://www.nesafric.com"
       }
     }
   },

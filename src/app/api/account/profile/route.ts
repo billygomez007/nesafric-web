@@ -18,6 +18,8 @@ export async function GET() {
       displayName: user.displayName,
       email: user.email,
       emailVerified: Boolean(user.emailVerifiedAt),
+      phone: user.phoneE164,
+      phoneVerified: Boolean(user.phoneVerifiedAt),
       createdAt: user.createdAt,
     });
   } catch (error) {

@@ -55,6 +55,14 @@ export type ClientOptions = {
 
 export const UNAUTHENTICATED = "UNAUTHENTICATED";
 
+/**
+ * The API origin answered with a redirect instead of the API (for example the bare domain
+ * redirecting to `www`). Native HTTP stacks don't replay a POST across a 307/308 and drop the
+ * Authorization header on a cross-host redirect, so this is reported as a clear configuration
+ * error rather than an unexplained failure.
+ */
+export const API_REDIRECTED = "API_REDIRECTED";
+
 export function buildQuery(query: RequestOptions["query"]) {
   const params = Object.entries(query ?? {}).filter((entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== "");
   return params.length ? `?${params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join("&")}` : "";
@@ -96,6 +104,9 @@ export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl, getTok
       signal?.removeEventListener("abort", abort);
     }
 
+    if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+      throw new ApiError(response.status || 0, API_REDIRECTED, "This version of the app can’t reach the NesAfric service. Please update the app and try again.");
+    }
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
       const error = payload?.error ?? {};

@@ -32,49 +32,63 @@ describe("Phase 2 GA4 business-conversion events", () => {
   });
 
   describe("AuthForm (sign_up / login)", () => {
-    it("fires sign_up exactly once after a successful registration, never before", async () => {
+    const CHALLENGE = { challengeId: "5b0f7f6e-2d3c-4a4b-9a55-000000000001", channel: "email", destination: "ama@example.com", expiresAt: "2026-09-28T10:00:00.000Z", resendAfterSeconds: 60 };
+
+    it("fires sign_up exactly once after a successful registration, never before, and never with the code", async () => {
       const { AuthForm } = await import("@/components/auth-form");
-      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ id: "user-1" }));
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse(CHALLENGE))
+        .mockResolvedValueOnce(jsonResponse({ id: "user-1", created: true, existingAccount: false, workspaces: { propertyOsOrganisations: [], marketplaceProfessionals: [] } }));
       const user = userEvent.setup();
       render(<AuthForm mode="register" />);
-      await user.type(screen.getByLabelText("Name"), "Ama");
+      await user.click(screen.getByRole("button", { name: "Email" }));
+      await user.type(screen.getByLabelText("Your name"), "Ama");
       await user.type(screen.getByLabelText("Email"), "ama@example.com");
-      await user.type(screen.getByLabelText("Password"), "a-very-long-password");
+      await user.click(screen.getByRole("button", { name: "Send code" }));
+      await user.type(await screen.findByLabelText("6-digit code"), "123456");
       expect(trackEvent).not.toHaveBeenCalled();
-      await user.click(screen.getByRole("button", { name: "Create account" }));
+      await user.click(screen.getByRole("button", { name: "Verify & create account" }));
       await waitFor(() => expect(push).toHaveBeenCalledWith("/onboarding"));
       expect(trackEvent).toHaveBeenCalledTimes(1);
       expect(trackEvent).toHaveBeenCalledWith("sign_up", { method: "email" });
+      expect(JSON.stringify(trackEvent.mock.calls)).not.toContain("123456");
     });
 
-    it("does not fire sign_up when registration fails", async () => {
+    it("does not fire sign_up when verification fails", async () => {
       const { AuthForm } = await import("@/components/auth-form");
-      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ error: { message: "Email already registered." } }, false));
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse(CHALLENGE))
+        .mockResolvedValueOnce(jsonResponse({ error: { code: "OTP_INVALID", message: "That code is incorrect or has expired." } }, false));
       const user = userEvent.setup();
       render(<AuthForm mode="register" />);
-      await user.type(screen.getByLabelText("Name"), "Ama");
+      await user.click(screen.getByRole("button", { name: "Email" }));
+      await user.type(screen.getByLabelText("Your name"), "Ama");
       await user.type(screen.getByLabelText("Email"), "ama@example.com");
-      await user.type(screen.getByLabelText("Password"), "a-very-long-password");
-      await user.click(screen.getByRole("button", { name: "Create account" }));
-      await screen.findByText("Email already registered.");
+      await user.click(screen.getByRole("button", { name: "Send code" }));
+      await user.type(await screen.findByLabelText("6-digit code"), "000000");
+      await user.click(screen.getByRole("button", { name: "Verify & create account" }));
+      await screen.findByText("That code is incorrect or has expired.");
       expect(trackEvent).not.toHaveBeenCalled();
       expect(push).not.toHaveBeenCalled();
     });
 
     it("fires login exactly once on success, and never on a rapid double submit", async () => {
       const { AuthForm } = await import("@/components/auth-form");
-      vi.mocked(fetch).mockResolvedValue(jsonResponse({ id: "user-1" }));
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse({ ...CHALLENGE, channel: "sms", destination: "+233 24 *** 4567" }))
+        .mockResolvedValue(jsonResponse({ id: "user-1", created: false, workspaces: { propertyOsOrganisations: [{ id: "org-1" }], marketplaceProfessionals: [] } }));
       const user = userEvent.setup();
       render(<AuthForm mode="login" />);
-      await user.type(screen.getByLabelText("Email"), "ama@example.com");
-      await user.type(screen.getByLabelText("Password"), "password123");
-      const button = screen.getByRole("button", { name: "Sign in" });
+      await user.type(screen.getByLabelText("Mobile number"), "024 123 4567");
+      await user.click(screen.getByRole("button", { name: "Send code" }));
+      await user.type(await screen.findByLabelText("6-digit code"), "123456");
+      const button = screen.getByRole("button", { name: "Verify & sign in" });
       await user.dblClick(button);
       await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard"));
       expect(trackEvent).toHaveBeenCalledTimes(1);
-      expect(trackEvent).toHaveBeenCalledWith("login", { method: "email" });
-      // The double-click's second request never went out — the submit button disables itself.
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(trackEvent).toHaveBeenCalledWith("login", { method: "phone" });
+      // One send, one verify: the double-click's second request never went out.
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -20,6 +20,8 @@ export type ListingMedia = {
 
 export type PublicListing = {
   id: string;
+  /** Pinned to the top of these results by a NesAfric admin (search results only; older servers omit it). */
+  isTopAd?: boolean;
   listingType: ListingType;
   category: string;
   title: string;

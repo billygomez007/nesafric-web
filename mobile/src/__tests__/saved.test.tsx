@@ -5,6 +5,7 @@ import { Image } from "expo-image";
 import { router } from "expo-router";
 import { renderRouter } from "expo-router/testing-library";
 import path from "path";
+import { StyleSheet } from "react-native";
 import type { ReactNode } from "react";
 
 import type { PublicListing } from "@/api/types";
@@ -167,6 +168,33 @@ describe("Saved properties screen", () => {
 
     act(() => router.navigate("/search"));
     expect(await screen.findByLabelText(`Save ${house.title}`)).toBeTruthy();
+  });
+
+  // Expo Router's `Link asChild` spreads the child's style into an object, so a Pressable style
+  // *function* used to vanish: cards had no white surface, border or radius.
+  const expectCardSurface = (node: { props: { style?: unknown } }) => {
+    const style = StyleSheet.flatten(node.props.style as never) as Record<string, unknown>;
+    expect(style.backgroundColor).toBe("#ffffff");
+    expect(style.borderWidth).toBe(1);
+    expect(style.borderRadius).toBe(8);
+    expect(style.overflow).toBe("hidden");
+  };
+
+  it("Search cards keep their white surface through Link asChild and still open the listing", async () => {
+    mockApi();
+    const app = renderRouter(APP_DIR, { initialUrl: "/search" });
+    await screen.findByLabelText(`Save ${house.title}`);
+    const card = screen.getAllByRole("link").find((node) => String(node.props.accessibilityLabel).includes(house.title))!;
+    expectCardSurface(card);
+    await act(async () => fireEvent.press(card));
+    await waitFor(() => expect(app.getPathname()).toBe(`/listing/${house.id}`));
+  });
+
+  it("Saved cards keep their white surface through Link asChild", async () => {
+    mockApi();
+    await seed([house]);
+    renderRouter(APP_DIR, { initialUrl: "/saved" });
+    expectCardSurface(await screen.findByTestId(`saved-card-${house.id}`));
   });
 
   it("opens the listing detail from Saved, and the detail heart agrees with Saved", async () => {

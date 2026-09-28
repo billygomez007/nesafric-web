@@ -14,6 +14,12 @@ const MAX_SAVED = 200;
 
 export type SavedListing = { listing: PublicListing; savedAt: string };
 
+/** What is kept of a listing: its own data, not where a search placed it (a Top Ad is a ranking, not a property of the home). */
+function snapshotOf(listing: PublicListing): PublicListing {
+  const { isTopAd: _placement, ...rest } = listing;
+  return rest;
+}
+
 export const SAVE_FAILED_MESSAGE = "Couldn’t update your saved properties on this device. Please try again.";
 
 type SavedContextValue = {
@@ -90,7 +96,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
 
   const save = useCallback(
     (listing: PublicListing) =>
-      commit((list) => (list.some((item) => item.listing.id === listing.id) ? list : [{ listing, savedAt: new Date().toISOString() }, ...list].slice(0, MAX_SAVED))),
+      commit((list) => (list.some((item) => item.listing.id === listing.id) ? list : [{ listing: snapshotOf(listing), savedAt: new Date().toISOString() }, ...list].slice(0, MAX_SAVED))),
     [commit],
   );
 
@@ -102,9 +108,10 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshSnapshot = useCallback(
-    (listing: PublicListing) =>
+    (fresh: PublicListing) =>
       commit(
         (list) => {
+          const listing = snapshotOf(fresh);
           const index = list.findIndex((item) => item.listing.id === listing.id);
           if (index < 0 || JSON.stringify(list[index].listing) === JSON.stringify(listing)) return list;
           const next = [...list];

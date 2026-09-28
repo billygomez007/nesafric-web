@@ -1,25 +1,24 @@
-import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 
+import { findOrCreateGoogleUser } from "@/modules/identity/service";
+import {
+  clearGoogleOAuthCookies,
+  GOOGLE_OAUTH_MOBILE_COOKIE,
+  GOOGLE_OAUTH_NONCE_COOKIE,
+  GOOGLE_OAUTH_STATE_COOKIE,
+  GOOGLE_OAUTH_VERIFIER_COOKIE,
+  GoogleOAuthError,
+  googleRedirectUri,
+  MOBILE_GOOGLE_REDIRECT,
+  resolveGoogleIdentity,
+} from "@/platform/auth/google-oauth";
+import { createMobileHandoff, isAppState, isCodeChallenge } from "@/platform/auth/mobile-handoff";
 import { createSession } from "@/platform/auth/session";
 import {
   AUTH_RETURN_TO_COOKIE,
   safeReturnTo,
 } from "@/platform/auth/return-to";
-import { hashPassword } from "@/platform/auth/passwords";
-import { db } from "@/platform/database/client";
-
-const GOOGLE_JWKS = createRemoteJWKSet(
-  new URL("https://www.googleapis.com/oauth2/v3/certs"),
-);
-
-function clearGoogleOAuthCookies(store: Awaited<ReturnType<typeof cookies>>) {
-  store.delete("nesafric_google_oauth_state");
-  store.delete("nesafric_google_oauth_nonce");
-  store.delete("nesafric_google_oauth_code_verifier");
-}
 
 function errorRedirect(
   origin: string,
@@ -34,22 +33,57 @@ function errorRedirect(
   return NextResponse.redirect(url);
 }
 
-function safeDisplayName(value: unknown, email: string) {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim();
-  }
+type MobileFlow = { appState: string; codeChallenge: string };
 
-  return email.split("@")[0] || "NesAfric user";
+function readMobileFlow(raw: string | undefined): MobileFlow | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<MobileFlow>;
+    return isAppState(parsed.appState) && isCodeChallenge(parsed.codeChallenge)
+      ? { appState: parsed.appState, codeChallenge: parsed.codeChallenge }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hands the result back to the native app through its URL scheme. A small page (rather than a bare
+ * redirect) so Android Custom Tabs and iOS auth sessions both follow it, with a visible fallback
+ * link. It carries only the one-time handoff code or an error — never a session token.
+ */
+function appRedirect(params: Record<string, string>) {
+  const target = new URL(MOBILE_GOOGLE_REDIRECT);
+  for (const [key, value] of Object.entries(params)) target.searchParams.set(key, value);
+  const href = target.toString().replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${href}"><title>Return to NesAfric</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:48px 24px"><p>Returning to the NesAfric app…</p><p><a href="${href}">Open NesAfric</a></p></body></html>`;
+  return new NextResponse(html, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    },
+  });
 }
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const origin = url.origin;
+  const store = await cookies();
+  const mobile = readMobileFlow(store.get(GOOGLE_OAUTH_MOBILE_COOKIE)?.value);
+
+  const fail = (message: string, code = "failed") => {
+    clearGoogleOAuthCookies(store);
+    return mobile
+      ? appRedirect({ error: code, message, state: mobile.appState })
+      : errorRedirect(origin, message);
+  };
 
   const providerError = url.searchParams.get("error");
 
   if (providerError) {
-    return errorRedirect(origin, "Google sign-in was cancelled.");
+    return fail("Google sign-in was cancelled.", "cancelled");
   }
 
   const code = url.searchParams.get("code");
@@ -60,16 +94,14 @@ export async function GET(request: Request) {
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return errorRedirect(origin, "Google sign-in is not configured.");
+    return fail("Google sign-in is not configured.");
   }
 
-  const store = await cookies();
+  const expectedState = store.get(GOOGLE_OAUTH_STATE_COOKIE)?.value;
 
-  const expectedState = store.get("nesafric_google_oauth_state")?.value;
+  const nonce = store.get(GOOGLE_OAUTH_NONCE_COOKIE)?.value;
 
-  const nonce = store.get("nesafric_google_oauth_nonce")?.value;
-
-  const codeVerifier = store.get("nesafric_google_oauth_code_verifier")?.value;
+  const codeVerifier = store.get(GOOGLE_OAUTH_VERIFIER_COOKIE)?.value;
 
   if (
     !code ||
@@ -79,82 +111,29 @@ export async function GET(request: Request) {
     !codeVerifier ||
     state !== expectedState
   ) {
-    return errorRedirect(
-      origin,
+    return fail(
       "Google sign-in session expired. Please try again.",
+      "expired",
     );
   }
 
-  const redirectUri = `${origin}/api/auth/google/callback`;
-
   try {
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri,
-        grant_type: "authorization_code",
-        code_verifier: codeVerifier,
-      }),
+    const identity = await resolveGoogleIdentity({
+      code,
+      codeVerifier,
+      nonce,
+      clientId,
+      clientSecret,
+      redirectUri: googleRedirectUri(origin),
     });
 
-    if (!tokenResponse.ok) {
-        return errorRedirect(origin, "Google sign-in could not be completed.");
-    }
+    const user = await findOrCreateGoogleUser(identity);
 
-    const tokenBody = (await tokenResponse.json()) as {
-      id_token?: string;
-    };
-
-    if (!tokenBody.id_token) {
-        return errorRedirect(origin, "Google did not return an identity token.");
-    }
-
-    const { payload } = await jwtVerify(tokenBody.id_token, GOOGLE_JWKS, {
-      audience: clientId,
-      issuer: ["https://accounts.google.com", "accounts.google.com"],
-    });
-
-    if (payload.nonce !== nonce) {
-        return errorRedirect(origin, "Google sign-in verification failed.");
-    }
-
-    if (payload.email_verified !== true || typeof payload.email !== "string") {
-        return errorRedirect(
-        origin,
-        "A verified Google email address is required.",
-      );
-    }
-
-    const email = payload.email.trim().toLowerCase();
-
-    let user = await db.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      const randomUnavailablePassword = randomBytes(64).toString("base64url");
-
-      user = await db.user.create({
-        data: {
-          email,
-          displayName: safeDisplayName(payload.name, email),
-          passwordHash: await hashPassword(randomUnavailablePassword),
-          emailVerifiedAt: new Date(),
-        },
-      });
-    } else if (!user.emailVerifiedAt) {
-      user = await db.user.update({
-        where: { id: user.id },
-        data: {
-          emailVerifiedAt: new Date(),
-        },
-      });
+    if (mobile) {
+      // Native app: no web session in the browser; the app redeems this one-time code instead.
+      const handoff = await createMobileHandoff(user.id, mobile.codeChallenge);
+      clearGoogleOAuthCookies(store);
+      return appRedirect({ code: handoff, state: mobile.appState });
     }
 
     const returnTo = safeReturnTo(
@@ -181,12 +160,11 @@ export async function GET(request: Request) {
         origin,
       ),
     );
-  } catch {
-    clearGoogleOAuthCookies(store);
-
-    return errorRedirect(
-      origin,
-      "Google sign-in could not be completed. Please try again.",
+  } catch (error) {
+    return fail(
+      error instanceof GoogleOAuthError
+        ? error.message
+        : "Google sign-in could not be completed. Please try again.",
     );
   }
 }

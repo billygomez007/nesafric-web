@@ -1,8 +1,6 @@
-import { NextResponse } from "next/server";
-
 import { authenticateUser } from "@/modules/identity/service";
+import { mobileSessionResponse } from "@/platform/auth/mobile-session";
 import { assertLoginNotRateLimited, recordLoginAttempt } from "@/platform/auth/rate-limit";
-import { createSessionRecord } from "@/platform/auth/session";
 import { AppError, errorResponse } from "@/platform/errors";
 
 export const maxDuration = 30;
@@ -21,16 +19,7 @@ export async function POST(request: Request) {
     await assertLoginNotRateLimited(email);
     const user = await authenticateUser(body);
     await recordLoginAttempt(email, true);
-    const { session, token } = await createSessionRecord(user.id);
-    return NextResponse.json(
-      {
-        token,
-        tokenType: "Bearer",
-        expiresAt: session.expiresAt,
-        user: { id: user.id, email: user.email, displayName: user.displayName },
-      },
-      { headers: { "Cache-Control": "no-store" } },
-    );
+    return await mobileSessionResponse(user);
   } catch (error) {
     // Count wrong credentials towards the lockout, exactly like the web login route.
     if (!(error instanceof AppError) || error.code !== "LOGIN_RATE_LIMITED") {

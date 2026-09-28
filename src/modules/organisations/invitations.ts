@@ -133,6 +133,16 @@ export async function acceptOrganisationInvitation(
       );
     }
 
+    // Team invitations are addressed to an email: a phone-only account must add and verify that
+    // email first (it is then this same account), never accept on someone else's address.
+    if (!user.email) {
+      throw new AppError(
+        "INVITATION_EMAIL_REQUIRED",
+        403,
+        "This invitation was sent to an email address. Add and verify that email on your account, then open the invitation again.",
+      );
+    }
+
     if (normalizeEmail(user.email) !== normalizeEmail(invitation.email)) {
       throw new AppError(
         "INVITATION_EMAIL_MISMATCH",

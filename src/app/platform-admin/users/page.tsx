@@ -5,9 +5,11 @@ import { PlatformAdminShell } from "@/components/platform-admin/shell";
 
 type UserRow = {
   id: string;
-  email: string;
+  email: string | null;
   displayName: string;
   emailVerifiedAt: string | null;
+  phoneE164?: string | null;
+  phoneVerifiedAt?: string | null;
   createdAt: string;
   platformPrincipal: {
     role: string;
@@ -196,19 +198,20 @@ function UsersContent() {
                   <tr className="align-top hover:bg-warm-white/60" key={user.id}>
                     <td className="px-5 py-4">
                       <p className="font-semibold text-forest">{user.displayName}</p>
-                      <p className="mt-1 text-xs text-muted">{user.email}</p>
+                      {user.email && <p className="mt-1 text-xs text-muted">{user.email}</p>}
+                      {user.phoneE164 && <p className="mt-1 text-xs text-muted">{user.phoneE164}</p>}
                       <p className="mt-1 font-mono text-[10px] text-muted">{user.id}</p>
                     </td>
 
                     <td className="px-5 py-4">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                          user.emailVerifiedAt
+                          user.emailVerifiedAt || user.phoneVerifiedAt
                             ? "bg-emerald/10 text-emerald"
                             : "bg-gold/15 text-forest"
                         }`}
                       >
-                        {user.emailVerifiedAt ? "Email verified" : "Email pending"}
+                        {user.emailVerifiedAt ? "Email verified" : user.phoneVerifiedAt ? "Phone verified" : user.email ? "Email pending" : "Unverified"}
                       </span>
                     </td>
 

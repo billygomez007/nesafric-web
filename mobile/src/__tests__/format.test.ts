@@ -33,6 +33,10 @@ describe("listing details formatting", () => {
   it("prefers the public location label", () => {
     expect(formatLocation(listing().location)).toBe("East Legon, Accra");
     expect(formatLocation({ ...listing().location, label: "Near A&C Mall" })).toBe("Near A&C Mall");
+    // Real data: a town that is its own locality is named once, whatever the casing.
+    expect(formatLocation({ ...listing().location, locality: "Oyibi", city: "Oyibi" })).toBe("Oyibi");
+    expect(formatLocation({ ...listing().location, locality: "oyibi ", city: "Oyibi" })).toBe("oyibi");
+    expect(formatLocation({ ...listing().location, locality: null, district: null, city: "Accra" })).toBe("Accra");
   });
 
   it("humanises enum values", () => {

@@ -8,10 +8,9 @@ import { FlatList, Pressable, StyleSheet, useWindowDimensions, View, type Native
 import { recordCampaignClick, recordCampaignImpression } from "@/api/home";
 import { useFeaturedCampaigns } from "@/api/home-queries";
 import { useApi } from "@/api/provider";
-import { AppText } from "@/components/ui";
-import { buildFeaturedSlides, type FeaturedSlide, type SlideTarget } from "@/home/featured";
+import { buildFeaturedSlides, NATIVE_CREATIVE_RATIO, type FeaturedSlide, type SlideTarget } from "@/home/featured";
 import { openSearch } from "@/marketplace/navigation";
-import { colors, fonts, radii } from "@/theme/tokens";
+import { colors, radii } from "@/theme/tokens";
 
 const CARD_GUTTER = 16;
 const GAP = 16;
@@ -27,6 +26,9 @@ export function openSlideTarget(target: SlideTarget) {
 /**
  * Homepage advertising carousel: eligible campaigns only (see `buildFeaturedSlides`). Hidden when
  * there are none or they can't be loaded — never filled with property listings.
+ *
+ * A campaign's uploaded artwork is the finished creative. Nothing is painted over it or added
+ * around it as campaign copy. Navigation controls remain platform UI; the headline is accessibility-only.
  */
 export function FeaturedAdsCarousel() {
   const { api, apiUrl } = useApi();
@@ -36,7 +38,8 @@ export function FeaturedAdsCarousel() {
   const list = useRef<FlatList<FeaturedSlide>>(null);
 
   const cardWidth = Math.min(width - CARD_GUTTER * 2, 560);
-  const cardHeight = Math.round(Math.min(Math.max(cardWidth * 0.55, 196), 300));
+  // The native creative canvas ratio, so the uploaded art is neither cropped nor letterboxed.
+  const cardHeight = Math.round(cardWidth * NATIVE_CREATIVE_RATIO);
   const interval = cardWidth + GAP;
   const pending = campaigns.isPending;
 
@@ -74,37 +77,40 @@ export function FeaturedAdsCarousel() {
 
   const multi = slides.length > 1;
   return (
-    <View style={{ height: cardHeight }}>
-      <FlatList
-        ref={list}
-        horizontal
-        data={slides}
-        keyExtractor={(slide) => slide.key}
-        renderItem={({ item }) => <Slide slide={item} width={cardWidth} height={cardHeight} onPress={press} />}
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={interval}
-        decelerationRate="fast"
-        disableIntervalMomentum
-        contentContainerStyle={styles.track}
-        ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
-        onMomentumScrollEnd={settle}
-        getItemLayout={(_, i) => ({ length: interval, offset: interval * i, index: i })}
-        accessibilityLabel="Sponsored campaigns"
-      />
+    <View>
+      <View style={{ height: cardHeight }}>
+        <FlatList
+          ref={list}
+          horizontal
+          data={slides}
+          keyExtractor={(slide) => slide.key}
+          renderItem={({ item }) => <Slide slide={item} width={cardWidth} height={cardHeight} onPress={press} />}
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={interval}
+          decelerationRate="fast"
+          disableIntervalMomentum
+          contentContainerStyle={styles.track}
+          ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
+          onMomentumScrollEnd={settle}
+          getItemLayout={(_, i) => ({ length: interval, offset: interval * i, index: i })}
+          accessibilityLabel="Advertising campaigns"
+        />
+      </View>
+
       {multi ? (
-        <>
-          <View pointerEvents="none" style={[styles.dots, { left: CARD_GUTTER, width: cardWidth }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <View style={[styles.footer, { marginHorizontal: CARD_GUTTER, width: cardWidth }]}>
+          <View style={styles.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             {slides.map((slide, i) => <View key={slide.key} style={[styles.dot, i === current && styles.dotActive]} />)}
           </View>
-          <View style={[styles.arrows, { right: CARD_GUTTER + 14 }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Previous campaign" hitSlop={6} onPress={() => go(-1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.white} />
+          <View style={styles.arrows}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Previous campaign" hitSlop={8} onPress={() => go(-1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
+              <MaterialCommunityIcons name="chevron-left" size={22} color={colors.ink} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Next campaign" hitSlop={6} onPress={() => go(1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
-              <MaterialCommunityIcons name="chevron-right" size={24} color={colors.white} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Next campaign" hitSlop={8} onPress={() => go(1)} style={({ pressed }) => [styles.arrow, pressed && styles.arrowPressed]}>
+              <MaterialCommunityIcons name="chevron-right" size={22} color={colors.ink} />
             </Pressable>
           </View>
-        </>
+        </View>
       ) : null}
     </View>
   );
@@ -112,64 +118,37 @@ export function FeaturedAdsCarousel() {
 
 function Slide({ slide, width, height, onPress }: { slide: FeaturedSlide; width: number; height: number; onPress: (slide: FeaturedSlide) => void }) {
   return (
-    <View style={[styles.slide, { width, height }]}>
-      {slide.imageUrl ? (
-        <Image source={{ uri: slide.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} accessibilityIgnoresInvertColors />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, styles.brandFill]} />
-      )}
-      <View style={[StyleSheet.absoluteFill, styles.shade]} />
-      <View style={styles.copy}>
-        <View style={styles.eyebrow}>
-          <AppText style={styles.eyebrowText} numberOfLines={1}>{slide.eyebrow}</AppText>
-        </View>
-        <AppText style={styles.title} numberOfLines={3}>{slide.title}</AppText>
-        {slide.subtitle ? <AppText style={styles.subtitle} numberOfLines={2}>{slide.subtitle}</AppText> : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${slide.ctaLabel}: ${slide.title}`}
-          onPress={() => onPress(slide)}
-          style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
-        >
-          <AppText style={styles.ctaText}>{slide.ctaLabel}</AppText>
-          <MaterialCommunityIcons name="arrow-right" size={16} color={colors.white} />
-        </Pressable>
-      </View>
-    </View>
+    <Pressable
+      testID={`campaign-slide-${slide.campaignId}`}
+      accessibilityRole="button"
+      // Advertising disclosure for screen readers only; nothing is drawn over the artwork.
+      accessibilityLabel={`Sponsored: ${slide.title}`}
+      accessibilityHint={slide.target.type === "web" ? "Opens advertiser page" : "Opens on NesAfric"}
+      onPress={() => onPress(slide)}
+      style={({ pressed }) => [styles.slide, { width, height }, pressed && styles.slidePressed]}
+    >
+      <Image
+        testID="campaign-art"
+        source={{ uri: slide.imageUrl }}
+        style={StyleSheet.absoluteFill}
+        contentFit="contain"
+        transition={150}
+        accessibilityIgnoresInvertColors
+      />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   track: { paddingHorizontal: CARD_GUTTER },
   skeleton: { marginHorizontal: CARD_GUTTER, borderRadius: radii.shell, backgroundColor: colors.cream },
-  slide: { borderRadius: radii.shell, overflow: "hidden", backgroundColor: colors.forestDeep, justifyContent: "center" },
-  brandFill: { backgroundColor: colors.forest },
-  // Dark from the left so the copy column reads on any photograph; the right side stays photographic.
-  shade: { experimental_backgroundImage: "linear-gradient(90deg, rgba(0,22,20,0.9) 0%, rgba(0,22,20,0.72) 42%, rgba(0,22,20,0.15) 72%, rgba(0,22,20,0) 100%)" },
-  copy: { width: "62%", paddingLeft: 18, paddingRight: 8, paddingBottom: 18, gap: 6 },
-  eyebrow: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.control, backgroundColor: "rgba(0,63,58,0.92)" },
-  eyebrowText: { fontFamily: fonts.bold, fontSize: 11, lineHeight: 14, color: colors.white, letterSpacing: 0.5, textTransform: "uppercase" },
-  title: { fontFamily: fonts.bold, fontSize: 21, lineHeight: 25, color: colors.white },
-  subtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 17, color: "rgba(255,255,255,0.9)" },
-  cta: {
-    marginTop: 4,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    height: 34,
-    paddingHorizontal: 14,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-    backgroundColor: colors.forest,
-  },
-  ctaPressed: { backgroundColor: colors.forestDeep },
-  ctaText: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.white },
-  dots: { position: "absolute", bottom: 12, flexDirection: "row", justifyContent: "center", gap: 6 },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.45)" },
-  dotActive: { backgroundColor: colors.white },
-  arrows: { position: "absolute", bottom: 10, flexDirection: "row", gap: 8 },
-  arrow: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,22,20,0.7)" },
-  arrowPressed: { backgroundColor: "rgba(0,22,20,0.9)" },
+  slide: { borderRadius: radii.shell, overflow: "hidden", backgroundColor: colors.cream, justifyContent: "center" },
+  slidePressed: { opacity: 0.96 },
+  footer: { marginTop: 8, minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 12 },
+  dots: { flexDirection: "row", gap: 6 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.hairline },
+  dotActive: { backgroundColor: colors.forest },
+  arrows: { flexDirection: "row", gap: 8 },
+  arrow: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.elevated },
+  arrowPressed: { backgroundColor: colors.surface },
 });

@@ -12,13 +12,15 @@ export type FeaturedSlide = {
   key: string;
   /** Every slide is a campaign; impressions and clicks are reported against it. */
   campaignId: string;
-  eyebrow: string;
+  /** Campaign headline is retained for accessibility only and is never painted over artwork. */
   title: string;
-  subtitle: string | null;
-  imageUrl: string | null;
-  ctaLabel: string;
+  /** Uploaded finished creative. Carousel slides are created only when artwork exists. */
+  imageUrl: string;
   target: SlideTarget;
 };
+
+/** Aspect ratio of the native-app creative canvas (1200 × 792, see Super Admin → Campaigns). */
+export const NATIVE_CREATIVE_RATIO = 792 / 1200;
 
 const LISTING_PATH = /^\/marketplace\/properties\/([0-9a-f-]{36})\/?$/i;
 
@@ -49,7 +51,7 @@ export function resolveDestination(destinationUrl: string, apiUrl: string): Slid
 /**
  * Native-app artwork for a campaign, per the creative specification shown in Super Admin: the
  * native creative, else mobile web, else desktop. Mirrors `selectCampaignCreative(…, "nativeApp")`
- * in the web repo (`src/modules/campaigns/eligibility.ts`). `null` renders a text slide.
+ * in the web repo (`src/modules/campaigns/eligibility.ts`). A campaign without artwork is not rendered.
  */
 export function nativeCampaignCreative(banner: Pick<CampaignBanner, "desktopMediaUrl" | "mobileMediaUrl" | "nativeAppMediaUrl">) {
   return banner.nativeAppMediaUrl ?? banner.mobileMediaUrl ?? banner.desktopMediaUrl ?? null;
@@ -65,14 +67,12 @@ export function buildFeaturedSlides(campaigns: CampaignBanner[], apiUrl: string,
     const target = resolveDestination(banner.destinationUrl, apiUrl);
     if (!target) return [];
     const media = nativeCampaignCreative(banner);
+    if (!media) return [];
     return [{
       key: `campaign:${banner.id}`,
       campaignId: banner.id,
-      eyebrow: "Sponsored",
       title: banner.headline,
-      subtitle: banner.supportingText,
-      imageUrl: media ? resolveMediaUrl(media, apiUrl) : null,
-      ctaLabel: banner.ctaLabel ?? "Learn more",
+      imageUrl: resolveMediaUrl(media, apiUrl),
       target,
     }];
   }).slice(0, max);

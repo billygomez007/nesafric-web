@@ -50,7 +50,7 @@ describe("PostgreSQL Phase 20 platform administration (independent of organisati
 
   it("bootstraps a platform principal from the environment variable, and denies a landlord organisation owner with no platform principal", async () => {
     const bootstrapUser = await registerUser({ displayName: "Bootstrap Candidate", email: "bootstrap-candidate@example.com", password: "secure-password-123" });
-    process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS = `someone-else@example.com, ${bootstrapUser.email.toUpperCase()} `;
+    process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS = `someone-else@example.com, ${bootstrapUser.email!.toUpperCase()} `;
     const principal = await requirePlatformPrincipal(bootstrapUser);
     expect(principal).toMatchObject({ role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "ENV_BOOTSTRAP" });
     // Idempotent: calling it again does not create a second principal or change the existing one.

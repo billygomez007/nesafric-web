@@ -56,7 +56,10 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
     return () => { cancelled = true; };
   }, [placement, countryCode, limit]);
 
-  const active = banners && banners.length > 0 ? banners[index % banners.length] : null;
+  // Carousel placements require uploaded artwork. Campaign text must never be manufactured
+  // into a substitute banner because the uploaded creative is the complete advertisement.
+  const visualBanners = banners?.filter((banner) => Boolean(banner.desktopMediaUrl || banner.mobileMediaUrl)) ?? null;
+  const active = visualBanners && visualBanners.length > 0 ? visualBanners[index % visualBanners.length] : null;
 
   useEffect(() => {
     if (!active || trackedImpressions.current.has(active.id)) return;
@@ -65,21 +68,21 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
   }, [active]);
 
   const goTo = useCallback((next: number) => {
-    if (!banners || banners.length === 0) return;
-    setIndex(((next % banners.length) + banners.length) % banners.length);
-  }, [banners]);
+    if (!visualBanners || visualBanners.length === 0) return;
+    setIndex(((next % visualBanners.length) + visualBanners.length) % visualBanners.length);
+  }, [visualBanners]);
 
-  const canRotate = !!banners && banners.length > 1;
+  const canRotate = !!visualBanners && visualBanners.length > 1;
 
   useEffect(() => {
     if (!canRotate || paused || reducedMotion) return;
-    const timer = setInterval(() => setIndex((current) => (banners ? (current + 1) % banners.length : 0)), AUTO_ROTATE_MS);
+    const timer = setInterval(() => setIndex((current) => (visualBanners ? (current + 1) % visualBanners.length : 0)), AUTO_ROTATE_MS);
     return () => clearInterval(timer);
-  }, [canRotate, paused, reducedMotion, banners]);
+  }, [canRotate, paused, reducedMotion, visualBanners]);
 
-  if (!banners || banners.length === 0) return null;
+  if (!visualBanners || visualBanners.length === 0) return null;
 
-  const multi = banners.length > 1;
+  const multi = visualBanners.length > 1;
   const desktopArt = active ? selectCampaignCreative(active, "desktopWeb") : null;
   const mobileArt = active ? selectCampaignCreative(active, "mobileWeb") : null;
 
@@ -115,30 +118,39 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
     >
       {active && (
         <a
-          aria-label={`Promoted: ${active.headline}`}
+          // Advertising disclosure for assistive technology only; nothing is drawn over the artwork.
+          aria-label={`Sponsored: ${active.headline}`}
           aria-roledescription="slide"
           className="group relative block h-36 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-gold-soft sm:h-40 lg:h-44"
+          data-testid="campaign-slide"
           href={active.destinationUrl}
           key={active.id}
           onClick={() => void fetch(`/api/public/campaigns/${active.id}/click`, { method: "POST" })}
           rel="noopener"
           role="group"
         >
-          {desktopArt && (
-            <div className="absolute inset-0 hidden bg-cover bg-center sm:block" style={{ backgroundImage: `url("${desktopArt}")` }} />
-          )}
-          {mobileArt && (
-            <div className="absolute inset-0 bg-cover bg-center sm:hidden" style={{ backgroundImage: `url("${mobileArt}")` }} />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-r from-forest-deep/95 via-forest-deep/60 to-transparent" />
-          <div className={`relative flex h-full max-w-xl flex-col justify-center gap-1.5 py-4 ${multi ? "pl-5 pr-12 sm:pl-12 sm:pr-14" : "px-5 sm:px-8"}`}>
-            <span className="w-fit text-xs font-semibold text-gold-soft">
-              Promoted
-            </span>
-            <h3 className="font-display text-lg font-semibold leading-tight text-white sm:text-xl">{active.headline}</h3>
-            {active.supportingText && <p className="line-clamp-2 max-w-md text-sm leading-6 text-white/80">{active.supportingText}</p>}
-            {active.ctaLabel && <span className="mt-2 inline-flex min-h-10 w-fit items-center rounded-[var(--radius-control)] bg-gold px-4 text-sm font-semibold text-forest-deep transition-colors group-hover:bg-gold-soft">{active.ctaLabel}</span>}
-          </div>
+          <>
+            {desktopArt && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 hidden h-full w-full object-contain sm:block"
+                data-testid="campaign-art"
+                src={desktopArt}
+              />
+            )}
+            {mobileArt && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-contain sm:hidden"
+                data-testid="campaign-art"
+                src={mobileArt}
+              />
+            )}
+          </>
         </a>
       )}
 
@@ -161,10 +173,10 @@ export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, 
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
           <div className="absolute bottom-3 left-6 flex gap-1.5 sm:left-1/2 sm:-translate-x-1/2">
-            {banners.map((banner, slideIndex) => (
+            {visualBanners.map((banner, slideIndex) => (
               <button
                 aria-current={slideIndex === index ? "true" : undefined}
-                aria-label={`Show campaign ${slideIndex + 1} of ${banners.length}: ${banner.headline}`}
+                aria-label={`Show campaign ${slideIndex + 1} of ${visualBanners.length}: ${banner.headline}`}
                 className="group/dot flex h-6 items-center px-0.5 outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-soft"
                 key={banner.id}
                 onClick={() => goTo(slideIndex)}
