@@ -68,7 +68,7 @@ describe("api client", () => {
       baseUrl: "https://api.test",
       fetchImpl: jest.fn().mockResolvedValue({ ok: false, status: 502, json: async () => { throw new SyntaxError("bad"); } } as unknown as Response),
     });
-    await expect(api.request("/x")).rejects.toMatchObject({ status: 502, code: "HTTP_502" });
+    await expect(api.request("/x")).rejects.toMatchObject({ status: 502, code: "SERVICE_UNAVAILABLE" });
   });
 
   it("uses an explicit token for a revocation call without reporting the current session as lost", async () => {

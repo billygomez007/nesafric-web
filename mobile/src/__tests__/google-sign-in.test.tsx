@@ -123,6 +123,17 @@ describe("Google sign-in flow (auth/google)", () => {
     expect(exchangeCalls()).toHaveLength(0);
   });
 
+  it("reports a server without Google credentials as not configured, never opening the website", async () => {
+    googleAnswers((url) => success({ error: "not_configured", message: "Google sign-in is not configured correctly.", state: url.searchParams.get("state")! }));
+    await expect(signInWithGoogle(api(), API)).rejects.toMatchObject({ reason: "notConfigured", message: "Google sign-in is not configured correctly. Please use email or phone for now." });
+    expect(exchangeCalls()).toHaveLength(0);
+  });
+
+  it("reports any other Google failure as a failed sign-in", async () => {
+    googleAnswers((url) => success({ error: "failed", message: "We couldn’t complete Google sign-in. Please try again.", state: url.searchParams.get("state")! }));
+    await expect(signInWithGoogle(api(), API)).rejects.toMatchObject({ reason: "failed", message: "We couldn’t complete Google sign-in. Please try again." });
+  });
+
   it("rejects a redirect whose state isn't the one this app started (injected link)", async () => {
     googleAnswers(() => success({ code: HANDOFF, state: "attacker-state-0123456789abcdef" }));
     await expect(signInWithGoogle(api(), API)).rejects.toMatchObject({ reason: "stateMismatch" });
@@ -185,9 +196,18 @@ describe("Continue with Google on the sign-in screen", () => {
     googleAnswers(() => ({ type: WebBrowser.WebBrowserResultType.CANCEL }));
     renderRouter(APP_DIR, { initialUrl: "/sign-in" });
     await act(async () => fireEvent.press(await screen.findByTestId("sign-in-google")));
-    expect(screen.queryByText(/couldn’t be completed|went wrong/)).toBeNull();
+    expect(screen.queryByText(/couldn’t complete|went wrong/)).toBeNull();
+    expect(await screen.findByText("Google sign-in was cancelled.")).toBeTruthy();
     expect(secureStore.has(SESSION_KEY)).toBe(false);
     expect(screen.getByTestId("sign-in-google")).toBeTruthy();
+  });
+
+  it("says when Google sign-in is not configured on the server", async () => {
+    googleAnswers((url) => success({ error: "not_configured", state: url.searchParams.get("state")! }));
+    renderRouter(APP_DIR, { initialUrl: "/sign-in" });
+    await act(async () => fireEvent.press(await screen.findByTestId("sign-in-google")));
+    expect(await screen.findByText("Google sign-in is not configured correctly. Please use email or phone for now.")).toBeTruthy();
+    expect(secureStore.has(SESSION_KEY)).toBe(false);
   });
 
   it("explains a network failure without signing in", async () => {

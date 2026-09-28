@@ -5,6 +5,7 @@ import {
   beginGoogleAuthorization,
   GOOGLE_OAUTH_MOBILE_COOKIE,
   googleOAuthCookieOptions,
+  mobileAppRedirect,
 } from "@/platform/auth/google-oauth";
 import { isAppState, isCodeChallenge } from "@/platform/auth/mobile-handoff";
 
@@ -28,12 +29,11 @@ export async function GET(request: Request) {
     );
   }
 
+  // Both halves are needed for the callback's token exchange. Without them, return to the app
+  // with a clear reason instead of leaving a JSON error page open in the auth browser.
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
-  if (!clientId) {
-    return NextResponse.json(
-      { error: { code: "GOOGLE_NOT_CONFIGURED", message: "Google sign-in is not configured yet." } },
-      { status: 503 },
-    );
+  if (!clientId || !process.env.GOOGLE_OAUTH_CLIENT_SECRET) {
+    return mobileAppRedirect({ error: "not_configured", message: "Google sign-in is not configured correctly.", state: appState });
   }
 
   const store = await cookies();

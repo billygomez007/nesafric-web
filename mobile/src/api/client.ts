@@ -63,6 +63,24 @@ export const UNAUTHENTICATED = "UNAUTHENTICATED";
  */
 export const API_REDIRECTED = "API_REDIRECTED";
 
+/**
+ * The server answered without NesAfric's JSON error shape: a page instead of an API response.
+ * A 404 means this API does not have the route the app called (for example an app built against a
+ * newer API than the one deployed); 5xx means the service is down. Both keep their HTTP status.
+ */
+export const SERVICE_ROUTE_MISSING = "SERVICE_ROUTE_MISSING";
+export const SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE";
+
+function fallbackMessage(status: number) {
+  return status >= 500 ? "NesAfric is temporarily unavailable. Please try again in a moment." : "Something went wrong. Please try again.";
+}
+
+function unstructuredError(status: number) {
+  if (status === 404 || status === 405) return new ApiError(status, SERVICE_ROUTE_MISSING, "This isn’t available on the NesAfric service yet. Please try again later or update the app.");
+  if (status >= 500) return new ApiError(status, SERVICE_UNAVAILABLE, fallbackMessage(status));
+  return new ApiError(status, `HTTP_${status}`, fallbackMessage(status));
+}
+
 export function buildQuery(query: RequestOptions["query"]) {
   const params = Object.entries(query ?? {}).filter((entry): entry is [string, string | number] => entry[1] !== undefined && entry[1] !== "");
   return params.length ? `?${params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join("&")}` : "";
@@ -109,12 +127,13 @@ export function createApiClient({ baseUrl, timeoutMs = 20_000, fetchImpl, getTok
     }
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
-      const error = payload?.error ?? {};
       if (auth && !explicitToken && response.status === 401) onUnauthenticated?.();
+      const error = payload?.error;
+      if (!error || typeof error.code !== "string") throw unstructuredError(response.status);
       throw new ApiError(
         response.status,
-        typeof error.code === "string" ? error.code : `HTTP_${response.status}`,
-        typeof error.message === "string" ? error.message : "Something went wrong. Please try again.",
+        error.code,
+        typeof error.message === "string" ? error.message : fallbackMessage(response.status),
         Array.isArray(error.issues) ? error.issues : [],
       );
     }

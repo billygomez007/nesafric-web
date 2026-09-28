@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
@@ -130,4 +131,24 @@ export async function resolveGoogleIdentity(input: {
     throw new GoogleOAuthError("A verified Google email address is required.");
   }
   return { email: payload.email, name: payload.name };
+}
+
+/**
+ * Hands a Google sign-in result back to the native app through its URL scheme. A small page (rather
+ * than a bare redirect) so Android Custom Tabs and iOS auth sessions both follow it, with a visible
+ * fallback link. It carries only the one-time handoff code or an error, never a session token.
+ */
+export function mobileAppRedirect(params: Record<string, string>) {
+  const target = new URL(MOBILE_GOOGLE_REDIRECT);
+  for (const [key, value] of Object.entries(params)) target.searchParams.set(key, value);
+  const href = target.toString().replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${href}"><title>Return to NesAfric</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:48px 24px"><p>Returning to the NesAfric app…</p><p><a href="${href}">Open NesAfric</a></p></body></html>`;
+  return new NextResponse(html, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    },
+  });
 }

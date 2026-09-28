@@ -28,7 +28,7 @@ const OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStor
 
 type PendingGoogleSignIn = { state: string; verifier: string; createdAt: number };
 
-export type GoogleSignInFailure = "cancelled" | "stateMismatch" | "expired" | "failed";
+export type GoogleSignInFailure = "cancelled" | "stateMismatch" | "expired" | "notConfigured" | "failed";
 
 export class GoogleSignInError extends Error {
   constructor(
@@ -44,7 +44,8 @@ const MESSAGES: Record<GoogleSignInFailure, string> = {
   cancelled: "Google sign-in was cancelled.",
   stateMismatch: "That Google sign-in didn’t come from this app. Please try again.",
   expired: "That Google sign-in expired. Please try again.",
-  failed: "Google sign-in couldn’t be completed. Please try again.",
+  notConfigured: "Google sign-in is not configured correctly. Please use email or phone for now.",
+  failed: "We couldn’t complete Google sign-in. Please try again.",
 };
 
 const fail = (reason: GoogleSignInFailure, message = MESSAGES[reason]) => new GoogleSignInError(reason, message);
@@ -131,7 +132,10 @@ export function completeGoogleRedirect(api: ApiClient, url: string): Promise<Mob
     if (!pending) return null;
     if (!key || params.get("state") !== pending.state) throw fail("stateMismatch");
     const error = params.get("error");
-    if (error) throw fail(error === "cancelled" ? "cancelled" : error === "expired" ? "expired" : "failed", error === "cancelled" ? MESSAGES.cancelled : params.get("message") || MESSAGES.failed);
+    // Our own copy for every known reason; the server's `message` is used only for other failures.
+    if (error === "cancelled" || error === "expired") throw fail(error);
+    if (error === "not_configured") throw fail("notConfigured");
+    if (error) throw fail("failed", params.get("message") || MESSAGES.failed);
     const code = params.get("code");
     if (!code) throw fail("failed");
     return exchangeGoogleHandoff(api, { code, codeVerifier: pending.verifier });

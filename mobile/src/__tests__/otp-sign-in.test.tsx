@@ -189,8 +189,56 @@ describe("native passwordless sign-in", () => {
     renderRouter(APP_DIR, { initialUrl: "/sign-in" });
     fireEvent.changeText(await screen.findByTestId("sign-in-phone"), "0241234567");
     await act(async () => fireEvent.press(screen.getByTestId("sign-in-send-code")));
-    expect(await screen.findByText("Text-message codes are temporarily unavailable. Please use email or try again later.")).toBeTruthy();
+    expect(await screen.findByText("We couldn’t send a verification code to that phone number. Please use email or try again later.")).toBeTruthy();
     expect(screen.queryByTestId("sign-in-code")).toBeNull();
+  });
+
+  // Production regression (2026-09-28): the deployed API had no passwordless routes, so every
+  // request got the website's HTML 404 page and the app said only "Something went wrong".
+  it.each([
+    ["sign in", "email", "ama@example.com"],
+    ["sign in", "sms", "0241234567"],
+    ["create account", "email", "ama@example.com"],
+    ["create account", "sms", "+233241234567"],
+  ])("%s by %s: a missing API route is reported specifically, never as 'Something went wrong'", async (mode, channel, identifier) => {
+    mockApi();
+    const base = jest.mocked(globalThis.fetch).getMockImplementation()!;
+    jest.mocked(globalThis.fetch).mockImplementation((input, init) =>
+      new URL(String(input)).pathname === "/api/auth/otp/request"
+        ? Promise.resolve({ ok: false, status: 404, json: async () => { throw new SyntaxError("Unexpected token <"); } } as unknown as Response)
+        : base(input, init),
+    );
+    renderRouter(APP_DIR, { initialUrl: "/sign-in" });
+    if (mode === "create account") {
+      fireEvent.press(await screen.findByTestId("sign-in-mode-register"));
+      fireEvent.changeText(await screen.findByTestId("sign-up-name"), "Ama Owusu");
+    }
+    if (channel === "email") fireEvent.press(await screen.findByTestId("sign-in-method-email"));
+    fireEvent.changeText(await screen.findByTestId(channel === "email" ? "sign-in-email" : "sign-in-phone"), identifier);
+    await act(async () => fireEvent.press(screen.getByTestId("sign-in-send-code")));
+    expect(await screen.findByText("Sign-in isn’t available right now. Please try again later.")).toBeTruthy();
+    expect(screen.queryByText("Something went wrong. Please try again.")).toBeNull();
+    expect(screen.queryByTestId("sign-in-code")).toBeNull();
+  });
+
+  it.each([
+    ["OTP_EMAIL_UNAVAILABLE", 503, "email", "Email verification is temporarily unavailable. Please try again later."],
+    ["INVALID_PHONE", 400, "sms", "Enter a valid Ghana phone number, for example 024 123 4567 or +233 24 123 4567."],
+    ["INVALID_EMAIL", 400, "email", "Enter a valid email address."],
+  ])("maps %s to specific, safe copy", async (code, status, channel, message) => {
+    mockApi();
+    const base = jest.mocked(globalThis.fetch).getMockImplementation()!;
+    jest.mocked(globalThis.fetch).mockImplementation((input, init) =>
+      new URL(String(input)).pathname === "/api/auth/otp/request"
+        ? json(status, { error: { code, message: "internal wording that is not shown" } })
+        : base(input, init),
+    );
+    renderRouter(APP_DIR, { initialUrl: "/sign-in" });
+    if (channel === "email") fireEvent.press(await screen.findByTestId("sign-in-method-email"));
+    fireEvent.changeText(await screen.findByTestId(channel === "email" ? "sign-in-email" : "sign-in-phone"), channel === "email" ? "ama@example.com" : "0241234567");
+    await act(async () => fireEvent.press(screen.getByTestId("sign-in-send-code")));
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.queryByText("internal wording that is not shown")).toBeNull();
   });
 
   it("shows server errors (wrong code, rate limits, SMS unavailable) and stores nothing", async () => {

@@ -107,8 +107,9 @@ export default function SignInScreen() {
         leave();
       } catch (error) {
         requestPostSignInRouting(null);
-        // Closing the Google window is a choice, not an error.
-        if (!(error instanceof GoogleSignInError && error.reason === "cancelled")) setFormError(signInErrorMessage(error));
+        // Closing the Google window is a choice, not an error: say so quietly.
+        if (error instanceof GoogleSignInError && error.reason === "cancelled") setNotice(error.message);
+        else setFormError(signInErrorMessage(error));
       }
     });
 
@@ -189,6 +190,7 @@ export default function SignInScreen() {
         />
 
         {formError ? <Notice message={formError} /> : null}
+        {!formError && notice && step === "identifier" ? <Notice tone="info" message={notice} /> : null}
 
         <Pressable
           testID="sign-in-google"

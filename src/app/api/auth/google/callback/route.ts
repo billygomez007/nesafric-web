@@ -10,7 +10,7 @@ import {
   GOOGLE_OAUTH_VERIFIER_COOKIE,
   GoogleOAuthError,
   googleRedirectUri,
-  MOBILE_GOOGLE_REDIRECT,
+  mobileAppRedirect as appRedirect,
   resolveGoogleIdentity,
 } from "@/platform/auth/google-oauth";
 import { createMobileHandoff, isAppState, isCodeChallenge } from "@/platform/auth/mobile-handoff";
@@ -47,26 +47,6 @@ function readMobileFlow(raw: string | undefined): MobileFlow | null {
   }
 }
 
-/**
- * Hands the result back to the native app through its URL scheme. A small page (rather than a bare
- * redirect) so Android Custom Tabs and iOS auth sessions both follow it, with a visible fallback
- * link. It carries only the one-time handoff code or an error — never a session token.
- */
-function appRedirect(params: Record<string, string>) {
-  const target = new URL(MOBILE_GOOGLE_REDIRECT);
-  for (const [key, value] of Object.entries(params)) target.searchParams.set(key, value);
-  const href = target.toString().replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=${href}"><title>Return to NesAfric</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:48px 24px"><p>Returning to the NesAfric app…</p><p><a href="${href}">Open NesAfric</a></p></body></html>`;
-  return new NextResponse(html, {
-    status: 200,
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store",
-      "referrer-policy": "no-referrer",
-    },
-  });
-}
-
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const origin = url.origin;
@@ -83,7 +63,11 @@ export async function GET(request: Request) {
   const providerError = url.searchParams.get("error");
 
   if (providerError) {
-    return fail("Google sign-in was cancelled.", "cancelled");
+    // `access_denied` is the person closing or refusing the consent screen; anything else is a
+    // Google-side failure and must not be reported as a cancellation.
+    return providerError === "access_denied"
+      ? fail("Google sign-in was cancelled.", "cancelled")
+      : fail("We couldn’t complete Google sign-in. Please try again.");
   }
 
   const code = url.searchParams.get("code");
@@ -94,7 +78,7 @@ export async function GET(request: Request) {
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return fail("Google sign-in is not configured.");
+    return fail("Google sign-in is not configured correctly.", "not_configured");
   }
 
   const expectedState = store.get(GOOGLE_OAUTH_STATE_COOKIE)?.value;

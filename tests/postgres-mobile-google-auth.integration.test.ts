@@ -215,6 +215,29 @@ describe("mobile Google sign-in", () => {
     expect(url.searchParams.get("state")).toBe(flow.state);
   });
 
+  it("returns other Google errors to the app as 'failed', not as a cancellation", async () => {
+    const flow = appFlow();
+    resetRequest();
+    await mobileGoogleStart(new Request(`${ORIGIN}/api/auth/mobile/google/start?state=${flow.state}&code_challenge=${flow.challenge}`));
+    const response = await googleCallback(new Request(`${ORIGIN}/api/auth/google/callback?error=server_error`));
+    const url = new URL(/content="0;url=([^"]+)"/.exec(await response.text())![1].replace(/&amp;/g, "&"));
+    expect(url.searchParams.get("error")).toBe("failed");
+    expect(url.searchParams.get("state")).toBe(flow.state);
+  });
+
+  it.each(["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"])("without %s, start returns to the app as not_configured instead of showing a web page", async (name) => {
+    delete process.env[name];
+    const flow = appFlow();
+    resetRequest();
+    const response = await mobileGoogleStart(new Request(`${ORIGIN}/api/auth/mobile/google/start?state=${flow.state}&code_challenge=${flow.challenge}&code_challenge_method=S256`));
+    expect(response.status).toBe(200);
+    const url = new URL(/content="0;url=([^"]+)"/.exec(await response.text())![1].replace(/&amp;/g, "&"));
+    expect(url.protocol + "//" + url.host + url.pathname).toBe("nesafric://auth/google");
+    expect(url.searchParams.get("error")).toBe("not_configured");
+    expect(url.searchParams.get("state")).toBe(flow.state);
+    expect(request.cookies.size).toBe(0);
+  });
+
   it("rejects a callback whose OAuth state doesn't match the browser's", async () => {
     const flow = appFlow();
     resetRequest();
