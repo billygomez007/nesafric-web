@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
-import { MarketplaceBanner } from "@/components/marketplace-banner";
 import { MarketplaceCarousel } from "@/components/marketplace-carousel";
 
 /**
@@ -35,30 +34,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Artwork rendering, click-through and the "no Sponsored/Promoted prefix" rules are covered by
+// tests/campaign-creative.unit.test.tsx (the clean-creative design that replaced this file's markup).
 describe("MarketplaceCarousel", () => {
-  it("shows artwork cleanly, keeps the whole slide clickable, and records impression and click", async () => {
-    mockCampaigns({ banners: [ART] });
-    render(<MarketplaceCarousel placement="MARKETPLACE_PRIMARY" />);
-    const slide = await screen.findByTestId("campaign-slide");
-    expect(slide.getAttribute("aria-label")).toBe("Sponsored: Airport Hills residences");
-    expect(slide.getAttribute("href")).toBe(ART.destinationUrl);
-    expect(within(slide).getAllByTestId("campaign-art")).toHaveLength(2);
-    // Nothing painted over the creative.
-    for (const text of ["Airport Hills residences", "Two- and three-bedroom homes", "See the homes", "Promoted", "Sponsored"]) {
-      expect(within(slide).queryByText(text)).toBeNull();
-    }
-    expect(slide.innerHTML).not.toMatch(/gradient/);
-    // Disclosure is for assistive technology only (the accessible name above): no visible caption
-    // or badge is drawn over or around the artwork.
-    expect(screen.queryByTestId("campaign-disclosure")).toBeNull();
-    expect(screen.queryByText("Sponsored")).toBeNull();
-
-    await waitFor(() => expect(posts).toContain("/api/public/campaigns/c-art/impression"));
-    slide.addEventListener("click", (event) => event.preventDefault());
-    fireEvent.click(slide);
-    expect(posts).toContain("/api/public/campaigns/c-art/click");
-  });
-
   it("never renders a campaign without artwork: no text fallback slide, and nothing is tracked", async () => {
     mockCampaigns({ banners: [TEXT_ONLY] });
     const { container } = render(<MarketplaceCarousel placement="MARKETPLACE_PRIMARY" />);
@@ -68,38 +46,10 @@ describe("MarketplaceCarousel", () => {
     expect(posts).toEqual([]);
   });
 
-  it("shows only campaigns that have artwork when some don't", async () => {
-    mockCampaigns({ banners: [{ ...TEXT_ONLY, id: "c-none", headline: "No artwork" }, ART] });
-    render(<MarketplaceCarousel placement="MARKETPLACE_PRIMARY" />);
-    const slide = await screen.findByTestId("campaign-slide");
-    expect(slide.getAttribute("aria-label")).toBe("Sponsored: Airport Hills residences");
-    expect(screen.queryByLabelText("Sponsored: No artwork")).toBeNull();
-    // One slide left: no previous/next controls.
-    expect(screen.queryByRole("button", { name: "Next campaign" })).toBeNull();
-    await waitFor(() => expect(posts).toContain("/api/public/campaigns/c-art/impression"));
-    expect(posts.some((path) => path.includes("c-none"))).toBe(false);
-  });
-
   it("renders nothing, not even the disclosure, when no campaign is eligible", async () => {
     mockCampaigns({ banners: [] });
     const { container } = render(<MarketplaceCarousel placement="MARKETPLACE_PRIMARY" />);
     await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
     expect(container.innerHTML).toBe("");
-  });
-});
-
-describe("MarketplaceBanner", () => {
-  it("shows artwork without copy on it, and text only when there is no artwork", async () => {
-    mockCampaigns({ banner: ART });
-    render(<MarketplaceBanner placement="PROFESSIONAL_FEATURED" />);
-    const banner = await screen.findByTestId("campaign-banner");
-    expect(banner.getAttribute("aria-label")).toBe("Sponsored: Airport Hills residences");
-    expect(within(banner).queryByText("Airport Hills residences")).toBeNull();
-    expect(within(banner).queryByText("Featured")).toBeNull();
-    cleanup();
-
-    mockCampaigns({ banner: TEXT_ONLY });
-    render(<MarketplaceBanner placement="PROFESSIONAL_FEATURED" />);
-    expect(within(await screen.findByTestId("campaign-banner")).getByText("Airport Hills residences")).toBeTruthy();
   });
 });

@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { NATIVE_APP_FALLBACK_SPEC, PLACEMENT_CREATIVE_SPECS, type PlacementCreativeSpec } from "@/modules/campaigns/creative-spec";
 import { selectCampaignCreative } from "@/modules/campaigns/eligibility";
 
 type Campaign = {
@@ -68,27 +69,8 @@ const TYPE_LABELS: Record<string, string> = {
 const CAMPAIGN_TYPES = Object.keys(TYPE_LABELS);
 const SERVICE_PROVIDER_TYPES = new Set(["PROPERTY_SERVICE_PROFESSIONAL", "PROPERTY_SERVICE_COMPANY"]);
 
-/**
- * Campaign-admin upload canvases.
- *
- * Current recommended artwork sizes:
- *   - Desktop web: 1600 x 220
- *   - Mobile web: 800 x 320
- *   - Native mobile app: 1200 x 792
- *
- * The web carousel is responsive and uses cover-style cropping, so important
- * visual content should remain inside a safe central area.
- *
- * Keep these client-side values synchronized with
- * `src/modules/campaigns/creative-spec.ts`.
- */
-const CREATIVE_SPECS: Record<string, { desktop: { width: number; height: number }; mobile: { width: number; height: number }; nativeApp: { width: number; height: number }; measured: boolean }> = {
-  MARKETPLACE_PRIMARY: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: true },
-  MARKETPLACE_INLINE: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: true },
-  DEVELOPMENT_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: false },
-  PROFESSIONAL_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: false },
-  SEARCH_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 792 }, measured: false },
-};
+/** Upload canvases come from the one canonical spec (`src/modules/campaigns/creative-spec.ts`). */
+const CREATIVE_SPECS: Partial<Record<string, PlacementCreativeSpec>> = PLACEMENT_CREATIVE_SPECS;
 
 function ratioLabel(dim: { width: number; height: number }) {
   return `${Math.round((dim.width / dim.height) * 10) / 10}:1`;
@@ -169,7 +151,7 @@ function CampaignPreview({
   const spec = CREATIVE_SPECS[placement];
   const dim =
     device === "nativeApp"
-      ? (spec?.nativeApp ?? { width: 1200, height: 792 })
+      ? (spec?.nativeApp ?? NATIVE_APP_FALLBACK_SPEC)
       : device === "mobile"
         ? (spec?.mobile ?? { width: 800, height: 320 })
         : (spec?.desktop ?? { width: 1600, height: 220 });
@@ -204,7 +186,9 @@ function CampaignPreview({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-hairline bg-forest-deep" data-testid="campaign-preview-artwork" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
+    // The app draws its 2.5:1 card on the page surface, so an older 1200 x 792 upload previews with
+    // the same plain side margins it gets in the app.
+    <div className={`overflow-hidden rounded-2xl border border-hairline ${device === "nativeApp" ? "bg-surface" : "bg-forest-deep"}`} data-testid="campaign-preview-artwork" style={{ aspectRatio: `${dim.width} / ${dim.height}` }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- the same plain <img> the public renderer uses */}
       <img alt={headline || "Campaign artwork"} className="block h-full w-full object-contain" src={mediaUrl} />
     </div>
@@ -238,6 +222,69 @@ function ConfirmDialog({
 }
 
 type PendingConfirm = { title: string; description: string; confirmLabel: string; destructive?: boolean; action: () => void };
+
+const ROTATION_OPTIONS = [5, 8, 10] as const;
+
+/** Placement-wide pace of the Homepage Advertising Carousel (`MARKETPLACE_PRIMARY`), shared by the
+ * website and the app. Saved immediately; the next carousel load uses it. */
+function CarouselRotationSetting() {
+  const [seconds, setSeconds] = useState<number | null>(null);
+  const [saving, setSaving] = useState<number | null>(null);
+  const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/platform-admin/campaigns/placements/MARKETPLACE_PRIMARY/rotation").then(async (response) => {
+      if (cancelled) return;
+      if (!response.ok) { setStatus({ tone: "error", text: "Couldn’t load the rotation setting." }); return; }
+      setSeconds((await response.json()).rotationSeconds);
+    }).catch(() => { if (!cancelled) setStatus({ tone: "error", text: "Couldn’t load the rotation setting." }); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function choose(value: number) {
+    if (value === seconds || saving) return;
+    setSaving(value);
+    setStatus(null);
+    const response = await fetch("/api/platform-admin/campaigns/placements/MARKETPLACE_PRIMARY/rotation", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rotationSeconds: value }),
+    }).catch(() => null);
+    setSaving(null);
+    if (!response?.ok) { setStatus({ tone: "error", text: "Couldn’t save. Try again." }); return; }
+    setSeconds((await response.json()).rotationSeconds);
+    setStatus({ tone: "ok", text: "Saved. Web and app use it on their next load." });
+  }
+
+  return (
+    <section className="rounded-2xl border border-hairline bg-white p-5 shadow-card" data-testid="carousel-rotation">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">{PLACEMENT_LABELS.MARKETPLACE_PRIMARY}</p>
+          <h2 className="mt-1 font-semibold text-forest">Carousel rotation</h2>
+          <p className="mt-1 text-xs text-muted">How long each campaign shows before the next one slides in. Applies to every campaign in this carousel.</p>
+        </div>
+        <div aria-label="Carousel rotation" className="inline-flex rounded-lg border border-hairline bg-warm-white p-1" role="radiogroup">
+          {ROTATION_OPTIONS.map((value) => (
+            <button
+              aria-checked={seconds === value}
+              className={`min-w-[5.5rem] rounded-md px-3 py-1.5 text-sm font-semibold transition ${seconds === value ? "bg-forest text-white shadow-sm" : "text-ink hover:bg-white"}`}
+              disabled={seconds === null || saving !== null}
+              key={value}
+              onClick={() => void choose(value)}
+              role="radio"
+              type="button"
+            >
+              {saving === value ? "Saving…" : `${value} seconds`}
+            </button>
+          ))}
+        </div>
+      </div>
+      {status && <p className={`mt-3 text-xs ${status.tone === "ok" ? "text-teal" : "text-red-600"}`} role="status">{status.text}</p>}
+    </section>
+  );
+}
 
 export function CampaignsAdminContent() {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
@@ -610,6 +657,8 @@ export function CampaignsAdminContent() {
           </div>
         )}
       </section>
+
+      <CarouselRotationSetting />
 
       <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1031,7 +1080,7 @@ export function CampaignsAdminContent() {
                       onRemove={() => void removeCreative(editingId, "nativeApp")}
                       onSelect={(file) => void uploadCreative(editingId, "nativeApp", file)}
                       previewUrl={editingCampaign?.nativeAppMediaUrl ?? null}
-                      spec={draftSpec?.nativeApp ?? { width: 1200, height: 792 }}
+                      spec={draftSpec?.nativeApp ?? NATIVE_APP_FALLBACK_SPEC}
                     />
                   </>
                 ) : (
@@ -1055,7 +1104,7 @@ export function CampaignsAdminContent() {
                       onRemove={() => clearStaged("nativeApp")}
                       onSelect={(file) => stageFile("nativeApp", file)}
                       previewUrl={stagedNativeAppPreview}
-                      spec={draftSpec?.nativeApp ?? { width: 1200, height: 792 }}
+                      spec={draftSpec?.nativeApp ?? NATIVE_APP_FALLBACK_SPEC}
                     />
                   </>
                 )}

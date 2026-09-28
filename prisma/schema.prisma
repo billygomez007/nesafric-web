@@ -4819,6 +4819,7 @@ model PlatformPrincipal {
   overridesRevoked          OrganisationEntitlementOverride[] @relation("OverrideRevoker")
   flagOverridesCreated      OrganisationFeatureFlagOverride[]
   flagsUpdated              FeatureFlag[]
+  campaignPlacementSettings CampaignPlacementSetting[]
   subscriptionStatusActions SubscriptionStatusHistory[]
 
   @@index([role, status])
@@ -5319,6 +5320,18 @@ enum CampaignType {
   UMOAFRIC_PROMOTION
   ANNOUNCEMENT
   GENERAL
+}
+
+/// Placement-wide display settings for a campaign carousel (not per campaign). A missing row
+/// means the defaults in `src/modules/campaigns/rotation.ts` (5 second rotation).
+model CampaignPlacementSetting {
+  placement                    CampaignPlacement  @id
+  /// Seconds each campaign stays on screen before the carousel advances: 5, 8 or 10.
+  rotationSeconds              Int                @default(5)
+  updatedByPlatformPrincipalId String?            @db.Uuid
+  updatedByPlatformPrincipal   PlatformPrincipal? @relation(fields: [updatedByPlatformPrincipalId], references: [id], onDelete: SetNull)
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @updatedAt
 }
 
 model Campaign {

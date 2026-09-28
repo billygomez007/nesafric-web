@@ -57,7 +57,7 @@ the old "List your property on NesAfric" slide are never used as substitutes.
 
 ### Creative selection
 
-Upload canvases: desktop web 1600×220, mobile web 800×320, native app 1200×792.
+Upload canvases: desktop web 1600×220, mobile web 800×320, native app **1200×480 (2.5:1)**.
 
 | Surface | Uses |
 | --- | --- |
@@ -65,8 +65,37 @@ Upload canvases: desktop web 1600×220, mobile web 800×320, native app 1200×79
 | Mobile web | mobile creative, else desktop |
 | Native app | native creative, else mobile web, else desktop |
 
-A campaign with no artwork is still eligible and renders as a text slide on the brand background.
-Super Admin shows a creative note when a surface falls back (`creativeReadiness`).
+A campaign with no artwork is skipped: it is never drawn as a text slide. With no campaign that has
+artwork, the carousel is hidden. Super Admin shows a creative note when a surface falls back
+(`creativeReadiness`).
+
+Artwork is the whole ad. Nothing is drawn over it: no Sponsored/Promoted badge, headline, copy, CTA,
+gradient or tint. It is always shown uncropped and undistorted (`object-contain` on web,
+`contentFit="contain"` in the app).
+
+### Native carousel size (from 2026-09-28)
+
+The app card keeps its width (screen minus 16 pt gutters, max 560 pt) and is now 2.5:1:
+`cardHeight = cardWidth × 0.4` (was `min(cardWidth × 0.66, 320)`). On a 402 pt iPhone that is
+370 × 148 pt instead of 370 × 244 pt, about 61% of the old height.
+
+**Legacy 1200×792 native uploads** still work and need no re-upload to stay safe: they are drawn with
+`contentFit="contain"` inside the 2.5:1 card, so they show whole and centred with plain side margins
+in the page surface colour (`#f8f5ef`). They are never cropped, stretched or put on a dark
+NesAfric-made backdrop. For a full-bleed card, upload a new 1200×480 native creative.
+
+### Rotation
+
+Both the website and the app advance the Homepage Advertising Carousel (`MARKETPLACE_PRIMARY`)
+automatically. Super Admin → Campaigns → **Carousel rotation** sets 5, 8 or 10 seconds for the whole
+placement (default 5; table `CampaignPlacementSetting`, migration
+`20260928190000_campaign_placement_rotation`; a missing row means 5 seconds).
+`GET /api/public/campaigns?limit=…` returns it as `rotationSeconds`.
+
+Autoplay never runs for a single campaign, keeps one timer per shown slide, pauses while a finger is
+on the carousel (app) or while hovered/focused (web), stops when Home is not visible or the app is in
+the background, and respects reduced motion. The app has no arrow buttons: people swipe, and the dots
+show position. Impressions are still counted once per campaign per session, when it is shown.
 
 ## Listing price units
 
