@@ -2,29 +2,28 @@ import { createHash, randomBytes } from "crypto";
 import { cookies, headers } from "next/headers";
 import { db } from "@/platform/database/client";
 import { AppError, unauthenticated } from "@/platform/errors";
+import { withAccountUnchanged, type AccountState } from "./account-lock";
 
 const COOKIE_NAME = "propertyos_session";
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 14;
 export const hashSessionToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /**
- * Ties a password sign-in's session to the password it checked. Checking a password (argon2) takes
- * a moment; if the account's real owner proves the email in that moment, the claimant's password is
- * cleared and their sessions revoked (`claimEmailOnFirstProof`). The session is therefore created
- * under a lock on the user row and only if the password hash is still the one that was checked —
- * whichever of the two commits second sees the other's result, so the claimant is never left with a
- * session.
+ * Ties a password sign-in's session to the account state it authenticated. Checking a password
+ * (argon2) takes a moment; if meanwhile the account's real owner proves the email, or the email or
+ * phone changes, the session is refused (see the concurrency model in `account-lock.ts`).
  */
-export type PasswordSessionGuard = { passwordHash: string };
+export type PasswordSessionGuard = { account: AccountState };
 
 export async function createSessionRecord(userId: string, token = randomBytes(32).toString("base64url"), guard?: PasswordSessionGuard) {
   const data = { userId, tokenHash: hashSessionToken(token), expiresAt: new Date(Date.now() + sessionDurationMs) };
   if (!guard) return { session: await db.session.create({ data }), token };
-  const session = await db.$transaction(async (tx) => {
-    const [row] = await tx.$queryRaw<Array<{ passwordHash: string | null }>>`SELECT "passwordHash" FROM "User" WHERE id = ${userId}::uuid FOR UPDATE`;
-    if (!row || row.passwordHash !== guard.passwordHash) throw new AppError("INVALID_CREDENTIALS", 401, "Email or password is incorrect.");
-    return tx.session.create({ data });
-  });
+  const session = await withAccountUnchanged(
+    userId,
+    guard.account,
+    { stale: () => new AppError("INVALID_CREDENTIALS", 401, "Email or password is incorrect.") },
+    (tx) => tx.session.create({ data }),
+  );
   return { session, token };
 }
 
@@ -84,12 +83,6 @@ export async function destroySession() {
 export async function currentSessionTokenHash() {
   const token = await readSessionToken();
   return token ? hashSessionToken(token) : null;
-}
-
-/** Ends every other session of this user (other browsers and devices), keeping the caller's own. */
-export async function revokeOtherSessions(userId: string) {
-  const token = await readSessionToken();
-  await db.session.deleteMany({ where: { userId, ...(token ? { NOT: { tokenHash: hashSessionToken(token) } } : {}) } });
 }
 
 export async function requireUser() {

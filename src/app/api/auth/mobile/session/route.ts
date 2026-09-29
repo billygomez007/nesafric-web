@@ -1,3 +1,4 @@
+import { accountState } from "@/platform/auth/account-lock";
 import { authenticateUser } from "@/modules/identity/service";
 import { mobileSessionResponse } from "@/platform/auth/mobile-session";
 import { assertLoginNotRateLimited, recordLoginAttempt } from "@/platform/auth/rate-limit";
@@ -19,8 +20,8 @@ export async function POST(request: Request) {
     await assertLoginNotRateLimited(email);
     const user = await authenticateUser(body);
     await recordLoginAttempt(email, true);
-    // Bound to the password just checked (see PasswordSessionGuard).
-    return await mobileSessionResponse(user, { passwordHash: user.passwordHash! });
+    // Bound to the account state just authenticated (see PasswordSessionGuard).
+    return await mobileSessionResponse(user, { account: accountState(user) });
   } catch (error) {
     // Count wrong credentials towards the lockout, exactly like the web login route.
     if (!(error instanceof AppError) || error.code !== "LOGIN_RATE_LIMITED") {

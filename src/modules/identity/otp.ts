@@ -3,12 +3,13 @@ import { z } from "zod";
 
 import { enqueueWelcomeEmail } from "@/modules/account-emails/service";
 import { claimEmailOnFirstProof } from "@/modules/identity/service";
+import { withAccountUnchanged, type AccountState } from "@/platform/auth/account-lock";
 import { getEmailProvider, getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
 import { renderEmail } from "@/modules/notifications/email-templates/render";
 import { BRAND } from "@/platform/brand";
 import { db } from "@/platform/database/client";
 import { Prisma, type User } from "@/platform/database/generated/client";
-import { AppError } from "@/platform/errors";
+import { AppError, unauthenticated } from "@/platform/errors";
 import { maskPhone, normalizePhone } from "@/platform/identity/phone";
 import { ipRateLimitKey, resolveClientIdentity } from "@/platform/security/client-ip";
 import { isMessagingError, type MessagingError } from "@/modules/messaging/errors";
@@ -320,24 +321,41 @@ export async function verifyOtp(input: unknown, context: { now?: Date } = {}): P
 /**
  * Adds a verified email or phone to the signed-in account. An identifier that already belongs to a
  * different account is refused (`IDENTIFIER_IN_USE`) — accounts are never merged implicitly.
+ *
+ * The code check (possibly an SMS provider round-trip) happens first; the link itself then commits
+ * only under the account lock, if the account is still exactly as the caller was authenticated and
+ * the caller's session still exists (see account-lock.ts). A link authenticated before the real
+ * owner proved a squatted email is therefore stale and changes nothing. Changing the account's
+ * email signs out its other sessions in the same transaction, keeping the caller's.
  */
-export async function verifyOtpLink(userId: string, input: unknown, context: { now?: Date } = {}) {
+export async function verifyOtpLink(
+  caller: { userId: string; account: AccountState; sessionTokenHash: string | null },
+  input: unknown,
+  context: { now?: Date } = {},
+) {
   const data = verifySchema.omit({ displayName: true }).parse(input);
   const normalized = normalizeIdentifier(data.channel, data.identifier);
   const identifierHash = identifierHashFor(data.channel, normalized);
   const challenge = await checkCode(data.challengeId, data.channel, normalized, identifierHash, data.code, ["LINK"], context.now);
-  if (challenge.userId !== userId) throw invalidCode();
+  if (challenge.userId !== caller.userId) throw invalidCode();
   const where = data.channel === "email" ? { email: normalized } : { phoneE164: normalized };
-  const owner = await db.user.findUnique({ where, select: { id: true } });
-  if (owner && owner.id !== userId) {
-    throw new AppError("IDENTIFIER_IN_USE", 409, data.channel === "email" ? "This email is already used by another NesAfric account." : "This phone number is already used by another NesAfric account.");
-  }
-  await consume(challenge.id, context.now);
   const verifiedAt = new Date();
   try {
-    return await db.user.update({
-      where: { id: userId },
-      data: data.channel === "email" ? { email: normalized, emailVerifiedAt: verifiedAt } : { phoneE164: normalized, phoneVerifiedAt: verifiedAt },
+    return await withAccountUnchanged(caller.userId, caller.account, { sessionTokenHash: caller.sessionTokenHash, stale: unauthenticated }, async (tx) => {
+      const owner = await tx.user.findUnique({ where, select: { id: true } });
+      if (owner && owner.id !== caller.userId) {
+        throw new AppError("IDENTIFIER_IN_USE", 409, data.channel === "email" ? "This email is already used by another NesAfric account." : "This phone number is already used by another NesAfric account.");
+      }
+      await consume(challenge.id, context.now, tx);
+      const updated = await tx.user.update({
+        where: { id: caller.userId },
+        data: data.channel === "email" ? { email: normalized, emailVerifiedAt: verifiedAt } : { phoneE164: normalized, phoneVerifiedAt: verifiedAt },
+      });
+      const previousEmail = caller.account.email?.toLowerCase() ?? null;
+      if (data.channel === "email" && previousEmail && updated.email !== previousEmail && caller.sessionTokenHash) {
+        await tx.session.deleteMany({ where: { userId: caller.userId, NOT: { tokenHash: caller.sessionTokenHash } } });
+      }
+      return updated;
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -414,8 +432,8 @@ async function checkCode(challengeId: string, channel: OtpChannel, normalized: s
 }
 
 /** Exactly one caller can consume a live challenge. */
-async function consume(challengeId: string, now = new Date()) {
-  const consumed = await db.authOtpChallenge.updateMany({
+async function consume(challengeId: string, now = new Date(), client: Pick<Prisma.TransactionClient, "authOtpChallenge"> = db) {
+  const consumed = await client.authOtpChallenge.updateMany({
     where: { id: challengeId, consumedAt: null, supersededAt: null, expiresAt: { gt: now }, failedAttempts: { lt: OTP_MAX_ATTEMPTS } },
     data: { consumedAt: now },
   });

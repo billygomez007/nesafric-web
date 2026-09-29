@@ -1,3 +1,4 @@
+import { lockAccount } from "@/platform/auth/account-lock";
 import { db } from "@/platform/database/client";
 import { Prisma } from "@/platform/database/generated/client";
 import { AppError } from "@/platform/errors";
@@ -56,6 +57,8 @@ export async function authenticateUser(input: unknown) {
  */
 export async function claimEmailOnFirstProof(userId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
+    // The account lock first, like every other identity transition (see account-lock.ts).
+    await lockAccount(tx, userId);
     const claimed = await tx.user.updateMany({
       where: { id: userId, emailVerifiedAt: null },
       data: { emailVerifiedAt: now, passwordHash: null, phoneE164: null, phoneVerifiedAt: null },

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { accountState, withAccountUnchanged } from "@/platform/auth/account-lock";
 import { hashPassword, verifyPassword } from "@/platform/auth/passwords";
 import { currentSessionTokenHash, newSessionData, requireUser, setSessionCookie } from "@/platform/auth/session";
-import { db } from "@/platform/database/client";
 import { AppError, errorResponse, unauthenticated } from "@/platform/errors";
 
 const changePasswordSchema = z
@@ -33,24 +33,10 @@ export async function PATCH(request: Request) {
     const passwordHash = await hashPassword(data.newPassword);
     const next = newSessionData(user.id);
 
-    // Checking and hashing passwords takes a moment. If, meanwhile, the address's real owner proved
-    // the email (`claimEmailOnFirstProof`: password cleared, sessions revoked), this request is
-    // stale and must change nothing. So the whole change happens under a lock on the user row, and
-    // only if the row is still exactly as it was authenticated: same password hash, same
-    // verification state, and this request's own session still alive. Whichever of the two
-    // transactions commits second sees the other's result (see also PasswordSessionGuard).
-    await db.$transaction(async (tx) => {
-      const [row] = await tx.$queryRaw<Array<{ passwordHash: string | null; emailVerifiedAt: Date | null }>>`
-        SELECT "passwordHash", "emailVerifiedAt" FROM "User" WHERE id = ${user.id}::uuid FOR UPDATE`;
-      const unchanged =
-        row
-        && row.passwordHash === user.passwordHash
-        && (row.emailVerifiedAt?.getTime() ?? null) === (user.emailVerifiedAt?.getTime() ?? null);
-      const sessionAlive = sessionTokenHash
-        ? (await tx.session.count({ where: { userId: user.id, tokenHash: sessionTokenHash, expiresAt: { gt: new Date() } } })) === 1
-        : false;
-      if (!unchanged || !sessionAlive) throw unauthenticated();
-
+    // Checking and hashing passwords takes a moment. The change commits only under the account
+    // lock, if the account is exactly as authenticated and this request's session still exists —
+    // e.g. not after the real owner proved a squatted email (see account-lock.ts).
+    await withAccountUnchanged(user.id, accountState(user), { sessionTokenHash, stale: unauthenticated }, async (tx) => {
       await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
       await tx.session.deleteMany({ where: { userId: user.id } });
       await tx.session.create({ data: next.data });

@@ -49,10 +49,20 @@ vi.mock("@/modules/conversations/channels/email-providers", async (importOrigina
 
 // A gate inside password hashing, to pause a password change mid-flight deterministically.
 const gate = vi.hoisted(() => ({ armed: false, onReached: null as null | (() => void), release: null as null | Promise<void> }));
+const verifyGate = vi.hoisted(() => ({ armed: false, onReached: null as null | (() => void), release: null as null | Promise<void> }));
 vi.mock("@/platform/auth/passwords", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/platform/auth/passwords")>();
   return {
     ...actual,
+    verifyPassword: async (hash: string, password: string) => {
+      const ok = await actual.verifyPassword(hash, password);
+      if (verifyGate.armed) {
+        verifyGate.armed = false;
+        verifyGate.onReached?.();
+        await verifyGate.release;
+      }
+      return ok;
+    },
     hashPassword: async (password: string) => {
       const hash = await actual.hashPassword(password);
       if (gate.armed) {
@@ -74,6 +84,39 @@ function armPasswordGate() {
   return { reached, release };
 }
 
+/** Arms the gate after a password CHECK (i.e. once a sign-in has read and authenticated the account). */
+function armVerifyGate() {
+  let release!: () => void;
+  verifyGate.release = new Promise<void>((resolve) => (release = resolve));
+  const reached = new Promise<void>((resolve) => (verifyGate.onReached = resolve));
+  verifyGate.armed = true;
+  return { reached, release };
+}
+
+/**
+ * A request whose JSON body only arrives on `release()`: the route has already authenticated the
+ * caller when it starts reading it, so this pauses a request between authentication and its work.
+ */
+function gatedJson(path: string, body: unknown) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let pulled!: () => void;
+  const reached = new Promise<void>((resolve) => (pulled = resolve));
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        pulled();
+        await released;
+        controller.enqueue(new TextEncoder().encode(JSON.stringify(body)));
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const req = new Request(`${ORIGIN}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: stream, duplex: "half" } as RequestInit);
+  return { req, reached, release };
+}
+
 import { PATCH as changeEmail } from "@/app/api/account/email/route";
 import { PATCH as changePassword } from "@/app/api/account/password/route";
 import { POST as verifyLink } from "@/app/api/account/identifiers/verify/route";
@@ -85,6 +128,7 @@ import { POST as requestRoute } from "@/app/api/auth/otp/request/route";
 import { POST as webVerify } from "@/app/api/auth/otp/verify/route";
 import { POST as legacyRegister } from "@/app/api/auth/register/route";
 import { findOrCreateGoogleUser, registerUser } from "@/modules/identity/service";
+import { accountState } from "@/platform/auth/account-lock";
 import { createSessionRecord } from "@/platform/auth/session";
 import { db } from "@/platform/database/client";
 import { findUsablePlatformPrincipal, requirePlatformPrincipal } from "@/platform/platform-admin/auth";
@@ -156,6 +200,7 @@ describe("account ownership verification (security batch 1)", () => {
     sms.sent = [];
     mail.sent = [];
     gate.armed = false;
+    verifyGate.armed = false;
     as();
   });
   afterEach(() => {
@@ -234,13 +279,77 @@ describe("account ownership verification (security batch 1)", () => {
       expect(((await attempt.json()) as { error: { code: string } }).error.code).toBe("OTP_NO_ACCOUNT");
     });
 
+    it.each([
+      ["an email code", async (email: string) => (await ownerProvesEmailWithCode(email)).cookie!],
+      ["Google", async (email: string) => {
+        const owner = await findOrCreateGoogleUser({ email, name: "Real Owner" });
+        return (await createSessionRecord(owner.id)).token;
+      }],
+    ] as const)("an identifier LINK racing the owner's proof by %s links nothing and leaves the attacker nothing", async (_via, ownerProves) => {
+      const { account, token } = await attackerPreRegisters("victim@example.com");
+      // The attacker prepares a link code for an address they control…
+      as({ bearer: token });
+      const linkSent = await requestRoute(json("/api/auth/otp/request", { mode: "link", channel: "email", identifier: "attacker@evil.example" }));
+      const { challengeId } = (await linkSent.json()) as { challengeId: string };
+      const attackerCode = lastCode("email");
+      // …and starts verifying it; the request has authenticated and pauses before doing its work…
+      const paused = gatedJson("/api/account/identifiers/verify", { challengeId, channel: "email", identifier: "attacker@evil.example", code: attackerCode });
+      as({ bearer: token });
+      const pending = verifyLink(paused.req);
+      await paused.reached;
+      // …the real owner proves the squatted address meanwhile…
+      const ownerToken = await ownerProves("victim@example.com");
+      // …and the stale link resumes and is refused.
+      paused.release();
+      const response = await pending;
+      expect(response.status).toBe(401);
+
+      const after = await db.user.findUniqueOrThrow({ where: { id: account.id } });
+      expect(after.email).toBe("victim@example.com");
+      expect(after.emailVerifiedAt).not.toBeNull();
+      expect(await db.user.count({ where: { email: "attacker@evil.example" } })).toBe(0);
+      expect(await sessionWorks(token)).toBe(false);
+      expect(await db.session.count({ where: { userId: account.id } })).toBe(1);
+      expect(await sessionWorks(ownerToken)).toBe(true);
+      // The code was not spent on the stale link, and still can't be used without a live session.
+      as({ bearer: token });
+      expect((await verifyLink(json("/api/account/identifiers/verify", { challengeId, channel: "email", identifier: "attacker@evil.example", code: attackerCode }))).status).toBe(401);
+    });
+
+    it("a link that commits BEFORE the owner's proof takes the attacker's account away from the squatted address; the owner gets a clean account of their own", async () => {
+      const { account, token } = await attackerPreRegisters("victim@example.com");
+      as({ bearer: token });
+      const linkSent = await requestRoute(json("/api/auth/otp/request", { mode: "link", channel: "email", identifier: "attacker@evil.example" }));
+      const { challengeId } = (await linkSent.json()) as { challengeId: string };
+      as({ bearer: token });
+      expect((await verifyLink(json("/api/account/identifiers/verify", { challengeId, channel: "email", identifier: "attacker@evil.example", code: lastCode("email") }))).status).toBe(200);
+      // The squatted address is no longer on any account.
+      expect(await db.user.count({ where: { email: "victim@example.com" } })).toBe(0);
+
+      // The owner's proof finds no account for their address and creates their own, separate one.
+      as();
+      const sent = await requestRoute(json("/api/auth/otp/request", { mode: "register", channel: "email", identifier: "victim@example.com" }));
+      const { challengeId: ownerChallenge } = (await sent.json()) as { challengeId: string };
+      const created = await webVerify(json("/api/auth/otp/verify", { challengeId: ownerChallenge, channel: "email", identifier: "victim@example.com", code: lastCode("email"), displayName: "Real Owner" }));
+      expect(created.status).toBe(200);
+      const owner = await db.user.findUniqueOrThrow({ where: { email: "victim@example.com" } });
+      expect(owner.id).not.toBe(account.id);
+      expect(owner.passwordHash).toBeNull();
+      // Nothing the attacker holds reaches the owner's account.
+      expect(await passwordWorks("victim@example.com", ATTACKER_PASSWORD)).toBe(false);
+      expect(await db.session.count({ where: { userId: owner.id } })).toBe(1);
+      as({ bearer: token });
+      const whoami = (await (await profile()).json()) as { id: string };
+      expect(whoami.id).toBe(account.id);
+    });
+
     it("a password sign-in racing the owner's proof can't leave the attacker a session", async () => {
       const { account } = await attackerPreRegisters("victim@example.com");
       // The attacker's password was checked just before the owner's proof landed…
       const checked = await db.user.findUniqueOrThrow({ where: { id: account.id } });
       await ownerProvesEmailWithCode("victim@example.com");
       // …so issuing the session afterwards, against the old password, is refused.
-      await expect(createSessionRecord(account.id, undefined, { passwordHash: checked.passwordHash! })).rejects.toMatchObject({ code: "INVALID_CREDENTIALS", status: 401 });
+      await expect(createSessionRecord(account.id, undefined, { account: accountState(checked) })).rejects.toMatchObject({ code: "INVALID_CREDENTIALS", status: 401 });
       expect(await db.session.count({ where: { userId: account.id } })).toBe(1);
     });
 
@@ -440,6 +549,40 @@ describe("account ownership verification (security batch 1)", () => {
       expect(taken.status).toBe(free.status);
       const shape = (value: Record<string, unknown>) => Object.keys(value).sort();
       expect(shape((await taken.json()) as Record<string, unknown>)).toEqual(shape((await free.json()) as Record<string, unknown>));
+    });
+
+    it.each([
+      ["web", async (email: string, password: string) => (await webLogin(json("/api/auth/login", { email, password }))).status],
+      ["mobile", async (email: string, password: string) => (await mobilePasswordSignIn(json("/api/auth/mobile/session", { email, password }))).status],
+    ] as const)("a %s password sign-in with the OLD email racing an email change creates no session", async (_client, signIn) => {
+      const { user, token } = await verifiedPasswordUser();
+      const { reached, release } = armVerifyGate();
+      as();
+      // Another client has read the account by its old email and checked the password…
+      const pending = signIn("ama@example.com", OWNER_PASSWORD);
+      await reached;
+      // …while the signed-in owner completes an email change, which signs out other sessions…
+      as({ bearer: token });
+      const started = await changeEmail(json("/api/account/email", { email: "new@example.com", currentPassword: OWNER_PASSWORD }, "PATCH"));
+      const { challengeId } = (await started.json()) as { challengeId: string };
+      as({ bearer: token });
+      expect((await verifyLink(json("/api/account/identifiers/verify", { challengeId, channel: "email", identifier: "new@example.com", code: lastCode("email") }))).status).toBe(200);
+      // …so the stale old-email sign-in is refused and leaves no session.
+      release();
+      expect(await pending).toBe(401);
+      expect(await db.session.count({ where: { userId: user.id } })).toBe(1);
+      expect(await sessionWorks(token)).toBe(true);
+      // The new email signs in; the old one no longer does.
+      expect(await passwordWorks("new@example.com", OWNER_PASSWORD)).toBe(true);
+      expect(await passwordWorks("ama@example.com", OWNER_PASSWORD)).toBe(false);
+    });
+
+    it("repeated sign-ins on an unchanged verified account keep working", async () => {
+      const { user } = await verifiedPasswordUser();
+      for (let i = 0; i < 3; i += 1) expect(await passwordWorks("ama@example.com", OWNER_PASSWORD)).toBe(true);
+      as();
+      expect((await webLogin(json("/api/auth/login", { email: "ama@example.com", password: OWNER_PASSWORD }))).status).toBe(200);
+      expect(await db.session.count({ where: { userId: user.id } })).toBe(5);
     });
 
     it("TEST 10: the code sent to the new address completes the change, verified, and signs out other devices", async () => {
