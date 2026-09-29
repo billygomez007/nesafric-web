@@ -7,6 +7,7 @@ import { StyleSheet } from "react-native";
 import type { CampaignBanner } from "@/api/home";
 import type { PublicListing } from "@/api/types";
 import { CATEGORY_COLLECTIONS, cityCollection, fetchSize, NEWEST, organic, popularCities, TOP_AD_HEADROOM, topAds } from "@/home/discovery/collections";
+import { carouselLayout, slideOffsets } from "@/home/components/featured-ads-carousel";
 import { scrollFeed } from "@/test-utils/feed";
 import { listing } from "@/test-utils/fixtures";
 
@@ -232,12 +233,45 @@ describe("home discovery rules", () => {
 describe("advertising carousel", () => {
   const campaign = (id: string): CampaignBanner => ({ id, placement: "MARKETPLACE_PRIMARY", headline: `Campaign ${id}`, supportingText: null, ctaLabel: null, destinationUrl: "https://developer.example/launch", desktopMediaUrl: null, mobileMediaUrl: `https://cdn.test/${id}.jpg` });
 
-  it("with several campaigns, draws each at 88% so the next one peeks and the carousel is shorter", async () => {
+  it("with several campaigns, shows exactly one full card: no next card peeking", async () => {
     mockApi({ banners: [campaign("c0ffee00-0000-4000-8000-000000000001"), campaign("c0ffee00-0000-4000-8000-000000000002")] });
     renderRouter(APP_DIR, { initialUrl: "/" });
     const artwork = await screen.findByTestId("campaign-artwork-c0ffee00-0000-4000-8000-000000000001");
     const { width, height } = StyleSheet.flatten(artwork.props.style) as { width: number; height: number };
-    expect(width).toBe(Math.round(560 * 0.88));
+    // Same full width as a single campaign (the test screen is wide, so the 560 cap applies).
+    expect(width).toBe(560);
     expect(width / height).toBeCloseTo(2.5, 1);
+  });
+
+  it.each([375, 390, 393, 430])("on a %i pt phone the card keeps its 16 pt gutters and full width", (viewport) => {
+    const { cardWidth, cardHeight, inset, gap, interval } = carouselLayout(viewport);
+    expect([cardWidth, inset, gap, interval]).toEqual([viewport - 32, 16, 16, viewport - 16]);
+    expect(cardWidth / cardHeight).toBeCloseTo(2.5, 1);
+  });
+
+  it.each([600, 768, 834])("on a %i pt screen the card is capped at 560 pt and centred", (viewport) => {
+    const { cardWidth, inset, gap } = carouselLayout(viewport);
+    expect(cardWidth).toBe(560);
+    expect(inset).toBe((viewport - 560) / 2);
+    expect(gap).toBe(inset);
+  });
+
+  it.each([375, 390, 393, 430, 600, 768, 834, 1024])("at %i pt, every snap position shows one whole card and nothing of its neighbours", (viewport) => {
+    const layout = carouselLayout(viewport);
+    const slides = 4;
+    // The scrollable content: inset, cards separated by gaps, inset.
+    const contentWidth = layout.inset * 2 + slides * layout.cardWidth + (slides - 1) * layout.gap;
+    for (let slide = 0; slide < slides; slide += 1) {
+      const scroll = slideOffsets(layout, slide).restingScroll;
+      // Where each card sits on screen at this resting position.
+      const left = (i: number) => slideOffsets(layout, i).itemOffset - scroll;
+      expect(left(slide)).toBe(layout.inset);
+      expect(left(slide) + layout.cardWidth).toBe(viewport - layout.inset);
+      expect(left(slide + 1)).toBeGreaterThanOrEqual(viewport);
+      expect(left(slide - 1) + layout.cardWidth).toBeLessThanOrEqual(0);
+      // The list can actually rest there, the last slide included.
+      expect(scroll).toBeLessThanOrEqual(contentWidth - viewport + 1e-9);
+    }
+    expect(slideOffsets(layout, slides - 1).restingScroll).toBeCloseTo(contentWidth - viewport, 9);
   });
 });

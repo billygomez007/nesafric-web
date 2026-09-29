@@ -9,6 +9,7 @@ import { FeaturedAdsCarousel } from "@/home/components/featured-ads-carousel";
 import { HeroSearch } from "@/home/components/hero-search";
 import { HomePremiumBackground } from "@/home/components/home-premium-background";
 import { HomeHeader } from "@/home/components/home-header";
+import { TrustedCompanies } from "@/home/components/trusted-companies";
 import { HOME_GUTTER, HOME_SECTION_GAP } from "@/home/components/layout";
 import { DiscoveryFeed } from "@/home/discovery/feed";
 import { MarketplaceModeSwitch } from "@/components/marketplace-mode-switch";
@@ -19,9 +20,9 @@ import { colors, spacing } from "@/theme/tokens";
 /**
  * Marketplace home. Under the header, the selector switches between the two NesAfric
  * marketplaces (Properties is the default on every launch):
- * - Properties: heading + search → category chips → advertising carousel, then the discovery
- *   feed (`DiscoveryFeed`): Top Ads, newly listed, cities, category and city collections, trusted
- *   companies partway down, advanced search at the end.
+ * - Properties: heading + search → category chips → advertising carousel → trusted companies,
+ *   then the discovery feed (`DiscoveryFeed`): Top Ads, newly listed, cities, category and city
+ *   collections, advanced search at the end.
  * - Service Providers: heading + service finder → services → providers on NesAfric.
  * Every section is backed by the real public API; nothing here is sample data. The floating
  * "Speak to AI" entry point (property search) sits above the tab bar in a touch-transparent layer.
@@ -73,6 +74,7 @@ export default function HomeScreen() {
                 <HeroSearch />
                 <CategoryChips />
                 <FeaturedAdsCarousel />
+                <TrustedCompanies />
               </View>
             }
           />

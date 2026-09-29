@@ -4,7 +4,6 @@ import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { useListingCollection } from "@/api/queries";
 import { AdvancedSearchCTA } from "@/home/components/advanced-search-cta";
 import { HOME_SECTION_GAP } from "@/home/components/layout";
-import { TrustedCompanies } from "@/home/components/trusted-companies";
 import { colors } from "@/theme/tokens";
 import { CATEGORY_COLLECTIONS, cityCollection, fetchSize, NEWEST, organic, popularCities, topAds, type DiscoveryCollection } from "./collections";
 import { SECTION_SPACING, CitiesSection, CollectionBody, CollectionSection, FeaturedSection, NewestNotice, SectionSkeleton } from "./section";
@@ -16,7 +15,6 @@ type FeedItem =
   | { key: string; type: "featured" }
   | { key: string; type: "newest" }
   | { key: string; type: "cities" }
-  | { key: string; type: "companies" }
   | { key: string; type: "collection"; collection: DiscoveryCollection }
   | { key: string; type: "advanced" };
 
@@ -43,7 +41,6 @@ export function DiscoveryFeed({ header, refreshing, onRefresh, bottomInset }: { 
       { key: "newest", type: "newest" },
       { key: "cities", type: "cities" },
       collection(first),
-      { key: "companies", type: "companies" },
       collection(second),
       ...(topCity ? [collection(cityCollection(topCity))] : []),
       ...rest.map(collection),
@@ -64,8 +61,6 @@ export function DiscoveryFeed({ header, refreshing, onRefresh, bottomInset }: { 
       }
       case "cities":
         return <CitiesSection tiles={cities} />;
-      case "companies":
-        return <View style={styles.block}><TrustedCompanies /></View>;
       case "collection":
         return <CollectionSection collection={item.collection} />;
       case "advanced":
