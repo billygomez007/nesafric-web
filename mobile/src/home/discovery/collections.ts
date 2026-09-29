@@ -32,7 +32,10 @@ export type DiscoveryCollection = {
   seeAll?: SearchFilters;
 };
 
-/** The newest listings: the one query Home always makes; the hero, the city tiles and "Newly listed" all read it. */
+/**
+ * The newest listings: the one query Home always makes. Featured (its Top Ads), "Newly listed" and
+ * the city tiles (its organic listings) all read it.
+ */
 export const NEWEST: DiscoveryCollection = { key: "newest", title: "Newly listed", subtitle: "Fresh on NesAfric this week and before", layout: "rail", filters: {}, size: 20, minItems: 1, seeAll: {} };
 
 /**
@@ -55,14 +58,34 @@ export function cityCollection(city: string): DiscoveryCollection {
   return { key: `city:${city.toLowerCase()}`, title: `Homes in ${city}`, layout: "rail", filters, size: 8, minItems: 2, seeAll: filters };
 }
 
+/**
+ * The server pins every active Top Ad (up to 12, `MAX_ACTIVE_TOP_ADS` on the web) to the top of any
+ * listings page. Organic shelves drop them, so each query asks for this many extra rows to still
+ * fill its shelf with ordinary listings.
+ */
+export const TOP_AD_HEADROOM = 12;
+
+/** Rows a collection requests: its shelf size plus room for the Top Ads it will drop (API max 50). */
+export function fetchSize(collection: Pick<DiscoveryCollection, "size">) {
+  return Math.min(collection.size + TOP_AD_HEADROOM, 50);
+}
+
 /** Eligible listings only (the API already filters; this is a second guard), capped. */
-export function eligible(items: PublicListing[], max: number, exclude: ReadonlySet<string> = new Set()) {
-  return items.filter((item) => isVerified(item) && !exclude.has(item.id)).slice(0, max);
+export function eligible(items: PublicListing[], max: number) {
+  return items.filter(isVerified).slice(0, max);
+}
+
+/**
+ * Listings for an organic shelf: eligible and never a Top Ad. A Top Ad is a paid placement and is
+ * shown only in Featured, where it is labelled; no other card says "Top Ad", so none may appear there.
+ */
+export function organic(items: PublicListing[], max: number) {
+  return items.filter((item) => isVerified(item) && item.isTopAd !== true).slice(0, max);
 }
 
 /** Admin-pinned Top Ads in the newest results: the only real "featured" signal NesAfric has. */
-export function topAds(items: PublicListing[]) {
-  return eligible(items, 3).filter((item) => item.isTopAd === true);
+export function topAds(items: PublicListing[], max = 3) {
+  return items.filter((item) => isVerified(item) && item.isTopAd === true).slice(0, max);
 }
 
 export type CityTile = { city: string; listing: PublicListing };
@@ -73,7 +96,8 @@ export type CityTile = { city: string; listing: PublicListing };
  */
 export function popularCities(items: PublicListing[], min = 2, max = 6): CityTile[] {
   const byCity = new Map<string, { city: string; count: number; listing: PublicListing }>();
-  for (const item of eligible(items, items.length)) {
+  // Organic listings only: a paid placement neither counts towards a city nor becomes its photo.
+  for (const item of organic(items, items.length)) {
     const city = item.location.city?.trim();
     if (!city || item.location.countryCode !== DEFAULT_COUNTRY) continue;
     const key = city.toLowerCase();

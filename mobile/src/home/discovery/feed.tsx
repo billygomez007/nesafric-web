@@ -6,7 +6,7 @@ import { AdvancedSearchCTA } from "@/home/components/advanced-search-cta";
 import { HOME_SECTION_GAP } from "@/home/components/layout";
 import { TrustedCompanies } from "@/home/components/trusted-companies";
 import { colors } from "@/theme/tokens";
-import { CATEGORY_COLLECTIONS, cityCollection, eligible, NEWEST, popularCities, topAds, type DiscoveryCollection } from "./collections";
+import { CATEGORY_COLLECTIONS, cityCollection, fetchSize, NEWEST, organic, popularCities, topAds, type DiscoveryCollection } from "./collections";
 import { SECTION_SPACING, CitiesSection, CollectionBody, CollectionSection, FeaturedSection, NewestNotice, SectionSkeleton } from "./section";
 
 /** How many listings "Newly listed" shows; the rest of the newest page feeds the city tiles. */
@@ -29,7 +29,7 @@ type FeedItem =
  * Each query is cached and de-duplicated by React Query; pull-to-refresh invalidates them all.
  */
 export function DiscoveryFeed({ header, refreshing, onRefresh, bottomInset }: { header: ReactElement; refreshing: boolean; onRefresh: () => void; bottomInset: number }) {
-  const newest = useListingCollection(NEWEST.key, NEWEST.filters, NEWEST.size);
+  const newest = useListingCollection(NEWEST.key, NEWEST.filters, fetchSize(NEWEST));
   const all = useMemo(() => newest.data?.items ?? [], [newest.data]);
   const featured = useMemo(() => topAds(all), [all]);
   const cities = useMemo(() => popularCities(all), [all]);
@@ -51,15 +51,14 @@ export function DiscoveryFeed({ header, refreshing, onRefresh, bottomInset }: { 
     ];
   }, [cities]);
 
-  const featuredIds = useMemo(() => new Set(featured.map((listing) => listing.id)), [featured]);
-
   function renderItem({ item }: { item: FeedItem }) {
     switch (item.type) {
       case "featured":
         return <FeaturedSection items={featured} />;
       case "newest": {
         if (newest.isPending) return <SectionSkeleton layout="rail" label="Loading properties" />;
-        const shown = eligible(all, NEWEST_SHOWN, featuredIds);
+        // Organic only: Top Ads appear in Featured, labelled, and nowhere else.
+        const shown = organic(all, NEWEST_SHOWN);
         if (!shown.length) return <NewestNotice failed={newest.isError} onRetry={() => void newest.refetch()} />;
         return <CollectionBody collection={NEWEST} items={shown} />;
       }

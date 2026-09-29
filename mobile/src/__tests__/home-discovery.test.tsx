@@ -6,7 +6,7 @@ import { StyleSheet } from "react-native";
 
 import type { CampaignBanner } from "@/api/home";
 import type { PublicListing } from "@/api/types";
-import { CATEGORY_COLLECTIONS, cityCollection, eligible, NEWEST, popularCities, topAds } from "@/home/discovery/collections";
+import { CATEGORY_COLLECTIONS, cityCollection, fetchSize, NEWEST, organic, popularCities, TOP_AD_HEADROOM, topAds } from "@/home/discovery/collections";
 import { scrollFeed } from "@/test-utils/feed";
 import { listing } from "@/test-utils/fixtures";
 
@@ -54,7 +54,9 @@ function mockApi({ inventory = INVENTORY, banners = [] as CampaignBanner[], fail
     if (url.pathname === "/api/public/homepage-companies") return json(200, { items: [] });
     if (url.pathname === "/api/public/listings") {
       if (failCategory && p.get("category") === failCategory) return json(500, { error: { code: "INTERNAL", message: "Down" } });
-      const items = inventory
+      // Like the server: every active Top Ad is pinned first, then the page is cut to pageSize.
+      const items = [...inventory]
+        .sort((a, b) => Number(b.isTopAd === true) - Number(a.isTopAd === true))
         .filter((item) => (!p.get("category") || p.get("category") === item.category) && (!p.get("listingType") || p.get("listingType") === item.listingType) && (!p.get("city") || p.get("city") === item.location.city))
         .slice(0, Number(p.get("pageSize") ?? 20));
       return json(200, { items, pagination: { page: 1, pageSize: items.length, total: items.length, totalPages: 1 } });
@@ -76,7 +78,7 @@ describe("home discovery feed", () => {
     // Nothing further down has been requested yet.
     expect(listingQueries().some((params) => params.get("category") === "COMMERCIAL")).toBe(false);
     // Every request is bounded.
-    expect(listingQueries().every((params) => Number(params.get("pageSize")) <= NEWEST.size)).toBe(true);
+    expect(listingQueries().every((params) => Number(params.get("pageSize")) <= fetchSize(NEWEST))).toBe(true);
 
     await scrollFeed();
     await waitFor(() => expect(listingQueries().some((params) => params.get("category") === "COMMERCIAL")).toBe(true));
@@ -164,6 +166,41 @@ describe("home discovery feed", () => {
   });
 });
 
+describe("Top Ads stay in Featured", () => {
+  // Worst case: all 12 allowed Top Ads active, matching the Newly listed, Apartments, For rent and
+  // Accra queries, and pinned ahead of every organic listing by the server.
+  const paid = Array.from({ length: 12 }, (_, i) => home({ title: `Paid ad ${i + 1}`, category: "APARTMENT", isTopAd: true }));
+
+  it("labels at most three Top Ads in Featured and shows none on any organic shelf, which still fill with organic listings", async () => {
+    mockApi({ inventory: [...paid, ...INVENTORY.filter((item) => item !== topAd)] });
+    renderRouter(APP_DIR, { initialUrl: "/" });
+    const featured = await screen.findByTestId("collection-featured");
+    expect(within(featured).getAllByText("Top Ad")).toHaveLength(3);
+    // Every card elsewhere is labelled by its title; a paid one would start with "Paid ad".
+    const leaked = () => expect(screen.queryAllByLabelText(/^Paid ad \d+/)).toHaveLength(0);
+    leaked();
+
+    // Organic listings still fill the shelves the Top Ads were pinned above.
+    const newest = await screen.findByTestId("collection-newest");
+    expect(within(newest).getByLabelText(/^Cantonments Apartment/)).toBeTruthy();
+    const apartments = await screen.findByTestId("collection-apartments");
+    expect(within(apartments).getByLabelText(/^Cantonments Apartment/)).toBeTruthy();
+    expect(within(apartments).getByLabelText(/^Osu Apartment/)).toBeTruthy();
+
+    // Checked at every step down the feed, as sections mount and unmount.
+    const seen = new Set<string>();
+    await scrollFeed({
+      afterEachRound: () => {
+        leaked();
+        for (const node of screen.queryAllByTestId(/^collection-/)) seen.add(String(node.props.testID));
+      },
+    });
+    for (const key of ["collection-apartments", "collection-city:accra", "collection-houses", "collection-commercial"]) expect(seen).toContain(key);
+    // Each organic request asked for enough rows to get past every pinned Top Ad.
+    expect(listingQueries().every((params) => Number(params.get("pageSize")) >= TOP_AD_HEADROOM + 4)).toBe(true);
+  });
+});
+
 describe("home discovery rules", () => {
   it("cities need at least two listings, most first, Ghana only", () => {
     const tiles = popularCities([home({ city: "Tema" }), home({ city: "Accra" }), home({ city: "Accra" }), home({ city: "Tema" }), home({ city: "Accra" }), home({ city: "Ho" }), home({ city: "Lomé", location: { ...listing().location, countryCode: "TG", city: "Lomé" } })]);
@@ -177,10 +214,18 @@ describe("home discovery rules", () => {
   it("every collection is a bounded query with a See all into Search", () => {
     for (const collection of [NEWEST, ...CATEGORY_COLLECTIONS, cityCollection("Accra")]) {
       expect(collection.size).toBeLessThanOrEqual(20);
+      // Room for every possible Top Ad on top of the shelf, within the API's 50-row page.
+      expect(fetchSize(collection)).toBe(Math.min(collection.size + TOP_AD_HEADROOM, 50));
       expect(collection.seeAll).toBeDefined();
     }
     expect(cityCollection("Accra").filters).toEqual({ city: "Accra", country: "GH" });
-    expect(eligible([topAd, apartment1], 5, new Set([topAd.id]))).toEqual([apartment1]);
+  });
+
+  it("organic shelves never take a Top Ad, and cities ignore them", () => {
+    const paid = Array.from({ length: 5 }, () => home({ isTopAd: true, city: "Takoradi" }));
+    expect(organic([...paid, apartment1, topAd], 10)).toEqual([apartment1]);
+    expect(topAds([...paid, apartment1])).toHaveLength(3);
+    expect(popularCities([...paid, apartment1]).map((tile) => tile.city)).toEqual([]);
   });
 });
 

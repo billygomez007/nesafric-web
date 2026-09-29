@@ -8,7 +8,7 @@ import { SectionHeading } from "@/home/components/section-heading";
 import { openSearch } from "@/marketplace/navigation";
 import { colors, fonts, radii } from "@/theme/tokens";
 import { CityTileCard, CompactRow, FeaturedCard, GridCard, RailCard } from "./cards";
-import { eligible, type CityTile, type DiscoveryCollection } from "./collections";
+import { fetchSize, organic, type CityTile, type DiscoveryCollection } from "./collections";
 
 const GAP = 12;
 /** Space under every section; a section that renders nothing takes no space at all. */
@@ -80,13 +80,14 @@ export function CollectionBody({ collection, items }: { collection: DiscoveryCol
 
 /**
  * A collection that fetches itself. It is mounted only when the feed is about to show it, so lower
- * collections cost nothing until someone scrolls towards them. With too few listings, or if the
- * request fails, the whole section is left out: Home never shows an empty or broken shelf.
+ * collections cost nothing until someone scrolls towards them. With too few organic listings, or if
+ * the request fails, the whole section is left out: Home never shows an empty or broken shelf.
  */
 export function CollectionSection({ collection }: { collection: DiscoveryCollection }) {
-  const query = useListingCollection(collection.key, collection.filters, collection.size);
+  const query = useListingCollection(collection.key, collection.filters, fetchSize(collection));
   if (query.isPending) return <SectionSkeleton layout={collection.layout} label={`Loading ${collection.title}`} />;
-  const items = eligible(query.data?.items ?? [], collection.size);
+  // Organic only: the API pins Top Ads first, and these cards carry no "Top Ad" label.
+  const items = organic(query.data?.items ?? [], collection.size);
   if (items.length < collection.minItems) return null;
   return <CollectionBody collection={collection} items={items} />;
 }

@@ -20,13 +20,30 @@ function json(status: number, body: unknown) {
   return { status, body };
 }
 
+function savedProvider(overrides: { displayName: string; contactPhone?: string | null }) {
+  return {
+    id: PROVIDER_ID,
+    type: "INDIVIDUAL",
+    contactEmail: null,
+    contactPhone: "0241234567",
+    categories: [{ category: { id: "c1", name: "Plumbing" } }],
+    serviceAreas: [{ id: "a1", name: "Accra, GH" }],
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   calls = [];
   push.mockReset();
   // Production today: no document requirements are configured, so nothing is uploaded.
   routes = {
     "GET /api/providers/categories": json(200, [{ id: "c1", key: "plumbing", name: "Plumbing" }]),
-    "POST /api/providers": json(201, { id: PROVIDER_ID }),
+    "POST /api/providers": json(201, savedProvider({ displayName: "Kofi Plumbing" })),
+    [`PATCH /api/providers/${PROVIDER_ID}`]: () => {
+      // Like the server: the update echoes what it saved (here with a server-side normalisation).
+      const body = calls.at(-1)!.body as { displayName: string; contactPhone: string | null };
+      return json(200, savedProvider({ displayName: `${body.displayName} (saved)`, contactPhone: body.contactPhone }));
+    },
     [`PATCH /api/marketplace/providers/${PROVIDER_ID}/profile`]: json(200, {}),
     "GET /api/public/providers/document-requirements": json(200, []),
     [`POST /api/providers/${PROVIDER_ID}/verification/consent`]: json(201, { id: "consent" }),
@@ -99,9 +116,68 @@ describe("service provider onboarding → workspace", () => {
     expect(posts("/api/providers")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Create profile & continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save & continue" }));
     await screen.findByText("Mandatory identity verification");
     expect(posts("/api/providers")).toHaveLength(1);
+  });
+
+  it("edits made after going Back are saved to the existing provider, and the review shows what was saved", async () => {
+    await fillToServiceAreas();
+    fireEvent.click(screen.getByRole("button", { name: "Create profile & continue" }));
+    await screen.findByText("Mandatory identity verification");
+
+    // Back to business information, change the name and phone.
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "← Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "← Back" }));
+    fireEvent.change(await screen.findByPlaceholderText("e.g. Kofi Mensah Electrical"), { target: { value: "Kofi Plumbing & Sons" } });
+    fireEvent.change(screen.getByLabelText(/Contact phone/), { target: { value: "0209999999" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save & continue" }));
+    await screen.findByText("Mandatory identity verification");
+
+    // One provider; the edit went through the owner-checked update route.
+    expect(posts("/api/providers")).toHaveLength(1);
+    const patches = calls.filter((call) => call.method === "PATCH" && call.url === `/api/providers/${PROVIDER_ID}`);
+    expect(patches).toHaveLength(1);
+    expect(patches[0].body).toMatchObject({ displayName: "Kofi Plumbing & Sons", contactPhone: "0209999999", categoryIds: ["c1"], serviceAreas: [{ areaType: "SERVICE_AREA", name: "Accra, GH" }], legalName: null, contactEmail: null });
+
+    await continueTo("Business & credential documents");
+    await continueTo("Portfolio");
+    await continueTo("Review & consent");
+    const review = screen.getByTestId("provider-review-saved");
+    // The server's saved value, not the form's local text.
+    expect(review.textContent).toContain("Kofi Plumbing & Sons (saved)");
+    expect(review.textContent).toContain("0209999999");
+    expect(review.textContent).toContain("Plumbing");
+  });
+
+  it("locks the account type once the profile exists", async () => {
+    await fillToServiceAreas();
+    fireEvent.click(screen.getByRole("button", { name: "Create profile & continue" }));
+    await screen.findByText("Mandatory identity verification");
+    for (let i = 0; i < 4; i += 1) fireEvent.click(await screen.findByRole("button", { name: "← Back" }));
+    expect(await screen.findByTestId("provider-type-locked")).toBeTruthy();
+    const company = screen.getByRole("button", { name: /Company \/ business/ }) as HTMLButtonElement;
+    expect(company.disabled).toBe(true);
+    fireEvent.click(company);
+    expect((screen.getByRole("button", { name: /Individual \/ artisan/ }) as HTMLButtonElement).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("a failed save keeps the person on the step, says why and keeps the workspace reachable", async () => {
+    await fillToServiceAreas();
+    fireEvent.click(screen.getByRole("button", { name: "Create profile & continue" }));
+    await screen.findByText("Mandatory identity verification");
+    routes[`PATCH /api/providers/${PROVIDER_ID}`] = json(403, { error: { code: "FORBIDDEN", message: "You do not have permission to perform this action." } });
+    fireEvent.click(screen.getByRole("button", { name: "← Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save & continue" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Your profile is saved as it was");
+    expect(screen.queryByText("Mandatory identity verification")).toBeNull();
+    expect(posts("/api/providers")).toHaveLength(1);
+    fireEvent.click(screen.getByTestId("provider-open-workspace"));
+    expect(push).toHaveBeenCalledWith(`/providers/${PROVIDER_ID}`);
   });
 
   it("an account that already owns a provider is offered its workspace, not a dead end", async () => {
@@ -109,6 +185,12 @@ describe("service provider onboarding → workspace", () => {
     await fillToServiceAreas();
     fireEvent.click(screen.getByRole("button", { name: "Create profile & continue" }));
     expect((await screen.findByRole("alert")).textContent).toContain("You already have a service provider profile.");
+    // Continuing again never overwrites that earlier profile with this form, nor creates another.
+    fireEvent.click(screen.getByRole("button", { name: "Save & continue" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Open your workspace to edit it."));
+    expect(calls.some((call) => call.method === "PATCH" && call.url === `/api/providers/${PROVIDER_ID}`)).toBe(false);
+    expect(posts("/api/providers")).toHaveLength(1);
+    expect(screen.queryByText("Mandatory identity verification")).toBeNull();
     fireEvent.click(screen.getByTestId("provider-open-workspace"));
     expect(push).toHaveBeenCalledWith(`/providers/${PROVIDER_ID}`);
   });
