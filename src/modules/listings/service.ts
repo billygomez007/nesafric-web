@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { ensureListingCover, lockListingMedia } from "./cover";
+import { isBookableCategory } from "@/lib/listing-categories";
 import { listingReadinessProblems } from "./readiness";
 import {
   ListingStatus,
@@ -45,7 +46,7 @@ import {
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 
-async function requirePropertyOsOrMarketplaceAccess(userId: string, organisationId: string, permission: string, minRole: "AGENT" | "ADMIN" = "AGENT") {
+export async function requirePropertyOsOrMarketplaceAccess(userId: string, organisationId: string, permission: string, minRole: "AGENT" | "ADMIN" = "AGENT") {
   const professional = await db.marketplaceProfessional.findUnique({ where: { backingOrganisationId: organisationId }, select: { id: true } });
   if (professional) return requireMarketplaceRole(userId, professional.id, minRole);
   return requirePermission(userId, organisationId, permission);
@@ -90,7 +91,7 @@ const LISTED_BY_LABEL: Record<string, string> = {
   THIRD_PARTY_AUTHORIZED: "Agent",
 };
 
-async function record(
+export async function record(
   tx: Tx,
   organisationId: string,
   actorUserId: string | undefined,
@@ -525,7 +526,7 @@ export async function listMarketplaceProfessionalListings(userId: string, market
  * Enquiries and viewings are then scoped by the listing's `marketplaceProfessionalId`, never by a
  * client-supplied organisation.
  */
-async function requireProfessionalInboxAccess(userId: string, marketplaceProfessionalId: string) {
+export async function requireProfessionalInboxAccess(userId: string, marketplaceProfessionalId: string) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);
   const professional = await db.marketplaceProfessional.findFirst({ where: { id: marketplaceProfessionalId, archivedAt: null }, select: { id: true } });
   if (!professional) throw notFound();
@@ -747,6 +748,11 @@ function editableListingInput(listing: Prisma.ListingGetPayload<{ include: typeo
     bedrooms: listing.bedrooms,
     bathrooms: listing.bathrooms?.toNumber() ?? null,
     sizeSqm: listing.sizeSqm?.toNumber() ?? null,
+    maxGuests: listing.maxGuests,
+    minimumNights: listing.minimumNights,
+    checkInTime: listing.checkInTime,
+    checkOutTime: listing.checkOutTime,
+    houseRules: listing.houseRules,
     countryCode: listing.countryCode,
     region: listing.region,
     city: listing.city,
@@ -1292,6 +1298,17 @@ function publicProjection(listing: Prisma.ListingGetPayload<{ include: typeof pu
       bathrooms: listing.bathrooms?.toString() ?? null,
       sizeSqm: listing.sizeSqm?.toString() ?? null,
     },
+    /** Hotels and short stays: guests request a booking instead of sending an enquiry. */
+    bookable: isBookableCategory(listing.category),
+    stay: isBookableCategory(listing.category)
+      ? {
+          maxGuests: listing.maxGuests,
+          minimumNights: listing.minimumNights,
+          checkInTime: listing.checkInTime,
+          checkOutTime: listing.checkOutTime,
+          houseRules: listing.houseRules,
+        }
+      : null,
     location: {
       countryCode: listing.countryCode,
       region: listing.region,

@@ -238,6 +238,7 @@ export function MarketplaceProShell({
     { href: `${base}/profile`, label: "Business Profile", icon: "profile" },
     { href: `${base}/listings`, label: "Listings", icon: "listing" },
     { href: `${base}/leads`, label: "Leads", icon: "leads" },
+    { href: `${base}/bookings`, label: "Bookings", icon: "leads" },
     {
       href: `${base}/developments`,
       label: "Developments",

@@ -30,7 +30,20 @@ export type AccountEmailTemplate =
   | "PROVIDER_VERIFICATION_REJECTED"
   | "MARKETPLACE_LEAD_CREATED"
   | "VIEWING_REQUEST_CREATED"
-  | "TEAM_INVITATION";
+  | "TEAM_INVITATION"
+  | "ACCOMMODATION_BOOKING_REQUESTED"
+  | "ACCOMMODATION_BOOKING_RECEIPT"
+  | "ACCOMMODATION_BOOKING_CONFIRMED"
+  | "ACCOMMODATION_BOOKING_DECLINED"
+  | "ACCOMMODATION_BOOKING_CANCELLED";
+
+/** Booking emails to the guest go to the address they gave; a guest needn't have an account. */
+const GUEST_BOOKING_TEMPLATES = new Set<AccountEmailTemplate>([
+  "ACCOMMODATION_BOOKING_RECEIPT",
+  "ACCOMMODATION_BOOKING_CONFIRMED",
+  "ACCOMMODATION_BOOKING_DECLINED",
+  "ACCOMMODATION_BOOKING_CANCELLED",
+]);
 
 export type AccountEmailPayload = {
   userId: string;
@@ -50,6 +63,18 @@ export type AccountEmailPayload = {
   leadId?: string;
   viewingRequestId?: string;
   requestedTimeLabel?: string;
+
+  /** Accommodation booking templates only. */
+  bookingId?: string;
+  bookingReference?: string;
+  checkInLabel?: string;
+  checkOutLabel?: string;
+  nights?: number;
+  guestsLabel?: string;
+  guestName?: string;
+  guestEmail?: string;
+  guestPhone?: string;
+  specialRequest?: string;
 
   /** Team-invitation fields. Invitation recipients may not have a NesAfric user account yet,
    * therefore invitation delivery can target a verified invitation email directly instead of
@@ -151,6 +176,53 @@ export async function enqueueViewingRequestNotification(recipientUserId: string,
   });
 }
 
+export type BookingEmailDetails = {
+  bookingId: string;
+  bookingReference: string;
+  listingTitle: string;
+  checkInLabel: string;
+  checkOutLabel: string;
+  nights: number;
+  guestsLabel: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone?: string;
+  specialRequest?: string;
+};
+
+/** New booking request → the listing's operator (same recipient rule as a lead: the listing's creator). */
+export async function enqueueBookingRequestedEmail(recipientUserId: string, details: BookingEmailDetails) {
+  const dedupeKey = `account-email:ACCOMMODATION_BOOKING_REQUESTED:${details.bookingId}`;
+  return enqueueJob({
+    type: "account-email",
+    idempotencyKey: dedupeKey,
+    payload: { userId: recipientUserId, template: "ACCOMMODATION_BOOKING_REQUESTED", dedupeKey, ...details } satisfies AccountEmailPayload,
+  });
+}
+
+/** Receipt, confirmation, decline or cancellation → the guest's own address. */
+export async function enqueueGuestBookingEmail(template: "ACCOMMODATION_BOOKING_RECEIPT" | "ACCOMMODATION_BOOKING_CONFIRMED" | "ACCOMMODATION_BOOKING_DECLINED" | "ACCOMMODATION_BOOKING_CANCELLED", details: BookingEmailDetails) {
+  const dedupeKey = `account-email:${template}:${details.bookingId}`;
+  return enqueueJob({
+    type: "account-email",
+    idempotencyKey: dedupeKey,
+    payload: {
+      userId: "",
+      template,
+      dedupeKey,
+      recipientEmail: details.guestEmail,
+      recipientDisplayName: details.guestName,
+      bookingId: details.bookingId,
+      bookingReference: details.bookingReference,
+      listingTitle: details.listingTitle,
+      checkInLabel: details.checkInLabel,
+      checkOutLabel: details.checkOutLabel,
+      nights: details.nights,
+      guestsLabel: details.guestsLabel,
+    } satisfies AccountEmailPayload,
+  });
+}
+
 export async function enqueueTeamInvitationEmail(input: {
   invitationId: string;
   recipientEmail: string;
@@ -205,6 +277,16 @@ export function contentFor(
     | "inviterName"
     | "roleLabel"
     | "invitationExpiresAt"
+    | "bookingId"
+    | "bookingReference"
+    | "checkInLabel"
+    | "checkOutLabel"
+    | "nights"
+    | "guestsLabel"
+    | "guestName"
+    | "guestEmail"
+    | "guestPhone"
+    | "specialRequest"
   > & {
     invitationToken?: string;
   },
@@ -408,6 +490,58 @@ export function contentFor(
         },
       };
     }
+    case "ACCOMMODATION_BOOKING_REQUESTED":
+      return {
+        subject: `New booking request — ${lead?.listingTitle ?? "your listing"}`,
+        sender: "notifications",
+        content: {
+          heading: "New booking request",
+          greeting: `Hi ${displayName},`,
+          paragraphs: [
+            `${lead?.guestName ?? "A guest"} has asked to stay at ${lead?.listingTitle ? `"${lead.listingTitle}"` : "your listing"}. Confirm or decline the request in NesAfric.`,
+          ],
+          details: [
+            { label: "Reference", value: lead?.bookingReference ?? "—" },
+            { label: "Guest", value: lead?.guestName ?? "—" },
+            { label: "Check-in", value: lead?.checkInLabel ?? "—" },
+            { label: "Check-out", value: lead?.checkOutLabel ?? "—" },
+            { label: "Nights", value: String(lead?.nights ?? "—") },
+            { label: "Guests", value: lead?.guestsLabel ?? "—" },
+            ...(lead?.guestEmail ? [{ label: "Email", value: lead.guestEmail }] : []),
+            ...(lead?.guestPhone ? [{ label: "Phone", value: lead.guestPhone }] : []),
+            ...(lead?.specialRequest ? [{ label: "Special requests", value: lead.specialRequest }] : []),
+          ],
+          cta: { label: "View the booking", path: "/leasing/bookings" },
+        },
+      };
+    case "ACCOMMODATION_BOOKING_RECEIPT":
+    case "ACCOMMODATION_BOOKING_CONFIRMED":
+    case "ACCOMMODATION_BOOKING_DECLINED":
+    case "ACCOMMODATION_BOOKING_CANCELLED": {
+      const place = lead?.listingTitle ?? "the property";
+      const copy = {
+        ACCOMMODATION_BOOKING_RECEIPT: { subject: `Booking request sent — ${place}`, heading: "Booking request sent", text: `We've sent your booking request to ${place}. It isn't confirmed yet: the property will confirm or decline it, and we'll email you when they do.` },
+        ACCOMMODATION_BOOKING_CONFIRMED: { subject: `Booking confirmed — ${place}`, heading: "Your booking is confirmed", text: `${place} has confirmed your booking request.` },
+        ACCOMMODATION_BOOKING_DECLINED: { subject: `Booking request declined — ${place}`, heading: "Booking request declined", text: `${place} couldn't accept your booking request for these dates.` },
+        ACCOMMODATION_BOOKING_CANCELLED: { subject: `Booking cancelled — ${place}`, heading: "Booking cancelled", text: `${place} has cancelled this booking.` },
+      }[template];
+      return {
+        subject: copy.subject,
+        sender: "notifications",
+        content: {
+          heading: copy.heading,
+          greeting: `Hi ${displayName},`,
+          paragraphs: [copy.text],
+          details: [
+            { label: "Reference", value: lead?.bookingReference ?? "—" },
+            { label: "Property", value: place },
+            { label: "Check-in", value: lead?.checkInLabel ?? "—" },
+            { label: "Check-out", value: lead?.checkOutLabel ?? "—" },
+            { label: "Guests", value: lead?.guestsLabel ?? "—" },
+          ],
+        },
+      };
+    }
     case "VIEWING_REQUEST_CREATED":
       return {
         subject: `New viewing request on ${BRAND.name}`,
@@ -430,25 +564,27 @@ export function contentFor(
 
 export async function sendAccountEmail(payload: AccountEmailPayload) {
   const invitationDelivery = payload.template === "TEAM_INVITATION";
+  // Sent to an address in the payload rather than to an account: invitations and guest booking emails.
+  const directDelivery = invitationDelivery || GUEST_BOOKING_TEMPLATES.has(payload.template);
 
-  const user = invitationDelivery || !payload.userId
+  const user = directDelivery || !payload.userId
     ? null
     : await db.user.findUnique({
         where: { id: payload.userId },
         select: { email: true, displayName: true },
       });
 
-  if (!invitationDelivery && !user) {
+  if (!directDelivery && !user) {
     return; // Account no longer exists between enqueue and processing — nothing to send.
   }
 
-  const recipientEmail = invitationDelivery ? payload.recipientEmail : user?.email;
-  const displayName = invitationDelivery
+  const recipientEmail = directDelivery ? payload.recipientEmail : user?.email;
+  const displayName = directDelivery
     ? payload.recipientDisplayName ?? "there"
     : user?.displayName ?? "there";
 
   if (!recipientEmail) {
-    if (!invitationDelivery) {
+    if (!directDelivery) {
       // A phone-only account has no email yet: nothing to send, and nothing to retry.
       console.log(JSON.stringify({ event: "account-email.skipped", template: payload.template, reason: "no-email-on-account" }));
       return;

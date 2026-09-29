@@ -28,6 +28,21 @@ const QUICK_LINKS = [
     tone: "border-market-commercial/45 bg-market-commercial-tint text-market-commercial hover:border-market-commercial hover:bg-market-commercial-tint",
   },
   {
+    label: "Hotels",
+    href: "/marketplace/properties?category=HOTEL",
+    tone: "border-market-rent/45 bg-market-rent-tint text-market-rent hover:border-market-rent hover:bg-market-rent-tint",
+  },
+  {
+    label: "Short stays",
+    href: "/marketplace/properties?category=SHORT_STAY",
+    tone: "border-market-rent/45 bg-market-rent-tint text-market-rent hover:border-market-rent hover:bg-market-rent-tint",
+  },
+  {
+    label: "Warehouses",
+    href: "/marketplace/properties?category=WAREHOUSE",
+    tone: "border-market-commercial/45 bg-market-commercial-tint text-market-commercial hover:border-market-commercial hover:bg-market-commercial-tint",
+  },
+  {
     label: "Houses",
     href: "/marketplace/properties?category=HOUSE",
     tone: "border-market-verified/35 bg-market-verified-tint text-market-verified hover:border-market-verified",

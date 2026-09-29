@@ -22,7 +22,7 @@ import { ipRateLimitKey, resolveClientIdentity } from "./client-ip";
  * Vercel a change takes effect on the next deployment (redeploy; no code change needed).
  */
 
-export type PublicWriteKind = "enquiry" | "viewing";
+export type PublicWriteKind = "enquiry" | "viewing" | "booking";
 
 type Rule = { id: string; scope: "ip" | "contact" | "ip-listing" | "listing" | "lead"; windowSeconds: number; limit: number };
 
@@ -43,6 +43,16 @@ export const DEFAULT_PUBLIC_WRITE_RULES: Record<PublicWriteKind, Rule[]> = {
     { id: "viewing.ip.10m", scope: "ip", windowSeconds: 10 * MINUTE, limit: 30 },
     { id: "viewing.lead.day", scope: "lead", windowSeconds: DAY, limit: 3 },
     { id: "viewing.listing.hour", scope: "listing", windowSeconds: HOUR, limit: 60 },
+  ],
+  // Hotel and short-stay booking requests: each one emails the operator and the guest, so the
+  // per-contact and per-IP+listing limits are what stop request (and email) floods.
+  booking: [
+    { id: "booking.ip.10m", scope: "ip", windowSeconds: 10 * MINUTE, limit: 20 },
+    { id: "booking.ip.day", scope: "ip", windowSeconds: DAY, limit: 100 },
+    { id: "booking.contact.hour", scope: "contact", windowSeconds: HOUR, limit: 5 },
+    { id: "booking.contact.day", scope: "contact", windowSeconds: DAY, limit: 15 },
+    { id: "booking.ip-listing.hour", scope: "ip-listing", windowSeconds: HOUR, limit: 5 },
+    { id: "booking.listing.hour", scope: "listing", windowSeconds: HOUR, limit: 60 },
   ],
 };
 

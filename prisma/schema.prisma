@@ -322,6 +322,17 @@ enum ListingPriceUnit {
   CUSTOM
   PER_SQM
   PER_KM
+  /// Hotels and short stays: priced per night of the stay.
+  PER_NIGHT
+}
+
+/// A hotel or short-stay booking request's lifecycle. There is no live room inventory, so a
+/// request is never confirmed automatically: the listing's operator confirms or declines it.
+enum AccommodationBookingStatus {
+  REQUESTED
+  CONFIRMED
+  DECLINED
+  CANCELLED
 }
 
 enum LeasePartyRole {
@@ -830,6 +841,7 @@ model User {
   listingVerificationHistory         ListingVerificationHistory[]               @relation("ListingVerificationActor")
   listingVerificationEvidence        ListingVerificationEvidence[]              @relation("ListingEvidenceSubmitter")
   marketplaceLeads                   MarketplaceLead[]                          @relation("MarketplaceLeadUser")
+  accommodationBookings              AccommodationBooking[]                     @relation("AccommodationBookingUser")
   marketplaceLeadHistory             MarketplaceLeadStatusHistory[]             @relation("MarketplaceLeadStatusActor")
   marketplaceLeadActivities          MarketplaceLeadActivity[]                  @relation("MarketplaceLeadActivityActor")
   viewingRequestsCreated             ViewingRequest[]                           @relation("ViewingRequestCreator")
@@ -1034,6 +1046,7 @@ model Organisation {
   aiEmployeeHandoffs          AIEmployeeHandoff[]
   aiEmployeeActivities        AIEmployeeActivity[]
   marketplaceLeads            MarketplaceLead[]
+  accommodationBookings       AccommodationBooking[]
   viewingRequests             ViewingRequest[]
   moveIns                     MoveIn[]
   noticesToVacate             NoticeToVacate[]
@@ -3160,6 +3173,12 @@ model Listing {
   propertyCondition  String?
   negotiable         Boolean           @default(false)
   yearBuilt          Int?
+  /// Hotels and short stays (bookable categories) only; null elsewhere.
+  maxGuests          Int?
+  minimumNights      Int?
+  checkInTime        String?
+  checkOutTime       String?
+  houseRules         String?
 
   countryCode                 String                        @db.Char(2)
   region                      String?
@@ -3224,6 +3243,7 @@ model Listing {
   conversations               Conversation[]
   attributionHistory          ListingAttributionHistory[]
   topAd                       MarketplaceTopAd?
+  accommodationBookings       AccommodationBooking[]
 
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
@@ -5902,4 +5922,46 @@ model AuthOtpChallenge {
   @@index([requesterHash, createdAt])
   @@index([channel, createdAt])
   @@index([expiresAt])
+}
+
+/// A guest's request to stay at a hotel or short-stay listing. The recipient is always the
+/// listing's own organisation (and, through the listing, its marketing professional), resolved on
+/// the server from the listing — never taken from the request.
+model AccommodationBooking {
+  id                     String                     @id @default(uuid()) @db.Uuid
+  /// Short public reference shown to the guest and the host ("NB-7K3Q9D").
+  reference              String                     @unique
+  organisationId         String                     @db.Uuid
+  listingId              String                     @db.Uuid
+  userId                 String?                    @db.Uuid
+  /// Listing category at the time of the request (HOTEL or SHORT_STAY).
+  accommodationType      String
+  checkIn                DateTime                   @db.Date
+  checkOut               DateTime                   @db.Date
+  nights                 Int
+  adults                 Int
+  children               Int                        @default(0)
+  guestName              String
+  guestEmail             String
+  guestPhone             String?
+  specialRequest         String?
+  /// The listing's nightly price and currency when the request was made.
+  nightlyPriceMinor      Decimal?                   @db.Decimal(19, 0)
+  currencyCode           String                     @db.Char(3)
+  status                 AccommodationBookingStatus @default(REQUESTED)
+  respondedAt            DateTime?
+  respondedByUserId      String?                    @db.Uuid
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  /// Public-form submission binding (`Idempotency-Key`), as on `MarketplaceLead`.
+  idempotencyKeyHash     String?
+  idempotencyFingerprint String?
+  organisation           Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  listing                Listing                    @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  user                   User?                      @relation("AccommodationBookingUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([listingId, idempotencyKeyHash])
+  @@index([organisationId, status, createdAt])
+  @@index([listingId, createdAt])
+  @@index([userId, createdAt])
 }

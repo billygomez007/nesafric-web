@@ -6,9 +6,14 @@ export default function LeasingPage() {
   return (
     <AppShell
       actions={
-        <Link className="rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface" href="/marketplace/properties">
-          Public marketplace
-        </Link>
+        <>
+          <Link className="rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface" href="/leasing/bookings">
+            Bookings
+          </Link>
+          <Link className="rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface" href="/marketplace/properties">
+            Public marketplace
+          </Link>
+        </>
       }
       description="Manage the leasing pipeline without creating tenant records prematurely."
       eyebrow="LEASING CRM"

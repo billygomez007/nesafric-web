@@ -5,6 +5,7 @@ import { photosCoverFirst } from "@/lib/listing-cover";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { idempotencyKeyFor, type IdempotencySlot } from "@/lib/idempotency-key";
 import type { PublicListing } from "@/components/property-marketplace-search";
+import { AccommodationBookingForm } from "@/components/accommodation-booking-form";
 import { ErrorState, Skeleton, SuccessNotice } from "@/components/ui/states";
 import { buttonClass } from "@/components/ui/button-styles";
 import { formatListingPrice, humanize, listingLocation, listingTypeLabel, priceUnitText, specLine } from "@/lib/listing-display";
@@ -224,7 +225,9 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
             </div>
           )}
 
-          {listing.contact.enquiryEnabled ? (
+          {listing.bookable ? (
+            <AccommodationBookingForm listing={listing} />
+          ) : listing.contact.enquiryEnabled ? (
             <form aria-label="Enquire about this listing" className="grid scroll-mt-24 gap-3 rounded-[var(--radius-panel)] border border-hairline bg-white p-5" id="enquire" onSubmit={submit}>
               <div>
                 <h2 className="text-lg font-semibold text-forest-deep">Ask about this property</h2>
@@ -256,13 +259,15 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
         </aside>
       </div>
 
-      {listing.contact.enquiryEnabled && (
+      {(listing.bookable || listing.contact.enquiryEnabled) && (
         <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-4 border-t border-hairline bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
           <p className="min-w-0 truncate text-base font-semibold text-forest-deep tabular-nums">
             {amount ? formatListingPrice(amount, listing.pricing.currencyCode) : "Price on request"}
             {amount && suffix && <span className="text-sm font-normal text-muted"> / {suffix}</span>}
           </p>
-          <a className={buttonClass("primary", "sm")} href="#enquire">Enquire</a>
+          {listing.bookable
+            ? <a className={buttonClass("primary", "sm")} href="#book">Request booking</a>
+            : <a className={buttonClass("primary", "sm")} href="#enquire">Enquire</a>}
         </div>
       )}
     </div>
