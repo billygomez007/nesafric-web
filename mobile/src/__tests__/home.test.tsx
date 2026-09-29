@@ -9,8 +9,10 @@ import type { CampaignBanner } from "@/api/home";
 import { buildFeaturedSlides, NATIVE_CAMPAIGN_ASPECT, nativeCampaignCreative, resolveDestination, rotationMs } from "@/home/featured";
 import { useCarouselAutoplay } from "@/home/use-carousel-autoplay";
 import { wrapOffset } from "@/home/components/logo-rail";
-import { homeListings, isNewListing } from "@/home/components/properties-on-nesafric";
+import { isNewListing } from "@/home/discovery/cards";
+import { eligible } from "@/home/discovery/collections";
 import { railCompanies } from "@/home/components/trusted-companies";
+import { scrollFeed } from "@/test-utils/feed";
 import { listing } from "@/test-utils/fixtures";
 
 jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn(async () => ({ type: "opened" })) }));
@@ -36,7 +38,16 @@ function json(status: number, body: unknown) {
   return Promise.resolve({ ok: status < 300, status, json: async () => body } as Response);
 }
 
-function mockApi({ banners = [] as CampaignBanner[], companies = [] as unknown[], search = (_url: URL) => [house] as unknown[], listingsStatus = 200 } = {}) {
+/** Like the server: a listing is returned only for queries it matches. */
+function matching(url: URL, items: ReturnType<typeof listing>[]) {
+  const p = url.searchParams;
+  return items.filter((item) =>
+    (!p.get("category") || p.get("category") === item.category) &&
+    (!p.get("listingType") || p.get("listingType") === item.listingType) &&
+    (!p.get("city") || p.get("city") === item.location.city));
+}
+
+function mockApi({ banners = [] as CampaignBanner[], companies = [] as unknown[], search = (url: URL) => matching(url, [house]) as unknown[], listingsStatus = 200 } = {}) {
   calls = [];
   globalThis.fetch = jest.fn((input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input));
@@ -77,12 +88,13 @@ describe("marketplace home", () => {
   it("renders the sections in the homepage brief's order", async () => {
     mockApi();
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByLabelText("Properties on NesAfric");
+    await screen.findByLabelText("Newly listed");
+    await scrollFeed();
     await screen.findByTestId("company-rail-placeholder");
     const texts = flatten(view.toJSON() as Node);
-    // Hero → chips → companies → properties rail → Advanced Search. No campaign runs here, so
-    // there is no advertising carousel, and the listing appears only in the properties rail.
-    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "Trusted by leading companies", "Properties on NesAfric", "4 Bedroom House", "Advanced Search"];
+    // Hero → chips → the first property shelf → trusted companies further down → Advanced Search.
+    // No campaign runs here, so there is no advertising carousel; the listing appears once.
+    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "Newly listed", "4 Bedroom House", "Trusted by leading companies", "Advanced Search"];
     const positions = order.map((text) => texts.indexOf(text));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -130,7 +142,7 @@ describe("marketplace home", () => {
   it("hides the advertising carousel when no campaign is eligible — listings are never promoted into it", async () => {
     mockApi();
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByLabelText("Properties on NesAfric");
+    await screen.findByLabelText("Newly listed");
     await waitFor(() => expect(calls.some((call) => call.url.pathname === "/api/public/campaigns")).toBe(true));
     expect(screen.queryByTestId("advertising-carousel")).toBeNull();
     expect(screen.queryByText("Sponsored")).toBeNull();
@@ -145,7 +157,7 @@ describe("marketplace home", () => {
     const base = jest.mocked(globalThis.fetch).getMockImplementation()!;
     jest.mocked(globalThis.fetch).mockImplementation((input, init) => (new URL(String(input)).pathname === "/api/public/campaigns" ? json(500, { error: { code: "INTERNAL", message: "Down" } }) : base(input, init)));
     renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByLabelText("Properties on NesAfric");
+    await screen.findByLabelText("Newly listed");
     await waitFor(() => expect(jest.mocked(globalThis.fetch).mock.calls.some(([input]) => new URL(String(input)).pathname === "/api/public/campaigns")).toBe(true));
     expect(screen.queryByTestId("advertising-carousel")).toBeNull();
   });
@@ -190,7 +202,7 @@ describe("marketplace home", () => {
     await waitFor(() => expect(searchCalls().some((params) => params.get("category") === "VILLA" && params.get("pageSize") === "20")).toBe(true));
   });
 
-  it("Properties on NesAfric shows only eligible listings and opens the tapped one", async () => {
+  it("Newly listed shows only eligible listings and opens the tapped one", async () => {
     const pending = listing({ id: "3f1c2a9e-5a55-4a1e-9f1c-000000000007", title: "Unverified bungalow", verification: { status: "PENDING" } });
     mockApi({ search: () => [house, pending] });
     renderRouter(APP_DIR, { initialUrl: "/" });
@@ -203,13 +215,13 @@ describe("marketplace home", () => {
   it("See all opens the existing Search screen with every listing", async () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByLabelText("Properties on NesAfric");
+    await screen.findByLabelText("Newly listed");
     const before = searchCalls().length;
     fireEvent.press(screen.getAllByText("See all").at(-1)!);
     await waitFor(() => expect(searchCalls().slice(before).some((params) => params.get("pageSize") === "20" && !params.get("listingType") && !params.get("category"))).toBe(true));
   });
 
-  it("Properties on NesAfric shows loading, then an honest empty state — never sample listings", async () => {
+  it("Newly listed shows loading, then an honest empty state — never sample listings", async () => {
     mockApi({ search: () => [] });
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
     expect(screen.getByLabelText("Loading properties")).toBeTruthy();
@@ -221,6 +233,7 @@ describe("marketplace home", () => {
     mockApi({ listingsStatus: 500 });
     renderRouter(APP_DIR, { initialUrl: "/" });
     expect(await screen.findByText("Properties couldn't load right now.", {}, { timeout: 5000 })).toBeTruthy();
+    await scrollFeed();
     expect(screen.getByText("Find your perfect property")).toBeTruthy();
     expect(screen.getByText("Advanced Search")).toBeTruthy();
     const before = searchCalls().length;
@@ -232,6 +245,7 @@ describe("marketplace home", () => {
   // of those scroll events let the Home ScrollView take over any touch in progress, so chips,
   // "View property" and property cards stopped responding. The rail must drift by transform only.
   async function loopingRail() {
+    await scrollFeed();
     const rail = await screen.findByTestId("company-rail-placeholder");
     act(() => fireEvent(rail, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 58 } } }));
   }
@@ -268,7 +282,7 @@ describe("marketplace home", () => {
     expect(await screen.findByText("Verified property")).toBeTruthy();
   });
 
-  it("with the logo rail moving, a Properties on NesAfric card still opens the listing", async () => {
+  it("with the logo rail moving, a Newly listed card still opens the listing", async () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/" });
     await loopingRail();
@@ -279,6 +293,7 @@ describe("marketplace home", () => {
   it("Advanced search opens the existing filter sheet", async () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/" });
+    await scrollFeed();
     fireEvent.press(await screen.findByLabelText("Advanced search"));
     expect(await screen.findByText("Bedrooms (at least)")).toBeTruthy();
   });
@@ -301,7 +316,7 @@ describe("marketplace home", () => {
   it("the AI microphone says voice search is coming soon — nothing recorded, requested or recommended", async () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByLabelText("Properties on NesAfric");
+    await screen.findByLabelText("Newly listed");
     fireEvent.press(await screen.findByLabelText("Speak to AI"));
     const before = calls.length;
     fireEvent.press(screen.getByLabelText("Voice search, coming soon"));
@@ -324,7 +339,7 @@ describe("marketplace home", () => {
   it("draws the premium background behind Home, never taking touches", async () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/" });
-    await screen.findByLabelText("Properties on NesAfric");
+    await screen.findByLabelText("Newly listed");
     // Hidden from screen readers by design, so the query has to include hidden elements.
     const background = screen.getByTestId("home-premium-background", { includeHiddenElements: true });
     expect(StyleSheet.flatten(background.props.style).pointerEvents).toBe("none");
@@ -354,6 +369,7 @@ describe("marketplace home", () => {
       { slug: "test-agency", displayName: "Test Agency", type: "BROKERAGE", logoUrl: "/uploads/test.png", verificationStatus: "PENDING" },
     ] });
     const view = renderRouter(APP_DIR, { initialUrl: "/" });
+    await scrollFeed();
     expect(await screen.findByLabelText("Accra Homes Ltd, verified company")).toBeTruthy();
     expect(screen.queryByLabelText("Legon Realty, verified company")).toBeNull();
     expect(screen.queryByLabelText("Test Agency, verified company")).toBeNull();
@@ -370,6 +386,7 @@ describe("marketplace home", () => {
   it("without verified logos shows a quiet, non-interactive rail instead of the old linked card", async () => {
     mockApi();
     renderRouter(APP_DIR, { initialUrl: "/" });
+    await scrollFeed();
     const rail = await screen.findByTestId("company-rail-placeholder");
     await screen.findByLabelText("Verified company logos will appear here");
     expect(screen.queryByText("Verified companies appear here")).toBeNull();
@@ -440,7 +457,7 @@ describe("home rails", () => {
 
   it("shows at most six verified listings and marks only recently published ones as new", () => {
     const many = Array.from({ length: 8 }, (_, i) => listing({ id: `3f1c2a9e-5a55-4a1e-9f1c-00000000010${i}` }));
-    expect(homeListings([listing({ verification: { status: "PENDING" } }), ...many])).toHaveLength(6);
+    expect(eligible([listing({ verification: { status: "PENDING" } }), ...many], 6)).toHaveLength(6);
     const now = Date.parse("2026-09-26T12:00:00.000Z");
     expect(isNewListing({ publishedAt: "2026-09-20T10:00:00.000Z" }, now)).toBe(true);
     expect(isNewListing({ publishedAt: "2026-08-01T10:00:00.000Z" }, now)).toBe(false);
