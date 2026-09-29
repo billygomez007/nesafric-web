@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
 import { trackEvent } from "@/platform/analytics";
@@ -39,11 +39,46 @@ async function uploadEvidence(providerId: string, evidenceType: string, file: Fi
   return { type: body.attached.type as string, reference: body.attached.reference as string };
 }
 
+type ApiErrorBody = { error?: { code?: string; message?: string; details?: { providerId?: string } } };
+
+async function readError(response: Response): Promise<ApiErrorBody["error"]> {
+  try {
+    return ((await response.json()) as ApiErrorBody).error ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * What to tell the person when a step fails, from the server's error code. The profile may
+ * already exist at the later steps, so those messages never suggest starting over.
+ */
+export function providerOnboardingErrorMessage(status: number, error: ApiErrorBody["error"], fallback: string) {
+  if (status === 401) return "Your session expired. Sign in again to continue.";
+  switch (error?.code) {
+    case "INVALID_VERIFICATION_STATE":
+      return "Your profile has already been submitted for verification. Open your workspace to follow its progress.";
+    case "CONTACT_NOT_READY":
+      return "Add a contact email or phone number to your profile before submitting for verification.";
+    case "EXPIRED_PROVIDER_EVIDENCE":
+      return "One of your documents has expired. Upload a current one and try again.";
+    case "VALIDATION_ERROR":
+      return fallback;
+    default:
+      return error?.message ?? fallback;
+  }
+}
+
 export function ServiceProviderOnboardingForm() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Synchronous guard: two clicks in the same frame both see `submitting === false`.
+  const inFlight = useRef(false);
+  // The profile exists but a later step failed: the workspace is still open to its owner.
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [consentRecorded, setConsentRecorded] = useState(false);
 
   const [accountType, setAccountType] = useState<"INDIVIDUAL" | "COMPANY">("INDIVIDUAL");
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
@@ -89,10 +124,25 @@ export function ServiceProviderOnboardingForm() {
     setServiceAreas((current) => current.map((area, position) => (position === index ? { ...area, ...patch } : area)));
   }
 
+  async function loadRequirements() {
+    const requirementParams = new URLSearchParams({ countryCode: "GH", providerType: accountType });
+    for (const categoryId of categoryIds) requirementParams.append("categoryId", categoryId);
+    const requirementResponse = await fetch(`/api/public/providers/document-requirements?${requirementParams}`);
+    if (requirementResponse.ok) setRequirements(await requirementResponse.json());
+  }
+
   async function createProviderAndFetchRequirements() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError("");
     setSubmitting(true);
     try {
+      // Already created in this session (Back, then Continue again): never create a second one.
+      if (providerId) {
+        await loadRequirements();
+        setStep(5);
+        return;
+      }
       const response = await fetch("/api/providers", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -111,8 +161,18 @@ export function ServiceProviderOnboardingForm() {
           })),
         }),
       });
+      if (!response.ok) {
+        const failure = await readError(response);
+        // This account already has a profile (an earlier attempt or another tab): open it.
+        if (failure?.code === "PROVIDER_IDENTITY_EXISTS" && failure.details?.providerId) {
+          setProviderId(failure.details.providerId);
+          setWorkspaceReady(true);
+          setError("You already have a service provider profile. Open your workspace to continue setting it up.");
+          return;
+        }
+        throw new Error(providerOnboardingErrorMessage(response.status, failure, "We couldn’t create your service provider profile. Check your details and try again."));
+      }
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error?.message ?? "Unable to create your service-provider profile.");
       setProviderId(body.id);
 
       await fetch("/api/marketplace/providers/" + body.id + "/profile", {
@@ -126,16 +186,14 @@ export function ServiceProviderOnboardingForm() {
         }),
       }).catch(() => {});
 
-      const requirementParams = new URLSearchParams({ countryCode: "GH", providerType: accountType });
-      for (const categoryId of categoryIds) requirementParams.append("categoryId", categoryId);
-      const requirementResponse = await fetch(`/api/public/providers/document-requirements?${requirementParams}`);
-      if (requirementResponse.ok) setRequirements(await requirementResponse.json());
+      await loadRequirements();
 
       trackCampaignEvent("service_provider_registration_started");
       setStep(5);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to create your service-provider profile.");
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   }
@@ -198,34 +256,55 @@ export function ServiceProviderOnboardingForm() {
     }
   }
 
+  function openWorkspace() {
+    if (providerId) router.push(`/providers/${providerId}`);
+  }
+
+  /**
+   * Finishing onboarding opens the provider's private workspace. Submitting for verification is
+   * part of it only when there is evidence to submit: public verification never gates access to
+   * the owner's own workspace, where documents can be added later.
+   */
   async function finalSubmit() {
-    if (!providerId) return;
+    if (!providerId || inFlight.current) return;
     if (!consent.accurate || !consent.authorized || !consent.reviewConsented || !consent.termsAccepted) {
       return setError("All four consent statements must be confirmed before submitting for review.");
     }
+    inFlight.current = true;
     setError("");
     setSubmitting(true);
     try {
-      const consentResponse = await fetch(`/api/providers/${providerId}/verification/consent`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ version: "2026-08-28", ...consent }),
-      });
-      if (!consentResponse.ok) throw new Error((await consentResponse.json()).error?.message ?? "Unable to record consent.");
+      if (!consentRecorded) {
+        const consentResponse = await fetch(`/api/providers/${providerId}/verification/consent`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ version: "2026-08-28", ...consent }),
+        });
+        if (!consentResponse.ok) {
+          throw new Error(providerOnboardingErrorMessage(consentResponse.status, await readError(consentResponse), "We couldn’t record your consent. Try again."));
+        }
+        setConsentRecorded(true);
+      }
 
-      const verificationResponse = await fetch(`/api/providers/${providerId}/verification`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ evidence: submittedEvidence }),
-      });
-      if (!verificationResponse.ok) throw new Error((await verificationResponse.json()).error?.message ?? "Unable to submit for verification.");
+      if (submittedEvidence.length) {
+        const verificationResponse = await fetch(`/api/providers/${providerId}/verification`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ evidence: submittedEvidence }),
+        });
+        if (!verificationResponse.ok) {
+          throw new Error(providerOnboardingErrorMessage(verificationResponse.status, await readError(verificationResponse), "We couldn’t submit your documents for verification."));
+        }
+      }
 
       trackCampaignEvent("service_provider_registration_completed");
       trackEvent("onboarding_completed", { onboarding_type: "offer_property_services" });
-      router.push(`/providers/${providerId}`);
+      openWorkspace();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to submit your verification.");
+      setWorkspaceReady(true);
+      setError(`${cause instanceof Error ? cause.message : "We couldn’t submit your verification."} Your profile is saved: you can open your workspace and finish verification there.`);
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   }
@@ -240,7 +319,12 @@ export function ServiceProviderOnboardingForm() {
         ))}
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
+      {workspaceReady && providerId && (
+        <button className="justify-self-start rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover" data-testid="provider-open-workspace" onClick={openWorkspace} type="button">
+          Open your service provider workspace
+        </button>
+      )}
 
       {step === 1 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
@@ -382,8 +466,9 @@ export function ServiceProviderOnboardingForm() {
       {step === 9 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Submit for verification</p>
+          {!submittedEvidence.length && <p className="text-sm text-muted" data-testid="provider-no-evidence-note">You haven’t uploaded verification documents yet. Your workspace opens now; upload them there to be reviewed.</p>}
           <p className="text-sm text-muted">Your profile will be saved and access to your dashboard unlocks immediately. You will not appear publicly or receive NesAfric work assignments until NesAfric has reviewed and approved your identity verification.</p>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(8)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={finalSubmit} type="button">{submitting ? "Submitting…" : "Submit for verification"}</button></div>
+          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(8)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={finalSubmit} type="button">{submitting ? "Submitting…" : submittedEvidence.length ? "Submit for verification" : "Finish and open workspace"}</button></div>
         </div>
       )}
     </div>

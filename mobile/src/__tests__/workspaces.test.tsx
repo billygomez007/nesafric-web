@@ -5,6 +5,7 @@ import * as SecureStore from "expo-secure-store";
 import { router } from "expo-router";
 import { renderRouter } from "expo-router/testing-library";
 import * as WebBrowser from "expo-web-browser";
+import { AppState } from "react-native";
 import path from "path";
 
 import type { Workspaces } from "@/api/account";
@@ -362,6 +363,46 @@ describe("service provider", () => {
     expect(WebBrowser.openBrowserAsync).toHaveBeenLastCalledWith("https://api.test/onboarding?start=services");
     expect(calls.some((call) => /^\/api\/providers/.test(call.url.pathname))).toBe(false);
   });
+
+  it("after registering on the website (Android: the browser call returns at once), coming back shows and opens the new workspace", async () => {
+    const server: Server = { workspaces: PRO_ONLY };
+    mockServer(server);
+    jest.mocked(WebBrowser.openBrowserAsync).mockResolvedValueOnce({ type: "opened" } as never);
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
+    fireEvent.press(await screen.findByTestId("gateway-service_provider"));
+    await signInThroughUi();
+    await waitFor(() => expect(app.getPathname()).toBe("/setup/service_provider"));
+    await act(async () => fireEvent.press(await screen.findByTestId("setup-open-web")));
+    const workspaceReads = () => calls.filter((call) => call.url.pathname === "/api/workspaces").length;
+    const readsBefore = workspaceReads();
+
+    // Still on the website: nothing is re-read yet.
+    expect(workspaceReads()).toBe(readsBefore);
+    // The provider is created there; the person returns to the app.
+    server.workspaces = { ...PRO_ONLY, serviceProviders: [PROVIDER] };
+    const listeners = jest.mocked(AppState.addEventListener).mock.calls.filter(([event]) => event === "change").map(([, listener]) => listener);
+    await act(async () => listeners.at(-1)!("active"));
+
+    await waitFor(() => expect(workspaceReads()).toBeGreaterThan(readsBefore));
+    fireEvent.press(await screen.findByTestId(`setup-open-${PROVIDER.id}`));
+    await waitFor(() => expect(app.getPathname()).toBe(`/provider/${PROVIDER.id}`));
+  });
+
+  it("names a failed workspace check on the set-up screen instead of silently showing the form", async () => {
+    mockServer({ workspaces: PRO_ONLY });
+    const app = renderRouter(APP_DIR, { initialUrl: "/account" });
+    fireEvent.press(await screen.findByTestId("gateway-service_provider"));
+    await signInThroughUi();
+    await waitFor(() => expect(app.getPathname()).toBe("/setup/service_provider"));
+    const base = jest.mocked(globalThis.fetch).getMockImplementation()!;
+    jest.mocked(globalThis.fetch).mockImplementation((input, init) =>
+      new URL(String(input)).pathname === "/api/workspaces" ? json(500, { error: { code: "INTERNAL", message: "boom" } }) : base(input, init),
+    );
+    await act(async () => fireEvent.press(await screen.findByTestId("setup-refresh")));
+    // A 5xx is retried twice first (the app's weak-network policy).
+    expect(await screen.findByText("We couldn’t check for your new workspace. Tap Check again.", {}, { timeout: 8000 })).toBeTruthy();
+    expect(screen.queryByText("boom")).toBeNull();
+  }, 15000);
 });
 
 describe("multi-role", () => {

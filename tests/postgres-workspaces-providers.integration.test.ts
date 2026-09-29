@@ -11,7 +11,8 @@ import { POST as mobileSignIn } from "@/app/api/auth/mobile/session/route";
 import { GET as workspaces } from "@/app/api/workspaces/route";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
-import { createServiceProvider } from "@/modules/providers/service";
+import { createServiceProvider, getProvider } from "@/modules/providers/service";
+import { AppError } from "@/platform/errors";
 import { db } from "@/platform/database/client";
 
 const PASSWORD = "correct-horse-battery-1";
@@ -50,6 +51,37 @@ describe("/api/workspaces service providers", () => {
   afterAll(async () => {
     await cleanDatabase();
     await db.$disconnect();
+  });
+
+  it("a new, unverified provider is in the workspace list at once and a repeated create points back to it", async () => {
+    const artisan = await user("new-artisan@example.com");
+    const input = { type: "INDIVIDUAL", displayName: "Ama Electrical", contactPhone: "+233200000001" };
+    const created = await createServiceProvider(artisan.id, input);
+
+    // No refresh, no sign-out: the very next workspace read includes it.
+    expect((await workspacesFor("new-artisan@example.com")).serviceProviders).toEqual([expect.objectContaining({ id: created.id, verificationStatus: "UNVERIFIED" })]);
+    // Public verification never gates the owner's own workspace.
+    await expect(getProvider(artisan.id, null, created.id)).resolves.toMatchObject({ viewerIsOwner: true, provider: { id: created.id } });
+
+    // Double submit / retry: no second identity, and the conflict names the owner's provider.
+    const retry = await createServiceProvider(artisan.id, input).catch((error: unknown) => error);
+    expect(retry).toBeInstanceOf(AppError);
+    expect(retry).toMatchObject({ code: "PROVIDER_IDENTITY_EXISTS", status: 409, details: { providerId: created.id } });
+    expect(await db.serviceProvider.count({ where: { individualUserId: artisan.id } })).toBe(1);
+  });
+
+  it("a company conflict names the provider only to someone who owns it", async () => {
+    const owner = await user("co-owner@example.com");
+    const organisation = await createOrganisation(owner.id, { name: "Tema Builders", type: "OTHER", countryCode: "GH" });
+    const company = await createServiceProvider(owner.id, { type: "COMPANY", companyOrganisationId: organisation.id, displayName: "Tema Builders" });
+    const retry = await createServiceProvider(owner.id, { type: "COMPANY", companyOrganisationId: organisation.id, displayName: "Tema Builders" }).catch((error: unknown) => error);
+    expect(retry).toMatchObject({ code: "PROVIDER_IDENTITY_EXISTS", details: { providerId: company.id } });
+
+    // Archived: no longer owned, so nothing is named.
+    await db.serviceProvider.update({ where: { id: company.id }, data: { archivedAt: new Date() } });
+    const afterArchive = await createServiceProvider(owner.id, { type: "COMPANY", companyOrganisationId: organisation.id, displayName: "Tema Builders" }).catch((error: unknown) => error);
+    expect(afterArchive).toMatchObject({ code: "PROVIDER_IDENTITY_EXISTS" });
+    expect((afterArchive as AppError).details).toBeUndefined();
   });
 
   it("lists only the providers the signed-in user owns, with status fields only", async () => {

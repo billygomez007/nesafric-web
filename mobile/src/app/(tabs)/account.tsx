@@ -37,6 +37,7 @@ import {
 } from "@/workspace/resolve";
 import { SETUP_PATH } from "@/workspace/routing";
 import { openSwitcher } from "@/workspace/shell";
+import { openWebsiteThenRefresh } from "@/workspace/web-handoff";
 
 /**
  * Account entry point (brief §6). Signing in is optional: guests keep browsing, saving and
@@ -265,9 +266,8 @@ function SignedInAccount() {
     (isWorkspaceIntent(intent) && Boolean(workspaces.data) && available.filter((workspace) => workspace.kind === intent).length === 1) || (intent === "tenant" && Boolean(tenancies.data));
 
   async function openOffer(kind: WorkspaceIntent) {
-    await WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${OFFERS[kind].path}`));
     // Back from the website: pick up a workspace that was just set up.
-    void workspaces.refetch();
+    await openWebsiteThenRefresh(websiteUrl(apiUrl, `${OFFERS[kind].path}`), () => void workspaces.refetch());
   }
 
   return (

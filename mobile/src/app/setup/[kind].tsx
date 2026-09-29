@@ -1,16 +1,17 @@
 import { router, useLocalSearchParams } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { websiteUrl } from "@/config";
 
 import { useWorkspaces } from "@/api/account-queries";
+import { ApiError, NETWORK_ERROR } from "@/api/client";
 import { useApi } from "@/api/provider";
 import { useSession } from "@/auth/session";
-import { AppText, Button, Card, Loading } from "@/components/ui";
+import { AppText, Button, Card, Loading, Notice } from "@/components/ui";
 import { colors, spacing } from "@/theme/tokens";
 import { isWorkspaceIntent, parseIntent, resolveAvailableWorkspaces, type WorkspaceIntent } from "@/workspace/resolve";
 import { SETUP_PATH } from "@/workspace/routing";
+import { openWebsiteThenRefresh } from "@/workspace/web-handoff";
 
 const COPY: Record<WorkspaceIntent, { title: string; body: string; action: string }> = {
   property_management: {
@@ -59,9 +60,8 @@ export default function SetupScreen() {
   const ready = resolveAvailableWorkspaces({ status, workspaces: workspaces.data }).filter((workspace) => workspace.kind === kind);
 
   async function setUp() {
-    await WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${SETUP_PATH[kind!]}`));
     // Back from the website: a workspace set up there shows up once the server lists it.
-    void workspaces.refetch();
+    await openWebsiteThenRefresh(websiteUrl(apiUrl, `${SETUP_PATH[kind!]}`), () => void workspaces.refetch());
   }
 
   return (
@@ -70,11 +70,14 @@ export default function SetupScreen() {
         {copy.title}
       </AppText>
       {workspaces.isFetching && !workspaces.data ? <Loading /> : null}
+      {workspaces.error && !workspaces.isFetching ? (
+        <Notice message={workspaces.error instanceof ApiError && workspaces.error.code === NETWORK_ERROR ? "You’re offline, so we couldn’t check for your new workspace. Check again when you’re connected." : "We couldn’t check for your new workspace. Tap Check again."} />
+      ) : null}
       {ready.length ? (
         <Card style={styles.card} testID="setup-ready">
           <AppText variant="label">Your workspace is ready</AppText>
           {ready.map((workspace, index) => (
-            <Button key={workspace.id ?? workspace.name} label={`Open ${workspace.name}`} variant={index === 0 ? "primary" : "secondary"} onPress={() => router.replace(workspace.route)} />
+            <Button key={workspace.id ?? workspace.name} label={`Open ${workspace.name}`} variant={index === 0 ? "primary" : "secondary"} onPress={() => router.replace(workspace.route)} testID={`setup-open-${workspace.id}`} />
           ))}
         </Card>
       ) : (
