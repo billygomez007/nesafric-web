@@ -160,7 +160,8 @@ describe("signed out: marketplace first, with a gateway for people who manage", 
       expect(card.props.accessibilityHint).toMatch(/Opens sign in\./);
     }
     expect(screen.getByText("Sign in to save properties, manage enquiries and keep track of viewings.")).toBeTruthy();
-    expect(screen.getByTestId("open-sign-in")).toHaveProp("accessibilityLabel", "Sign in / Create account");
+    expect(screen.getByTestId("open-sign-in")).toHaveProp("accessibilityLabel", "Sign in");
+    expect(screen.getByTestId("open-create-account")).toHaveProp("accessibilityLabel", "Create account");
     expect(screen.getByText("Manage properties, units, tenants, leases, rent and maintenance.")).toBeTruthy();
     expect(screen.getByText("For agents, agencies, developers and property companies. Manage listings, leads, enquiries and your marketplace presence.")).toBeTruthy();
     expect(screen.getByText("Manage services, jobs, requests, customers and your business profile.")).toBeTruthy();
@@ -194,6 +195,11 @@ describe("signed out: marketplace first, with a gateway for people who manage", 
     fireEvent.press(await screen.findByTestId("open-sign-in"));
     await waitFor(() => expect(app.getPathname()).toBe("/sign-in"));
     expect(await screen.findByTestId("sign-in-title")).toHaveTextContent("Sign in to NesAfric");
+
+    act(() => router.back());
+    fireEvent.press(await screen.findByTestId("open-create-account"));
+    expect(await screen.findByTestId("sign-in-title")).toHaveTextContent("Create your NesAfric account");
+    expect(screen.getByTestId("sign-in-mode-login")).toHaveProp("accessibilityLabel", "Sign in");
   });
 });
 

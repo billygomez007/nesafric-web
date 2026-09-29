@@ -73,8 +73,8 @@ export default function SetupScreen() {
       {ready.length ? (
         <Card style={styles.card} testID="setup-ready">
           <AppText variant="label">Your workspace is ready</AppText>
-          {ready.map((workspace) => (
-            <Button key={workspace.id ?? workspace.name} label={`Open ${workspace.name}`} onPress={() => router.replace(workspace.route)} />
+          {ready.map((workspace, index) => (
+            <Button key={workspace.id ?? workspace.name} label={`Open ${workspace.name}`} variant={index === 0 ? "primary" : "secondary"} onPress={() => router.replace(workspace.route)} />
           ))}
         </Card>
       ) : (

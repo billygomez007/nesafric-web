@@ -16,14 +16,14 @@ export function GatewayCard({ icon, title, description, onPress, testID, highlig
       testID={testID}
       style={({ pressed }) => [styles.card, highlighted && styles.highlighted, pressed && styles.pressed]}
     >
-      <View style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">
-        <Ionicons name={icon} size={24} color={colors.forest} />
+      <View style={[styles.icon, highlighted && styles.iconHighlighted]} accessibilityElementsHidden importantForAccessibility="no">
+        <Ionicons name={icon} size={24} color={highlighted ? colors.action : colors.forest} />
       </View>
       <View style={styles.text}>
         <AppText variant="label">{title}</AppText>
         <AppText variant="caption">{description}</AppText>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+      <Ionicons name="chevron-forward" size={20} color={highlighted ? colors.action : colors.muted} />
     </Pressable>
   );
 }
@@ -40,8 +40,10 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     backgroundColor: colors.elevated,
   },
-  highlighted: { borderColor: colors.brand, borderWidth: 2 },
+  // The card the person came in through: orange edge and icon tile, the card itself stays white.
+  highlighted: { borderColor: colors.action, borderWidth: 2, padding: spacing.lg - 1 },
   pressed: { backgroundColor: colors.surface },
   icon: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
+  iconHighlighted: { backgroundColor: colors.actionTint },
   text: { flex: 1, gap: 2 },
 });

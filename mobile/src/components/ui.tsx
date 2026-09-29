@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import { useState, type Ref } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps, type TextProps, type ViewProps } from "react-native";
 
 import { colors, fonts, radii, spacing, type } from "@/theme/tokens";
@@ -7,18 +7,24 @@ export function AppText({ variant = "body", style, ...props }: TextProps & { var
   return <Text {...props} style={[type[variant], style]} />;
 }
 
+type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive" | "dark";
+
 type ButtonProps = {
   label: string;
   onPress: () => void;
-  variant?: "primary" | "secondary" | "dark";
+  variant?: ButtonVariant;
   loading?: boolean;
   disabled?: boolean;
   testID?: string;
   accessibilityHint?: string;
 };
 
-/** Pill buttons matching the web `buttonStyles`: primary is teal with ink text (never white, for
- * contrast), secondary is white with a hairline border, dark is forest with white text. */
+/**
+ * Pill buttons. Primary is NesAfric orange with a white label: use it for the one main action on a
+ * screen. Secondary is white with a hairline border, ghost is text only, destructive is danger red
+ * (never orange), dark is forest for saves inside workspace forms. Disabled turns grey; loading
+ * keeps the variant's colour and shows a spinner.
+ */
 export function Button({ label, onPress, variant = "primary", loading = false, disabled = false, testID, accessibilityHint }: ButtonProps) {
   const inactive = disabled || loading;
   return (
@@ -30,12 +36,12 @@ export function Button({ label, onPress, variant = "primary", loading = false, d
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, inactive ? styles.buttonDisabled : buttonVariants[variant](pressed)]}
+      style={({ pressed }) => [styles.button, disabled ? styles.buttonDisabled : buttonVariants[variant](pressed && !loading)]}
     >
       {loading ? (
-        <ActivityIndicator color={colors.ink} />
+        <ActivityIndicator color={buttonText[variant]} />
       ) : (
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={[styles.buttonLabel, { color: inactive ? colors.disabledText : buttonText[variant] }]}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={[styles.buttonLabel, { color: disabled ? colors.disabledText : buttonText[variant] }]}>
           {label}
         </Text>
       )}
@@ -43,15 +49,19 @@ export function Button({ label, onPress, variant = "primary", loading = false, d
   );
 }
 
-const buttonVariants = {
-  primary: (pressed: boolean) => ({ backgroundColor: pressed ? colors.tealLight : colors.brand }),
-  secondary: (pressed: boolean) => ({ backgroundColor: pressed ? colors.surface : colors.elevated, borderWidth: 1, borderColor: colors.hairline }),
-  dark: (pressed: boolean) => ({ backgroundColor: pressed ? colors.forestDeep : colors.forest }),
+const buttonVariants: Record<ButtonVariant, (pressed: boolean) => object> = {
+  primary: (pressed) => ({ backgroundColor: pressed ? colors.actionPressed : colors.action }),
+  secondary: (pressed) => ({ backgroundColor: pressed ? colors.surface : colors.elevated, borderWidth: 1, borderColor: colors.hairline }),
+  ghost: (pressed) => ({ backgroundColor: pressed ? colors.actionTint : "transparent" }),
+  destructive: (pressed) => ({ backgroundColor: pressed ? colors.dangerPressed : colors.danger }),
+  dark: (pressed) => ({ backgroundColor: pressed ? colors.forestDeep : colors.forest }),
 };
 
-const buttonText = { primary: colors.ink, secondary: colors.ink, dark: colors.white };
+const buttonText: Record<ButtonVariant, string> = { primary: colors.white, secondary: colors.ink, ghost: colors.action, destructive: colors.white, dark: colors.white };
 
-export function TextField({ label, error, style, ref, ...props }: TextInputProps & { label: string; error?: string; ref?: Ref<TextInput> }) {
+/** Neutral border at rest, orange while focused, red on error (error always wins). */
+export function TextField({ label, error, style, ref, onFocus, onBlur, ...props }: TextInputProps & { label: string; error?: string; ref?: Ref<TextInput> }) {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
       <AppText variant="label">{label}</AppText>
@@ -59,8 +69,18 @@ export function TextField({ label, error, style, ref, ...props }: TextInputProps
         ref={ref}
         accessibilityLabel={label}
         placeholderTextColor={colors.muted}
+        selectionColor={colors.action}
+        cursorColor={colors.action}
+        onFocus={(event) => {
+          setFocused(true);
+          onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          onBlur?.(event);
+        }}
         {...props}
-        style={[styles.input, style, error ? { borderColor: colors.danger } : null]}
+        style={[styles.input, style, focused && styles.inputFocused, error ? { borderColor: colors.danger } : null]}
       />
       {error ? <AppText style={styles.fieldError}>{error}</AppText> : null}
     </View>
@@ -114,6 +134,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
+  inputFocused: { borderColor: colors.action },
   fieldError: { color: colors.danger, fontSize: 13 },
   card: { backgroundColor: colors.elevated, borderRadius: radii.panel, borderWidth: 1, borderColor: colors.hairline, padding: spacing.lg, gap: spacing.xs },
   notice: { borderWidth: 1, borderRadius: radii.control, padding: spacing.md, backgroundColor: colors.elevated },
