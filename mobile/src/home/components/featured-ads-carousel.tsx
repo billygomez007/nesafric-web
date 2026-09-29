@@ -13,19 +13,35 @@ import { buildFeaturedSlides, NATIVE_CAMPAIGN_ASPECT, rotationMs, type FeaturedS
 import { openSearch } from "@/marketplace/navigation";
 import { colors, radii } from "@/theme/tokens";
 
+/** Phone gutter each side of the card; the card never grows past `MAX_CARD_WIDTH`. */
 const CARD_GUTTER = 16;
-const GAP = 16;
+const MAX_CARD_WIDTH = 560;
 /** Impressions are reported once per campaign per app session, like the website carousel. */
 const reportedImpressions = new Set<string>();
 
 /**
- * One full advertisement per screen. The card spans the screen minus the 16pt gutters (capped at
- * 560), and the gap between cards equals one gutter, so a snap step of card + gap puts the next
- * card's left edge exactly at the screen's right edge: nothing of it shows at rest.
+ * One full advertisement per screen, at any width. Every carousel behaviour reads this one result.
+ *
+ * - The card is the screen minus the 16pt gutters, capped at 560pt.
+ * - `inset` is the space each side of the card: 16pt on phones, and wider than that once the cap
+ *   applies (tablets), so the card stays centred.
+ * - The gap between cards equals `inset`. With the track padded by `inset`, a snap step of
+ *   `interval = card + gap` puts the next card's left edge exactly at the screen's right edge and
+ *   the previous card's right edge exactly at the left edge: neither shows at rest.
+ * - Slide `i` rests at scroll offset `i * interval`, and the last slide's offset is exactly the
+ *   end of the content, so snapping, autoplay and settling all land on whole slides.
  */
 export function carouselLayout(screenWidth: number) {
-  const cardWidth = Math.min(screenWidth - CARD_GUTTER * 2, 560);
-  return { gutter: CARD_GUTTER, gap: GAP, cardWidth, cardHeight: Math.round(cardWidth * NATIVE_CAMPAIGN_ASPECT), interval: cardWidth + GAP };
+  const cardWidth = Math.min(screenWidth - CARD_GUTTER * 2, MAX_CARD_WIDTH);
+  const inset = (screenWidth - cardWidth) / 2;
+  const gap = inset;
+  const interval = cardWidth + gap;
+  return { cardWidth, cardHeight: Math.round(cardWidth * NATIVE_CAMPAIGN_ASPECT), inset, gap, interval };
+}
+
+/** Where slide `index` sits and where the list rests for it, from `carouselLayout`. */
+export function slideOffsets(layout: ReturnType<typeof carouselLayout>, index: number) {
+  return { itemOffset: layout.inset + index * layout.interval, restingScroll: index * layout.interval };
 }
 
 export function openSlideTarget(target: SlideTarget) {
@@ -61,7 +77,8 @@ export function FeaturedAdsCarousel() {
     return () => subscription.remove();
   }, []);
 
-  const { cardWidth, cardHeight, interval } = carouselLayout(width);
+  const layout = carouselLayout(width);
+  const { cardWidth, cardHeight, inset, gap, interval } = layout;
   const delay = rotationMs(campaigns.data?.rotationSeconds);
 
   const slides = useMemo(() => buildFeaturedSlides(campaigns.data?.banners ?? [], apiUrl), [campaigns.data, apiUrl]);
@@ -87,7 +104,7 @@ export function FeaturedAdsCarousel() {
     delayMs: delay,
     paused: dragging || !focused || !appActive || reduceMotion,
     onAdvance: (next) => {
-      list.current?.scrollToOffset({ offset: next * interval, animated: true });
+      list.current?.scrollToOffset({ offset: slideOffsets(layout, next).restingScroll, animated: true });
       setIndex(next);
     },
   });
@@ -114,12 +131,12 @@ export function FeaturedAdsCarousel() {
         snapToInterval={interval}
         decelerationRate="fast"
         disableIntervalMomentum
-        contentContainerStyle={styles.track}
-        ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
+        contentContainerStyle={{ paddingHorizontal: inset }}
+        ItemSeparatorComponent={() => <View style={{ width: gap }} />}
         onScrollBeginDrag={() => setDragging(true)}
         onScrollEndDrag={() => setDragging(false)}
         onMomentumScrollEnd={settle}
-        getItemLayout={(_, i) => ({ length: interval, offset: interval * i, index: i })}
+        getItemLayout={(_, i) => ({ length: interval, offset: slideOffsets(layout, i).itemOffset, index: i })}
         accessibilityLabel="Advertisements"
       />
       {multi ? (
@@ -152,7 +169,6 @@ function CampaignArtwork({ slide, width, height, onPress }: { slide: FeaturedSli
 }
 
 const styles = StyleSheet.create({
-  track: { paddingHorizontal: CARD_GUTTER },
   // Neutral page surface: a 2.5:1 upload fills the card; an older 1200 x 792 one sits centred with
   // plain margins, never on a dark NesAfric-made backdrop.
   card: { borderRadius: radii.shell, overflow: "hidden", backgroundColor: colors.surface },

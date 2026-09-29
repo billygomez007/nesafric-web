@@ -7,7 +7,7 @@ import { StyleSheet } from "react-native";
 import type { CampaignBanner } from "@/api/home";
 import type { PublicListing } from "@/api/types";
 import { CATEGORY_COLLECTIONS, cityCollection, fetchSize, NEWEST, organic, popularCities, TOP_AD_HEADROOM, topAds } from "@/home/discovery/collections";
-import { carouselLayout } from "@/home/components/featured-ads-carousel";
+import { carouselLayout, slideOffsets } from "@/home/components/featured-ads-carousel";
 import { scrollFeed } from "@/test-utils/feed";
 import { listing } from "@/test-utils/fixtures";
 
@@ -243,21 +243,35 @@ describe("advertising carousel", () => {
     expect(width / height).toBeCloseTo(2.5, 1);
   });
 
-  it.each([375, 390, 393, 430])("at %i pt, each snap shows one whole card and none of the next", (screen) => {
-    const { gutter, gap, cardWidth, cardHeight, interval } = carouselLayout(screen);
-    expect(cardWidth).toBe(screen - 32);
+  it.each([375, 390, 393, 430])("on a %i pt phone the card keeps its 16 pt gutters and full width", (viewport) => {
+    const { cardWidth, cardHeight, inset, gap, interval } = carouselLayout(viewport);
+    expect([cardWidth, inset, gap, interval]).toEqual([viewport - 32, 16, 16, viewport - 16]);
     expect(cardWidth / cardHeight).toBeCloseTo(2.5, 1);
-    for (const slide of [0, 1, 2]) {
-      const offset = slide * interval; // resting scroll position after snapping to `slide`
-      const cardLeft = gutter + slide * interval - offset;
-      const nextLeft = gutter + (slide + 1) * interval - offset;
-      const previousRight = gutter + (slide - 1) * interval + cardWidth - offset;
-      expect(cardLeft).toBe(gutter);
-      expect(cardLeft + cardWidth).toBe(screen - gutter);
-      // The next card starts at (or past) the right edge, the previous ends at (or before) the left.
-      expect(nextLeft).toBeGreaterThanOrEqual(screen);
-      expect(previousRight).toBeLessThanOrEqual(0);
+  });
+
+  it.each([600, 768, 834])("on a %i pt screen the card is capped at 560 pt and centred", (viewport) => {
+    const { cardWidth, inset, gap } = carouselLayout(viewport);
+    expect(cardWidth).toBe(560);
+    expect(inset).toBe((viewport - 560) / 2);
+    expect(gap).toBe(inset);
+  });
+
+  it.each([375, 390, 393, 430, 600, 768, 834, 1024])("at %i pt, every snap position shows one whole card and nothing of its neighbours", (viewport) => {
+    const layout = carouselLayout(viewport);
+    const slides = 4;
+    // The scrollable content: inset, cards separated by gaps, inset.
+    const contentWidth = layout.inset * 2 + slides * layout.cardWidth + (slides - 1) * layout.gap;
+    for (let slide = 0; slide < slides; slide += 1) {
+      const scroll = slideOffsets(layout, slide).restingScroll;
+      // Where each card sits on screen at this resting position.
+      const left = (i: number) => slideOffsets(layout, i).itemOffset - scroll;
+      expect(left(slide)).toBe(layout.inset);
+      expect(left(slide) + layout.cardWidth).toBe(viewport - layout.inset);
+      expect(left(slide + 1)).toBeGreaterThanOrEqual(viewport);
+      expect(left(slide - 1) + layout.cardWidth).toBeLessThanOrEqual(0);
+      // The list can actually rest there, the last slide included.
+      expect(scroll).toBeLessThanOrEqual(contentWidth - viewport + 1e-9);
     }
-    expect(gap).toBe(gutter);
+    expect(slideOffsets(layout, slides - 1).restingScroll).toBeCloseTo(contentWidth - viewport, 9);
   });
 });
