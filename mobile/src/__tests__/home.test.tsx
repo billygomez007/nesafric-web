@@ -92,9 +92,9 @@ describe("marketplace home", () => {
     await scrollFeed();
     await screen.findByTestId("company-rail-placeholder");
     const texts = flatten(view.toJSON() as Node);
-    // Hero → chips → the first property shelf → trusted companies further down → Advanced Search.
-    // No campaign runs here, so there is no advertising carousel; the listing appears once.
-    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "Newly listed", "4 Bedroom House", "Trusted by leading companies", "Advanced Search"];
+    // Hero → chips → (carousel) → trusted companies directly under it → the first property shelf →
+    // Advanced Search. No campaign runs here, so there is no carousel; the listing appears once.
+    const order = ["Find your perfect property", "Area, city or property", "Rent", "Villas", "Trusted by leading companies", "Newly listed", "4 Bedroom House", "Advanced Search"];
     const positions = order.map((text) => texts.indexOf(text));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);

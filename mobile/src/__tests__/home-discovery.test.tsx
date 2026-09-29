@@ -7,6 +7,7 @@ import { StyleSheet } from "react-native";
 import type { CampaignBanner } from "@/api/home";
 import type { PublicListing } from "@/api/types";
 import { CATEGORY_COLLECTIONS, cityCollection, fetchSize, NEWEST, organic, popularCities, TOP_AD_HEADROOM, topAds } from "@/home/discovery/collections";
+import { carouselLayout } from "@/home/components/featured-ads-carousel";
 import { scrollFeed } from "@/test-utils/feed";
 import { listing } from "@/test-utils/fixtures";
 
@@ -232,12 +233,31 @@ describe("home discovery rules", () => {
 describe("advertising carousel", () => {
   const campaign = (id: string): CampaignBanner => ({ id, placement: "MARKETPLACE_PRIMARY", headline: `Campaign ${id}`, supportingText: null, ctaLabel: null, destinationUrl: "https://developer.example/launch", desktopMediaUrl: null, mobileMediaUrl: `https://cdn.test/${id}.jpg` });
 
-  it("with several campaigns, draws each at 88% so the next one peeks and the carousel is shorter", async () => {
+  it("with several campaigns, shows exactly one full card: no next card peeking", async () => {
     mockApi({ banners: [campaign("c0ffee00-0000-4000-8000-000000000001"), campaign("c0ffee00-0000-4000-8000-000000000002")] });
     renderRouter(APP_DIR, { initialUrl: "/" });
     const artwork = await screen.findByTestId("campaign-artwork-c0ffee00-0000-4000-8000-000000000001");
     const { width, height } = StyleSheet.flatten(artwork.props.style) as { width: number; height: number };
-    expect(width).toBe(Math.round(560 * 0.88));
+    // Same full width as a single campaign (the test screen is wide, so the 560 cap applies).
+    expect(width).toBe(560);
     expect(width / height).toBeCloseTo(2.5, 1);
+  });
+
+  it.each([375, 390, 393, 430])("at %i pt, each snap shows one whole card and none of the next", (screen) => {
+    const { gutter, gap, cardWidth, cardHeight, interval } = carouselLayout(screen);
+    expect(cardWidth).toBe(screen - 32);
+    expect(cardWidth / cardHeight).toBeCloseTo(2.5, 1);
+    for (const slide of [0, 1, 2]) {
+      const offset = slide * interval; // resting scroll position after snapping to `slide`
+      const cardLeft = gutter + slide * interval - offset;
+      const nextLeft = gutter + (slide + 1) * interval - offset;
+      const previousRight = gutter + (slide - 1) * interval + cardWidth - offset;
+      expect(cardLeft).toBe(gutter);
+      expect(cardLeft + cardWidth).toBe(screen - gutter);
+      // The next card starts at (or past) the right edge, the previous ends at (or before) the left.
+      expect(nextLeft).toBeGreaterThanOrEqual(screen);
+      expect(previousRight).toBeLessThanOrEqual(0);
+    }
+    expect(gap).toBe(gutter);
   });
 });
