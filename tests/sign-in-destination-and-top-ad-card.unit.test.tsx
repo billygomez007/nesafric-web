@@ -16,6 +16,7 @@ describe("post sign-in destination (web password and Google)", () => {
       remember: { key: "propertyos.activeOrganisationId", value: "o1" },
     });
     expect(resolveSignInDestination({ propertyOsOrganisations: [], marketplaceProfessionals: [{ id: "p1" }], serviceProviders: [{ id: "s1" }] }).path).toBe("/pro/p1");
+    expect(resolveSignInDestination({ propertyOsOrganisations: [{ id: "o1" }], marketplaceProfessionals: [], serviceProviders: [{ id: "s1" }] }).path).toBe("/dashboard");
   });
 
   it("sends a service-provider owner to their provider workspace instead of onboarding", () => {

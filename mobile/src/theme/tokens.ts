@@ -51,7 +51,18 @@ export const colors = {
   success: css["--color-success"],
   warning: css["--color-warning"],
   danger: css["--color-danger"],
+  dangerPressed: "#b91c1c",
   white: "#ffffff",
+  /**
+   * NesAfric orange, the logo's action colour: what to tap, what is selected, the next step.
+   * Native-only (the web has no orange yet). `orange` is the logo swatch, for tints and strokes
+   * only: white on it is 2.45:1. Anything that must be read — a CTA fill, orange text, a selected
+   * border — uses `action`, the deep step of the same hue (4.94:1 with white, WCAG AA).
+   */
+  orange: "#f28c28",
+  action: "#b8520a",
+  actionPressed: "#9c4508",
+  actionTint: "#fef3e8",
   // Explicit disabled pair instead of opacity (the web contrast guard bans `disabled:opacity-*`).
   disabledBackground: css["--color-hairline"],
   disabledText: css["--color-muted"],

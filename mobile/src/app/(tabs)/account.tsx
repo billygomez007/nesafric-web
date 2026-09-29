@@ -1,3 +1,4 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
@@ -19,7 +20,7 @@ import { GatewayCard } from "@/components/gateway-card";
 import { ListRow, RowGroup, type IconName } from "@/components/list-row";
 import { AppText, Button, Card, Notice } from "@/components/ui";
 import { leaseLabel } from "@/tenant/maintenance";
-import { colors, fonts, spacing } from "@/theme/tokens";
+import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { setWorkspaceIntent, useWorkspaceIntent } from "@/workspace/intent";
 import {
   hasWorkspaceKind,
@@ -36,6 +37,7 @@ import {
 } from "@/workspace/resolve";
 import { SETUP_PATH } from "@/workspace/routing";
 import { openSwitcher } from "@/workspace/shell";
+import { openWebsiteThenRefresh } from "@/workspace/web-handoff";
 
 /**
  * Account entry point (brief §6). Signing in is optional: guests keep browsing, saving and
@@ -170,7 +172,8 @@ function SignedOutAccount() {
           Looking for property?
         </AppText>
         <AppText variant="caption">Sign in to save properties, manage enquiries and keep track of viewings.</AppText>
-        <Button label="Sign in / Create account" onPress={() => { setWorkspaceIntent(null); router.push("/sign-in"); }} testID="open-sign-in" />
+        <Button label="Sign in" onPress={() => { setWorkspaceIntent(null); router.push("/sign-in"); }} testID="open-sign-in" />
+        <Button label="Create account" variant="secondary" onPress={() => { setWorkspaceIntent(null); router.push({ pathname: "/sign-in", params: { mode: "register" } }); }} testID="open-create-account" />
       </Card>
 
       <View style={styles.section}>
@@ -259,11 +262,12 @@ function SignedInAccount() {
   const missing = (Object.keys(OFFERS) as WorkspaceIntent[]).filter((kind) => !hasWorkspaceKind(available, kind));
   // The tapped card only reorders and highlights; it never adds a workspace.
   const offers = isWorkspaceIntent(intent) && missing.includes(intent) ? [intent, ...missing.filter((kind) => kind !== intent)] : missing;
+  const intentHasAction =
+    (isWorkspaceIntent(intent) && Boolean(workspaces.data) && available.filter((workspace) => workspace.kind === intent).length === 1) || (intent === "tenant" && Boolean(tenancies.data));
 
   async function openOffer(kind: WorkspaceIntent) {
-    await WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `${OFFERS[kind].path}`));
     // Back from the website: pick up a workspace that was just set up.
-    void workspaces.refetch();
+    await openWebsiteThenRefresh(websiteUrl(apiUrl, `${OFFERS[kind].path}`), () => void workspaces.refetch());
   }
 
   return (
@@ -288,12 +292,23 @@ function SignedInAccount() {
           <AppText variant="heading" accessibilityRole="header">
             Current workspace
           </AppText>
+          {continueIn.kind !== "marketplace" ? (
+            <Card style={styles.continueCard}>
+              <View style={styles.continueHead}>
+                <View style={styles.continueTile} accessibilityElementsHidden importantForAccessibility="no">
+                  <Ionicons name={ICONS[continueIn.kind]} size={22} color={colors.action} />
+                </View>
+                <View style={styles.profileText}>
+                  <AppText variant="label">{continueIn.name}</AppText>
+                  {continueIn.subtitle ? <AppText variant="caption">{continueIn.subtitle}</AppText> : null}
+                </View>
+              </View>
+              {/* One orange action per screen: a just-answered sign-in intent owns it when it has one. */}
+              <Button label={`Continue in ${continueIn.name}`} variant={intentHasAction ? "secondary" : "primary"} onPress={() => router.push(continueIn.route)} testID="continue-workspace" />
+            </Card>
+          ) : null}
           <RowGroup>
-            {continueIn.kind !== "marketplace" ? (
-              <ListRow icon={ICONS[continueIn.kind]} title={`Continue in ${continueIn.name}`} detail={continueIn.subtitle} onPress={() => router.push(continueIn.route)} testID="continue-workspace" />
-            ) : (
-              <ListRow icon="storefront-outline" title="Marketplace" detail="You’re browsing the marketplace" />
-            )}
+            {continueIn.kind === "marketplace" ? <ListRow icon="storefront-outline" title="Marketplace" detail="You’re browsing the marketplace" /> : null}
             <ListRow icon="swap-horizontal-outline" title="Switch workspace" detail={available.length > 1 ? `${available.length} workspaces available` : "Marketplace only"} onPress={() => openSwitcher("marketplace", null)} testID="open-switcher" />
             <ListRow icon="search-outline" title="Browse Marketplace" onPress={() => router.navigate("/")} testID="browse-marketplace" />
             <ListRow icon="settings-outline" title="Account settings" detail="Name, email and password on nesafric.com" accessibilityHint="Opens nesafric.com" onPress={() => void WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/settings`))} testID="account-settings" last />
@@ -518,7 +533,10 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.lg },
   notices: { gap: spacing.sm },
   noticeActions: { gap: spacing.sm },
-  intro: { gap: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.gold },
+  intro: { gap: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.orange },
+  continueCard: { gap: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.orange },
+  continueHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  continueTile: { width: 44, height: 44, borderRadius: radii.panel, backgroundColor: colors.actionTint, alignItems: "center", justifyContent: "center" },
   restoring: { paddingVertical: spacing.xl, alignItems: "center" },
   profile: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.forest, alignItems: "center", justifyContent: "center" },

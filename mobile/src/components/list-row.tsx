@@ -32,16 +32,25 @@ export function ListRow(props: {
 }) {
   const { icon, title, detail, meta, trailing, onPress, last = false, testID, accessibilityHint, selected, highlighted = false } = props;
   const label = [title, detail, meta].filter(Boolean).join(", ");
+  // Rows in a choice list (switcher) sit the icon in a tile that turns orange when chosen.
+  const choice = selected !== undefined;
+  const glyph = icon ? <Ionicons name={icon} size={22} color={selected ? colors.action : colors.forest} /> : null;
   const content = (
     <>
-      {icon ? <Ionicons name={icon} size={22} color={colors.forest} /> : null}
+      {glyph && choice ? (
+        <View style={[styles.tile, selected && styles.tileSelected]} accessibilityElementsHidden importantForAccessibility="no">
+          {glyph}
+        </View>
+      ) : (
+        glyph
+      )}
       <View style={styles.text}>
         <AppText variant="label">{title}</AppText>
         {detail ? <AppText variant="caption">{detail}</AppText> : null}
         {meta ? <AppText variant="caption">{meta}</AppText> : null}
       </View>
       {trailing}
-      {onPress ? <Ionicons name={selected ? "checkmark-circle" : "chevron-forward"} size={selected ? 22 : 18} color={selected ? colors.brand : colors.muted} /> : null}
+      {onPress ? <Ionicons name={selected ? "checkmark-circle" : "chevron-forward"} size={selected ? 22 : 18} color={selected ? colors.action : colors.muted} /> : null}
     </>
   );
   if (!onPress) {
@@ -59,7 +68,7 @@ export function ListRow(props: {
       accessibilityState={selected === undefined ? undefined : { selected }}
       onPress={onPress}
       testID={testID}
-      style={({ pressed }) => [styles.row, last && styles.rowLast, highlighted && styles.highlighted, pressed && styles.rowPressed]}
+      style={({ pressed }) => [styles.row, last && styles.rowLast, (highlighted || selected) && styles.highlighted, pressed && styles.rowPressed]}
     >
       {content}
     </Pressable>
@@ -71,6 +80,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.hairline, minHeight: 56 },
   rowLast: { borderBottomWidth: 0 },
   rowPressed: { backgroundColor: colors.surface },
-  highlighted: { backgroundColor: colors.cream, borderLeftWidth: 3, borderLeftColor: colors.brand },
+  // Marked or chosen: an orange edge on a white row, never an orange fill. The edge is the state
+  // indicator, so it uses the contrast-safe `action` step (4.94:1 on white), not the 2.45:1 swatch.
+  highlighted: { borderLeftWidth: 3, borderLeftColor: colors.action, paddingLeft: spacing.lg - 3 },
+  tile: { width: 40, height: 40, borderRadius: radii.panel, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  tileSelected: { backgroundColor: colors.actionTint },
   text: { flex: 1, gap: 2 },
 });

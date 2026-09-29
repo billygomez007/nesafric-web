@@ -1,3 +1,4 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +11,7 @@ import { signInErrorMessage } from "@/auth/errors";
 import { GoogleSignInError } from "@/auth/google";
 import { useSession } from "@/auth/session";
 import { BrandLogo } from "@/components/brand-logo";
+import type { IconName } from "@/components/list-row";
 import { AppText, Button, Notice, TextField } from "@/components/ui";
 import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { requestPostSignInRouting } from "@/workspace/navigator";
@@ -183,14 +185,6 @@ export default function SignInScreen() {
           {entry.lead}
         </AppText>
 
-        <Segmented
-          testID="sign-in-mode"
-          value={mode}
-          options={[{ value: "login", label: "Sign in" }, { value: "register", label: "Create account" }]}
-          onChange={(value) => reset({ mode: value })}
-          disabled={disabled}
-        />
-
         {formError ? <Notice message={formError} /> : null}
         {!formError && notice && step === "identifier" ? <Notice tone="info" message={notice} /> : null}
 
@@ -221,7 +215,7 @@ export default function SignInScreen() {
         <Segmented
           testID="sign-in-method"
           value={channel}
-          options={[{ value: "sms", label: "Phone" }, { value: "email", label: "Email" }]}
+          options={[{ value: "sms", label: "Phone", icon: "call-outline" }, { value: "email", label: "Email", icon: "mail-outline" }]}
           onChange={(value) => reset({ channel: value })}
           disabled={disabled}
         />
@@ -297,7 +291,7 @@ export default function SignInScreen() {
             />
             <View style={styles.row}>
               <Pressable accessibilityRole="button" onPress={() => reset({})} disabled={disabled} hitSlop={8}>
-                <AppText style={styles.link}>{phone ? "Change number" : "Change email"}</AppText>
+                <AppText style={styles.quietLink}>{phone ? "Change number" : "Change email"}</AppText>
               </Pressable>
               {secondsLeft > 0 ? (
                 <AppText variant="caption" accessibilityLabel="You can request a new code in about a minute">
@@ -327,6 +321,8 @@ export default function SignInScreen() {
           </>
         ) : null}
 
+        <ModeSwitch mode={mode} onChange={(value) => reset({ mode: value })} disabled={disabled} />
+
         <AppText variant="caption" style={styles.center}>
           The same account works on nesafric.com. You can keep browsing properties without signing in.
         </AppText>
@@ -335,7 +331,25 @@ export default function SignInScreen() {
   );
 }
 
-function Segmented<T extends string>({ value, options, onChange, disabled, testID }: { value: T; options: { value: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean; testID?: string }) {
+/** "Already have an account? Sign in": only the action words are orange and tappable. */
+function ModeSwitch({ mode, onChange, disabled }: { mode: OtpMode; onChange: (mode: OtpMode) => void; disabled: boolean }) {
+  const next: OtpMode = mode === "register" ? "login" : "register";
+  const action = next === "register" ? "Create an account" : "Sign in";
+  return (
+    <View style={styles.modeSwitch}>
+      <AppText variant="caption">{next === "register" ? "New to NesAfric?" : "Already have an account?"}</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={action} accessibilityState={{ disabled }} disabled={disabled} onPress={() => onChange(next)} hitSlop={12} testID={`sign-in-mode-${next}`}>
+        <AppText style={styles.link}>{action}</AppText>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * Phone / Email. The chosen side is unmistakable without relying on colour: white tile, orange
+ * border, orange icon and label, bolder weight; the other side stays muted grey.
+ */
+function Segmented<T extends string>({ value, options, onChange, disabled, testID }: { value: T; options: { value: T; label: string; icon: IconName }[]; onChange: (value: T) => void; disabled?: boolean; testID?: string }) {
   return (
     <View style={styles.segmented} accessibilityRole="tablist" testID={testID}>
       {options.map((option) => {
@@ -351,6 +365,7 @@ function Segmented<T extends string>({ value, options, onChange, disabled, testI
             style={[styles.segment, selected && styles.segmentSelected]}
             testID={`${testID}-${option.value}`}
           >
+            <Ionicons name={option.icon} size={18} color={selected ? colors.action : colors.muted} />
             <AppText style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>{option.label}</AppText>
           </Pressable>
         );
@@ -380,11 +395,13 @@ const styles = StyleSheet.create({
   divider: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline },
   segmented: { flexDirection: "row", padding: 4, gap: 4, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.hairline, backgroundColor: colors.surface },
-  segment: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: radii.pill },
-  segmentSelected: { backgroundColor: colors.elevated, borderWidth: 1, borderColor: colors.hairline },
-  segmentLabel: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.muted },
-  segmentLabelSelected: { color: colors.ink },
+  segment: { flex: 1, minHeight: 44, flexDirection: "row", gap: spacing.xs, alignItems: "center", justifyContent: "center", borderRadius: radii.pill, borderWidth: 1.5, borderColor: "transparent" },
+  segmentSelected: { backgroundColor: colors.elevated, borderColor: colors.action },
+  segmentLabel: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 18, color: colors.muted },
+  segmentLabelSelected: { fontFamily: fonts.bold, color: colors.action },
   code: { fontSize: 22, letterSpacing: 8, textAlign: "center" },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  link: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.brandStrong },
+  link: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.action },
+  quietLink: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: colors.ink },
+  modeSwitch: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: spacing.xs, paddingVertical: spacing.xs },
 });

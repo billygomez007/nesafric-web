@@ -14,7 +14,8 @@ import { openSearch } from "@/marketplace/navigation";
 import { colors, radii } from "@/theme/tokens";
 
 const CARD_GUTTER = 16;
-const GAP = 16;
+const GAP = 10;
+const PEEK = 0.88;
 /** Impressions are reported once per campaign per app session, like the website carousel. */
 const reportedImpressions = new Set<string>();
 
@@ -27,7 +28,8 @@ export function openSlideTarget(target: SlideTarget) {
 /**
  * The homepage advertising carousel: live campaigns only (see `buildFeaturedSlides`). With no
  * campaign that has artwork, nothing renders, not even a placeholder. Each campaign's artwork is
- * shown exactly as uploaded, uncropped, in a 2.5:1 card (the 1200 x 480 native upload); the dots
+ * shown exactly as uploaded, uncropped, in a 2.5:1 card (the 1200 x 480 native upload), at 88% width
+ * with the next card peeking when there are several; the dots
  * sit below the card, never over the artwork. There are no arrow buttons: people swipe.
  *
  * It advances on its own every `rotationSeconds` (Super Admin's placement setting, 5 s by default)
@@ -51,12 +53,14 @@ export function FeaturedAdsCarousel() {
     return () => subscription.remove();
   }, []);
 
-  const cardWidth = Math.min(width - CARD_GUTTER * 2, 560);
+  const slides = useMemo(() => buildFeaturedSlides(campaigns.data?.banners ?? [], apiUrl), [campaigns.data, apiUrl]);
+  // One campaign fills the width. Several are drawn at 88% so the next one peeks in: the row reads
+  // as swipeable and the carousel is ~12% shorter, bringing the first property shelf up the screen.
+  const fullWidth = Math.min(width - CARD_GUTTER * 2, 560);
+  const cardWidth = slides.length > 1 ? Math.round(fullWidth * PEEK) : fullWidth;
   const cardHeight = Math.round(cardWidth * NATIVE_CAMPAIGN_ASPECT);
   const interval = cardWidth + GAP;
   const delay = rotationMs(campaigns.data?.rotationSeconds);
-
-  const slides = useMemo(() => buildFeaturedSlides(campaigns.data?.banners ?? [], apiUrl), [campaigns.data, apiUrl]);
   const current = Math.min(index, slides.length - 1);
   const visible = slides[current];
 
@@ -149,7 +153,7 @@ const styles = StyleSheet.create({
   // plain margins, never on a dark NesAfric-made backdrop.
   card: { borderRadius: radii.shell, overflow: "hidden", backgroundColor: colors.surface },
   // Below the card, so nothing is drawn over campaign artwork.
-  controls: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: 8, paddingHorizontal: CARD_GUTTER },
+  controls: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: 6, paddingHorizontal: CARD_GUTTER },
   dots: { flexDirection: "row", gap: 6 },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "rgba(0,63,58,0.25)" },
   dotActive: { backgroundColor: colors.forest },

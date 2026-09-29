@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
+import { scrollFeed } from "@/test-utils/feed";
 import path from "path";
 
 import { listing } from "@/test-utils/fixtures";
@@ -55,8 +56,9 @@ describe("signed-out marketplace", () => {
     expect(await screen.findByText("Find your perfect property")).toBeTruthy();
     // With no campaigns the featured carousel and the properties rail both show real published listings.
     expect((await screen.findAllByText("4 Bedroom House")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Properties on NesAfric")).toBeTruthy();
-    expect(screen.getByLabelText("Advanced search")).toBeTruthy();
+    expect(screen.getByText("Newly listed")).toBeTruthy();
+    await scrollFeed();
+    expect(await screen.findByLabelText("Advanced search")).toBeTruthy();
     expect(screen.queryByText(/sign in to continue/i)).toBeNull();
     // Every request is to a public endpoint, with no credentials.
     expect(calls.every((call) => call.url.startsWith("https://api.test/api/public/") && call.init.credentials === "omit")).toBe(true);

@@ -237,6 +237,28 @@ export async function updateServiceCategory(
   });
 }
 
+/**
+ * A repeated "create profile" (double submit, Back then Continue, a reload mid-onboarding) hits
+ * the one-identity-per-user/company unique index. When the caller already owns that identity,
+ * the conflict carries its id so onboarding can continue with it instead of dead-ending; someone
+ * who doesn't own it learns nothing beyond the conflict itself.
+ */
+async function providerIdentityExists(userId: string, data: { type: "INDIVIDUAL" | "COMPANY"; companyOrganisationId?: string }) {
+  const existing = await db.serviceProvider.findFirst({
+    where: {
+      ...(data.type === "INDIVIDUAL" ? { individualUserId: userId } : { companyOrganisationId: data.companyOrganisationId }),
+      ...ownedProviderWhere(userId),
+    },
+    select: { id: true },
+  });
+  return new AppError(
+    "PROVIDER_IDENTITY_EXISTS",
+    409,
+    "This user or company already has a provider identity.",
+    existing ? { providerId: existing.id } : undefined,
+  );
+}
+
 export async function createServiceProvider(userId: string, input: unknown) {
   const data = createProviderSchema.parse(input);
   return db.$transaction(async (tx) => {
@@ -276,7 +298,7 @@ export async function createServiceProvider(userId: string, input: unknown) {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new AppError("PROVIDER_IDENTITY_EXISTS", 409, "This user or company already has a provider identity.");
+        throw await providerIdentityExists(userId, data);
       }
       throw error;
     }
