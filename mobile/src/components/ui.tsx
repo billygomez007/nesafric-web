@@ -23,7 +23,7 @@ type ButtonProps = {
  * Pill buttons. Primary is NesAfric orange with a white label: use it for the one main action on a
  * screen. Secondary is white with a hairline border, ghost is text only, destructive is danger red
  * (never orange), dark is forest for saves inside workspace forms. Disabled turns grey; loading
- * keeps the variant's colour and shows a spinner.
+ * keeps the variant's colour and shows a spinner, even when the button is also disabled.
  */
 export function Button({ label, onPress, variant = "primary", loading = false, disabled = false, testID, accessibilityHint }: ButtonProps) {
   const inactive = disabled || loading;
@@ -36,7 +36,9 @@ export function Button({ label, onPress, variant = "primary", loading = false, d
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, disabled ? styles.buttonDisabled : buttonVariants[variant](pressed && !loading)]}
+      // Loading wins over disabled: callers often set both from one busy flag, and the spinner
+      // (drawn in the variant's label colour) must stay on the variant's own background to be seen.
+      style={({ pressed }) => [styles.button, disabled && !loading ? styles.buttonDisabled : buttonVariants[variant](pressed && !loading)]}
     >
       {loading ? (
         <ActivityIndicator color={buttonText[variant]} />

@@ -80,8 +80,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.hairline, minHeight: 56 },
   rowLast: { borderBottomWidth: 0 },
   rowPressed: { backgroundColor: colors.surface },
-  // Marked or chosen: an orange edge on a white row, never an orange fill.
-  highlighted: { borderLeftWidth: 3, borderLeftColor: colors.orange, paddingLeft: spacing.lg - 3 },
+  // Marked or chosen: an orange edge on a white row, never an orange fill. The edge is the state
+  // indicator, so it uses the contrast-safe `action` step (4.94:1 on white), not the 2.45:1 swatch.
+  highlighted: { borderLeftWidth: 3, borderLeftColor: colors.action, paddingLeft: spacing.lg - 3 },
   tile: { width: 40, height: 40, borderRadius: radii.panel, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   tileSelected: { backgroundColor: colors.actionTint },
   text: { flex: 1, gap: 2 },
