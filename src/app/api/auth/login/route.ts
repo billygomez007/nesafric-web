@@ -33,7 +33,8 @@ export async function POST(request: Request) {
       true,
     );
 
-    await createSession(user.id);
+    // Bound to the password just checked (see PasswordSessionGuard).
+    await createSession(user.id, { passwordHash: user.passwordHash! });
 
     const store = await cookies();
 

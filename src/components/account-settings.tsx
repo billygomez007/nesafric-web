@@ -73,6 +73,9 @@ export function AccountSettings() {
   const [emailPassword, setEmailPassword] = useState("");
   const [emailNotice, setEmailNotice] = useState<Notice>(null);
   const [savingEmail, setSavingEmail] = useState(false);
+  // Step 2 of an email change: the code sent to the new address.
+  const [emailChallenge, setEmailChallenge] = useState<{ challengeId: string; email: string; destination: string } | null>(null);
+  const [emailCode, setEmailCode] = useState("");
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -145,31 +148,50 @@ export function AccountSettings() {
     }
   }
 
+  /**
+   * Changing the email takes two steps: the current password sends a code to the NEW address, and
+   * that code makes it the account's email. The email never changes on the password alone.
+   */
   async function updateEmail(event: FormEvent) {
     event.preventDefault();
     setEmailNotice(null);
     setSavingEmail(true);
 
     try {
-      const response = await fetch("/api/account/email", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, currentPassword: emailPassword }),
-      });
-      const body = await response.json();
-
-      if (!response.ok) {
-        throw new Error(body?.error?.message ?? "Unable to update your email.");
+      if (!emailChallenge) {
+        const response = await fetch("/api/account/email", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, currentPassword: emailPassword }),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error(body?.error?.message ?? "Unable to update your email.");
+        }
+        setEmailChallenge({ challengeId: body.challengeId, email, destination: body.destination });
+        setEmailPassword("");
+        setEmailCode("");
+        setEmailNotice({ kind: "success", message: `We sent a 6-digit code to ${body.destination}. Enter it to confirm the new email.` });
+        return;
       }
 
-      setProfile((current) =>
-        current ? { ...current, email: body.email, emailVerified: body.emailVerified } : current,
-      );
+      const response = await fetch("/api/account/identifiers/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId: emailChallenge.challengeId, channel: "email", identifier: emailChallenge.email, code: emailCode }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body?.error?.message ?? "Unable to confirm your new email.");
+      }
+
+      setProfile((current) => (current ? { ...current, email: body.email, emailVerified: true } : current));
       setEmail(body.email);
-      setEmailPassword("");
+      setEmailChallenge(null);
+      setEmailCode("");
       setEmailNotice({
         kind: "success",
-        message: "Email updated. Please use the new email the next time you sign in.",
+        message: "Email updated and verified. Use the new email the next time you sign in; your other devices have been signed out.",
       });
     } catch (error) {
       setEmailNotice({
@@ -179,6 +201,12 @@ export function AccountSettings() {
     } finally {
       setSavingEmail(false);
     }
+  }
+
+  function cancelEmailChange() {
+    setEmailChallenge(null);
+    setEmailCode("");
+    setEmailNotice(null);
   }
 
   async function updatePassword(event: FormEvent) {
@@ -283,11 +311,26 @@ export function AccountSettings() {
       <Card
         eyebrow="Account"
         title="Email address"
-        description="Change the email you use to sign in. For security, confirm the change with your current password."
+        description="Change the email you use to sign in. For security, confirm with your current password, then with a code sent to the new address."
       >
         <form className="space-y-4" onSubmit={updateEmail}>
           <NoticeBanner notice={emailNotice} />
 
+          {emailChallenge ? (
+            <label className="block text-sm font-medium text-ink">
+              Code sent to {emailChallenge.destination}
+              <input
+                autoComplete="one-time-code"
+                className={inputClass}
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                pattern="\d{6}"
+                required
+                value={emailCode}
+              />
+            </label>
+          ) : (
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block text-sm font-medium text-ink">
               Email
@@ -312,17 +355,23 @@ export function AccountSettings() {
               />
             </label>
           </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <p className="text-xs text-muted">
               Status: {profile?.emailVerified ? "Verified" : "Verification required"}
+              {emailChallenge ? (
+                <button className="ml-3 font-semibold text-ink underline" onClick={cancelEmailChange} type="button">
+                  Use a different email
+                </button>
+              ) : null}
             </p>
             <button
               className="rounded-xl bg-forest px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-deep disabled:cursor-not-allowed disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
               disabled={savingEmail}
               type="submit"
             >
-              {savingEmail ? "Updating..." : "Change email"}
+              {savingEmail ? "Updating..." : emailChallenge ? "Confirm new email" : "Send code to new email"}
             </button>
           </div>
         </form>

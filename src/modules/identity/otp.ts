@@ -2,6 +2,7 @@ import { createHmac, randomInt, randomUUID, timingSafeEqual } from "crypto";
 import { z } from "zod";
 
 import { enqueueWelcomeEmail } from "@/modules/account-emails/service";
+import { claimEmailOnFirstProof } from "@/modules/identity/service";
 import { getEmailProvider, getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
 import { renderEmail } from "@/modules/notifications/email-templates/render";
 import { BRAND } from "@/platform/brand";
@@ -422,7 +423,8 @@ async function consume(challengeId: string, now = new Date()) {
 }
 
 async function markVerified(user: User, channel: OtpChannel) {
-  if (channel === "email" && !user.emailVerifiedAt) return db.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+  // First proof of an email that someone only claimed: hand the owner a clean account (H-1).
+  if (channel === "email" && !user.emailVerifiedAt) return claimEmailOnFirstProof(user.id);
   if (channel === "sms" && !user.phoneVerifiedAt) return db.user.update({ where: { id: user.id }, data: { phoneVerifiedAt: new Date() } });
   return user;
 }

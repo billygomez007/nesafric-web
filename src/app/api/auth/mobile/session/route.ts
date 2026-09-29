@@ -19,7 +19,8 @@ export async function POST(request: Request) {
     await assertLoginNotRateLimited(email);
     const user = await authenticateUser(body);
     await recordLoginAttempt(email, true);
-    return await mobileSessionResponse(user);
+    // Bound to the password just checked (see PasswordSessionGuard).
+    return await mobileSessionResponse(user, { passwordHash: user.passwordHash! });
   } catch (error) {
     // Count wrong credentials towards the lockout, exactly like the web login route.
     if (!(error instanceof AppError) || error.code !== "LOGIN_RATE_LIMITED") {

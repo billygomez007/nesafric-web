@@ -172,8 +172,11 @@ describe("passwordless sign-in with one-time codes", () => {
       expect(mail.sent).toHaveLength(2);
     });
 
-    it("signs an existing password account in with a web session cookie, leaving its password intact", async () => {
+    it("signs an existing verified password account in with a web session cookie, leaving its password intact", async () => {
       const user = await registerUser({ displayName: "Ama", email: "ama@example.com", password: PASSWORD });
+      // Verified: its owner already proved this address. (An unverified one is claimed afresh by the
+      // first proof and loses the claimant's password: tests/postgres-account-ownership.)
+      await db.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
       const before = (await db.user.findUniqueOrThrow({ where: { id: user.id } })).passwordHash;
       const sent = await send({ mode: "login", channel: "email", identifier: "AMA@example.com" });
       const verified = await verifyWeb({ challengeId: sent.body.challengeId, channel: "email", identifier: "ama@example.com", code: lastCode("email") });

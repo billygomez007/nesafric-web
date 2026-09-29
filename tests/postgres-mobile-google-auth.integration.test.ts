@@ -173,8 +173,9 @@ describe("mobile Google sign-in", () => {
     expect(await db.session.count()).toBe(1);
   });
 
-  it("links an existing password account with the same email (any case) to the same User row", async () => {
+  it("links an existing verified password account with the same email (any case) to the same User row", async () => {
     const existing = await registerUser({ displayName: "Ama Mensah", email: "ama@example.com", password: PASSWORD });
+    await db.user.update({ where: { id: existing.id }, data: { emailVerifiedAt: new Date() } });
     const { flow, redirect } = await mobileGoogle(appFlow(), { email: "AMA@Example.com ", name: "Ama from Google" });
     const body = await (await redeem(redirect!.searchParams.get("code"), flow.verifier)).json();
     expect(body.user.id).toBe(existing.id);
@@ -182,6 +183,21 @@ describe("mobile Google sign-in", () => {
     // Their password still works on web and mobile.
     resetRequest();
     expect((await mobileSignIn(jsonRequest(`${ORIGIN}/api/auth/mobile/session`, { email: "ama@example.com", password: PASSWORD }))).status).toBe(200);
+  });
+
+  it("claims an unverified password account for the Google owner: the claimant's password and sessions end", async () => {
+    const claimant = await registerUser({ displayName: "Not Ama", email: "ama@example.com", password: PASSWORD });
+    resetRequest();
+    const claimantSignIn = await mobileSignIn(jsonRequest(`${ORIGIN}/api/auth/mobile/session`, { email: "ama@example.com", password: PASSWORD }));
+    expect(claimantSignIn.status).toBe(200);
+    const { flow, redirect } = await mobileGoogle(appFlow(), { email: "ama@example.com", name: "Ama from Google" });
+    const body = await (await redeem(redirect!.searchParams.get("code"), flow.verifier)).json();
+    expect(body.user.id).toBe(claimant.id);
+    // Only the Google owner's fresh session is left; the password no longer signs in.
+    expect(await db.session.count({ where: { userId: claimant.id } })).toBe(1);
+    expect((await db.user.findUniqueOrThrow({ where: { id: claimant.id } })).passwordHash).toBeNull();
+    resetRequest();
+    expect((await mobileSignIn(jsonRequest(`${ORIGIN}/api/auth/mobile/session`, { email: "ama@example.com", password: PASSWORD }))).status).toBe(401);
   });
 
   it("creates exactly one User row for a new Google user, and the same row on the next sign-in", async () => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createSessionRecord } from "./session";
+import { createSessionRecord, type PasswordSessionGuard } from "./session";
 
 /**
  * The one mobile sign-in response (`MobileSessionResponse` in the app), shared by password, Google
@@ -8,8 +8,8 @@ import { createSessionRecord } from "./session";
  * `POST /api/auth/logout`) whose opaque token is returned once, in this body, for the app's secure
  * storage. Never cached, never logged. `email` is null for a phone-only account.
  */
-export async function mobileSessionResponse(user: { id: string; email: string | null; phoneE164?: string | null; displayName: string }) {
-  const { session, token } = await createSessionRecord(user.id);
+export async function mobileSessionResponse(user: { id: string; email: string | null; phoneE164?: string | null; displayName: string }, guard?: PasswordSessionGuard) {
+  const { session, token } = await createSessionRecord(user.id, undefined, guard);
   return NextResponse.json(
     {
       token,

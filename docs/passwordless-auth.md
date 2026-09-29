@@ -37,11 +37,19 @@ account signs into that account (`existingAccount: true`) instead of creating a 
 | Phone-only user adds an email (link) | Email added; Google with that email reaches the same user |
 | Email-only user adds a phone (link) | Phone added to the same user |
 | Phone/email already belongs to another account | `409 IDENTIFIER_IN_USE`; nothing changes. Accounts are never merged implicitly |
-| Existing password account signs in with an email code | Same user; password hash untouched |
+| Existing password account with a **verified** email signs in with an email code or Google | Same user; password and other sessions untouched |
+| Existing account whose email was **never verified** is proved by an email code or Google | Same user, now verified; the password, every earlier session and any linked phone are removed, because whoever set them never proved the address (`claimEmailOnFirstProof`) |
 
-Legacy password routes (`/api/auth/login`, `/api/auth/register`, `/api/auth/mobile/session`,
-`/api/account/password`) remain for existing clients with their rate limiting. Accounts without a
-password get `INVALID_CREDENTIALS` / `PASSWORD_NOT_SET` there.
+Legacy password routes (`/api/auth/login`, `/api/auth/mobile/session`, `/api/account/password`)
+remain for existing clients with their rate limiting. Accounts without a password get
+`INVALID_CREDENTIALS` / `PASSWORD_NOT_SET` there. `POST /api/auth/register` is retired: it answers
+`410 REGISTRATION_RETIRED` to every request and creates nothing.
+
+Changing a password account's email is two steps: `PATCH /api/account/email` (current password)
+sends a code to the new address and answers `202` with the challenge; the email only changes when
+that code is verified at `POST /api/account/identifiers/verify`, which also signs out the account's
+other sessions. Platform-admin bootstrap (`PLATFORM_ADMIN_BOOTSTRAP_EMAILS`) only matches verified
+emails.
 
 Features that need an email (team invitations, account emails) skip or explain when a phone-only
 account has none, rather than failing.

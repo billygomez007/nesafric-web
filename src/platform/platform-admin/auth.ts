@@ -22,7 +22,10 @@ function bootstrapEmails(): string[] {
 export async function ensurePlatformBootstrap() {
   const emails = bootstrapEmails();
   if (!emails.length) return;
-  const users = await db.user.findMany({ where: { email: { in: emails } } });
+  // Only an address its owner has proved (email code or Google). A listed address someone merely
+  // typed into an unverified account grants nothing (H-4); the owner's first proof clears that
+  // account's claimant (`claimEmailOnFirstProof`) before this ever matches it.
+  const users = await db.user.findMany({ where: { email: { in: emails }, emailVerifiedAt: { not: null } } });
   for (const user of users) {
     await db.platformPrincipal.upsert({
       where: { userId: user.id },
