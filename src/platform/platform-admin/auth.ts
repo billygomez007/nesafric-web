@@ -37,15 +37,26 @@ export async function ensurePlatformBootstrap() {
 
 /**
  * The one way to read a principal for an authorization decision. An `ENV_BOOTSTRAP` principal
- * exists only because its user's email matched the bootstrap list, so it is unusable while that
- * email is unverified — whenever and however the row was created (H-4). This is checked at read
- * time, not just when granting, so a principal granted before verification was required fails
- * closed until its owner proves the address. `MANUAL` principals (operator-created) are unaffected.
+ * exists only because its user's email is on the bootstrap list, so it is usable only while all of
+ * this holds right now (H-4):
+ *
+ * - the principal is ACTIVE;
+ * - the user's current email is verified;
+ * - that email (normalised) is still in `PLATFORM_ADMIN_BOOTSTRAP_EMAILS`.
+ *
+ * Checked every time a principal is read, however and whenever the row was created — so a grant
+ * made before verification was required, an account that later proved some *other* address, or an
+ * address removed from the list all fail closed. A missing or stale list fails closed too; no row
+ * is ever deleted here. `MANUAL` principals (operator-created) are unaffected.
  */
 export async function findUsablePlatformPrincipal(client: Pick<Prisma.TransactionClient, "platformPrincipal">, userId: string) {
-  const principal = await client.platformPrincipal.findUnique({ where: { userId }, include: { user: { select: { emailVerifiedAt: true } } } });
+  const principal = await client.platformPrincipal.findUnique({ where: { userId }, include: { user: { select: { email: true, emailVerifiedAt: true } } } });
   if (!principal) return null;
-  if (principal.createdVia === "ENV_BOOTSTRAP" && !principal.user.emailVerifiedAt) return null;
+  if (principal.createdVia === "ENV_BOOTSTRAP") {
+    const email = principal.user.email?.trim().toLowerCase();
+    const bound = principal.status === "ACTIVE" && Boolean(principal.user.emailVerifiedAt) && Boolean(email) && bootstrapEmails().includes(email!);
+    if (!bound) return null;
+  }
   const { user: _user, ...usable } = principal;
   return usable;
 }

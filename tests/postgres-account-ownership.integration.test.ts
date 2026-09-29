@@ -117,7 +117,10 @@ function gatedJson(path: string, body: unknown) {
   return { req, reached, release };
 }
 
+import { createHash } from "node:crypto";
 import { PATCH as changeEmail } from "@/app/api/account/email/route";
+import { POST as googleExchange } from "@/app/api/auth/mobile/google/exchange/route";
+import { createMobileHandoff } from "@/platform/auth/mobile-handoff";
 import { PATCH as changePassword } from "@/app/api/account/password/route";
 import { POST as verifyLink } from "@/app/api/account/identifiers/verify/route";
 import { GET as profile } from "@/app/api/account/profile/route";
@@ -493,6 +496,37 @@ describe("account ownership verification (security batch 1)", () => {
       expect(await db.platformPrincipal.count()).toBe(1);
     });
 
+    it("a pre-fix bootstrap principal can't be revived by proving some OTHER email", async () => {
+      const { account, token } = await attackerPreRegisters("founder@example.com");
+      await db.platformPrincipal.create({ data: { userId: account.id, role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "ENV_BOOTSTRAP" } });
+      process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS = "founder@example.com";
+      // The claimant proves an address they do control through the email change…
+      as({ bearer: token });
+      const started = await changeEmail(json("/api/account/email", { email: "attacker@evil.example", currentPassword: ATTACKER_PASSWORD }, "PATCH"));
+      const { challengeId } = (await started.json()) as { challengeId: string };
+      as({ bearer: token });
+      expect((await verifyLink(json("/api/account/identifiers/verify", { challengeId, channel: "email", identifier: "attacker@evil.example", code: lastCode("email") }))).status).toBe(200);
+      const revived = await db.user.findUniqueOrThrow({ where: { id: account.id } });
+      expect(revived.emailVerifiedAt).not.toBeNull();
+      // …but a verified email that isn't the listed one grants nothing, and no row is deleted.
+      await expect(requirePlatformPrincipal(revived)).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+      expect(await findUsablePlatformPrincipal(db, account.id)).toBeNull();
+      expect(await db.platformPrincipal.count({ where: { userId: account.id } })).toBe(1);
+    });
+
+    it("a missing or stale bootstrap list fails closed without deleting the principal", async () => {
+      const founder = await findOrCreateGoogleUser({ email: "founder@example.com", name: "Founder" });
+      process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS = "founder@example.com";
+      await expect(requirePlatformPrincipal(founder)).resolves.toMatchObject({ role: "SUPER_ADMIN", createdVia: "ENV_BOOTSTRAP" });
+      delete process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS;
+      await expect(requirePlatformPrincipal(founder)).rejects.toMatchObject({ code: "FORBIDDEN" });
+      process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS = "someone-else@example.com";
+      await expect(requirePlatformPrincipal(founder)).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(await db.platformPrincipal.count({ where: { userId: founder.id } })).toBe(1);
+      process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS = " FOUNDER@example.com ";
+      await expect(requirePlatformPrincipal(founder)).resolves.toMatchObject({ role: "SUPER_ADMIN" });
+    });
+
     it("an operator-created MANUAL principal keeps working, verified email or not", async () => {
       const staff = await registerUser({ displayName: "Staff", email: "staff@example.com", password: OWNER_PASSWORD });
       await db.platformPrincipal.create({ data: { userId: staff.id, role: "SUPPORT_AGENT", status: "ACTIVE", createdVia: "MANUAL" } });
@@ -508,6 +542,44 @@ describe("account ownership verification (security batch 1)", () => {
       expect(await sessionWorks(token)).toBe(false);
       const owner = await db.user.findUniqueOrThrow({ where: { id: account.id } });
       await expect(requirePlatformPrincipal(owner)).resolves.toMatchObject({ role: "SUPER_ADMIN" });
+    });
+  });
+
+  describe("mobile Google handoff redemption", () => {
+    const verifier = "v".repeat(43) + "0123456789";
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const redeem = async (code: string) => {
+      as();
+      return googleExchange(json("/api/auth/mobile/google/exchange", { code, codeVerifier: verifier }));
+    };
+
+    it("a fresh handoff redeems once for a working session", async () => {
+      const user = await findOrCreateGoogleUser({ email: "kofi@example.com", name: "Kofi" });
+      const code = await createMobileHandoff(user.id, challenge);
+      const response = await redeem(code);
+      expect(response.status).toBe(200);
+      const { token } = (await response.json()) as { token: string };
+      expect(await sessionWorks(token)).toBe(true);
+      expect((await redeem(code)).status).toBe(400);
+    });
+
+    it("a handoff issued before an email change is stale: no session, and the code is burned", async () => {
+      const user = await findOrCreateGoogleUser({ email: "kofi@example.com", name: "Kofi" });
+      const code = await createMobileHandoff(user.id, challenge);
+      // The account's email changes before the app redeems the code.
+      const { token } = await createSessionRecord(user.id);
+      as({ bearer: token });
+      const started = await requestRoute(json("/api/auth/otp/request", { mode: "link", channel: "email", identifier: "kofi.new@example.com" }));
+      const { challengeId } = (await started.json()) as { challengeId: string };
+      as({ bearer: token });
+      expect((await verifyLink(json("/api/account/identifiers/verify", { challengeId, channel: "email", identifier: "kofi.new@example.com", code: lastCode("email") }))).status).toBe(200);
+      const before = await db.session.count({ where: { userId: user.id } });
+
+      const response = await redeem(code);
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe("INVALID_HANDOFF");
+      expect(await db.session.count({ where: { userId: user.id } })).toBe(before);
+      expect((await db.mobileAuthHandoff.findFirstOrThrow({ where: { userId: user.id } })).consumedAt).not.toBeNull();
     });
   });
 

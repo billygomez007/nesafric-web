@@ -60,9 +60,15 @@ transactions, so no stale sign-in, password change or link can recreate access a
 first proof or an email change.
 
 Platform-admin bootstrap (`PLATFORM_ADMIN_BOOTSTRAP_EMAILS`) only matches verified emails, and every
-authorization read of a principal (`findUsablePlatformPrincipal`) treats an `ENV_BOOTSTRAP`
-principal as absent while its user's email is unverified — including principals granted before
-this rule existed. `MANUAL` principals are unaffected.
+authorization read of a principal (`findUsablePlatformPrincipal`) accepts an `ENV_BOOTSTRAP`
+principal only while it is ACTIVE, its user's current email is verified, and that email is still on
+the list — including principals granted before this rule existed. A missing or stale list fails
+closed; no row is deleted. `MANUAL` principals are unaffected. Keep the production list set and
+current for every bootstrap admin.
+
+The mobile Google handoff is redeemed under the same account lock: code consumption, PKCE check and
+session creation happen in one transaction, and a handoff issued before any change to the account
+(its `User` row written after the handoff was created) is stale and creates no session.
 
 Features that need an email (team invitations, account emails) skip or explain when a phone-only
 account has none, rather than failing.
