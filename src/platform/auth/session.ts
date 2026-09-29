@@ -30,6 +30,16 @@ export async function createSessionRecord(userId: string, token = randomBytes(32
 
 export async function createSession(userId: string, guard?: PasswordSessionGuard) {
   const { token } = await createSessionRecord(userId, undefined, guard);
+  await setSessionCookie(token);
+}
+
+/** A fresh session token and the row that stores it (hashed), for callers creating it in their own transaction. */
+export function newSessionData(userId: string) {
+  const token = randomBytes(32).toString("base64url");
+  return { token, data: { userId, tokenHash: hashSessionToken(token), expiresAt: new Date(Date.now() + sessionDurationMs) } };
+}
+
+export async function setSessionCookie(token: string) {
   const store = await cookies();
   store.set(COOKIE_NAME, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: sessionDurationMs / 1000 });
 }
@@ -68,6 +78,12 @@ export async function getOptionalUser() {
 export async function destroySession() {
   const token = await readSessionToken();
   if (token) await db.session.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+}
+
+/** The hash of the session token this request authenticated with, if any. */
+export async function currentSessionTokenHash() {
+  const token = await readSessionToken();
+  return token ? hashSessionToken(token) : null;
 }
 
 /** Ends every other session of this user (other browsers and devices), keeping the caller's own. */

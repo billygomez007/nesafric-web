@@ -47,7 +47,35 @@ vi.mock("@/modules/conversations/channels/email-providers", async (importOrigina
   };
 });
 
+// A gate inside password hashing, to pause a password change mid-flight deterministically.
+const gate = vi.hoisted(() => ({ armed: false, onReached: null as null | (() => void), release: null as null | Promise<void> }));
+vi.mock("@/platform/auth/passwords", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/platform/auth/passwords")>();
+  return {
+    ...actual,
+    hashPassword: async (password: string) => {
+      const hash = await actual.hashPassword(password);
+      if (gate.armed) {
+        gate.armed = false;
+        gate.onReached?.();
+        await gate.release;
+      }
+      return hash;
+    },
+  };
+});
+
+/** Arms the gate: the next password hash pauses until `release()`; `reached` resolves when it pauses. */
+function armPasswordGate() {
+  let release!: () => void;
+  gate.release = new Promise<void>((resolve) => (release = resolve));
+  const reached = new Promise<void>((resolve) => (gate.onReached = resolve));
+  gate.armed = true;
+  return { reached, release };
+}
+
 import { PATCH as changeEmail } from "@/app/api/account/email/route";
+import { PATCH as changePassword } from "@/app/api/account/password/route";
 import { POST as verifyLink } from "@/app/api/account/identifiers/verify/route";
 import { GET as profile } from "@/app/api/account/profile/route";
 import { POST as webLogin } from "@/app/api/auth/login/route";
@@ -59,7 +87,7 @@ import { POST as legacyRegister } from "@/app/api/auth/register/route";
 import { findOrCreateGoogleUser, registerUser } from "@/modules/identity/service";
 import { createSessionRecord } from "@/platform/auth/session";
 import { db } from "@/platform/database/client";
-import { requirePlatformPrincipal } from "@/platform/platform-admin/auth";
+import { findUsablePlatformPrincipal, requirePlatformPrincipal } from "@/platform/platform-admin/auth";
 
 const ORIGIN = "https://www.nesafric.test";
 const ATTACKER_PASSWORD = "attacker-chosen-password-1";
@@ -127,6 +155,7 @@ describe("account ownership verification (security batch 1)", () => {
     sms.codes = new Map();
     sms.sent = [];
     mail.sent = [];
+    gate.armed = false;
     as();
   });
   afterEach(() => {
@@ -215,6 +244,67 @@ describe("account ownership verification (security batch 1)", () => {
       expect(await db.session.count({ where: { userId: account.id } })).toBe(1);
     });
 
+    it.each([
+      ["an email code", async (email: string) => (await ownerProvesEmailWithCode(email)).cookie!],
+      ["Google", async (email: string) => {
+        const owner = await findOrCreateGoogleUser({ email, name: "Real Owner" });
+        return (await createSessionRecord(owner.id)).token;
+      }],
+    ] as const)("a password CHANGE racing the owner's proof by %s changes nothing and leaves the attacker nothing", async (_via, ownerProves) => {
+      const { account, token } = await attackerPreRegisters("victim@example.com");
+      const { reached, release } = armPasswordGate();
+      as({ bearer: token });
+      // The attacker's change has authenticated and checked the old password, and pauses while hashing the new one…
+      const pending = changePassword(json("/api/account/password", { currentPassword: ATTACKER_PASSWORD, newPassword: "attacker-new-password-99" }, "PATCH"));
+      await reached;
+      // …the real owner proves the address meanwhile…
+      const ownerToken = await ownerProves("victim@example.com");
+      // …and the stale change resumes, and is refused.
+      release();
+      const response = await pending;
+      expect(response.status).toBe(401);
+
+      const after = await db.user.findUniqueOrThrow({ where: { id: account.id } });
+      expect(after.passwordHash).toBeNull();
+      expect(await passwordWorks("victim@example.com", ATTACKER_PASSWORD)).toBe(false);
+      expect(await passwordWorks("victim@example.com", "attacker-new-password-99")).toBe(false);
+      expect(await sessionWorks(token)).toBe(false);
+      // The owner's fresh session is the only one, and it works.
+      expect(await db.session.count({ where: { userId: account.id } })).toBe(1);
+      expect(await sessionWorks(ownerToken)).toBe(true);
+    });
+
+    it("a password change that commits before the owner's proof is still undone by it", async () => {
+      const { account, token } = await attackerPreRegisters("victim@example.com");
+      as({ bearer: token });
+      const changed = await changePassword(json("/api/account/password", { currentPassword: ATTACKER_PASSWORD, newPassword: "attacker-new-password-99" }, "PATCH"));
+      expect(changed.status).toBe(200);
+      const replacement = request.cookies.get("propertyos_session")!;
+      const owner = await ownerProvesEmailWithCode("victim@example.com");
+      expect(await passwordWorks("victim@example.com", "attacker-new-password-99")).toBe(false);
+      as({ cookie: replacement });
+      expect((await profile()).status).toBe(401);
+      as({ cookie: owner.cookie });
+      expect((await profile()).status).toBe(200);
+      expect(await db.session.count({ where: { userId: account.id } })).toBe(1);
+    });
+
+    it("a verified user's normal password change still works: new password in, old sessions out, fresh session issued", async () => {
+      const user = await registerUser({ displayName: "Ama", email: "ama@example.com", password: OWNER_PASSWORD });
+      await db.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+      const { token } = await createSessionRecord(user.id);
+      const { token: otherDevice } = await createSessionRecord(user.id);
+      as({ bearer: token });
+      const changed = await changePassword(json("/api/account/password", { currentPassword: OWNER_PASSWORD, newPassword: "a-brand-new-owner-password" }, "PATCH"));
+      expect(changed.status).toBe(200);
+      const fresh = request.cookies.get("propertyos_session")!;
+      expect(await passwordWorks("ama@example.com", "a-brand-new-owner-password")).toBe(true);
+      expect(await passwordWorks("ama@example.com", OWNER_PASSWORD)).toBe(false);
+      expect(await sessionWorks(otherDevice)).toBe(false);
+      as({ cookie: fresh });
+      expect((await profile()).status).toBe(200);
+    });
+
     it("TEST 4: an already-verified password account keeps its password and sessions when it signs in again", async () => {
       const user = await registerUser({ displayName: "Ama", email: "ama@example.com", password: OWNER_PASSWORD });
       await db.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date("2026-01-01T00:00:00Z") } });
@@ -274,6 +364,31 @@ describe("account ownership verification (security batch 1)", () => {
       await expect(requirePlatformPrincipal(founder)).resolves.toMatchObject({ role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "ENV_BOOTSTRAP" });
       await expect(requirePlatformPrincipal(other)).rejects.toMatchObject({ code: "FORBIDDEN" });
       expect(await db.platformPrincipal.count()).toBe(1);
+    });
+
+    it("a bootstrap principal granted before verification was required is unusable until the email is verified", async () => {
+      // As if granted by the pre-fix bootstrap: an ENV_BOOTSTRAP principal on an unverified account.
+      const squatter = await registerUser({ displayName: "Squatter", email: "founder@example.com", password: ATTACKER_PASSWORD });
+      await db.platformPrincipal.create({ data: { userId: squatter.id, role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "ENV_BOOTSTRAP" } });
+      for (const listed of [undefined, "founder@example.com"]) {
+        if (listed) process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS = listed;
+        else delete process.env.PLATFORM_ADMIN_BOOTSTRAP_EMAILS;
+        await expect(requirePlatformPrincipal(squatter)).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+        // The same check guards every other authorization read (document and logo reviews).
+        expect(await findUsablePlatformPrincipal(db, squatter.id)).toBeNull();
+      }
+      // Once the address is proved (here: its owner's first proof), the principal works again.
+      await ownerProvesEmailWithCode("founder@example.com");
+      const owner = await db.user.findUniqueOrThrow({ where: { id: squatter.id } });
+      await expect(requirePlatformPrincipal(owner)).resolves.toMatchObject({ role: "SUPER_ADMIN", createdVia: "ENV_BOOTSTRAP" });
+      expect(await db.platformPrincipal.count()).toBe(1);
+    });
+
+    it("an operator-created MANUAL principal keeps working, verified email or not", async () => {
+      const staff = await registerUser({ displayName: "Staff", email: "staff@example.com", password: OWNER_PASSWORD });
+      await db.platformPrincipal.create({ data: { userId: staff.id, role: "SUPPORT_AGENT", status: "ACTIVE", createdVia: "MANUAL" } });
+      await expect(requirePlatformPrincipal(staff)).resolves.toMatchObject({ role: "SUPPORT_AGENT", createdVia: "MANUAL" });
+      expect(await findUsablePlatformPrincipal(db, staff.id)).toMatchObject({ createdVia: "MANUAL" });
     });
 
     it("the squatter's account, once its real owner proves the email, is bootstrapped for the owner only", async () => {

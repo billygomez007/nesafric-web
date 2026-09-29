@@ -48,8 +48,14 @@ remain for existing clients with their rate limiting. Accounts without a passwor
 Changing a password account's email is two steps: `PATCH /api/account/email` (current password)
 sends a code to the new address and answers `202` with the challenge; the email only changes when
 that code is verified at `POST /api/account/identifiers/verify`, which also signs out the account's
-other sessions. Platform-admin bootstrap (`PLATFORM_ADMIN_BOOTSTRAP_EMAILS`) only matches verified
-emails.
+other sessions. Password sign-in and password change both commit under a lock on the user row and only
+if the account is exactly as it was authenticated (same password hash, same verification state, and
+for a change the caller's session still alive), so neither can outlive an owner's first proof.
+
+Platform-admin bootstrap (`PLATFORM_ADMIN_BOOTSTRAP_EMAILS`) only matches verified emails, and every
+authorization read of a principal (`findUsablePlatformPrincipal`) treats an `ENV_BOOTSTRAP`
+principal as absent while its user's email is unverified — including principals granted before
+this rule existed. `MANUAL` principals are unaffected.
 
 Features that need an email (team invitations, account emails) skip or explain when a phone-only
 account has none, rather than failing.

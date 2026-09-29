@@ -5,6 +5,7 @@ import { PERMISSIONS, requirePermission } from "@/platform/authorization/permiss
 import { membershipHasPermission } from "@/platform/authorization/policy";
 import { AppError, forbidden, notFound } from "@/platform/errors";
 import { ownsProvider } from "@/modules/providers/service";
+import { findUsablePlatformPrincipal } from "@/platform/platform-admin/auth";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/platform-admin/permissions";
 import {
   getMalwareScanner,
@@ -545,7 +546,7 @@ async function requireStorageObjectRead(userId: string, organisationId: string |
     // against `PlatformPrincipal` rather than `requirePlatformPrincipal`, since this function only
     // has a userId, not the full authenticated `User` row that helper expects, and bootstrap has
     // already run by the time anyone reaches the platform-admin review surface that calls this.
-    const principal = await db.platformPrincipal.findUnique({ where: { userId } });
+    const principal = await findUsablePlatformPrincipal(db, userId);
     if (principal && principal.status === "ACTIVE" && platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.providerIdentityReview)) return;
     throw forbidden();
   }

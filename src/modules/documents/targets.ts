@@ -4,6 +4,7 @@ import { PERMISSIONS, requirePermission } from "@/platform/authorization/permiss
 import { membershipHasPermission } from "@/platform/authorization/policy";
 import { AppError, forbidden, notFound } from "@/platform/errors";
 import { ownsProvider } from "@/modules/providers/service";
+import { findUsablePlatformPrincipal } from "@/platform/platform-admin/auth";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/platform-admin/permissions";
 import { requireMarketplaceRole } from "@/modules/marketplace-professionals/permissions";
 import { archivePreviousLogos, LOGO_MIME_TYPES } from "@/modules/marketplace-professionals/logo";
@@ -304,7 +305,7 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
       const member = await tx.marketplaceProfessionalMember.findUnique({ where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId: targetId, userId } } });
       const isBusinessAdmin = member?.status === "ACTIVE" && (member.role === "OWNER" || member.role === "ADMIN");
       if (!isBusinessAdmin) {
-        const principal = await tx.platformPrincipal.findUnique({ where: { userId } });
+        const principal = await findUsablePlatformPrincipal(tx, userId);
         if (!principal || principal.status !== "ACTIVE" || !platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.marketplaceVerify)) throw forbidden();
       }
       return { organisationId: professional.backingOrganisationId };
@@ -374,7 +375,7 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
     authorize: async (tx, { userId, targetId }) => {
       const campaign = await tx.campaign.findUnique({ where: { id: targetId }, select: { id: true } });
       if (!campaign) throw notFound();
-      const principal = await tx.platformPrincipal.findUnique({ where: { userId } });
+      const principal = await findUsablePlatformPrincipal(tx, userId);
       if (!principal || principal.status !== "ACTIVE" || !platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.campaignReview)) throw forbidden();
       return { organisationId: null };
     },

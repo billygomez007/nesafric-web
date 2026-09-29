@@ -1,4 +1,4 @@
-import type { User } from "@/platform/database/generated/client";
+import type { Prisma, User } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { forbidden } from "@/platform/errors";
 import { PLATFORM_PERMISSIONS, platformRoleHasPermission, type PlatformPermission } from "./permissions";
@@ -35,10 +35,25 @@ export async function ensurePlatformBootstrap() {
   }
 }
 
+/**
+ * The one way to read a principal for an authorization decision. An `ENV_BOOTSTRAP` principal
+ * exists only because its user's email matched the bootstrap list, so it is unusable while that
+ * email is unverified — whenever and however the row was created (H-4). This is checked at read
+ * time, not just when granting, so a principal granted before verification was required fails
+ * closed until its owner proves the address. `MANUAL` principals (operator-created) are unaffected.
+ */
+export async function findUsablePlatformPrincipal(client: Pick<Prisma.TransactionClient, "platformPrincipal">, userId: string) {
+  const principal = await client.platformPrincipal.findUnique({ where: { userId }, include: { user: { select: { emailVerifiedAt: true } } } });
+  if (!principal) return null;
+  if (principal.createdVia === "ENV_BOOTSTRAP" && !principal.user.emailVerifiedAt) return null;
+  const { user: _user, ...usable } = principal;
+  return usable;
+}
+
 export async function getOptionalPlatformPrincipal(user: User | null) {
   if (!user) return null;
   await ensurePlatformBootstrap();
-  return db.platformPrincipal.findUnique({ where: { userId: user.id } });
+  return findUsablePlatformPrincipal(db, user.id);
 }
 
 /**
