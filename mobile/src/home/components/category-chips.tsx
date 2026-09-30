@@ -20,7 +20,10 @@ const ICONS: Record<string, IconName> = {
  */
 export const HOME_CATEGORIES: { label: string; filters: SearchFilters }[] = [
   ...INTENTS,
-  ...PROPERTY_TYPES.filter((type) => ["HOUSE", "APARTMENT", "TOWNHOUSE", "VILLA"].includes(type.value)).map((type) => ({ label: type.label, filters: { category: type.value } })),
+  ...["APARTMENT", "VILLA", "TOWNHOUSE", "HOUSE"].map((value) => {
+    const type = PROPERTY_TYPES.find((item) => item.value === value)!;
+    return { label: type.label, filters: { category: type.value } };
+  }),
 ];
 
 /** Two rows of icon chips (intents, then property types) that scroll sideways together. */
