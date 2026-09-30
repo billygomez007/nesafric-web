@@ -24,6 +24,7 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [copied, setCopied] = useState(false);
   // Captured once so "Available now" is stable across re-renders.
   const [now] = useState(() => Date.now());
   // Retrying an identical submission (e.g. after the viewing step failed) replays the same lead
@@ -99,6 +100,47 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
   ];
   const fieldClass = "h-11 w-full rounded-[var(--radius-control)] border border-hairline bg-white px-3 text-sm text-ink outline-none transition focus:border-forest focus:ring-2 focus:ring-forest/10";
 
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/marketplace/properties/${listing.id}`
+      : `https://www.nesafric.com/marketplace/properties/${listing.id}`;
+
+  const shareTitle = listing.title;
+  const shareText = `${shareTitle} - ${listingLocation(listing.location)}`;
+
+  async function copyShareLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  async function shareNative() {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
+    await copyShareLink();
+  }
+
+  function openShare(url: string) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <div className="pb-24 lg:pb-0">
       {/* Gallery: one cover photograph, then the rest of the set. */}
@@ -138,6 +180,29 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
               {amount ? formatListingPrice(amount, listing.pricing.currencyCode) : "Price on request"}
               {amount && suffix && <span className="text-base font-normal text-muted"> / {suffix}</span>}
             </p>
+
+            <div className="mt-5 flex flex-wrap items-center gap-2" aria-label="Share this property">
+              <button
+                className={buttonClass("secondary", "sm")}
+                onClick={() => openShare(`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${shareUrl}`)}`)}
+                type="button"
+              >
+                WhatsApp
+              </button>
+              <button
+                className={buttonClass("secondary", "sm")}
+                onClick={() => openShare(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)}
+                type="button"
+              >
+                Facebook
+              </button>
+              <button className={buttonClass("secondary", "sm")} onClick={() => void shareNative()} type="button">
+                Share
+              </button>
+              <button className={buttonClass("secondary", "sm")} onClick={() => void copyShareLink()} type="button">
+                {copied ? "Copied" : "Copy link"}
+              </button>
+            </div>
             {specs.length > 0 && (
               <p className="mt-2 flex flex-wrap gap-x-3 text-sm text-slate-600">{specs.map((part) => <span key={part}>{part}</span>)}</p>
             )}
