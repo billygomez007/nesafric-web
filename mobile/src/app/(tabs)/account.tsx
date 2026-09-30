@@ -4,7 +4,13 @@ import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { websiteUrl } from "@/config";
 
@@ -54,7 +60,15 @@ export default function AccountScreen() {
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={status === "signedIn" ? <RefreshControl refreshing={workspaces.isRefetching} onRefresh={() => void workspaces.refetch()} tintColor={colors.brand} /> : undefined}
+        refreshControl={
+          status === "signedIn" ? (
+            <RefreshControl
+              refreshing={workspaces.isRefetching}
+              onRefresh={() => void workspaces.refetch()}
+              tintColor={colors.brand}
+            />
+          ) : undefined
+        }
       >
         <AppText variant="title" accessibilityRole="header">
           Account
@@ -62,7 +76,10 @@ export default function AccountScreen() {
         {notice ? <SignOutNotice notice={notice} /> : null}
 
         {status === "restoring" ? (
-          <View style={styles.restoring} accessibilityLabel="Checking your sign-in">
+          <View
+            style={styles.restoring}
+            accessibilityLabel="Checking your sign-in"
+          >
             <ActivityIndicator color={colors.brand} />
           </View>
         ) : status === "signedIn" ? (
@@ -72,10 +89,46 @@ export default function AccountScreen() {
         )}
 
         <RowGroup>
-          <ListRow icon="help-buoy-outline" title="Help & support" detail={BRAND.contact.support} onPress={() => Linking.openURL(`mailto:${BRAND.contact.support}`)} />
-          <ListRow icon="call-outline" title="Call us" detail={BRAND.contact.phoneDisplay} onPress={() => Linking.openURL(`tel:${BRAND.contact.phoneTel}`)} />
-          <ListRow icon="shield-checkmark-outline" title="Privacy policy" onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/privacy`))} />
-          <ListRow icon="document-text-outline" title="Terms of service" onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/terms`))} last />
+          <ListRow
+            icon="help-buoy-outline"
+            title="Help & support"
+            detail={BRAND.contact.support}
+            onPress={() => Linking.openURL(`mailto:${BRAND.contact.support}`)}
+          />
+          <ListRow
+            icon="call-outline"
+            title="Call us"
+            detail={BRAND.contact.phoneDisplay}
+            onPress={() => Linking.openURL(`tel:${BRAND.contact.phoneTel}`)}
+          />
+          <ListRow
+            icon="shield-checkmark-outline"
+            title="Privacy policy"
+            onPress={() =>
+              WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/privacy`))
+            }
+          />
+          {status === "signedIn" ? (
+            <ListRow
+              icon="trash-outline"
+              title="Delete account"
+              detail="Request deletion of your NesAfric account"
+              onPress={() =>
+                WebBrowser.openBrowserAsync(
+                  websiteUrl(apiUrl, `/account-deletion`),
+                )
+              }
+              testID="delete-account"
+            />
+          ) : null}
+          <ListRow
+            icon="document-text-outline"
+            title="Terms of service"
+            onPress={() =>
+              WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/terms`))
+            }
+            last
+          />
         </RowGroup>
 
         <AppText variant="caption" style={styles.version}>
@@ -90,7 +143,13 @@ const SAVED_KEPT = "Your saved properties are still here.";
 
 function formatDate(iso: string | null) {
   const date = iso ? new Date(iso) : null;
-  return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  return date && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
 }
 
 /**
@@ -98,13 +157,26 @@ function formatDate(iso: string | null) {
  * unless it answered; never claims the device forgot it unless secure storage confirmed deletion.
  */
 function signOutMessages(notice: NonNullable<SessionNotice>) {
-  const messages: { tone: "info" | "warning"; text: string; testID: string }[] = [];
+  const messages: { tone: "info" | "warning"; text: string; testID: string }[] =
+    [];
   if (notice.kind === "expired") {
-    messages.push({ tone: "warning", testID: "notice-expired", text: `You’ve been signed out because your session ended. Sign in again to see your workspaces. ${SAVED_KEPT}` });
+    messages.push({
+      tone: "warning",
+      testID: "notice-expired",
+      text: `You’ve been signed out because your session ended. Sign in again to see your workspaces. ${SAVED_KEPT}`,
+    });
   } else if (notice.server === "pending") {
-    messages.push({ tone: "info", testID: "notice-server-pending", text: "You’re signed out on this device. Ending your session on NesAfric…" });
+    messages.push({
+      tone: "info",
+      testID: "notice-server-pending",
+      text: "You’re signed out on this device. Ending your session on NesAfric…",
+    });
   } else if (notice.server === "ended") {
-    messages.push({ tone: "info", testID: "notice-server-ended", text: `You’re signed out on this device and your session on NesAfric has ended. ${SAVED_KEPT}` });
+    messages.push({
+      tone: "info",
+      testID: "notice-server-ended",
+      text: `You’re signed out on this device and your session on NesAfric has ended. ${SAVED_KEPT}`,
+    });
   } else {
     const until = formatDate(notice.expiresAt);
     messages.push({
@@ -114,9 +186,17 @@ function signOutMessages(notice: NonNullable<SessionNotice>) {
     });
   }
   if (notice.device === "pendingDeletion") {
-    messages.push({ tone: "warning", testID: "notice-device-pending", text: "We couldn’t fully remove your sign-in from this device’s secure storage. It won’t be used again, and we’ll finish removing it the next time the app opens." });
+    messages.push({
+      tone: "warning",
+      testID: "notice-device-pending",
+      text: "We couldn’t fully remove your sign-in from this device’s secure storage. It won’t be used again, and we’ll finish removing it the next time the app opens.",
+    });
   } else if (notice.device === "failed") {
-    messages.push({ tone: "warning", testID: "notice-device-failed", text: "We couldn’t remove your sign-in from this device’s secure storage, so it may come back when the app restarts. Tap Try again, or sign out again after restarting." });
+    messages.push({
+      tone: "warning",
+      testID: "notice-device-failed",
+      text: "We couldn’t remove your sign-in from this device’s secure storage, so it may come back when the app restarts. Tap Try again, or sign out again after restarting.",
+    });
   }
   return messages;
 }
@@ -124,7 +204,9 @@ function signOutMessages(notice: NonNullable<SessionNotice>) {
 function SignOutNotice({ notice }: { notice: NonNullable<SessionNotice> }) {
   const { dismissNotice, retrySignOut } = useSession();
   const [retrying, setRetrying] = useState(false);
-  const canRetry = notice.device === "failed" || (notice.kind === "signedOut" && notice.server === "notConfirmed");
+  const canRetry =
+    notice.device === "failed" ||
+    (notice.kind === "signedOut" && notice.server === "notConfirmed");
   return (
     <View style={styles.notices}>
       {signOutMessages(notice).map((message) => (
@@ -145,21 +227,46 @@ function SignOutNotice({ notice }: { notice: NonNullable<SessionNotice> }) {
             }}
           />
         ) : null}
-        {notice.kind === "signedOut" && notice.server === "pending" ? null : <Button label="Dismiss" variant="secondary" onPress={dismissNotice} testID="dismiss-notice" />}
+        {notice.kind === "signedOut" && notice.server === "pending" ? null : (
+          <Button
+            label="Dismiss"
+            variant="secondary"
+            onPress={dismissNotice}
+            testID="dismiss-notice"
+          />
+        )}
       </View>
     </View>
   );
 }
 
-const GATEWAY: { intent: WorkspaceIntent; icon: IconName; title: string; description: string }[] = [
-  { intent: "property_management", icon: "business-outline", title: "Landlord & Property Manager", description: "Manage properties, units, tenants, leases, rent and maintenance." },
+const GATEWAY: {
+  intent: WorkspaceIntent;
+  icon: IconName;
+  title: string;
+  description: string;
+}[] = [
+  {
+    intent: "property_management",
+    icon: "business-outline",
+    title: "Landlord & Property Manager",
+    description:
+      "Manage properties, units, tenants, leases, rent and maintenance.",
+  },
   {
     intent: "professional",
     icon: "briefcase-outline",
     title: "Real Estate Professional",
-    description: "For agents, agencies, developers and property companies. Manage listings, leads, enquiries and your marketplace presence.",
+    description:
+      "For agents, agencies, developers and property companies. Manage listings, leads, enquiries and your marketplace presence.",
   },
-  { intent: "service_provider", icon: "construct-outline", title: "Service Provider", description: "Manage services, jobs, requests, customers and your business profile." },
+  {
+    intent: "service_provider",
+    icon: "construct-outline",
+    title: "Service Provider",
+    description:
+      "Manage services, jobs, requests, customers and your business profile.",
+  },
 ];
 
 /** Marketplace first: property seekers sign in only if they want to; the cards below are for people who manage on NesAfric. */
@@ -171,9 +278,27 @@ function SignedOutAccount() {
         <AppText variant="heading" accessibilityRole="header">
           Looking for property?
         </AppText>
-        <AppText variant="caption">Sign in to save properties, manage enquiries and keep track of viewings.</AppText>
-        <Button label="Sign in" onPress={() => { setWorkspaceIntent(null); router.push("/sign-in"); }} testID="open-sign-in" />
-        <Button label="Create account" variant="secondary" onPress={() => { setWorkspaceIntent(null); router.push({ pathname: "/sign-in", params: { mode: "register" } }); }} testID="open-create-account" />
+        <AppText variant="caption">
+          Sign in to save properties, manage enquiries and keep track of
+          viewings.
+        </AppText>
+        <Button
+          label="Sign in"
+          onPress={() => {
+            setWorkspaceIntent(null);
+            router.push("/sign-in");
+          }}
+          testID="open-sign-in"
+        />
+        <Button
+          label="Create account"
+          variant="secondary"
+          onPress={() => {
+            setWorkspaceIntent(null);
+            router.push({ pathname: "/sign-in", params: { mode: "register" } });
+          }}
+          testID="open-create-account"
+        />
       </Card>
 
       <View style={styles.section}>
@@ -209,7 +334,10 @@ function SignedOutAccount() {
             onPress={() => {
               // Intent only: what the account can actually open is decided by the server after sign-in.
               setWorkspaceIntent(card.intent);
-              router.push({ pathname: "/sign-in", params: { intent: card.intent } });
+              router.push({
+                pathname: "/sign-in",
+                params: { intent: card.intent },
+              });
             }}
           />
         ))}
@@ -220,10 +348,28 @@ function SignedOutAccount() {
 
 // Onboarding offers, not access: each opens set-up on the website; a workspace appears only once
 // the server lists it.
-const OFFERS: Record<WorkspaceIntent, { title: string; detail: string; path: string; icon: IconName }> = {
-  property_management: { title: "Set up Property Management", detail: "For landlords, property managers and property companies", path: SETUP_PATH.property_management, icon: "business-outline" },
-  professional: { title: "Register as a Real Estate Professional", detail: "For agents, agencies, developers and property companies", path: SETUP_PATH.professional, icon: "briefcase-outline" },
-  service_provider: { title: "Register as a Service Provider", detail: "For artisans, contractors and service businesses", path: SETUP_PATH.service_provider, icon: "construct-outline" },
+const OFFERS: Record<
+  WorkspaceIntent,
+  { title: string; detail: string; path: string; icon: IconName }
+> = {
+  property_management: {
+    title: "Set up Property Management",
+    detail: "For landlords, property managers and property companies",
+    path: SETUP_PATH.property_management,
+    icon: "business-outline",
+  },
+  professional: {
+    title: "Register as a Real Estate Professional",
+    detail: "For agents, agencies, developers and property companies",
+    path: SETUP_PATH.professional,
+    icon: "briefcase-outline",
+  },
+  service_provider: {
+    title: "Register as a Service Provider",
+    detail: "For artisans, contractors and service businesses",
+    path: SETUP_PATH.service_provider,
+    icon: "construct-outline",
+  },
 };
 
 const ICONS: Record<WorkspaceKind, IconName> = {
@@ -233,7 +379,12 @@ const ICONS: Record<WorkspaceKind, IconName> = {
   service_provider: "construct-outline",
 };
 
-const ROW_TEST_ID: Record<WorkspaceKind, string> = { marketplace: "workspace-marketplace", property_management: "workspace", professional: "agent", service_provider: "provider" };
+const ROW_TEST_ID: Record<WorkspaceKind, string> = {
+  marketplace: "workspace-marketplace",
+  property_management: "workspace",
+  professional: "agent",
+  service_provider: "provider",
+};
 
 function SignedInAccount() {
   const { user, status, signOut } = useSession();
@@ -247,7 +398,9 @@ function SignedInAccount() {
   useEffect(() => {
     if (!user || !workspaces.data) return;
     let cancelled = false;
-    void loadLastWorkspace(user.id, workspaces.data).then((ref) => !cancelled && setLastWorkspace(ref));
+    void loadLastWorkspace(user.id, workspaces.data).then(
+      (ref) => !cancelled && setLastWorkspace(ref),
+    );
     return () => {
       cancelled = true;
     };
@@ -255,37 +408,65 @@ function SignedInAccount() {
 
   const displayName = profile.data?.displayName ?? user?.displayName ?? "";
   // A phone-only account has no email: show the phone number instead.
-  const email = profile.data?.email ?? user?.email ?? profile.data?.phone ?? user?.phone ?? "";
+  const email =
+    profile.data?.email ??
+    user?.email ??
+    profile.data?.phone ??
+    user?.phone ??
+    "";
   const session = { status, workspaces: workspaces.data };
   const available = resolveAvailableWorkspaces(session);
   const continueIn = resolveInitialWorkspace(session, lastWorkspace);
-  const missing = (Object.keys(OFFERS) as WorkspaceIntent[]).filter((kind) => !hasWorkspaceKind(available, kind));
+  const missing = (Object.keys(OFFERS) as WorkspaceIntent[]).filter(
+    (kind) => !hasWorkspaceKind(available, kind),
+  );
   // The tapped card only reorders and highlights; it never adds a workspace.
-  const offers = isWorkspaceIntent(intent) && missing.includes(intent) ? [intent, ...missing.filter((kind) => kind !== intent)] : missing;
+  const offers =
+    isWorkspaceIntent(intent) && missing.includes(intent)
+      ? [intent, ...missing.filter((kind) => kind !== intent)]
+      : missing;
   const intentHasAction =
-    (isWorkspaceIntent(intent) && Boolean(workspaces.data) && available.filter((workspace) => workspace.kind === intent).length === 1) || (intent === "tenant" && Boolean(tenancies.data));
+    (isWorkspaceIntent(intent) &&
+      Boolean(workspaces.data) &&
+      available.filter((workspace) => workspace.kind === intent).length ===
+        1) ||
+    (intent === "tenant" && Boolean(tenancies.data));
 
   async function openOffer(kind: WorkspaceIntent) {
     // Back from the website: pick up a workspace that was just set up.
-    await openWebsiteThenRefresh(websiteUrl(apiUrl, `${OFFERS[kind].path}`), () => void workspaces.refetch());
+    await openWebsiteThenRefresh(
+      websiteUrl(apiUrl, `${OFFERS[kind].path}`),
+      () => void workspaces.refetch(),
+    );
   }
 
   return (
     <>
       <Card style={styles.profile}>
-        <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no">
+        <View
+          style={styles.avatar}
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        >
           <AppText style={styles.avatarText}>{initials(displayName)}</AppText>
         </View>
         <View style={styles.profileText}>
-          <AppText variant="label" accessibilityLabel={`Signed in as ${displayName}`}>
+          <AppText
+            variant="label"
+            accessibilityLabel={`Signed in as ${displayName}`}
+          >
             {displayName}
           </AppText>
           <AppText variant="caption">{email}</AppText>
         </View>
       </Card>
 
-      {isWorkspaceIntent(intent) && workspaces.data ? <IntentNotice intent={intent} available={available} /> : null}
-      {intent === "tenant" && tenancies.data ? <TenantIntentNotice tenancies={tenancies.data} /> : null}
+      {isWorkspaceIntent(intent) && workspaces.data ? (
+        <IntentNotice intent={intent} available={available} />
+      ) : null}
+      {intent === "tenant" && tenancies.data ? (
+        <TenantIntentNotice tenancies={tenancies.data} />
+      ) : null}
 
       {workspaces.data ? (
         <View style={styles.section} testID="current-workspace">
@@ -295,35 +476,88 @@ function SignedInAccount() {
           {continueIn.kind !== "marketplace" ? (
             <Card style={styles.continueCard}>
               <View style={styles.continueHead}>
-                <View style={styles.continueTile} accessibilityElementsHidden importantForAccessibility="no">
-                  <Ionicons name={ICONS[continueIn.kind]} size={22} color={colors.action} />
+                <View
+                  style={styles.continueTile}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                >
+                  <Ionicons
+                    name={ICONS[continueIn.kind]}
+                    size={22}
+                    color={colors.action}
+                  />
                 </View>
                 <View style={styles.profileText}>
                   <AppText variant="label">{continueIn.name}</AppText>
-                  {continueIn.subtitle ? <AppText variant="caption">{continueIn.subtitle}</AppText> : null}
+                  {continueIn.subtitle ? (
+                    <AppText variant="caption">{continueIn.subtitle}</AppText>
+                  ) : null}
                 </View>
               </View>
               {/* One orange action per screen: a just-answered sign-in intent owns it when it has one. */}
-              <Button label={`Continue in ${continueIn.name}`} variant={intentHasAction ? "secondary" : "primary"} onPress={() => router.push(continueIn.route)} testID="continue-workspace" />
+              <Button
+                label={`Continue in ${continueIn.name}`}
+                variant={intentHasAction ? "secondary" : "primary"}
+                onPress={() => router.push(continueIn.route)}
+                testID="continue-workspace"
+              />
             </Card>
           ) : null}
           <RowGroup>
-            {continueIn.kind === "marketplace" ? <ListRow icon="storefront-outline" title="Marketplace" detail="You’re browsing the marketplace" /> : null}
-            <ListRow icon="swap-horizontal-outline" title="Switch workspace" detail={available.length > 1 ? `${available.length} workspaces available` : "Marketplace only"} onPress={() => openSwitcher("marketplace", null)} testID="open-switcher" />
-            <ListRow icon="search-outline" title="Browse Marketplace" onPress={() => router.navigate("/")} testID="browse-marketplace" />
-            <ListRow icon="settings-outline" title="Account settings" detail="Name, email and password on nesafric.com" accessibilityHint="Opens nesafric.com" onPress={() => void WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/settings`))} testID="account-settings" last />
+            {continueIn.kind === "marketplace" ? (
+              <ListRow
+                icon="storefront-outline"
+                title="Marketplace"
+                detail="You’re browsing the marketplace"
+              />
+            ) : null}
+            <ListRow
+              icon="swap-horizontal-outline"
+              title="Switch workspace"
+              detail={
+                available.length > 1
+                  ? `${available.length} workspaces available`
+                  : "Marketplace only"
+              }
+              onPress={() => openSwitcher("marketplace", null)}
+              testID="open-switcher"
+            />
+            <ListRow
+              icon="search-outline"
+              title="Browse Marketplace"
+              onPress={() => router.navigate("/")}
+              testID="browse-marketplace"
+            />
+            <ListRow
+              icon="settings-outline"
+              title="Account settings"
+              detail="Name, email and password on nesafric.com"
+              accessibilityHint="Opens nesafric.com"
+              onPress={() =>
+                void WebBrowser.openBrowserAsync(
+                  websiteUrl(apiUrl, `/settings`),
+                )
+              }
+              testID="account-settings"
+              last
+            />
           </RowGroup>
         </View>
       ) : null}
 
-      <HomesSection tenancies={tenancies.data} error={tenancies.error} onRetry={() => tenancies.refetch()} />
+      <HomesSection
+        tenancies={tenancies.data}
+        error={tenancies.error}
+        onRetry={() => tenancies.refetch()}
+      />
 
       <View style={styles.section} testID="tenant-access-section">
         <AppText variant="heading" accessibilityRole="header">
           Renting with NesAfric?
         </AppText>
         <AppText variant="caption">
-          If your landlord or property manager gave you a tenant access code, connect it to this account.
+          If your landlord or property manager gave you a tenant access code,
+          connect it to this account.
         </AppText>
         <Button
           label="Enter tenant access code"
@@ -337,7 +571,14 @@ function SignedInAccount() {
         <AppText variant="heading" accessibilityRole="header">
           Your workspaces
         </AppText>
-        <WorkspaceList available={workspaces.data ? available : undefined} isPending={workspaces.isPending} error={workspaces.error} onRetry={() => workspaces.refetch()} lastWorkspace={lastWorkspace} intent={intent} />
+        <WorkspaceList
+          available={workspaces.data ? available : undefined}
+          isPending={workspaces.isPending}
+          error={workspaces.error}
+          onRetry={() => workspaces.refetch()}
+          lastWorkspace={lastWorkspace}
+          intent={intent}
+        />
       </View>
 
       {workspaces.data && offers.length ? (
@@ -360,7 +601,10 @@ function SignedInAccount() {
               />
             ))}
           </RowGroup>
-          <AppText variant="caption">These open nesafric.com. Sign in there with the same account; your new workspace appears here when you come back.</AppText>
+          <AppText variant="caption">
+            These open nesafric.com. Sign in there with the same account; your
+            new workspace appears here when you come back.
+          </AppText>
         </View>
       ) : null}
 
@@ -378,20 +622,47 @@ function SignedInAccount() {
   );
 }
 
-function IntentNotice({ intent, available }: { intent: WorkspaceIntent; available: AvailableWorkspace[] }) {
+function IntentNotice({
+  intent,
+  available,
+}: {
+  intent: WorkspaceIntent;
+  available: AvailableWorkspace[];
+}) {
   const matching = available.filter((workspace) => workspace.kind === intent);
   const label = WORKSPACE_KIND_LABEL[intent].toLowerCase();
   return (
     <View style={styles.notices} testID="intent-notice">
       {matching.length ? (
         <>
-          <Notice tone="info" message={matching.length === 1 ? `Your ${label} workspace is ready.` : `You have ${matching.length} ${label} workspaces.`} />
-          {matching.length === 1 ? <Button label={`Open ${matching[0].name}`} onPress={() => router.push(matching[0].route)} testID="intent-open" /> : null}
+          <Notice
+            tone="info"
+            message={
+              matching.length === 1
+                ? `Your ${label} workspace is ready.`
+                : `You have ${matching.length} ${label} workspaces.`
+            }
+          />
+          {matching.length === 1 ? (
+            <Button
+              label={`Open ${matching[0].name}`}
+              onPress={() => router.push(matching[0].route)}
+              testID="intent-open"
+            />
+          ) : null}
         </>
       ) : (
-        <Notice tone="info" message={`This account doesn’t have a ${label} workspace yet. You can set one up below.`} />
+        <Notice
+          tone="info"
+          message={`This account doesn’t have a ${label} workspace yet. You can set one up below.`}
+        />
       )}
-      <Button label="Dismiss" variant="secondary" onPress={() => setWorkspaceIntent(null)} testID="intent-dismiss" />
+      <Button
+        label="Dismiss"
+        variant="secondary"
+        onPress={() => setWorkspaceIntent(null)}
+        testID="intent-dismiss"
+      />
     </View>
   );
 }
@@ -406,22 +677,46 @@ function TenantIntentNotice({ tenancies }: { tenancies: Tenancy[] }) {
     <View style={styles.notices} testID="tenant-intent-notice">
       {tenancies.length ? (
         <>
-          <Notice tone="info" message={only ? "Your rented home is linked to this account." : `You have ${tenancies.length} rented homes linked to this account. Choose one under Your homes.`} />
+          <Notice
+            tone="info"
+            message={
+              only
+                ? "Your rented home is linked to this account."
+                : `You have ${tenancies.length} rented homes linked to this account. Choose one under Your homes.`
+            }
+          />
           {only ? (
             <Button
               label="Open your home"
-              onPress={() => router.push({ pathname: "/home/[tenancyId]", params: { tenancyId: only.tenantOrganisationId } })}
+              onPress={() =>
+                router.push({
+                  pathname: "/home/[tenancyId]",
+                  params: { tenancyId: only.tenantOrganisationId },
+                })
+              }
               testID="tenant-intent-open"
             />
           ) : null}
         </>
       ) : (
         <>
-          <Notice tone="info" message="No rented home is linked to this account yet. Enter the tenant access code your landlord or property manager gave you to connect it." />
-          <Button label="Enter tenant access code" onPress={() => router.push("/tenant-access")} testID="tenant-intent-access-code" />
+          <Notice
+            tone="info"
+            message="No rented home is linked to this account yet. Enter the tenant access code your landlord or property manager gave you to connect it."
+          />
+          <Button
+            label="Enter tenant access code"
+            onPress={() => router.push("/tenant-access")}
+            testID="tenant-intent-access-code"
+          />
         </>
       )}
-      <Button label="Dismiss" variant="secondary" onPress={() => setWorkspaceIntent(null)} testID="tenant-intent-dismiss" />
+      <Button
+        label="Dismiss"
+        variant="secondary"
+        onPress={() => setWorkspaceIntent(null)}
+        testID="tenant-intent-dismiss"
+      />
     </View>
   );
 }
@@ -439,7 +734,10 @@ function WorkspaceList(props: {
 
   if (isPending) {
     return (
-      <View style={styles.restoring} accessibilityLabel="Loading your workspaces">
+      <View
+        style={styles.restoring}
+        accessibilityLabel="Loading your workspaces"
+      >
         <ActivityIndicator color={colors.brand} />
       </View>
     );
@@ -448,8 +746,16 @@ function WorkspaceList(props: {
     const offline = error instanceof ApiError && error.code === NETWORK_ERROR;
     return (
       <Card>
-        <AppText variant="label">{offline ? "You’re offline" : "Couldn’t load your workspaces"}</AppText>
-        <AppText variant="caption">{offline ? "Check your connection. Browsing saved properties still works." : error instanceof Error ? error.message : "Please try again."}</AppText>
+        <AppText variant="label">
+          {offline ? "You’re offline" : "Couldn’t load your workspaces"}
+        </AppText>
+        <AppText variant="caption">
+          {offline
+            ? "Check your connection. Browsing saved properties still works."
+            : error instanceof Error
+              ? error.message
+              : "Please try again."}
+        </AppText>
         <Button label="Try again" variant="secondary" onPress={onRetry} />
       </Card>
     );
@@ -463,23 +769,33 @@ function WorkspaceList(props: {
             key={`${workspace.kind}:${workspace.id ?? ""}`}
             icon={ICONS[workspace.kind]}
             title={workspace.name}
-            detail={sameWorkspace(workspace, lastWorkspace) ? `${workspace.subtitle} · last opened` : workspace.subtitle}
+            detail={
+              sameWorkspace(workspace, lastWorkspace)
+                ? `${workspace.subtitle} · last opened`
+                : workspace.subtitle
+            }
             highlighted={workspace.kind === intent}
             onPress={() => {
-              if (workspace.kind !== "marketplace") return router.push(workspace.route);
+              if (workspace.kind !== "marketplace")
+                return router.push(workspace.route);
               // Choosing the marketplace is a choice too: the next launch opens it, not a workspace.
               if (userId) void rememberWorkspace(userId, workspace);
               router.navigate("/");
             }}
-            testID={workspace.id ? `${ROW_TEST_ID[workspace.kind]}-${workspace.id}` : ROW_TEST_ID.marketplace}
+            testID={
+              workspace.id
+                ? `${ROW_TEST_ID[workspace.kind]}-${workspace.id}`
+                : ROW_TEST_ID.marketplace
+            }
             last={index === available.length - 1}
           />
         ))}
       </RowGroup>
       {available.length === 1 ? (
         <AppText variant="caption" style={styles.hint}>
-          You’re not a member of a landlord, property management, professional or service provider workspace yet. When someone invites you, or you set one up
-          on nesafric.com, it will appear here.
+          You’re not a member of a landlord, property management, professional
+          or service provider workspace yet. When someone invites you, or you
+          set one up on nesafric.com, it will appear here.
         </AppText>
       ) : null}
     </View>
@@ -490,13 +806,26 @@ function WorkspaceList(props: {
  * Homes the user rents, as linked to their account by the landlord or property manager (server
  * list). Hidden when there are none; a failed check never blocks the rest of the account screen.
  */
-function HomesSection({ tenancies, error, onRetry }: { tenancies: Tenancy[] | undefined; error: unknown; onRetry: () => void }) {
+function HomesSection({
+  tenancies,
+  error,
+  onRetry,
+}: {
+  tenancies: Tenancy[] | undefined;
+  error: unknown;
+  onRetry: () => void;
+}) {
   if (!tenancies) {
     if (!error) return null;
     return (
       <Card style={styles.homesError}>
         <AppText variant="caption">Couldn’t check for homes you rent.</AppText>
-        <Button label="Try again" variant="secondary" onPress={onRetry} testID="homes-retry" />
+        <Button
+          label="Try again"
+          variant="secondary"
+          onPress={onRetry}
+          testID="homes-retry"
+        />
       </Card>
     );
   }
@@ -511,9 +840,22 @@ function HomesSection({ tenancies, error, onRetry }: { tenancies: Tenancy[] | un
           <ListRow
             key={tenancy.tenantOrganisationId}
             icon="key-outline"
-            title={tenancy.leases.length ? tenancy.leases.map(leaseLabel).join(", ") : tenancy.organisation.name}
-            detail={tenancy.leases.length ? `Rented through ${tenancy.organisation.name}` : "No current lease"}
-            onPress={() => router.push({ pathname: "/home/[tenancyId]", params: { tenancyId: tenancy.tenantOrganisationId } })}
+            title={
+              tenancy.leases.length
+                ? tenancy.leases.map(leaseLabel).join(", ")
+                : tenancy.organisation.name
+            }
+            detail={
+              tenancy.leases.length
+                ? `Rented through ${tenancy.organisation.name}`
+                : "No current lease"
+            }
+            onPress={() =>
+              router.push({
+                pathname: "/home/[tenancyId]",
+                params: { tenancyId: tenancy.tenantOrganisationId },
+              })
+            }
             testID={`home-${tenancy.tenantOrganisationId}`}
             last={index === tenancies.length - 1}
           />
@@ -525,7 +867,12 @@ function HomesSection({ tenancies, error, onRetry }: { tenancies: Tenancy[] | un
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "N";
+  return (
+    (
+      (parts[0]?.[0] ?? "") +
+      (parts.length > 1 ? parts[parts.length - 1][0] : "")
+    ).toUpperCase() || "N"
+  );
 }
 
 const styles = StyleSheet.create({
@@ -533,18 +880,50 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.lg },
   notices: { gap: spacing.sm },
   noticeActions: { gap: spacing.sm },
-  intro: { gap: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.orange },
-  continueCard: { gap: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.orange },
+  intro: {
+    gap: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.orange,
+  },
+  continueCard: {
+    gap: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.orange,
+  },
   continueHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  continueTile: { width: 44, height: 44, borderRadius: radii.panel, backgroundColor: colors.actionTint, alignItems: "center", justifyContent: "center" },
+  continueTile: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.panel,
+    backgroundColor: colors.actionTint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   restoring: { paddingVertical: spacing.xl, alignItems: "center" },
   profile: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.forest, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: colors.white, fontFamily: "NotoSans-Bold", fontSize: 17 },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.forest,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    color: colors.white,
+    fontFamily: "NotoSans-Bold",
+    fontSize: 17,
+  },
   profileText: { flex: 1, gap: 2 },
   section: { gap: spacing.md },
   hint: { marginTop: spacing.sm },
   homesError: { gap: spacing.sm },
-  eyebrow: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, letterSpacing: 1.6, color: colors.gold },
+  eyebrow: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 1.6,
+    color: colors.gold,
+  },
   version: { textAlign: "center" },
 });
