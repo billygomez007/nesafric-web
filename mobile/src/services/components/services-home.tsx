@@ -1,8 +1,9 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useMemo, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { useProviderCollection, useServiceCategories } from "@/api/service-queries";
+import type { ServiceCategory } from "@/api/types";
 import { AppText, Button } from "@/components/ui";
 import { HOME_GUTTER } from "@/home/components/layout";
 import { SectionHeading } from "@/home/components/section-heading";
@@ -13,7 +14,6 @@ import { CategoryTiles } from "./category-tiles";
 import { InlineState } from "./inline-state";
 import { ProviderCard } from "./provider-card";
 
-const COLLAPSED_CATEGORIES = 8;
 const HOME_PROVIDERS = 5;
 
 /**
@@ -25,10 +25,44 @@ export function ServicesHome() {
   const categoriesQuery = useServiceCategories();
   const providersQuery = useProviderCollection({}, HOME_PROVIDERS);
   const [text, setText] = useState("");
-  const [expanded, setExpanded] = useState(false);
+  const [selectedParent, setSelectedParent] = useState<ServiceCategory | null>(null);
 
-  const ordered = useMemo(() => orderCategories(categoriesQuery.data ?? []), [categoriesQuery.data]);
-  const visible = expanded ? ordered : ordered.slice(0, COLLAPSED_CATEGORIES);
+  const ordered = useMemo(
+    () => orderCategories(categoriesQuery.data ?? []),
+    [categoriesQuery.data],
+  );
+
+  const explicitTopLevelCategories = useMemo(
+    () => ordered.filter((category) => category.parentId === null),
+    [ordered],
+  );
+
+  const hierarchical = explicitTopLevelCategories.length > 0;
+
+  const topLevelCategories = hierarchical
+    ? explicitTopLevelCategories
+    : ordered;
+
+  const subcategories = useMemo(
+    () =>
+      selectedParent
+        ? orderCategories(
+            ordered.filter(
+              (category) => category.parentId === selectedParent.id,
+            ),
+          )
+        : [],
+    [ordered, selectedParent],
+  );
+
+  function selectCategory(category: ServiceCategory) {
+    if (hierarchical && category.parentId === null) {
+      setSelectedParent(category);
+      return;
+    }
+
+    openProviderSearch({ service: category.key });
+  }
 
   /** Hands the text to Search, where the server searches providers. */
   function submit() {
@@ -42,8 +76,8 @@ export function ServicesHome() {
   return (
     <>
       <View style={styles.hero}>
-        <AppText accessibilityRole="header" style={styles.title}>Service Providers</AppText>
-        <AppText style={styles.lead}>Find trusted professionals for your property.</AppText>
+        <AppText accessibilityRole="header" style={styles.title}>Property Services</AppText>
+        <AppText style={styles.lead}>Find trusted professionals and companies for every stage of your property.</AppText>
         <View style={styles.searchBox}>
           <MaterialCommunityIcons name="magnify" size={22} color={colors.muted} />
           <TextInput
@@ -60,22 +94,59 @@ export function ServicesHome() {
       </View>
 
       <View style={styles.section}>
-        <SectionHeading title="Popular services" />
+        <SectionHeading
+          title={selectedParent ? selectedParent.name : "Property Services"}
+          subtitle={
+            selectedParent
+              ? "Choose the service you need."
+              : "Browse all property service categories."
+          }
+        />
         <View style={styles.gutter}>
           {!categoriesQuery.data ? (
             <InlineState loading={categoriesQuery.isPending} error={categoriesQuery.error} onRetry={() => categoriesQuery.refetch()} testID="service-categories-state" />
-          ) : !ordered.length ? (
-            <InlineState emptyTitle="No services listed yet" emptyMessage="Service categories will appear here once NesAfric publishes them." />
+          ) : !topLevelCategories.length ? (
+            <InlineState
+              emptyTitle="No services listed yet"
+              emptyMessage="Service categories will appear here once NesAfric publishes them."
+            />
+          ) : selectedParent ? (
+            <View style={styles.categories}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Property Services"
+                onPress={() => setSelectedParent(null)}
+                style={({ pressed }) => [
+                  styles.backButton,
+                  pressed && styles.backButtonPressed,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="chevron-left"
+                  size={20}
+                  color={colors.forestDeep}
+                />
+                <AppText style={styles.backLabel}>All Property Services</AppText>
+              </Pressable>
+
+              {subcategories.length ? (
+                <CategoryTiles
+                  categories={subcategories}
+                  onSelect={selectCategory}
+                />
+              ) : (
+                <InlineState
+                  emptyTitle="No subcategories listed yet"
+                  emptyMessage="Services will appear here once NesAfric publishes them."
+                />
+              )}
+            </View>
           ) : (
             <View style={styles.categories}>
-              <CategoryTiles categories={visible} onSelect={(category) => openProviderSearch({ service: category.key })} />
-              {ordered.length > COLLAPSED_CATEGORIES ? (
-                <Button
-                  label={expanded ? "Show fewer services" : `All services (${ordered.length})`}
-                  variant="secondary"
-                  onPress={() => setExpanded((value) => !value)}
-                />
-              ) : null}
+              <CategoryTiles
+                categories={topLevelCategories}
+                onSelect={selectCategory}
+              />
             </View>
           )}
         </View>
@@ -134,5 +205,19 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   gutter: { paddingHorizontal: HOME_GUTTER },
   categories: { gap: 10 },
+  backButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 44,
+    paddingHorizontal: 4,
+  },
+  backButtonPressed: { opacity: 0.72 },
+  backLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.forestDeep,
+  },
   providers: { gap: 12 },
 });

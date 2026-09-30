@@ -368,50 +368,243 @@ async function main() {
   }
   // Phase 25: Ghana-launch property-services taxonomy, grouped for admin/onboarding navigation.
   // `group`/`sortOrder` are display-only — matching/eligibility logic never reads them, only `key`.
-  const categories = [
-    ["plumbing", "Plumbing", "REPAIRS_MAINTENANCE", 10],
-    ["electrical", "Electrical", "REPAIRS_MAINTENANCE", 20],
-    ["hvac", "Air conditioning / HVAC", "REPAIRS_MAINTENANCE", 30],
-    ["appliance", "Appliance repair", "REPAIRS_MAINTENANCE", 40],
-    ["locksmith", "Locksmith", "REPAIRS_MAINTENANCE", 50],
-    ["handyman", "General handyman", "REPAIRS_MAINTENANCE", 60],
-    ["facility_maintenance", "Facilities & Property Maintenance", "REPAIRS_MAINTENANCE", 70],
-    ["masonry", "Masonry", "BUILDING_CONSTRUCTION", 10],
-    ["carpentry", "Carpentry & Joinery", "BUILDING_CONSTRUCTION", 20],
-    ["tiling", "Tiling", "BUILDING_CONSTRUCTION", 30],
-    ["roofing", "Roofing", "BUILDING_CONSTRUCTION", 40],
-    ["welding", "Welding / metal work", "BUILDING_CONSTRUCTION", 50],
-    ["glass_aluminium", "Glass / aluminium work", "BUILDING_CONSTRUCTION", 60],
-    ["structural", "Structural work", "BUILDING_CONSTRUCTION", 70],
-    ["general_contractor", "General contractor", "BUILDING_CONSTRUCTION", 80],
-    ["painting", "Painting & Decorating", "BUILDING_CONSTRUCTION", 90],
-    ["cleaning", "Cleaning Services", "PROPERTY_CARE", 10],
-    ["deep_cleaning", "Deep cleaning", "PROPERTY_CARE", 20],
-    ["landscaping", "Landscaping & Gardening", "PROPERTY_CARE", 30],
-    ["pest_control", "Pest Control & Fumigation", "PROPERTY_CARE", 40],
-    ["pool_maintenance", "Pool maintenance", "PROPERTY_CARE", 50],
-    ["sanitation", "Sanitation", "PROPERTY_CARE", 60],
-    ["security", "Security Services", "SECURITY_SYSTEMS", 10],
-    ["generator_power_backup", "Generator / power backup services", "SECURITY_SYSTEMS", 20],
-    ["solar", "Solar installation / maintenance", "SECURITY_SYSTEMS", 30],
-    ["water_tank_pump", "Water tank / pump services", "SECURITY_SYSTEMS", 40],
-    ["borehole_water_systems", "Borehole / water system services", "SECURITY_SYSTEMS", 50],
-    ["interior_design", "Interior design", "DESIGN_PROPERTY_SERVICES", 10],
-    ["interior_fitout", "Interior fit-out", "DESIGN_PROPERTY_SERVICES", 20],
-    ["furniture_joinery", "Furniture / joinery", "DESIGN_PROPERTY_SERVICES", 30],
-    ["moving", "Moving / relocation", "DESIGN_PROPERTY_SERVICES", 40],
-    ["photography", "Property photography", "DESIGN_PROPERTY_SERVICES", 50],
-    ["property_inspection", "Property inspection", "DESIGN_PROPERTY_SERVICES", 60],
-    ["land_surveying", "Land Surveyors", "DESIGN_PROPERTY_SERVICES", 70],
-    ["property_valuation", "Property Valuers / Estate Surveyors", "DESIGN_PROPERTY_SERVICES", 80],
-    ["quantity_surveying", "Quantity Surveyors", "DESIGN_PROPERTY_SERVICES", 90],
-    ["architecture", "Architects & Building Designers", "DESIGN_PROPERTY_SERVICES", 100],
-    ["building_contractor", "Masons & Building Contractors", "BUILDING_CONSTRUCTION", 100],
-    ["other_property_service", "Other property service", "OTHER", 10],
+  // Property Services taxonomy.
+  //
+  // Top-level categories are navigation/grouping nodes only.
+  // Leaf categories are selectable services. Existing stable keys are reused
+  // wherever their meaning maps cleanly to the approved taxonomy so existing
+  // provider-category relationships retain their category IDs.
+  const propertyServiceGroups = [
+    ["property_services_construction_building_works", "Construction & Building Works", 10],
+    ["property_services_repairs_maintenance", "Repairs & Maintenance", 20],
+    ["property_services_cleaning_property_care", "Cleaning & Property Care", 30],
+    ["property_services_landscaping_outdoor", "Landscaping & Outdoor Services", 40],
+    ["property_services_security_access_safety", "Security, Access & Safety", 50],
+    ["property_services_energy_power_utilities", "Energy, Power & Utilities", 60],
+    ["property_services_interior_design_fitout", "Interior Design & Fit-Out", 70],
+    ["property_services_architecture_engineering", "Architecture, Engineering & Technical Services", 80],
+    ["property_services_surveying_valuation_planning", "Surveying, Valuation & Planning", 90],
+    ["property_services_moving_relocation_storage", "Moving, Relocation & Storage", 100],
+    ["property_services_legal_documentation_compliance", "Legal, Documentation & Compliance Services", 110],
   ] as const;
-  for (const [key, name, group, sortOrder] of categories) {
-    await prisma.serviceCategory.upsert({ where: { key }, update: { name, active: true, group, sortOrder }, create: { key, name, group, sortOrder } });
+
+  const legacyGroupByParentKey = {
+    property_services_construction_building_works: "BUILDING_CONSTRUCTION",
+    property_services_repairs_maintenance: "REPAIRS_MAINTENANCE",
+    property_services_cleaning_property_care: "PROPERTY_CARE",
+    property_services_landscaping_outdoor: "PROPERTY_CARE",
+    property_services_security_access_safety: "SECURITY_SYSTEMS",
+    property_services_energy_power_utilities: "SECURITY_SYSTEMS",
+    property_services_interior_design_fitout: "DESIGN_PROPERTY_SERVICES",
+    property_services_architecture_engineering: "DESIGN_PROPERTY_SERVICES",
+    property_services_surveying_valuation_planning: "DESIGN_PROPERTY_SERVICES",
+    property_services_moving_relocation_storage: "DESIGN_PROPERTY_SERVICES",
+    property_services_legal_documentation_compliance: "OTHER",
+  } as const;
+
+  for (const [key, name, sortOrder] of propertyServiceGroups) {
+    await prisma.serviceCategory.upsert({
+      where: { key },
+      update: {
+        name,
+        parentId: null,
+        group: legacyGroupByParentKey[key],
+        sortOrder,
+        active: true,
+        publiclyVisible: true,
+        onboardingSelectable: false,
+      },
+      create: {
+        key,
+        name,
+        parentId: null,
+        group: legacyGroupByParentKey[key],
+        sortOrder,
+        active: true,
+        publiclyVisible: true,
+        onboardingSelectable: false,
+      },
+    });
   }
+
+  const parentIdByKey = new Map(
+    (
+      await prisma.serviceCategory.findMany({
+        where: { key: { in: propertyServiceGroups.map(([key]) => key) } },
+        select: { id: true, key: true },
+      })
+    ).map((category) => [category.key, category.id]),
+  );
+
+  const categories = [
+    // 1. Construction & Building Works
+    ["general_contractor", "General Contractors", "property_services_construction_building_works", 10],
+    ["building_contractor", "Building Contractors", "property_services_construction_building_works", 20],
+    ["masonry", "Masonry & Blockwork", "property_services_construction_building_works", 30],
+    ["carpentry", "Carpentry & Joinery", "property_services_construction_building_works", 40],
+    ["roofing", "Roofing", "property_services_construction_building_works", 50],
+    ["tiling", "Tiling", "property_services_construction_building_works", 60],
+    ["painting", "Painting & Decorating", "property_services_construction_building_works", 70],
+    ["welding", "Welding & Metal Fabrication", "property_services_construction_building_works", 80],
+    ["glass_aluminium", "Glass & Aluminium Works", "property_services_construction_building_works", 90],
+    ["steel_works", "Steel Works", "property_services_construction_building_works", 100],
+    ["flooring_installation", "Flooring Installation", "property_services_construction_building_works", 110],
+    ["scaffolding", "Scaffolding", "property_services_construction_building_works", 120],
+
+    // 2. Repairs & Maintenance
+    ["handyman", "General Handyman", "property_services_repairs_maintenance", 10],
+    ["plumbing", "Plumbing Repairs", "property_services_repairs_maintenance", 20],
+    ["electrical", "Electrical Repairs", "property_services_repairs_maintenance", 30],
+    ["hvac", "Air Conditioning / HVAC", "property_services_repairs_maintenance", 40],
+    ["appliance", "Appliance Repair", "property_services_repairs_maintenance", 50],
+    ["septic_system_maintenance", "Septic System Maintenance", "property_services_repairs_maintenance", 60],
+    ["elevator_lift_maintenance", "Elevator / Lift Maintenance", "property_services_repairs_maintenance", 70],
+
+    // 3. Cleaning & Property Care
+    ["residential_cleaning", "Residential Cleaning", "property_services_cleaning_property_care", 10],
+    ["commercial_cleaning", "Commercial Cleaning", "property_services_cleaning_property_care", 20],
+    ["deep_cleaning", "Deep Cleaning", "property_services_cleaning_property_care", 30],
+    ["post_construction_cleaning", "Post-Construction Cleaning", "property_services_cleaning_property_care", 40],
+    ["move_in_move_out_cleaning", "Move-In / Move-Out Cleaning", "property_services_cleaning_property_care", 50],
+    ["carpet_upholstery_cleaning", "Carpet & Upholstery Cleaning", "property_services_cleaning_property_care", 60],
+    ["pest_control", "Pest Control & Fumigation", "property_services_cleaning_property_care", 70],
+
+    // 4. Landscaping & Outdoor Services
+    ["landscaping", "Landscaping", "property_services_landscaping_outdoor", 10],
+    ["gardening", "Gardening", "property_services_landscaping_outdoor", 20],
+    ["lawn_maintenance", "Lawn Maintenance", "property_services_landscaping_outdoor", 30],
+    ["tree_cutting_pruning", "Tree Cutting & Pruning", "property_services_landscaping_outdoor", 40],
+    ["fence_installation", "Fence Installation", "property_services_landscaping_outdoor", 50],
+    ["gate_installation", "Gate Installation", "property_services_landscaping_outdoor", 60],
+    ["paving_interlocking", "Paving & Interlocking", "property_services_landscaping_outdoor", 70],
+    ["outdoor_lighting", "Outdoor Lighting", "property_services_landscaping_outdoor", 80],
+    ["pool_construction", "Pool Construction", "property_services_landscaping_outdoor", 90],
+
+    // 5. Security, Access & Safety
+    ["security", "Security Guards", "property_services_security_access_safety", 10],
+    ["cctv_installation", "CCTV Installation", "property_services_security_access_safety", 20],
+    ["alarm_systems", "Alarm Systems", "property_services_security_access_safety", 30],
+    ["access_control", "Access Control", "property_services_security_access_safety", 40],
+    ["intercom_systems", "Intercom Systems", "property_services_security_access_safety", 50],
+    ["electric_fencing", "Electric Fencing", "property_services_security_access_safety", 60],
+    ["gate_automation", "Gate Automation", "property_services_security_access_safety", 70],
+    ["fire_alarm_systems", "Fire Alarm Systems", "property_services_security_access_safety", 80],
+    ["fire_extinguishers_suppression", "Fire Extinguishers & Suppression", "property_services_security_access_safety", 90],
+
+    // 6. Energy, Power & Utilities
+    ["solar", "Solar Installation", "property_services_energy_power_utilities", 10],
+    ["inverters_ups", "Inverters & UPS", "property_services_energy_power_utilities", 20],
+    ["generator_power_backup", "Generator Installation & Maintenance", "property_services_energy_power_utilities", 30],
+    ["borehole_water_systems", "Borehole Drilling", "property_services_energy_power_utilities", 40],
+    ["water_pumps", "Water Pumps", "property_services_energy_power_utilities", 50],
+    ["water_tanks", "Water Tanks", "property_services_energy_power_utilities", 60],
+    ["water_treatment", "Water Treatment", "property_services_energy_power_utilities", 70],
+    ["septic_sewage_systems", "Septic & Sewage Systems", "property_services_energy_power_utilities", 80],
+    ["gas_lpg_systems", "Gas / LPG Systems", "property_services_energy_power_utilities", 90],
+    ["ev_charging_installation", "EV Charging Installation", "property_services_energy_power_utilities", 100],
+
+    // 7. Interior Design & Fit-Out
+    ["interior_design", "Interior Design", "property_services_interior_design_fitout", 10],
+    ["interior_fitout", "Interior Fit-Out", "property_services_interior_design_fitout", 20],
+    ["furniture_joinery", "Furniture & Joinery", "property_services_interior_design_fitout", 30],
+    ["custom_cabinetry", "Custom Cabinetry", "property_services_interior_design_fitout", 40],
+    ["kitchen_installation", "Kitchen Installation", "property_services_interior_design_fitout", 50],
+    ["bathroom_fitout", "Bathroom Fit-Out", "property_services_interior_design_fitout", 60],
+    ["wardrobes_closets", "Wardrobes & Closets", "property_services_interior_design_fitout", 70],
+    ["curtains_blinds", "Curtains & Blinds", "property_services_interior_design_fitout", 80],
+    ["flooring", "Flooring", "property_services_interior_design_fitout", 90],
+    ["wallpaper", "Wallpaper", "property_services_interior_design_fitout", 100],
+    ["decorative_painting", "Decorative Painting", "property_services_interior_design_fitout", 110],
+    ["lighting_design", "Lighting Design", "property_services_interior_design_fitout", 120],
+    ["office_partitions", "Office Partitions", "property_services_interior_design_fitout", 130],
+
+    // 8. Architecture, Engineering & Technical Services
+    ["architecture", "Architects", "property_services_architecture_engineering", 10],
+    ["building_designers", "Building Designers", "property_services_architecture_engineering", 20],
+    ["structural", "Structural Engineers", "property_services_architecture_engineering", 30],
+    ["civil_engineers", "Civil Engineers", "property_services_architecture_engineering", 40],
+    ["electrical_engineers", "Electrical Engineers", "property_services_architecture_engineering", 50],
+    ["mechanical_mep_engineers", "Mechanical / MEP Engineers", "property_services_architecture_engineering", 60],
+    ["geotechnical_engineers", "Geotechnical Engineers", "property_services_architecture_engineering", 70],
+
+    // 9. Surveying, Valuation & Planning
+    ["land_surveying", "Land Surveyors", "property_services_surveying_valuation_planning", 10],
+    ["quantity_surveying", "Quantity Surveyors", "property_services_surveying_valuation_planning", 20],
+    ["property_valuation", "Property Valuers / Estate Surveyors", "property_services_surveying_valuation_planning", 30],
+
+    // 10. Moving, Relocation & Storage
+    ["home_moving", "Home Moving", "property_services_moving_relocation_storage", 10],
+    ["office_moving", "Office Moving", "property_services_moving_relocation_storage", 20],
+    ["packing_services", "Packing Services", "property_services_moving_relocation_storage", 30],
+    ["furniture_moving", "Furniture Moving", "property_services_moving_relocation_storage", 40],
+    ["furniture_assembly", "Furniture Assembly", "property_services_moving_relocation_storage", 50],
+    ["relocation_services", "Relocation Services", "property_services_moving_relocation_storage", 60],
+    ["local_haulage", "Local Haulage", "property_services_moving_relocation_storage", 70],
+    ["property_clearance", "Property Clearance", "property_services_moving_relocation_storage", 80],
+    ["storage_services", "Storage Services", "property_services_moving_relocation_storage", 90],
+    ["warehouse_storage", "Warehouse Storage", "property_services_moving_relocation_storage", 100],
+    ["equipment_moving", "Equipment Moving", "property_services_moving_relocation_storage", 110],
+
+    // 11. Legal, Documentation & Compliance Services
+    ["property_lawyers", "Property Lawyers", "property_services_legal_documentation_compliance", 10],
+    ["land_documentation", "Land Documentation", "property_services_legal_documentation_compliance", 20],
+    ["building_permit_assistance", "Building Permit Assistance", "property_services_legal_documentation_compliance", 30],
+    ["property_due_diligence", "Property Due Diligence", "property_services_legal_documentation_compliance", 40],
+    ["land_registration_support", "Land Registration Support", "property_services_legal_documentation_compliance", 50],
+  ] as const;
+
+  for (const [key, name, parentKey, sortOrder] of categories) {
+    const parentId = parentIdByKey.get(parentKey);
+    if (!parentId) throw new Error(`Missing Property Services parent category: ${parentKey}`);
+
+    await prisma.serviceCategory.upsert({
+      where: { key },
+      update: {
+        name,
+        parentId,
+        group: legacyGroupByParentKey[parentKey],
+        sortOrder,
+        active: true,
+        publiclyVisible: true,
+        onboardingSelectable: true,
+      },
+      create: {
+        key,
+        name,
+        parentId,
+        group: legacyGroupByParentKey[parentKey],
+        sortOrder,
+        active: true,
+        publiclyVisible: true,
+        onboardingSelectable: true,
+      },
+    });
+  }
+
+  // Keep broad/legacy categories and their provider relationships intact, but do
+  // not expose them as choices in the new taxonomy when they cannot be mapped
+  // safely to one exact approved leaf.
+  const hiddenLegacyCategoryKeys = [
+    "locksmith",
+    "facility_maintenance",
+    "cleaning",
+    "pool_maintenance",
+    "sanitation",
+    "water_tank_pump",
+    "moving",
+    "photography",
+    "property_inspection",
+    "other_property_service",
+  ] as const;
+
+  await prisma.serviceCategory.updateMany({
+    where: { key: { in: [...hiddenLegacyCategoryKeys] } },
+    data: {
+      publiclyVisible: false,
+      onboardingSelectable: false,
+    },
+  });
+
   const categoryIdByKey = new Map((await prisma.serviceCategory.findMany({ select: { id: true, key: true } })).map((c) => [c.key, c.id]));
 
   // Phase 23: Ghana-launch mandatory identity/business document requirements for Property Service

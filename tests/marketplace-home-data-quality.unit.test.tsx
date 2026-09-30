@@ -26,19 +26,46 @@ vi.mock("@/components/marketing/site-footer", () => ({
 }));
 
 const CATEGORIES = [
-  { id: "c1", key: "plumbing", name: "Plumbing" },
-  { id: "c2", key: "electrical", name: "Electrical" },
-  { id: "c3", key: "roofing", name: "Roofing" },
+  {
+    id: "parent-construction",
+    key: "property_services_construction_building_works",
+    name: "Construction & Building Works",
+    parentId: null,
+    sortOrder: 10,
+  },
+  {
+    id: "parent-repairs",
+    key: "property_services_repairs_maintenance",
+    name: "Repairs & Maintenance",
+    parentId: null,
+    sortOrder: 20,
+  },
+  {
+    id: "c1",
+    key: "plumbing",
+    name: "Plumbing Repairs",
+    parentId: "parent-repairs",
+    sortOrder: 10,
+  },
+  {
+    id: "c2",
+    key: "electrical",
+    name: "Electrical Repairs",
+    parentId: "parent-repairs",
+    sortOrder: 20,
+  },
 ];
 
 type Routes = {
-  providers: unknown;
+  providers?: unknown;
+  categories?: typeof CATEGORIES;
   directory?: (url: URL) => unknown;
   homepageCompanies?: unknown;
 };
 
 function mockApi({
-  providers,
+  providers = { items: [], pagination: { total: 0 } },
+  categories = CATEGORIES,
   directory,
   homepageCompanies = { items: [] },
 }: Routes) {
@@ -62,7 +89,7 @@ function mockApi({
       }
 
       if (url.pathname === "/api/public/marketplace/categories") {
-        return json(CATEGORIES);
+        return json(categories);
       }
 
       if (url.pathname === "/api/public/marketplace/providers") {
@@ -188,46 +215,48 @@ describe("marketplace homepage data quality", () => {
     expect(await screen.findByText("2 verified")).toBeTruthy();
   });
 
-  it("replaces empty service categories with a provider invitation when there are no providers", async () => {
+  it("keeps Property Services categories browsable when there are no published providers", async () => {
     mockApi({
       providers: { items: [], pagination: { total: 0 } },
+      categories: CATEGORIES,
     });
 
     render(<MarketplaceHome />);
 
-    expect(
-      await screen.findByText("Offer property services?"),
-    ).toBeTruthy();
+    const repairs = await screen.findByRole("link", {
+      name: "Repairs & Maintenance",
+    });
+
+    expect(repairs.getAttribute("href")).toBe(
+      "/marketplace/services/category/property_services_repairs_maintenance",
+    );
 
     expect(
-      screen.queryByRole("link", { name: "Plumbing" }),
+      screen.queryByRole("link", { name: "Plumbing Repairs" }),
     ).toBeNull();
   });
 
-  it("links only the service categories that a public provider actually offers", async () => {
+  it("links top-level Property Services categories to their category pages", async () => {
     mockApi({
-      providers: {
-        items: [
-          {
-            categories: [CATEGORIES[0], CATEGORIES[2]],
-          },
-        ],
-        pagination: { total: 1 },
-      },
+      categories: CATEGORIES,
     });
 
     render(<MarketplaceHome />);
 
-    expect(
-      await screen.findByRole("link", { name: "Plumbing" }),
-    ).toBeTruthy();
+    const repairs = await screen.findByRole("link", {
+      name: "Repairs & Maintenance",
+    });
+    expect(repairs.getAttribute("href")).toBe(
+      "/marketplace/services/category/property_services_repairs_maintenance",
+    );
 
-    expect(
-      screen.getByRole("link", { name: "Roofing" }),
-    ).toBeTruthy();
+    const construction = screen.getByRole("link", {
+      name: "Construction & Building Works",
+    });
+    expect(construction.getAttribute("href")).toBe(
+      "/marketplace/services/category/property_services_construction_building_works",
+    );
 
-    expect(
-      screen.queryByRole("link", { name: "Electrical" }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Plumbing Repairs" })).toBeNull();
   });
 });

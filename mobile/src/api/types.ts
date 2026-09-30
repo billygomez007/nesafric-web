@@ -83,6 +83,14 @@ export type ServiceCategory = {
   description: string | null;
   group: string;
   sortOrder: number;
+  parentId?: string | null;
+  parent?: {
+    id: string;
+    key: string;
+    name: string;
+    sortOrder: number;
+  } | null;
+  children?: ServiceCategory[];
 };
 
 export type ProviderType = "INDIVIDUAL" | "COMPANY";

@@ -209,80 +209,93 @@ function ProfessionalDiscovery() {
 
 /* ---------- Service providers ---------- */
 
-type ServiceCategory = { id: string; key: string; name: string };
-type ProviderPage = { items: Array<{ categories: ServiceCategory[] }>; pagination: { total: number } };
-
-const PROVIDER_SAMPLE_SIZE = 50;
-
-/**
- * Which service categories have at least one public provider. Derived from the provider sample
- * when it holds every public provider; otherwise asked per category, so a category link is only
- * ever shown when the search behind it returns someone. `null` while loading.
- */
-function useCategoriesWithProviders(categories: ServiceCategory[] | null, providers: ProviderPage | null) {
-  const [perCategory, setPerCategory] = useState<Record<string, number> | null>(null);
-  const needsPerCategory = !!categories && !!providers && providers.pagination.total > providers.items.length;
-
-  useEffect(() => {
-    if (!needsPerCategory || !categories) return;
-    const controller = new AbortController();
-    Promise.all(categories.map(async (category) => {
-      const response = await fetch(`/api/public/marketplace/providers?category=${encodeURIComponent(category.key)}&page=1&pageSize=1`, { signal: controller.signal });
-      const body = response.ok ? await response.json() as ProviderPage : null;
-      return [category.key, body?.pagination.total ?? 0] as const;
-    })).then((entries) => setPerCategory(Object.fromEntries(entries))).catch(() => {});
-    return () => controller.abort();
-  }, [needsPerCategory, categories]);
-
-  if (!categories || !providers) return null;
-  if (providers.pagination.total === 0) return [];
-  if (!needsPerCategory) {
-    const offered = new Set(providers.items.flatMap((provider) => provider.categories.map((category) => category.key)));
-    return categories.filter((category) => offered.has(category.key));
-  }
-  return perCategory ? categories.filter((category) => (perCategory[category.key] ?? 0) > 0) : null;
-}
+type ServiceCategory = {
+  id: string;
+  key: string;
+  name: string;
+  parentId?: string | null;
+  sortOrder?: number;
+};
 
 function ServiceProviders() {
-  const categories = useJson<ServiceCategory[]>("/api/public/marketplace/categories");
-  const providers = useJson<ProviderPage>(`/api/public/marketplace/providers?page=1&pageSize=${PROVIDER_SAMPLE_SIZE}`);
-  const offered = useCategoriesWithProviders(categories, providers);
+  const categories = useJson<ServiceCategory[]>(
+    "/api/public/marketplace/categories",
+  );
 
-  if (offered === null) return null;
+  if (categories === null) return null;
 
-  // No public providers yet: invite providers rather than showing empty consumer destinations.
-  if (offered.length === 0) {
+  const parents = categories
+    .filter((category) => category.parentId === null)
+    .sort(
+      (a, b) =>
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+        a.name.localeCompare(b.name),
+    );
+
+  if (parents.length === 0) {
     return (
-      <section aria-labelledby="services-heading" className="border-t border-hairline bg-white">
+      <section
+        aria-labelledby="services-heading"
+        className="border-t border-hairline bg-background"
+      >
         <div className="mx-auto flex max-w-[1400px] flex-col gap-4 px-5 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <div>
-            <h2 className="text-xl font-semibold text-forest-deep" id="services-heading">Offer property services?</h2>
+            <h2
+              className="text-xl font-semibold text-forest-deep"
+              id="services-heading"
+            >
+              Offer property services?
+            </h2>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted">
-              Plumbers, electricians, cleaners and other trades can join NesAfric to be found by the owners and managers who need them.
+              Property service professionals and companies can join NesAfric to
+              be found by customers who need their services.
             </p>
           </div>
-          <Link className={`${buttonClass("secondary", "sm")} shrink-0`} href="/register">Join as a service provider</Link>
+          <Link
+            className={`${buttonClass("secondary", "sm")} shrink-0`}
+            href="/register"
+          >
+            Join as a service provider
+          </Link>
         </div>
       </section>
     );
   }
 
   return (
-    <section aria-labelledby="services-heading" className="border-t border-hairline bg-white">
+    <section
+      aria-labelledby="services-heading"
+      className="border-t border-hairline bg-background"
+    >
       <div className="mx-auto grid max-w-[1400px] gap-8 px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <h2 className="text-2xl font-semibold tracking-[-0.015em] text-forest-deep sm:text-[28px]" id="services-heading">Service providers</h2>
+          <h2
+            className="text-2xl font-semibold tracking-[-0.015em] text-forest-deep sm:text-[28px]"
+            id="services-heading"
+          >
+            Property Services
+          </h2>
           <p className="mt-3 max-w-md text-sm leading-6 text-muted">
-            Plumbers, electricians, cleaners and other trades who work with owners and managers on NesAfric.
+            Find trusted professionals and companies for every stage of your
+            property.
           </p>
-          <Link className={`${buttonClass("secondary", "sm")} mt-5`} href="/marketplace/services">Find a service provider</Link>
+          <Link
+            className={`${buttonClass("secondary", "sm")} mt-5`}
+            href="/marketplace/services"
+          >
+            Browse Property Services
+          </Link>
         </div>
-        <ul aria-label="Services" className="flex flex-wrap content-start gap-2">
-          {offered.slice(0, 16).map((category) => (
+
+        <ul
+          aria-label="Property service categories"
+          className="flex flex-wrap content-start gap-2"
+        >
+          {parents.map((category) => (
             <li key={category.id}>
               <Link
                 className="inline-flex min-h-10 items-center rounded-full border border-hairline px-4 text-sm font-medium text-forest-deep transition hover:border-forest/40 hover:bg-warm-white"
-                href={`/marketplace/services?category=${encodeURIComponent(category.key)}`}
+                href={`/marketplace/services/category/${encodeURIComponent(category.key)}`}
               >
                 {category.name}
               </Link>

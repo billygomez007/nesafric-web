@@ -190,7 +190,7 @@ describe("marketplace selector", () => {
     await screen.findByText("Find your perfect property");
 
     fireEvent.press(screen.getByTestId("marketplace-mode-services"));
-    expect(await screen.findByText("Find trusted professionals for your property.")).toBeTruthy();
+    expect(await screen.findByText("Find trusted professionals and companies for every stage of your property.")).toBeTruthy();
     expect(screen.getByPlaceholderText("Search plumbers, electricians, cleaners…")).toBeTruthy();
     expect(await screen.findByText("Kwame Plumbing Services")).toBeTruthy();
     expect(screen.queryByText("Find your perfect property")).toBeNull();
@@ -207,7 +207,7 @@ describe("service provider marketplace home", () => {
   it("lists services from the categories API, core services first and admin-added ones kept", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    expect(await screen.findByText("Popular services")).toBeTruthy();
+    expect((await screen.findAllByText("Property Services")).length).toBeGreaterThanOrEqual(1);
     const tiles = (await screen.findAllByTestId(/^service-category-/)).map((tile) => tile.props.testID);
     expect(tiles).toEqual([
       "service-category-plumbing",

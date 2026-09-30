@@ -5,14 +5,32 @@ import { useRouter } from "next/navigation";
 import { trackCampaignEvent } from "@/components/marketing/campaign-tracking";
 import { trackEvent } from "@/platform/analytics";
 
-type Category = { id: string; key: string; name: string };
+type Category = {
+  id: string;
+  key: string;
+  name: string;
+  parentId?: string | null;
+  parent?: { id: string; key: string; name: string; sortOrder: number } | null;
+};
 type Organisation = { id: string; name: string };
-type DocumentRequirement = { evidenceType: string; label: string; description: string | null; required: boolean };
+type DocumentRequirement = {
+  evidenceType: string;
+  label: string;
+  description: string | null;
+  required: boolean;
+};
 type ServiceArea = { countryCode: string; region: string; city: string };
 
 const STEP_LABELS = [
-  "Account type", "Business information", "Services", "Service areas",
-  "Identity verification", "Business documents", "Portfolio", "Review & consent", "Submit",
+  "Account type",
+  "Business information",
+  "Services",
+  "Service areas",
+  "Identity verification",
+  "Business documents",
+  "Portfolio",
+  "Review & consent",
+  "Submit",
 ];
 
 async function fileToBase64(file: File) {
@@ -20,23 +38,45 @@ async function fileToBase64(file: File) {
   return Buffer.from(buffer).toString("base64");
 }
 
-async function uploadEvidence(providerId: string, evidenceType: string, file: File) {
-  const response = await fetch(`/api/providers/${providerId}/verification/evidence`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      fileName: file.name,
-      contentType: file.type || "application/octet-stream",
-      dataBase64: await fileToBase64(file),
-      evidenceType,
-    }),
-  });
+async function uploadEvidence(
+  providerId: string,
+  evidenceType: string,
+  file: File,
+) {
+  const response = await fetch(
+    `/api/providers/${providerId}/verification/evidence`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        dataBase64: await fileToBase64(file),
+        evidenceType,
+      }),
+    },
+  );
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error?.message ?? `Unable to upload ${evidenceType}.`);
+  if (!response.ok) {
+    const code = body.error?.code;
+    if (
+      code === "STORAGE_NOT_CONFIGURED" ||
+      code === "STORAGE_PRIVATE_NOT_CONFIGURED" ||
+      code === "STORAGE_PUBLIC_NOT_CONFIGURED"
+    ) {
+      throw new Error(
+        "Document upload is temporarily unavailable. Please try again later.",
+      );
+    }
+    throw new Error(body.error?.message ?? `Unable to upload ${evidenceType}.`);
+  }
   // Only forward type/reference — the raw evidence row also carries `expiresAt: null`, which
   // `z.coerce.date()` on the verification-submit schema turns into the Unix epoch (a very
   // definitely-expired date) rather than leaving it absent.
-  return { type: body.attached.type as string, reference: body.attached.reference as string };
+  return {
+    type: body.attached.type as string,
+    reference: body.attached.reference as string,
+  };
 }
 
 /** What the server saved (create and update both return it): the review step shows this. */
@@ -50,7 +90,13 @@ type SavedProvider = {
   serviceAreas: { id: string; name: string }[];
 };
 
-type ApiErrorBody = { error?: { code?: string; message?: string; details?: { providerId?: string } } };
+type ApiErrorBody = {
+  error?: {
+    code?: string;
+    message?: string;
+    details?: { providerId?: string };
+  };
+};
 
 async function readError(response: Response): Promise<ApiErrorBody["error"]> {
   try {
@@ -64,7 +110,11 @@ async function readError(response: Response): Promise<ApiErrorBody["error"]> {
  * What to tell the person when a step fails, from the server's error code. The profile may
  * already exist at the later steps, so those messages never suggest starting over.
  */
-export function providerOnboardingErrorMessage(status: number, error: ApiErrorBody["error"], fallback: string) {
+export function providerOnboardingErrorMessage(
+  status: number,
+  error: ApiErrorBody["error"],
+  fallback: string,
+) {
   if (status === 401) return "Your session expired. Sign in again to continue.";
   switch (error?.code) {
     case "INVALID_VERIFICATION_STATE":
@@ -94,7 +144,9 @@ export function ServiceProviderOnboardingForm() {
   // `providerId` came from an earlier profile (409), not from this form's own create.
   const [adoptedExisting, setAdoptedExisting] = useState(false);
 
-  const [accountType, setAccountType] = useState<"INDIVIDUAL" | "COMPANY">("INDIVIDUAL");
+  const [accountType, setAccountType] = useState<"INDIVIDUAL" | "COMPANY">(
+    "INDIVIDUAL",
+  );
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [companyOrganisationId, setCompanyOrganisationId] = useState("");
 
@@ -107,45 +159,95 @@ export function ServiceProviderOnboardingForm() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
 
-  const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([{ countryCode: "GH", region: "", city: "" }]);
+  const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([
+    { countryCode: "GH", region: "", city: "" },
+  ]);
 
   const [providerId, setProviderId] = useState<string | null>(null);
   const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
-  const [identityFiles, setIdentityFiles] = useState<Record<string, File | null>>({});
-  const [businessFiles, setBusinessFiles] = useState<Record<string, File | null>>({});
+  const [identityFiles, setIdentityFiles] = useState<
+    Record<string, File | null>
+  >({});
+  const [businessFiles, setBusinessFiles] = useState<
+    Record<string, File | null>
+  >({});
   const [portfolioFile, setPortfolioFile] = useState<File | null>(null);
-  const [submittedEvidence, setSubmittedEvidence] = useState<{ type: string; reference: string }[]>([]);
+  const [submittedEvidence, setSubmittedEvidence] = useState<
+    { type: string; reference: string }[]
+  >([]);
 
-  const [consent, setConsent] = useState({ accurate: false, authorized: false, reviewConsented: false, termsAccepted: false });
+  const [consent, setConsent] = useState({
+    accurate: false,
+    authorized: false,
+    reviewConsented: false,
+    termsAccepted: false,
+  });
 
   useEffect(() => {
-    fetch("/api/providers/categories").then(async (response) => {
-      if (response.ok) setCategories(await response.json());
-    }).catch(() => {});
+    fetch("/api/providers/categories")
+      .then(async (response) => {
+        if (response.ok) setCategories(await response.json());
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (accountType !== "COMPANY") return;
-    fetch("/api/organisations").then(async (response) => {
-      if (response.ok) setOrganisations(await response.json());
-    }).catch(() => {});
+    fetch("/api/organisations")
+      .then(async (response) => {
+        if (response.ok) setOrganisations(await response.json());
+      })
+      .catch(() => {});
   }, [accountType]);
 
-  const identityRequirements = requirements.filter((requirement) => requirement.evidenceType.startsWith("GHANA_CARD"));
-  const businessRequirements = requirements.filter((requirement) => !requirement.evidenceType.startsWith("GHANA_CARD"));
+  const identityRequirements = requirements.filter((requirement) =>
+    requirement.evidenceType.startsWith("GHANA_CARD"),
+  );
+  const businessRequirements = requirements.filter(
+    (requirement) => !requirement.evidenceType.startsWith("GHANA_CARD"),
+  );
+
+  const categoryGroups = Array.from(
+    categories
+      .reduce((groups, category) => {
+        const key = category.parent?.id ?? "other";
+        const current = groups.get(key) ?? {
+          id: key,
+          name: category.parent?.name ?? "Other property services",
+          sortOrder: category.parent?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+          categories: [] as Category[],
+        };
+        current.categories.push(category);
+        groups.set(key, current);
+        return groups;
+      }, new Map<string, { id: string; name: string; sortOrder: number; categories: Category[] }>())
+      .values(),
+  ).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
   function updateServiceArea(index: number, patch: Partial<ServiceArea>) {
-    setServiceAreas((current) => current.map((area, position) => (position === index ? { ...area, ...patch } : area)));
+    setServiceAreas((current) =>
+      current.map((area, position) =>
+        position === index ? { ...area, ...patch } : area,
+      ),
+    );
   }
 
   async function loadRequirements() {
-    const requirementParams = new URLSearchParams({ countryCode: "GH", providerType: accountType });
-    for (const categoryId of categoryIds) requirementParams.append("categoryId", categoryId);
-    const requirementResponse = await fetch(`/api/public/providers/document-requirements?${requirementParams}`);
-    if (requirementResponse.ok) setRequirements(await requirementResponse.json());
+    const requirementParams = new URLSearchParams({
+      countryCode: "GH",
+      providerType: accountType,
+    });
+    for (const categoryId of categoryIds)
+      requirementParams.append("categoryId", categoryId);
+    const requirementResponse = await fetch(
+      `/api/public/providers/document-requirements?${requirementParams}`,
+    );
+    if (requirementResponse.ok)
+      setRequirements(await requirementResponse.json());
   }
 
-  const editableServiceAreas = () => serviceAreas.filter((area) => area.city || area.region);
+  const editableServiceAreas = () =>
+    serviceAreas.filter((area) => area.city || area.region);
 
   /** The provider's own marketplace profile keeps the structured areas (best effort, as on create). */
   async function syncMarketplaceProfile(id: string) {
@@ -155,7 +257,9 @@ export function ServiceProviderOnboardingForm() {
       body: JSON.stringify({
         categoryIds,
         serviceAreas: editableServiceAreas().map((area) => ({
-          countryCode: area.countryCode, region: area.region || undefined, city: area.city || undefined,
+          countryCode: area.countryCode,
+          region: area.region || undefined,
+          city: area.city || undefined,
         })),
       }),
     }).catch(() => {});
@@ -178,13 +282,17 @@ export function ServiceProviderOnboardingForm() {
         categoryIds,
         serviceAreas: editableServiceAreas().map((area) => ({
           areaType: "SERVICE_AREA",
-          name: [area.city, area.region, area.countryCode].filter(Boolean).join(", "),
+          name: [area.city, area.region, area.countryCode]
+            .filter(Boolean)
+            .join(", "),
         })),
       }),
     });
     if (!response.ok) {
       setWorkspaceReady(true);
-      throw new Error(`${providerOnboardingErrorMessage(response.status, await readError(response), "We couldn’t save your changes.")} Your profile is saved as it was: you can try again, or open your workspace and edit it there.`);
+      throw new Error(
+        `${providerOnboardingErrorMessage(response.status, await readError(response), "We couldn’t save your changes.")} Your profile is saved as it was: you can try again, or open your workspace and edit it there.`,
+      );
     }
     setSaved(await response.json());
     await syncMarketplaceProfile(id);
@@ -200,7 +308,9 @@ export function ServiceProviderOnboardingForm() {
       // form. Its workspace is the place to edit it.
       if (providerId && adoptedExisting) {
         setWorkspaceReady(true);
-        setError("You already have a service provider profile. Open your workspace to edit it.");
+        setError(
+          "You already have a service provider profile. Open your workspace to edit it.",
+        );
         return;
       }
       // Already created in this session (Back, then Continue again): never create a second one;
@@ -216,7 +326,8 @@ export function ServiceProviderOnboardingForm() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           type: accountType,
-          companyOrganisationId: accountType === "COMPANY" ? companyOrganisationId : undefined,
+          companyOrganisationId:
+            accountType === "COMPANY" ? companyOrganisationId : undefined,
           displayName,
           legalName: legalName || undefined,
           contactEmail: contactEmail || undefined,
@@ -225,21 +336,34 @@ export function ServiceProviderOnboardingForm() {
           categoryIds,
           serviceAreas: editableServiceAreas().map((area) => ({
             areaType: "SERVICE_AREA",
-            name: [area.city, area.region, area.countryCode].filter(Boolean).join(", "),
+            name: [area.city, area.region, area.countryCode]
+              .filter(Boolean)
+              .join(", "),
           })),
         }),
       });
       if (!response.ok) {
         const failure = await readError(response);
         // This account already has a profile (an earlier attempt or another tab): open it.
-        if (failure?.code === "PROVIDER_IDENTITY_EXISTS" && failure.details?.providerId) {
+        if (
+          failure?.code === "PROVIDER_IDENTITY_EXISTS" &&
+          failure.details?.providerId
+        ) {
           setProviderId(failure.details.providerId);
           setAdoptedExisting(true);
           setWorkspaceReady(true);
-          setError("You already have a service provider profile. Open your workspace to continue setting it up.");
+          setError(
+            "You already have a service provider profile. Open your workspace to continue setting it up.",
+          );
           return;
         }
-        throw new Error(providerOnboardingErrorMessage(response.status, failure, "We couldn’t create your service provider profile. Check your details and try again."));
+        throw new Error(
+          providerOnboardingErrorMessage(
+            response.status,
+            failure,
+            "We couldn’t create your service provider profile. Check your details and try again.",
+          ),
+        );
       }
       const body = await response.json();
       setProviderId(body.id);
@@ -251,7 +375,11 @@ export function ServiceProviderOnboardingForm() {
       trackCampaignEvent("service_provider_registration_started");
       setStep(5);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to create your service-provider profile.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to create your service-provider profile.",
+      );
     } finally {
       inFlight.current = false;
       setSubmitting(false);
@@ -260,8 +388,14 @@ export function ServiceProviderOnboardingForm() {
 
   async function submitIdentityDocuments() {
     if (!providerId) return;
-    const missing = identityRequirements.filter((requirement) => requirement.required && !identityFiles[requirement.evidenceType]);
-    if (missing.length) return setError(`Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`);
+    const missing = identityRequirements.filter(
+      (requirement) =>
+        requirement.required && !identityFiles[requirement.evidenceType],
+    );
+    if (missing.length)
+      return setError(
+        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
+      );
     setError("");
     setSubmitting(true);
     try {
@@ -269,12 +403,18 @@ export function ServiceProviderOnboardingForm() {
       for (const requirement of identityRequirements) {
         const file = identityFiles[requirement.evidenceType];
         if (!file) continue;
-        uploaded.push(await uploadEvidence(providerId, requirement.evidenceType, file));
+        uploaded.push(
+          await uploadEvidence(providerId, requirement.evidenceType, file),
+        );
       }
       setSubmittedEvidence((current) => [...current, ...uploaded]);
       setStep(6);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to upload identity documents.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to upload identity documents.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -282,8 +422,14 @@ export function ServiceProviderOnboardingForm() {
 
   async function submitBusinessDocuments() {
     if (!providerId) return;
-    const missing = businessRequirements.filter((requirement) => requirement.required && !businessFiles[requirement.evidenceType]);
-    if (missing.length) return setError(`Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`);
+    const missing = businessRequirements.filter(
+      (requirement) =>
+        requirement.required && !businessFiles[requirement.evidenceType],
+    );
+    if (missing.length)
+      return setError(
+        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
+      );
     setError("");
     setSubmitting(true);
     try {
@@ -291,12 +437,18 @@ export function ServiceProviderOnboardingForm() {
       for (const requirement of businessRequirements) {
         const file = businessFiles[requirement.evidenceType];
         if (!file) continue;
-        uploaded.push(await uploadEvidence(providerId, requirement.evidenceType, file));
+        uploaded.push(
+          await uploadEvidence(providerId, requirement.evidenceType, file),
+        );
       }
       setSubmittedEvidence((current) => [...current, ...uploaded]);
       setStep(7);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to upload business documents.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to upload business documents.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -307,10 +459,15 @@ export function ServiceProviderOnboardingForm() {
     setError("");
     setSubmitting(true);
     try {
-      if (portfolioFile) await uploadEvidence(providerId, "PORTFOLIO_EVIDENCE", portfolioFile);
+      if (portfolioFile)
+        await uploadEvidence(providerId, "PORTFOLIO_EVIDENCE", portfolioFile);
       setStep(8);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to upload portfolio evidence.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to upload portfolio evidence.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -327,42 +484,71 @@ export function ServiceProviderOnboardingForm() {
    */
   async function finalSubmit() {
     if (!providerId || inFlight.current) return;
-    if (!consent.accurate || !consent.authorized || !consent.reviewConsented || !consent.termsAccepted) {
-      return setError("All four consent statements must be confirmed before submitting for review.");
+    if (
+      !consent.accurate ||
+      !consent.authorized ||
+      !consent.reviewConsented ||
+      !consent.termsAccepted
+    ) {
+      return setError(
+        "All four consent statements must be confirmed before submitting for review.",
+      );
     }
     inFlight.current = true;
     setError("");
     setSubmitting(true);
     try {
       if (!consentRecorded) {
-        const consentResponse = await fetch(`/api/providers/${providerId}/verification/consent`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ version: "2026-08-28", ...consent }),
-        });
+        const consentResponse = await fetch(
+          `/api/providers/${providerId}/verification/consent`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ version: "2026-08-28", ...consent }),
+          },
+        );
         if (!consentResponse.ok) {
-          throw new Error(providerOnboardingErrorMessage(consentResponse.status, await readError(consentResponse), "We couldn’t record your consent. Try again."));
+          throw new Error(
+            providerOnboardingErrorMessage(
+              consentResponse.status,
+              await readError(consentResponse),
+              "We couldn’t record your consent. Try again.",
+            ),
+          );
         }
         setConsentRecorded(true);
       }
 
       if (submittedEvidence.length) {
-        const verificationResponse = await fetch(`/api/providers/${providerId}/verification`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ evidence: submittedEvidence }),
-        });
+        const verificationResponse = await fetch(
+          `/api/providers/${providerId}/verification`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ evidence: submittedEvidence }),
+          },
+        );
         if (!verificationResponse.ok) {
-          throw new Error(providerOnboardingErrorMessage(verificationResponse.status, await readError(verificationResponse), "We couldn’t submit your documents for verification."));
+          throw new Error(
+            providerOnboardingErrorMessage(
+              verificationResponse.status,
+              await readError(verificationResponse),
+              "We couldn’t submit your documents for verification.",
+            ),
+          );
         }
       }
 
       trackCampaignEvent("service_provider_registration_completed");
-      trackEvent("onboarding_completed", { onboarding_type: "offer_property_services" });
+      trackEvent("onboarding_completed", {
+        onboarding_type: "offer_property_services",
+      });
       openWorkspace();
     } catch (cause) {
       setWorkspaceReady(true);
-      setError(`${cause instanceof Error ? cause.message : "We couldn’t submit your verification."} Your profile is saved: you can open your workspace and finish verification there.`);
+      setError(
+        `${cause instanceof Error ? cause.message : "We couldn’t submit your verification."} Your profile is saved: you can open your workspace and finish verification there.`,
+      );
     } finally {
       inFlight.current = false;
       setSubmitting(false);
@@ -373,45 +559,109 @@ export function ServiceProviderOnboardingForm() {
     <div className="mt-8 grid gap-6">
       <div className="flex flex-wrap gap-2 text-xs font-medium text-muted">
         {STEP_LABELS.map((label, index) => (
-          <span className={`rounded-full px-3 py-1 ${index + 1 === step ? "bg-forest text-ink" : index + 1 < step ? "bg-surface" : "bg-surface"}`} key={label}>
+          <span
+            className={`rounded-full px-3 py-1 ${index + 1 === step ? "bg-forest text-ink" : index + 1 < step ? "bg-surface" : "bg-surface"}`}
+            key={label}
+          >
             {index + 1}. {label}
           </span>
         ))}
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
+      {error && (
+        <p
+          className="rounded-lg bg-red-50 p-3 text-sm text-red-800"
+          role="alert"
+        >
+          {error}
+        </p>
+      )}
       {workspaceReady && providerId && (
-        <button className="justify-self-start rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover" data-testid="provider-open-workspace" onClick={openWorkspace} type="button">
+        <button
+          className="justify-self-start rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover"
+          data-testid="provider-open-workspace"
+          onClick={openWorkspace}
+          type="button"
+        >
           Open your service provider workspace
         </button>
       )}
 
       {step === 1 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
-          <p className="text-sm font-medium">Are you registering as an individual or a company?</p>
+          <p className="text-sm font-medium">
+            Are you registering as an individual or a company?
+          </p>
           {/* A provider's type (and its company) is fixed once the profile exists: one identity per person or company. */}
-          {providerId && <p className="text-sm text-muted" data-testid="provider-type-locked">Your profile is already created as {accountType === "INDIVIDUAL" ? "an individual" : "a company"}. This can’t be changed here.</p>}
+          {providerId && (
+            <p
+              className="text-sm text-muted"
+              data-testid="provider-type-locked"
+            >
+              Your profile is already created as{" "}
+              {accountType === "INDIVIDUAL" ? "an individual" : "a company"}.
+              This can’t be changed here.
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <button aria-pressed={accountType === "INDIVIDUAL"} className={`rounded-xl border border-hairline p-4 text-left disabled:cursor-not-allowed disabled:text-muted ${accountType === "INDIVIDUAL" ? "border-brand bg-forest/5" : ""}`} disabled={Boolean(providerId)} onClick={() => setAccountType("INDIVIDUAL")} type="button">
+            <button
+              aria-pressed={accountType === "INDIVIDUAL"}
+              className={`rounded-xl border border-hairline p-4 text-left disabled:cursor-not-allowed disabled:text-muted ${accountType === "INDIVIDUAL" ? "border-brand bg-forest/5" : ""}`}
+              disabled={Boolean(providerId)}
+              onClick={() => setAccountType("INDIVIDUAL")}
+              type="button"
+            >
               <p className="font-semibold">Individual / artisan</p>
-              <p className="mt-1 text-sm text-muted">You work independently — plumber, electrician, agent, etc.</p>
+              <p className="mt-1 text-sm text-muted">
+                You work independently — plumber, electrician, agent, etc.
+              </p>
             </button>
-            <button aria-pressed={accountType === "COMPANY"} className={`rounded-xl border border-hairline p-4 text-left disabled:cursor-not-allowed disabled:text-muted ${accountType === "COMPANY" ? "border-brand bg-forest/5" : ""}`} disabled={Boolean(providerId)} onClick={() => setAccountType("COMPANY")} type="button">
+            <button
+              aria-pressed={accountType === "COMPANY"}
+              className={`rounded-xl border border-hairline p-4 text-left disabled:cursor-not-allowed disabled:text-muted ${accountType === "COMPANY" ? "border-brand bg-forest/5" : ""}`}
+              disabled={Boolean(providerId)}
+              onClick={() => setAccountType("COMPANY")}
+              type="button"
+            >
               <p className="font-semibold">Company / business</p>
-              <p className="mt-1 text-sm text-muted">A registered business with a team — contractor, facilities company, etc.</p>
+              <p className="mt-1 text-sm text-muted">
+                A registered business with a team — contractor, facilities
+                company, etc.
+              </p>
             </button>
           </div>
           {accountType === "COMPANY" && (
             <label className="text-sm font-medium">
               Which organisation is this business?
-              <select className="mt-1 w-full rounded border p-3" disabled={Boolean(providerId)} onChange={(event) => setCompanyOrganisationId(event.target.value)} value={companyOrganisationId}>
+              <select
+                className="mt-1 w-full rounded border p-3"
+                disabled={Boolean(providerId)}
+                onChange={(event) =>
+                  setCompanyOrganisationId(event.target.value)
+                }
+                value={companyOrganisationId}
+              >
                 <option value="">Select an organisation</option>
-                {organisations.map((organisation) => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}
+                {organisations.map((organisation) => (
+                  <option key={organisation.id} value={organisation.id}>
+                    {organisation.name}
+                  </option>
+                ))}
               </select>
-              {organisations.length === 0 && <span className="mt-1 block text-xs text-muted">No organisations found — create one first, then return to this page.</span>}
+              {organisations.length === 0 && (
+                <span className="mt-1 block text-xs text-muted">
+                  No organisations found — create one first, then return to this
+                  page.
+                </span>
+              )}
             </label>
           )}
-          <button className="rounded bg-forest p-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={accountType === "COMPANY" && !companyOrganisationId} onClick={() => setStep(2)} type="button">
+          <button
+            className="rounded bg-forest p-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+            disabled={accountType === "COMPANY" && !companyOrganisationId}
+            onClick={() => setStep(2)}
+            type="button"
+          >
             Continue
           </button>
         </div>
@@ -419,62 +669,244 @@ export function ServiceProviderOnboardingForm() {
 
       {step === 2 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
-          <label className="text-sm font-medium">Business / display name<input className="mt-1 w-full rounded border p-3" onChange={(event) => setDisplayName(event.target.value)} placeholder="e.g. Kofi Mensah Electrical" required value={displayName} /></label>
-          <label className="text-sm font-medium">Legal name <span className="font-normal text-muted">(optional)</span><input className="mt-1 w-full rounded border p-3" onChange={(event) => setLegalName(event.target.value)} value={legalName} /></label>
+          <label className="text-sm font-medium">
+            Business / display name
+            <input
+              className="mt-1 w-full rounded border p-3"
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="e.g. Kofi Mensah Electrical"
+              required
+              value={displayName}
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Legal name{" "}
+            <span className="font-normal text-muted">(optional)</span>
+            <input
+              className="mt-1 w-full rounded border p-3"
+              onChange={(event) => setLegalName(event.target.value)}
+              value={legalName}
+            />
+          </label>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium">Contact email<input className="mt-1 w-full rounded border p-3" onChange={(event) => setContactEmail(event.target.value)} type="email" value={contactEmail} /></label>
-            <label className="text-sm font-medium">Contact phone<input className="mt-1 w-full rounded border p-3" onChange={(event) => setContactPhone(event.target.value)} value={contactPhone} /></label>
+            <label className="text-sm font-medium">
+              Contact email
+              <input
+                className="mt-1 w-full rounded border p-3"
+                onChange={(event) => setContactEmail(event.target.value)}
+                type="email"
+                value={contactEmail}
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Contact phone
+              <input
+                className="mt-1 w-full rounded border p-3"
+                onChange={(event) => setContactPhone(event.target.value)}
+                value={contactPhone}
+              />
+            </label>
           </div>
-          <label className="text-sm font-medium">Description <span className="font-normal text-muted">(optional)</span><textarea className="mt-1 w-full rounded border p-3" onChange={(event) => setBiography(event.target.value)} rows={4} value={biography} /></label>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(1)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={!displayName || (!contactEmail && !contactPhone)} onClick={() => setStep(3)} type="button">Continue</button></div>
+          <label className="text-sm font-medium">
+            Description{" "}
+            <span className="font-normal text-muted">(optional)</span>
+            <textarea
+              className="mt-1 w-full rounded border p-3"
+              onChange={(event) => setBiography(event.target.value)}
+              rows={4}
+              value={biography}
+            />
+          </label>
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(1)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={!displayName || (!contactEmail && !contactPhone)}
+              onClick={() => setStep(3)}
+              type="button"
+            >
+              Continue
+            </button>
+          </div>
         </div>
       )}
 
       {step === 3 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Which services do you offer?</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {categories.map((category) => (
-              <label className="flex items-center gap-2 rounded-xl border border-hairline p-3 text-sm" key={category.id}>
-                <input
-                  checked={categoryIds.includes(category.id)}
-                  onChange={(event) => setCategoryIds((current) => event.target.checked ? [...current, category.id] : current.filter((id) => id !== category.id))}
-                  type="checkbox"
-                />
-                {category.name}
-              </label>
+          <div className="grid gap-5">
+            {categoryGroups.map((group) => (
+              <fieldset className="grid gap-2" key={group.id}>
+                <legend className="text-sm font-semibold">{group.name}</legend>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {group.categories.map((category) => (
+                    <label
+                      className="flex items-center gap-2 rounded-xl border border-hairline p-3 text-sm"
+                      key={category.id}
+                    >
+                      <input
+                        checked={categoryIds.includes(category.id)}
+                        onChange={(event) =>
+                          setCategoryIds((current) =>
+                            event.target.checked
+                              ? current.includes(category.id)
+                                ? current
+                                : [...current, category.id]
+                              : current.filter((id) => id !== category.id),
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      {category.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
             ))}
           </div>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(2)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={!categoryIds.length} onClick={() => setStep(4)} type="button">Continue</button></div>
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(2)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={!categoryIds.length}
+              onClick={() => setStep(4)}
+              type="button"
+            >
+              Continue
+            </button>
+          </div>
         </div>
       )}
 
       {step === 4 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
-          <p className="text-sm font-medium">Where do you offer these services?</p>
+          <p className="text-sm font-medium">
+            Where do you offer these services?
+          </p>
           {serviceAreas.map((area, index) => (
             <div className="grid gap-3 sm:grid-cols-3" key={index}>
-              <input className="rounded border bg-surface p-3 uppercase" readOnly value={area.countryCode} />
-              <input className="rounded border p-3" onChange={(event) => updateServiceArea(index, { region: event.target.value })} placeholder="Region" value={area.region} />
-              <input className="rounded border p-3" onChange={(event) => updateServiceArea(index, { city: event.target.value })} placeholder="City" value={area.city} />
+              <input
+                className="rounded border bg-surface p-3 uppercase"
+                readOnly
+                value={area.countryCode}
+              />
+              <input
+                className="rounded border p-3"
+                onChange={(event) =>
+                  updateServiceArea(index, { region: event.target.value })
+                }
+                placeholder="Region"
+                value={area.region}
+              />
+              <input
+                className="rounded border p-3"
+                onChange={(event) =>
+                  updateServiceArea(index, { city: event.target.value })
+                }
+                placeholder="City"
+                value={area.city}
+              />
             </div>
           ))}
-          <button className="text-left text-sm font-semibold text-ink" onClick={() => setServiceAreas((current) => [...current, { countryCode: "GH", region: "", city: "" }])} type="button">+ Add another area</button>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(3)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting || !serviceAreas.some((area) => area.city || area.region)} onClick={createProviderAndFetchRequirements} type="button">{providerId ? (submitting ? "Saving…" : "Save & continue") : submitting ? "Creating profile…" : "Create profile & continue"}</button></div>
+          <button
+            className="text-left text-sm font-semibold text-ink"
+            onClick={() =>
+              setServiceAreas((current) => [
+                ...current,
+                { countryCode: "GH", region: "", city: "" },
+              ])
+            }
+            type="button"
+          >
+            + Add another area
+          </button>
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(3)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={
+                submitting ||
+                !serviceAreas.some((area) => area.city || area.region)
+              }
+              onClick={createProviderAndFetchRequirements}
+              type="button"
+            >
+              {providerId
+                ? submitting
+                  ? "Saving…"
+                  : "Save & continue"
+                : submitting
+                  ? "Creating profile…"
+                  : "Create profile & continue"}
+            </button>
+          </div>
         </div>
       )}
 
       {step === 5 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Mandatory identity verification</p>
-          <p className="text-sm text-muted">NesAfric requires a Ghana Card to keep the marketplace safe and trustworthy. This is private and reviewed only by authorised NesAfric staff — it is never shown publicly.</p>
+          <p className="text-sm text-muted">
+            NesAfric requires a Ghana Card to keep the marketplace safe and
+            trustworthy. This is private and reviewed only by authorised
+            NesAfric staff — it is never shown publicly.
+          </p>
           {identityRequirements.map((requirement) => (
-            <label className="text-sm font-medium" key={requirement.evidenceType}>
-              {requirement.label}{requirement.required && <span className="text-red-600"> *</span>}
-              <input accept="image/*" capture="environment" className="mt-1 w-full rounded border p-3" onChange={(event) => setIdentityFiles((current) => ({ ...current, [requirement.evidenceType]: event.target.files?.[0] ?? null }))} type="file" />
+            <label
+              className="text-sm font-medium"
+              key={requirement.evidenceType}
+            >
+              {requirement.label}
+              {requirement.required && <span className="text-red-600"> *</span>}
+              <input
+                accept="image/*"
+                capture="environment"
+                className="mt-1 w-full rounded border p-3"
+                onChange={(event) =>
+                  setIdentityFiles((current) => ({
+                    ...current,
+                    [requirement.evidenceType]: event.target.files?.[0] ?? null,
+                  }))
+                }
+                type="file"
+              />
             </label>
           ))}
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(4)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={submitIdentityDocuments} type="button">{submitting ? "Uploading…" : "Continue"}</button></div>
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(4)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={submitIdentityDocuments}
+              type="button"
+            >
+              {submitting ? "Uploading…" : "Continue"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -482,23 +914,89 @@ export function ServiceProviderOnboardingForm() {
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Business & credential documents</p>
           {businessRequirements.length === 0 ? (
-            <p className="text-sm text-muted">No additional documents are required for your account type and services.</p>
-          ) : businessRequirements.map((requirement) => (
-            <label className="text-sm font-medium" key={requirement.evidenceType}>
-              {requirement.label}{requirement.required && <span className="text-red-600"> *</span>}
-              <input accept="image/*,application/pdf" className="mt-1 w-full rounded border p-3" onChange={(event) => setBusinessFiles((current) => ({ ...current, [requirement.evidenceType]: event.target.files?.[0] ?? null }))} type="file" />
-            </label>
-          ))}
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(5)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={submitBusinessDocuments} type="button">{submitting ? "Uploading…" : "Continue"}</button></div>
+            <p className="text-sm text-muted">
+              No additional documents are required for your account type and
+              services.
+            </p>
+          ) : (
+            businessRequirements.map((requirement) => (
+              <label
+                className="text-sm font-medium"
+                key={requirement.evidenceType}
+              >
+                {requirement.label}
+                {requirement.required && (
+                  <span className="text-red-600"> *</span>
+                )}
+                <input
+                  accept="image/*,application/pdf"
+                  className="mt-1 w-full rounded border p-3"
+                  onChange={(event) =>
+                    setBusinessFiles((current) => ({
+                      ...current,
+                      [requirement.evidenceType]:
+                        event.target.files?.[0] ?? null,
+                    }))
+                  }
+                  type="file"
+                />
+              </label>
+            ))
+          )}
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(5)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={submitBusinessDocuments}
+              type="button"
+            >
+              {submitting ? "Uploading…" : "Continue"}
+            </button>
+          </div>
         </div>
       )}
 
       {step === 7 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
-          <p className="text-sm font-medium">Portfolio <span className="font-normal text-muted">(optional)</span></p>
-          <p className="text-sm text-muted">Show examples of your past work. You can add more later from your dashboard.</p>
-          <input accept="image/*" className="rounded border p-3" onChange={(event) => setPortfolioFile(event.target.files?.[0] ?? null)} type="file" />
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(6)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={submitPortfolio} type="button">{submitting ? "Saving…" : "Continue"}</button></div>
+          <p className="text-sm font-medium">
+            Portfolio <span className="font-normal text-muted">(optional)</span>
+          </p>
+          <p className="text-sm text-muted">
+            Show examples of your past work. You can add more later from your
+            dashboard.
+          </p>
+          <input
+            accept="image/*"
+            className="rounded border p-3"
+            onChange={(event) =>
+              setPortfolioFile(event.target.files?.[0] ?? null)
+            }
+            type="file"
+          />
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(6)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={submitPortfolio}
+              type="button"
+            >
+              {submitting ? "Saving…" : "Continue"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -507,35 +1005,129 @@ export function ServiceProviderOnboardingForm() {
           <p className="text-sm font-medium">Review & consent</p>
           {/* What NesAfric saved, not the form's local state. */}
           {saved && (
-            <div className="rounded-lg bg-surface p-4 text-sm text-ink" data-testid="provider-review-saved">
-              <p><strong>{saved.displayName}</strong> · {saved.type === "INDIVIDUAL" ? "Individual" : "Company"}</p>
-              <p className="mt-1">Services: {saved.categories.map(({ category }) => category.name).join(", ") || "None"}</p>
-              <p className="mt-1">Service areas: {saved.serviceAreas.map((area) => area.name).join("; ") || "None"}</p>
-              <p className="mt-1">Contact: {[saved.contactEmail, saved.contactPhone].filter(Boolean).join(" · ") || "None"}</p>
-              <p className="mt-1">{submittedEvidence.length} document{submittedEvidence.length === 1 ? "" : "s"} uploaded</p>
+            <div
+              className="rounded-lg bg-surface p-4 text-sm text-ink"
+              data-testid="provider-review-saved"
+            >
+              <p>
+                <strong>{saved.displayName}</strong> ·{" "}
+                {saved.type === "INDIVIDUAL" ? "Individual" : "Company"}
+              </p>
+              <p className="mt-1">
+                Services:{" "}
+                {saved.categories
+                  .map(({ category }) => category.name)
+                  .join(", ") || "None"}
+              </p>
+              <p className="mt-1">
+                Service areas:{" "}
+                {saved.serviceAreas.map((area) => area.name).join("; ") ||
+                  "None"}
+              </p>
+              <p className="mt-1">
+                Contact:{" "}
+                {[saved.contactEmail, saved.contactPhone]
+                  .filter(Boolean)
+                  .join(" · ") || "None"}
+              </p>
+              <p className="mt-1">
+                {submittedEvidence.length} document
+                {submittedEvidence.length === 1 ? "" : "s"} uploaded
+              </p>
             </div>
           )}
           {[
-            ["accurate", "I confirm the information I have provided is accurate."],
-            ["authorized", "I confirm the uploaded documents belong to me, or to a person I am authorised to represent."],
-            ["reviewConsented", "I consent to NesAfric reviewing my verification evidence."],
-            ["termsAccepted", "I agree to the NesAfric service-provider terms and privacy requirements."],
+            [
+              "accurate",
+              "I confirm the information I have provided is accurate.",
+            ],
+            [
+              "authorized",
+              "I confirm the uploaded documents belong to me, or to a person I am authorised to represent.",
+            ],
+            [
+              "reviewConsented",
+              "I consent to NesAfric reviewing my verification evidence.",
+            ],
+            [
+              "termsAccepted",
+              "I agree to the NesAfric service-provider terms and privacy requirements.",
+            ],
           ].map(([key, label]) => (
             <label className="flex items-start gap-2 text-sm" key={key}>
-              <input checked={consent[key as keyof typeof consent]} className="mt-1" onChange={(event) => setConsent((current) => ({ ...current, [key]: event.target.checked }))} type="checkbox" />
+              <input
+                checked={consent[key as keyof typeof consent]}
+                className="mt-1"
+                onChange={(event) =>
+                  setConsent((current) => ({
+                    ...current,
+                    [key]: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
               {label}
             </label>
           ))}
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(7)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={() => setStep(9)} type="button">Continue</button></div>
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(7)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={() => setStep(9)}
+              type="button"
+            >
+              Continue
+            </button>
+          </div>
         </div>
       )}
 
       {step === 9 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Submit for verification</p>
-          {!submittedEvidence.length && <p className="text-sm text-muted" data-testid="provider-no-evidence-note">You haven’t uploaded verification documents yet. Your workspace opens now; upload them there to be reviewed.</p>}
-          <p className="text-sm text-muted">Your profile will be saved and access to your dashboard unlocks immediately. You will not appear publicly or receive NesAfric work assignments until NesAfric has reviewed and approved your identity verification.</p>
-          <div className="flex justify-between"><button className="text-sm font-semibold text-muted" onClick={() => setStep(8)} type="button">← Back</button><button className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted" disabled={submitting} onClick={finalSubmit} type="button">{submitting ? "Submitting…" : submittedEvidence.length ? "Submit for verification" : "Finish and open workspace"}</button></div>
+          {!submittedEvidence.length && (
+            <p
+              className="text-sm text-muted"
+              data-testid="provider-no-evidence-note"
+            >
+              You haven’t uploaded verification documents yet. Your workspace
+              opens now; upload them there to be reviewed.
+            </p>
+          )}
+          <p className="text-sm text-muted">
+            Your profile will be saved and access to your dashboard unlocks
+            immediately. You will not appear publicly or receive NesAfric work
+            assignments until NesAfric has reviewed and approved your identity
+            verification.
+          </p>
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(8)}
+              type="button"
+            >
+              ← Back
+            </button>
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={finalSubmit}
+              type="button"
+            >
+              {submitting
+                ? "Submitting…"
+                : submittedEvidence.length
+                  ? "Submit for verification"
+                  : "Finish and open workspace"}
+            </button>
+          </div>
         </div>
       )}
     </div>
