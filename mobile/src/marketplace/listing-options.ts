@@ -1,6 +1,8 @@
 /** Choices of the listing form — the same values as the website's listing form. */
 
 export const PROPERTY_TYPES = [
+  ["HOTEL", "Hotel"],
+  ["SHORT_STAY", "Short stay"],
   ["APARTMENT", "Apartment"],
   ["HOUSE", "House"],
   ["TOWNHOUSE", "Townhouse"],
@@ -11,8 +13,6 @@ export const PROPERTY_TYPES = [
   ["WAREHOUSE", "Warehouse"],
   ["COMMERCIAL", "Commercial space"],
   ["GUEST_HOUSE", "Guest house"],
-  ["HOTEL", "Hotel"],
-  ["SHORT_STAY", "Short stay"],
 ] as const;
 
 export const RESIDENTIAL_TYPES = new Set(["APARTMENT", "HOUSE", "TOWNHOUSE", "VILLA", "GUEST_HOUSE", "HOTEL", "SHORT_STAY"]);
