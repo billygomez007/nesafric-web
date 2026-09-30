@@ -7,7 +7,67 @@ import { MarketplaceRequestHistory } from "@/components/marketplace-request-hist
 type Area = { countryCode: string; region?: string | null; city?: string | null; district?: string | null; label?: string | null; latitude?: string | null; longitude?: string | null; radiusKm?: string | null };
 type Profile = { providerId: string; listed: boolean; publicDescription: string | null; showContactEmail: boolean; showContactPhone: boolean; startingRateMinor: string | null; currencyCode: string | null; responseTimeHours: number | null; categories: { categoryId: string; category: { id: string; name: string } }[]; serviceAreas: Area[]; history: { id: string; action: string; changedFields: string[]; createdAt: string }[] };
 
-export function ProviderMarketplaceSettings({ providerId, categories }: { providerId: string; categories: { id: string; name: string }[] }) {
+type MarketplaceCategory = {
+  id: string;
+  name: string;
+  parent: {
+    id: string;
+    key: string;
+    name: string;
+    sortOrder: number;
+  } | null;
+};
+
+function groupMarketplaceCategoriesByParent(categories: MarketplaceCategory[]) {
+  const groups = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      sortOrder: number;
+      categories: MarketplaceCategory[];
+    }
+  >();
+
+  for (const category of categories) {
+    if (!category.parent) continue;
+
+    const existing = groups.get(category.parent.id);
+
+    if (existing) {
+      existing.categories.push(category);
+      continue;
+    }
+
+    groups.set(category.parent.id, {
+      id: category.parent.id,
+      name: category.parent.name,
+      sortOrder: category.parent.sortOrder,
+      categories: [category],
+    });
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      categories: [...group.categories].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        a.sortOrder - b.sortOrder ||
+        a.name.localeCompare(b.name),
+    );
+}
+
+export function ProviderMarketplaceSettings({
+  providerId,
+  categories,
+}: {
+  providerId: string;
+  categories: MarketplaceCategory[];
+}) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [error, setError] = useState("");
@@ -27,5 +87,5 @@ export function ProviderMarketplaceSettings({ providerId, categories }: { provid
   }
   if (!profile && !error) return <p className="rounded-xl border border-hairline border-hairline bg-white p-6 text-muted">Loading marketplace settings...</p>;
   if (!profile) return <p className="rounded-xl bg-red-50 p-6 text-red-800">{error}</p>;
-  return <div className="grid gap-6"><form className="grid gap-5 rounded-2xl border border-hairline bg-white p-6 shadow-sm" onSubmit={save}><div className="flex flex-col justify-between gap-3 sm:flex-row"><div><h2 className="text-xl font-semibold">Marketplace visibility</h2><p className="mt-1 text-sm text-muted">Only explicitly selected fields are published.</p></div>{profile.listed && <Link className="self-start text-sm font-semibold text-teal" href={`/marketplace/${providerId}`}>View public profile →</Link>}</div><label className="flex items-center gap-3 rounded-xl border border-hairline p-4 font-medium"><input defaultChecked={profile.listed} name="listed" type="checkbox" />List this provider publicly</label><label className="text-sm font-medium">Public description<textarea className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={profile.publicDescription ?? ""} name="publicDescription" rows={4} /></label><div className="grid gap-3 sm:grid-cols-2"><label className="flex items-center gap-2 rounded-xl border border-hairline p-4 text-sm"><input defaultChecked={profile.showContactEmail} name="showContactEmail" type="checkbox" />Publish contact email</label><label className="flex items-center gap-2 rounded-xl border border-hairline p-4 text-sm"><input defaultChecked={profile.showContactPhone} name="showContactPhone" type="checkbox" />Publish contact phone</label></div><div className="grid gap-3 sm:grid-cols-3"><label className="text-sm font-medium">Starting rate<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={profile.startingRateMinor ? Number(profile.startingRateMinor) / 100 : ""} min="0" name="startingRate" step="0.01" type="number" /></label><label className="text-sm font-medium">Currency<input className="mt-1 w-full rounded-xl border border-hairline p-3 uppercase" defaultValue={profile.currencyCode ?? ""} maxLength={3} name="currencyCode" /></label><label className="text-sm font-medium">Response time (hours)<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={profile.responseTimeHours ?? ""} min="1" name="responseTimeHours" type="number" /></label></div><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public service categories</legend><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{categories.map((category) => <label className="flex items-center gap-2 text-sm" key={category.id}><input defaultChecked={profile.categories.some(({ categoryId }) => categoryId === category.id)} name="categoryIds" type="checkbox" value={category.id} />{category.name}</label>)}</div></fieldset><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public service areas</legend><div className="grid gap-3">{areas.map((area, index) => <div className="grid gap-2 rounded-lg bg-surface p-3 md:grid-cols-5" key={index}><input className="rounded-xl border border-hairline p-2 text-sm uppercase" maxLength={2} placeholder="Country" value={area.countryCode} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, countryCode: event.target.value.toUpperCase() } : current))} /><input className="rounded-xl border border-hairline p-2 text-sm" placeholder="Region/state" value={area.region ?? ""} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, region: event.target.value } : current))} /><input className="rounded-xl border border-hairline p-2 text-sm" placeholder="City" value={area.city ?? ""} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, city: event.target.value } : current))} /><input className="rounded-xl border border-hairline p-2 text-sm" placeholder="District" value={area.district ?? ""} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, district: event.target.value } : current))} /><button className="rounded-xl border border-hairline px-3 text-sm text-red-700" onClick={() => setAreas(areas.filter((_, currentIndex) => currentIndex !== index))} type="button">Remove</button></div>)}</div><button className="mt-3 rounded-xl border border-hairline px-3 py-2 text-sm font-semibold" onClick={() => setAreas([...areas, { countryCode: "" }])} type="button">Add service area</button></fieldset>{(error || success) && <p className={`rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-800" : "bg-teal/10 text-teal"}`}>{error || success}</p>}<button className="rounded-lg bg-forest p-3 font-semibold text-white">Save marketplace profile</button></form><section className="rounded-2xl border border-hairline bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Visibility history</h2>{profile.history.length ? <div className="mt-4 grid gap-2">{profile.history.map((item) => <div className="flex flex-wrap justify-between gap-2 rounded-xl border border-hairline p-3 text-sm" key={item.id}><div><strong>{item.action.replaceAll("_", " ")}</strong><p className="text-muted">{item.changedFields.join(", ")}</p></div><span className="text-muted">{new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.createdAt))}</span></div>)}</div> : <p className="mt-3 text-sm text-muted">No marketplace visibility changes yet.</p>}</section><section><h2 className="mb-4 text-xl font-semibold">Incoming marketplace enquiries</h2><MarketplaceRequestHistory providerId={providerId} /></section></div>;
+  return <div className="grid gap-6"><form className="grid gap-5 rounded-2xl border border-hairline bg-white p-6 shadow-sm" onSubmit={save}><div className="flex flex-col justify-between gap-3 sm:flex-row"><div><h2 className="text-xl font-semibold">Marketplace visibility</h2><p className="mt-1 text-sm text-muted">Only explicitly selected fields are published.</p></div>{profile.listed && <Link className="self-start text-sm font-semibold text-teal" href={`/marketplace/${providerId}`}>View public profile →</Link>}</div><label className="flex items-center gap-3 rounded-xl border border-hairline p-4 font-medium"><input defaultChecked={profile.listed} name="listed" type="checkbox" />List this provider publicly</label><label className="text-sm font-medium">Public description<textarea className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={profile.publicDescription ?? ""} name="publicDescription" rows={4} /></label><div className="grid gap-3 sm:grid-cols-2"><label className="flex items-center gap-2 rounded-xl border border-hairline p-4 text-sm"><input defaultChecked={profile.showContactEmail} name="showContactEmail" type="checkbox" />Publish contact email</label><label className="flex items-center gap-2 rounded-xl border border-hairline p-4 text-sm"><input defaultChecked={profile.showContactPhone} name="showContactPhone" type="checkbox" />Publish contact phone</label></div><div className="grid gap-3 sm:grid-cols-3"><label className="text-sm font-medium">Starting rate<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={profile.startingRateMinor ? Number(profile.startingRateMinor) / 100 : ""} min="0" name="startingRate" step="0.01" type="number" /></label><label className="text-sm font-medium">Currency<input className="mt-1 w-full rounded-xl border border-hairline p-3 uppercase" defaultValue={profile.currencyCode ?? ""} maxLength={3} name="currencyCode" /></label><label className="text-sm font-medium">Response time (hours)<input className="mt-1 w-full rounded-xl border border-hairline p-3" defaultValue={profile.responseTimeHours ?? ""} min="1" name="responseTimeHours" type="number" /></label></div><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public service categories</legend><div className="mt-3 grid gap-5">{groupMarketplaceCategoriesByParent(categories).map((group) => <section className="grid gap-2" key={group.id}><h3 className="text-sm font-semibold text-ink">{group.name}</h3><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{group.categories.map((category) => <label className="flex items-center gap-2 text-sm" key={category.id}><input defaultChecked={profile.categories.some(({ categoryId }) => categoryId === category.id)} name="categoryIds" type="checkbox" value={category.id} />{category.name}</label>)}</div></section>)}</div></fieldset><fieldset className="rounded-xl border border-hairline p-4"><legend className="px-1 text-sm font-semibold">Public service areas</legend><div className="grid gap-3">{areas.map((area, index) => <div className="grid gap-2 rounded-lg bg-surface p-3 md:grid-cols-5" key={index}><input className="rounded-xl border border-hairline p-2 text-sm uppercase" maxLength={2} placeholder="Country" value={area.countryCode} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, countryCode: event.target.value.toUpperCase() } : current))} /><input className="rounded-xl border border-hairline p-2 text-sm" placeholder="Region/state" value={area.region ?? ""} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, region: event.target.value } : current))} /><input className="rounded-xl border border-hairline p-2 text-sm" placeholder="City" value={area.city ?? ""} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, city: event.target.value } : current))} /><input className="rounded-xl border border-hairline p-2 text-sm" placeholder="District" value={area.district ?? ""} onChange={(event) => setAreas(areas.map((current, currentIndex) => currentIndex === index ? { ...current, district: event.target.value } : current))} /><button className="rounded-xl border border-hairline px-3 text-sm text-red-700" onClick={() => setAreas(areas.filter((_, currentIndex) => currentIndex !== index))} type="button">Remove</button></div>)}</div><button className="mt-3 rounded-xl border border-hairline px-3 py-2 text-sm font-semibold" onClick={() => setAreas([...areas, { countryCode: "" }])} type="button">Add service area</button></fieldset>{(error || success) && <p className={`rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-800" : "bg-teal/10 text-teal"}`}>{error || success}</p>}<button className="rounded-lg bg-forest p-3 font-semibold text-white">Save marketplace profile</button></form><section className="rounded-2xl border border-hairline bg-white p-6 shadow-sm"><h2 className="text-xl font-semibold">Visibility history</h2>{profile.history.length ? <div className="mt-4 grid gap-2">{profile.history.map((item) => <div className="flex flex-wrap justify-between gap-2 rounded-xl border border-hairline p-3 text-sm" key={item.id}><div><strong>{item.action.replaceAll("_", " ")}</strong><p className="text-muted">{item.changedFields.join(", ")}</p></div><span className="text-muted">{new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.createdAt))}</span></div>)}</div> : <p className="mt-3 text-sm text-muted">No marketplace visibility changes yet.</p>}</section><section><h2 className="mb-4 text-xl font-semibold">Incoming marketplace enquiries</h2><MarketplaceRequestHistory providerId={providerId} /></section></div>;
 }

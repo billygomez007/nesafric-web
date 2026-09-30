@@ -9,6 +9,17 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 /** Icons are decoration only; any category the server adds later gets the fallback. */
 const ICONS: Record<string, string> = {
+  property_services_construction_building_works: "hammer-wrench",
+  property_services_repairs_maintenance: "tools",
+  property_services_cleaning_property_care: "broom",
+  property_services_landscaping_outdoor: "flower",
+  property_services_security_access_safety: "shield-home",
+  property_services_energy_power_utilities: "flash",
+  property_services_interior_design_fitout: "sofa-outline",
+  property_services_architecture_engineering: "floor-plan",
+  property_services_surveying_valuation_planning: "map-marker-distance",
+  property_services_moving_relocation_storage: "truck",
+  property_services_legal_documentation_compliance: "file-document-outline",
   plumbing: "pipe-wrench",
   electrical: "flash",
   cleaning: "broom",
@@ -39,7 +50,7 @@ export function categoryIcon(key: string): IconName {
   return name && name in MaterialCommunityIcons.glyphMap ? (name as IconName) : "toolbox-outline";
 }
 
-/** Two-column tiles; each opens the provider list for that service. */
+/** Two-column tiles for Property Services categories and subcategories. */
 export function CategoryTiles({ categories, onSelect }: { categories: ServiceCategory[]; onSelect: (category: ServiceCategory) => void }) {
   return (
     <View style={styles.grid}>

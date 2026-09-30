@@ -2733,6 +2733,9 @@ model ServiceCategory {
   group                ServiceCategoryGroup          @default(OTHER)
   /// Admin-controlled ordering within its group; lower sorts first.
   sortOrder            Int                           @default(0)
+  parentId             String?                       @db.Uuid
+  parent               ServiceCategory?              @relation("ServiceCategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children             ServiceCategory[]             @relation("ServiceCategoryHierarchy")
   active               Boolean                       @default(true)
   /// Whether this category may appear in public marketplace filters/listings. Distinct from
   /// `active` — a category can be active (usable internally, e.g. dispatch matching) without yet
@@ -2749,6 +2752,7 @@ model ServiceCategory {
 
   @@index([active, name])
   @@index([group, sortOrder])
+  @@index([parentId, sortOrder])
 }
 
 model ServiceProviderCategory {

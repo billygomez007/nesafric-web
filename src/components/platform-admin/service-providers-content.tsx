@@ -24,6 +24,7 @@ type ProviderRow = {
 };
 
 const QUEUE_TABS = [
+  { value: "AWAITING_SUBMISSION", label: "Awaiting submission" },
   { value: "PENDING_VERIFICATION", label: "Pending verification" },
   { value: "VERIFIED", label: "Verified" },
   { value: "REQUIRES_MORE_INFO", label: "Requires more info" },
@@ -146,14 +147,18 @@ function ProvidersQueue() {
               {rows.length === 0 && (
                 <div className="rounded-xl border border-dashed border-hairline bg-white p-6">
                   <p className="font-semibold text-forest">
-                    {tab === "PENDING_VERIFICATION"
-                      ? "No providers awaiting verification"
-                      : "No providers in this view"}
+                    {tab === "AWAITING_SUBMISSION"
+                      ? "No providers awaiting submission"
+                      : tab === "PENDING_VERIFICATION"
+                        ? "No providers awaiting verification"
+                        : "No providers in this view"}
                   </p>
                   <p className="mt-1 text-sm text-muted">
-                    {tab === "PENDING_VERIFICATION"
-                      ? "New provider verification submissions will appear here automatically."
-                      : "Choose another verification status to view matching providers."}
+                    {tab === "AWAITING_SUBMISSION"
+                      ? "New provider registrations that have not submitted verification will appear here."
+                      : tab === "PENDING_VERIFICATION"
+                        ? "New provider verification submissions will appear here automatically."
+                        : "Choose another verification status to view matching providers."}
                   </p>
                 </div>
               )}
@@ -254,6 +259,8 @@ function ProvidersQueue() {
 
 type CategoryRow = {
   id: string; key: string; name: string; description: string | null; group: string; sortOrder: number;
+  parentId: string | null;
+  parent?: { id: string; key: string; name: string; sortOrder: number } | null;
   active: boolean; publiclyVisible: boolean; onboardingSelectable: boolean;
 };
 const GROUP_LABELS: Record<string, string> = {
@@ -266,7 +273,7 @@ function CategoriesAdmin() {
   const [categories, setCategories] = useState<CategoryRow[] | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [draft, setDraft] = useState({ key: "", name: "", group: "OTHER", description: "" });
+  const [draft, setDraft] = useState({ key: "", name: "", group: "OTHER", description: "", parentId: "" });
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -281,14 +288,23 @@ function CategoriesAdmin() {
     void load();
   }, []);
 
-  async function toggle(category: CategoryRow, field: "active" | "publiclyVisible" | "onboardingSelectable") {
+  async function updateCategory(
+    category: CategoryRow,
+    patch: Partial<Pick<CategoryRow, "active" | "publiclyVisible" | "onboardingSelectable" | "sortOrder">>,
+  ) {
     setError(""); setNotice("");
     const response = await fetch(`/api/platform-admin/service-categories/${category.id}`, {
-      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [field]: !category[field] }),
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
     });
     const body = await response.json();
     if (!response.ok) return setError(body.error?.message ?? "Unable to update this category.");
     await load();
+  }
+
+  async function toggle(category: CategoryRow, field: "active" | "publiclyVisible" | "onboardingSelectable") {
+    await updateCategory(category, { [field]: !category[field] });
   }
 
   async function create(event: React.FormEvent) {
@@ -297,12 +313,19 @@ function CategoriesAdmin() {
     try {
       const response = await fetch("/api/platform-admin/service-categories", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key: draft.key, name: draft.name, group: draft.group, description: draft.description || undefined }),
+        body: JSON.stringify({
+          key: draft.key,
+          name: draft.name,
+          group: draft.group,
+          description: draft.description || undefined,
+          parentId: draft.parentId || null,
+          onboardingSelectable: Boolean(draft.parentId),
+        }),
       });
       const body = await response.json();
       if (!response.ok) return setError(body.error?.message ?? "Unable to create that category.");
       setNotice(`Category "${body.name}" created.`);
-      setDraft({ key: "", name: "", group: "OTHER", description: "" });
+      setDraft({ key: "", name: "", group: "OTHER", description: "", parentId: "" });
       await load();
     } finally {
       setSaving(false);
@@ -316,14 +339,24 @@ function CategoriesAdmin() {
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {notice && <p className="rounded-lg bg-teal/10 p-3 text-sm text-teal">{notice}</p>}
 
-      <form className="grid gap-2 rounded-xl border bg-white p-4 sm:grid-cols-5" onSubmit={create}>
+      <form className="grid gap-2 rounded-xl border bg-white p-4 sm:grid-cols-6" onSubmit={create}>
         <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(e) => setDraft({ ...draft, key: e.target.value })} placeholder="key (e.g. drone_photography)" required value={draft.key} />
         <input className="rounded-xl border border-hairline p-2 text-sm" onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Display name" required value={draft.name} />
         <select className="rounded-xl border border-hairline p-2 text-sm" onChange={(e) => setDraft({ ...draft, group: e.target.value })} value={draft.group}>
           {Object.entries(GROUP_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
+        <select
+          className="rounded-xl border border-hairline p-2 text-sm"
+          onChange={(e) => setDraft({ ...draft, parentId: e.target.value })}
+          value={draft.parentId}
+        >
+          <option value="">Top-level category</option>
+          {categories.filter((category) => !category.parentId).map((category) => (
+            <option key={category.id} value={category.id}>{category.name}</option>
+          ))}
+        </select>
         <input className="rounded-xl border border-hairline p-2 text-sm sm:col-span-2" onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Description (optional)" value={draft.description} />
-        <button className="rounded bg-forest px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted sm:col-span-5 sm:w-fit" disabled={saving} type="submit">{saving ? "Saving…" : "Add category"}</button>
+        <button className="rounded bg-forest px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-muted sm:col-span-6 sm:w-fit" disabled={saving} type="submit">{saving ? "Saving…" : "Add category"}</button>
       </form>
 
       <section className="overflow-x-auto rounded-xl border bg-white shadow-card">
@@ -331,7 +364,9 @@ function CategoriesAdmin() {
           <thead className="border-b bg-warm-white text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Parent</th>
               <th className="px-4 py-3">Group</th>
+              <th className="px-4 py-3">Order</th>
               <th className="px-4 py-3">Active</th>
               <th className="px-4 py-3">Public</th>
               <th className="px-4 py-3">Onboarding</th>
@@ -344,7 +379,25 @@ function CategoriesAdmin() {
                   <p className="font-medium text-forest">{category.name}</p>
                   <p className="text-xs text-muted">{category.key}</p>
                 </td>
+                <td className="px-4 py-3 text-muted">{category.parent?.name ?? "Top level"}</td>
                 <td className="px-4 py-3 text-muted">{GROUP_LABELS[category.group] ?? category.group}</td>
+                <td className="px-4 py-3">
+                  <input
+                    aria-label={`Display order for ${category.name}`}
+                    className="w-20 rounded-lg border border-hairline px-2 py-1 text-sm"
+                    defaultValue={category.sortOrder}
+                    min={0}
+                    onBlur={(event) => {
+                      const sortOrder = Number.parseInt(event.currentTarget.value, 10);
+                      if (Number.isInteger(sortOrder) && sortOrder >= 0 && sortOrder !== category.sortOrder) {
+                        void updateCategory(category, { sortOrder });
+                      } else {
+                        event.currentTarget.value = String(category.sortOrder);
+                      }
+                    }}
+                    type="number"
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <button className={`rounded-full px-2.5 py-1 text-xs font-semibold ${category.active ? "bg-teal/10 text-teal" : "bg-surface text-muted"}`} onClick={() => void toggle(category, "active")} type="button">{category.active ? "Active" : "Deactivated"}</button>
                 </td>

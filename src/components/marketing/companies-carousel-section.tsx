@@ -42,7 +42,7 @@ export function CompaniesCarouselSection({
   return (
     <section
       aria-labelledby="companies-heading"
-      className={`border-y border-hairline bg-white ${compact ? "py-5 sm:py-6" : "py-12 sm:py-16"}`}
+      className={`border-y border-hairline bg-background ${compact ? "py-5 sm:py-6" : "py-12 sm:py-16"}`}
     >
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-end justify-between gap-4 px-5 sm:px-8">
         <h2

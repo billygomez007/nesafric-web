@@ -111,8 +111,22 @@ export function orderCategories(categories: ServiceCategory[]) {
     const index = LEAD_SERVICE_KEYS.indexOf(key);
     return index === -1 ? LEAD_SERVICE_KEYS.length : index;
   };
+
   return categories
     .map((category, index) => ({ category, index }))
-    .sort((a, b) => rank(a.category.key) - rank(b.category.key) || a.index - b.index)
+    .sort((a, b) => {
+      const aTopLevel = a.category.parentId === null;
+      const bTopLevel = b.category.parentId === null;
+
+      if (aTopLevel && bTopLevel) {
+        return a.category.sortOrder - b.category.sortOrder || a.index - b.index;
+      }
+
+      return (
+        rank(a.category.key) - rank(b.category.key) ||
+        a.category.sortOrder - b.category.sortOrder ||
+        a.index - b.index
+      );
+    })
     .map(({ category }) => category);
 }

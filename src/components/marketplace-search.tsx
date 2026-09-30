@@ -18,7 +18,13 @@ import {
 } from "@/components/marketplace-provider-trust";
 import { SaveProviderButton, SavedProvidersProvider } from "@/components/saved-providers";
 
-type Category = { id: string; key: string; name: string };
+type Category = {
+  id: string;
+  key: string;
+  name: string;
+  parentId?: string | null;
+  parent?: { id: string; key: string; name: string; sortOrder: number } | null;
+};
 /** Public provider payload (`publicProfile()` in `src/modules/marketplace/service.ts`). Rating,
  * rating count, completed jobs, completion rate and verification badges are server-derived. */
 export type PublicProvider = {
@@ -78,7 +84,7 @@ export function MarketplaceSearch() {
       <form aria-label="Search service providers" className="grid gap-3 border-y border-hairline py-5 sm:grid-cols-2 lg:grid-cols-4" onSubmit={submit}>
         {/* Searched on the server (names, descriptions, services, areas); the list is never filtered here. */}
         <div className="sm:col-span-2 lg:col-span-4"><label className={fieldLabelClass} htmlFor="msp-q">Search</label><input className={controlClass} defaultValue={initialQ} id="msp-q" maxLength={200} name="q" placeholder="Plumber, electrician, Kwame Plumbing, Accra…" type="search" /></div>
-        <div><label className={fieldLabelClass} htmlFor="msp-category">Service</label><select className={controlClass} defaultValue={initialCategory} id="msp-category" key={`${initialCategory}-${categories.length}`} name="category"><option value="">All services</option>{categories.map((category) => <option key={category.id} value={category.key}>{category.name}</option>)}</select></div>
+        <div><label className={fieldLabelClass} htmlFor="msp-category">Service</label><select className={controlClass} defaultValue={initialCategory} id="msp-category" key={`${initialCategory}-${categories.length}`} name="category"><option value="">All services</option>{categories.filter((category) => category.parentId !== null).map((category) => <option key={category.id} value={category.key}>{category.name}</option>)}</select></div>
         <div><label className={fieldLabelClass} htmlFor="msp-type">Provider type</label><select className={controlClass} id="msp-type" name="providerType"><option value="">Individuals and companies</option><option value="INDIVIDUAL">Individual</option><option value="COMPANY">Company</option></select></div>
         <div><label className={fieldLabelClass} htmlFor="msp-city">City</label><input className={controlClass} id="msp-city" name="city" placeholder="e.g. Accra" /></div>
         <div><label className={fieldLabelClass} htmlFor="msp-district">District</label><input className={controlClass} id="msp-district" name="district" placeholder="e.g. Ayawaso West" /></div>
