@@ -119,6 +119,7 @@ const sections = [
     body: (
       <>
         <p>Subject to applicable law, you may have rights to request access to personal information, correction of inaccurate information, deletion or blocking in certain circumstances, restriction or objection to certain processing, and information about how your data is used.</p>
+        <p>You can request deletion of your NesAfric account and associated personal data through the mobile app under Account → Delete account, or through our <Link className="font-semibold text-forest" href="/account-deletion">account deletion page</Link>.</p>
         <p>We may need to verify your identity before acting on a request. Some requests may be limited where retention or processing is required by law, necessary for legal claims, security, fraud prevention or the rights of others.</p>
       </>
     ),

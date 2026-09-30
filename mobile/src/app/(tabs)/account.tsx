@@ -75,6 +75,9 @@ export default function AccountScreen() {
           <ListRow icon="help-buoy-outline" title="Help & support" detail={BRAND.contact.support} onPress={() => Linking.openURL(`mailto:${BRAND.contact.support}`)} />
           <ListRow icon="call-outline" title="Call us" detail={BRAND.contact.phoneDisplay} onPress={() => Linking.openURL(`tel:${BRAND.contact.phoneTel}`)} />
           <ListRow icon="shield-checkmark-outline" title="Privacy policy" onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/privacy`))} />
+          {status === "signedIn" ? (
+            <ListRow icon="trash-outline" title="Delete account" detail="Request deletion of your NesAfric account" onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/account-deletion`))} testID="delete-account" />
+          ) : null}
           <ListRow icon="document-text-outline" title="Terms of service" onPress={() => WebBrowser.openBrowserAsync(websiteUrl(apiUrl, `/terms`))} last />
         </RowGroup>
 
