@@ -60,7 +60,7 @@ const searchCalls = () => calls.filter((call) => call.url.pathname === "/api/pub
 
 describe("accommodation categories", () => {
   it("Hotels, Short stays and Warehouses sit with Rent, Buy, Land and Commercial", () => {
-    expect(HOME_CATEGORIES.slice(0, 7).map((category) => category.label)).toEqual(["Rent", "Buy", "Land", "Commercial", "Hotels", "Short stays", "Warehouses"]);
+    expect(HOME_CATEGORIES.slice(0, 7).map((category) => category.label)).toEqual(["Hotels", "Short stays", "Rent", "Buy", "Land", "Commercial", "Warehouses"]);
   });
 
   it.each([["Hotels", "HOTEL"], ["Short stays", "SHORT_STAY"], ["Warehouses", "WAREHOUSE"]])("the %s chip opens Search filtered to %s", async (label, category) => {
