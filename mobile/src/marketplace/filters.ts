@@ -37,12 +37,12 @@ export const PROPERTY_TYPES = [
 ] as const;
 
 export const INTENTS: { label: string; filters: SearchFilters }[] = [
-  { label: "Hotels", filters: { category: "HOTEL" } },
-  { label: "Short stays", filters: { category: "SHORT_STAY" } },
   { label: "Rent", filters: { listingType: "RENT" } },
   { label: "Buy", filters: { listingType: "SALE" } },
   { label: "Land", filters: { category: "LAND" } },
   { label: "Commercial", filters: { category: "COMMERCIAL" } },
+  { label: "Hotels", filters: { category: "HOTEL" } },
+  { label: "Short stays", filters: { category: "SHORT_STAY" } },
   { label: "Warehouses", filters: { category: "WAREHOUSE" } },
 ];
 
