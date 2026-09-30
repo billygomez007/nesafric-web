@@ -2,7 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { FlatList, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { FlatList, Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useApi } from "@/api/provider";
@@ -22,10 +22,41 @@ export default function ListingDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <Stack.Screen options={{ title: "", headerRight: listing ? () => <SaveButton listing={listing} /> : undefined }} />
+      <Stack.Screen
+        options={{
+          title: "",
+          headerRight: listing
+            ? () => (
+                <View style={styles.headerActions}>
+                  <Pressable
+                    accessibilityLabel="Share property"
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => shareListing(listing)}
+                    style={styles.headerShare}
+                    testID="share-property"
+                  >
+                    <Ionicons name="share-outline" size={23} color={colors.ink} />
+                  </Pressable>
+                  <SaveButton listing={listing} />
+                </View>
+              )
+            : undefined,
+        }}
+      />
       {!listing ? <QueryState isPending={query.isPending} error={query.error} onRetry={() => query.refetch()} /> : <ListingDetail listing={listing} />}
     </View>
   );
+}
+
+async function shareListing(listing: PublicListing) {
+  const url = `https://www.nesafric.com/marketplace/properties/${listing.id}`;
+
+  await Share.share({
+    title: listing.title,
+    message: `${listing.title}\n${url}`,
+    url,
+  });
 }
 
 function ListingDetail({ listing }: { listing: PublicListing }) {
@@ -185,6 +216,8 @@ function formatDate(value: string) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  headerShare: { alignItems: "center", justifyContent: "center", minWidth: 32, minHeight: 32 },
   body: { padding: spacing.xl, gap: spacing.xl },
   titleBlock: { gap: spacing.xs },
   inline: { flexDirection: "row", alignItems: "center", gap: 4 },

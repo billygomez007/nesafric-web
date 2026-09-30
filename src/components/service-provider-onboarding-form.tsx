@@ -29,6 +29,7 @@ const STEP_LABELS = [
   "Identity verification",
   "Business documents",
   "Portfolio",
+  "WhatsApp notifications",
   "Review & consent",
   "Submit",
 ];
@@ -172,6 +173,19 @@ export function ServiceProviderOnboardingForm() {
     Record<string, File | null>
   >({});
   const [portfolioFile, setPortfolioFile] = useState<File | null>(null);
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
+  const [whatsappPreferences, setWhatsappPreferences] = useState({
+    inquiryNotifications: true,
+    viewingNotifications: true,
+    leadNotifications: true,
+    savedPropertyNotifications: true,
+    bookingNotifications: true,
+    serviceRequestNotifications: true,
+    messageNotifications: true,
+    reviewNotifications: true,
+    accountActivityNotifications: true,
+  });
   const [submittedEvidence, setSubmittedEvidence] = useState<
     { type: string; reference: string }[]
   >([]);
@@ -1001,6 +1015,155 @@ export function ServiceProviderOnboardingForm() {
       )}
 
       {step === 8 && (
+        <div className="grid gap-5 rounded-xl border border-hairline p-6">
+          <div className="grid gap-2">
+            <p className="text-sm font-medium">WhatsApp notifications</p>
+            <p className="text-sm text-muted">
+              Add the WhatsApp number where you want NesAfric to send important
+              business alerts. Your number must be verified before WhatsApp
+              notifications can be delivered.
+            </p>
+          </div>
+
+          <label className="grid gap-1 text-sm font-medium">
+            Business WhatsApp number
+            <input
+              className="rounded border p-3"
+              onChange={(event) => setWhatsappNumber(event.target.value)}
+              placeholder="e.g. 024 123 4567"
+              type="tel"
+              value={whatsappNumber}
+            />
+          </label>
+
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              checked={whatsappOptIn}
+              className="mt-1"
+              onChange={(event) => setWhatsappOptIn(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              I agree to receive NesAfric business notifications on this
+              WhatsApp number. I can turn them off later.
+            </span>
+          </label>
+
+          <fieldset className="grid gap-3">
+            <legend className="text-sm font-medium">
+              Choose the notifications you want
+            </legend>
+
+            {[
+              ["inquiryNotifications", "Property and customer inquiries"],
+              ["viewingNotifications", "Viewing requests and updates"],
+              ["leadNotifications", "New leads"],
+              ["savedPropertyNotifications", "Saved or liked property activity"],
+              ["bookingNotifications", "Bookings"],
+              ["serviceRequestNotifications", "Service requests"],
+              ["messageNotifications", "Customer messages"],
+              ["reviewNotifications", "Reviews"],
+              ["accountActivityNotifications", "Important account activity"],
+            ].map(([key, label]) => (
+              <label className="flex items-start gap-2 text-sm" key={key}>
+                <input
+                  checked={
+                    whatsappPreferences[
+                      key as keyof typeof whatsappPreferences
+                    ]
+                  }
+                  className="mt-1"
+                  onChange={(event) =>
+                    setWhatsappPreferences((current) => ({
+                      ...current,
+                      [key]: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+
+          <p className="text-xs text-muted">
+            WhatsApp delivery remains disabled until this number is verified.
+          </p>
+
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(7)}
+              type="button"
+            >
+              ← Back
+            </button>
+
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting || (whatsappOptIn && !whatsappNumber.trim())}
+              onClick={async () => {
+                if (!providerId) {
+                  setStep(9);
+                  return;
+                }
+
+                if (!whatsappNumber.trim() && !whatsappOptIn) {
+                  setStep(9);
+                  return;
+                }
+
+                setSubmitting(true);
+                setError("");
+
+                try {
+                  const response = await fetch(
+                    `/api/providers/${providerId}/whatsapp-notifications`,
+                    {
+                      method: "PUT",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        whatsappNumber,
+                        whatsappOptIn,
+                        ...whatsappPreferences,
+                      }),
+                    },
+                  );
+
+                  if (!response.ok) {
+                    const body = await response.json().catch(() => ({}));
+
+                    setError(
+                      providerOnboardingErrorMessage(
+                        response.status,
+                        body,
+                        "We could not save your WhatsApp notification settings.",
+                      ),
+                    );
+
+                    return;
+                  }
+
+                  setStep(9);
+                } catch {
+                  setError(
+                    "We could not save your WhatsApp notification settings. Please try again.",
+                  );
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+              type="button"
+            >
+              {submitting ? "Saving…" : "Save & continue"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 9 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Review & consent</p>
           {/* What NesAfric saved, not the form's local state. */}
@@ -1072,7 +1235,7 @@ export function ServiceProviderOnboardingForm() {
           <div className="flex justify-between">
             <button
               className="text-sm font-semibold text-muted"
-              onClick={() => setStep(7)}
+              onClick={() => setStep(8)}
               type="button"
             >
               ← Back
@@ -1080,7 +1243,7 @@ export function ServiceProviderOnboardingForm() {
             <button
               className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
               disabled={submitting}
-              onClick={() => setStep(9)}
+              onClick={() => setStep(10)}
               type="button"
             >
               Continue
@@ -1089,7 +1252,7 @@ export function ServiceProviderOnboardingForm() {
         </div>
       )}
 
-      {step === 9 && (
+      {step === 10 && (
         <div className="grid gap-4 rounded-xl border border-hairline p-6">
           <p className="text-sm font-medium">Submit for verification</p>
           {!submittedEvidence.length && (
@@ -1110,7 +1273,7 @@ export function ServiceProviderOnboardingForm() {
           <div className="flex justify-between">
             <button
               className="text-sm font-semibold text-muted"
-              onClick={() => setStep(8)}
+              onClick={() => setStep(9)}
               type="button"
             >
               ← Back

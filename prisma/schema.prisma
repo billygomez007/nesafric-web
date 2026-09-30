@@ -1075,6 +1075,7 @@ model Organisation {
   voiceContactPreferences     VoiceContactPreference[]
   phoneNumbers                PhoneNumber[]
   mediaStreamSessions         MediaStreamSession[]
+  businessWhatsAppConfig      BusinessWhatsAppConfig?
 
   @@index([countryCode])
   @@index([archivedAt])
@@ -2635,73 +2636,74 @@ model WorkOrderHistory {
 }
 
 model ServiceProvider {
-  id                    String                        @id @default(uuid()) @db.Uuid
-  type                  ServiceProviderType
-  individualUserId      String?                       @unique @db.Uuid
-  companyOrganisationId String?                       @unique @db.Uuid
-  administratorUserId   String                        @db.Uuid
-  displayName           String
-  legalName             String?
+  id                     String                        @id @default(uuid()) @db.Uuid
+  type                   ServiceProviderType
+  individualUserId       String?                       @unique @db.Uuid
+  companyOrganisationId  String?                       @unique @db.Uuid
+  administratorUserId    String                        @db.Uuid
+  displayName            String
+  legalName              String?
   /// Public profile URL segment: `/marketplace/services/{slug}`. Nullable — existing
   /// landlord-only-directory providers created before this field existed are never forced to
   /// have one; only providers actually intended for public listing need it, and application code
   /// always generates one on create going forward.
-  slug                  String?                       @unique
-  contactEmail          String?                       @db.Citext
-  contactPhone          String?
-  verificationStatus    ProviderVerificationStatus    @default(UNVERIFIED)
-  availabilityStatus    ProviderAvailabilityStatus    @default(UNAVAILABLE)
-  contactReady          Boolean                       @default(false)
-  evidenceReady         Boolean                       @default(false)
-  acceptingWork         Boolean                       @default(false)
-  biography             String?
+  slug                   String?                       @unique
+  contactEmail           String?                       @db.Citext
+  contactPhone           String?
+  verificationStatus     ProviderVerificationStatus    @default(UNVERIFIED)
+  availabilityStatus     ProviderAvailabilityStatus    @default(UNAVAILABLE)
+  contactReady           Boolean                       @default(false)
+  evidenceReady          Boolean                       @default(false)
+  acceptingWork          Boolean                       @default(false)
+  biography              String?
   /// Set only by a platform reviewer (`PlatformPrincipal` with `providerIdentityReview`) once
   /// mandatory Ghana Card identity evidence has been approved. This is the gate that actually
   /// governs public marketplace discoverability and UmoAfric-initiated work assignment — separate
   /// from `verificationStatus`, which a landlord organisation can also drive for its own private
   /// directory, but which can only reach VERIFIED once this is set.
-  identityVerifiedAt    DateTime?
+  identityVerifiedAt     DateTime?
   /// Set once business-registration evidence (COMPANY-type providers) has been approved.
-  businessVerifiedAt    DateTime?
+  businessVerifiedAt     DateTime?
   /// Set once a category-relevant credential (trade certificate, professional licence, etc.) has
   /// been approved. Optional — many categories have no credential requirement.
-  skillVerifiedAt       DateTime?
+  skillVerifiedAt        DateTime?
   /// Platform-wide suspension — distinct from a single landlord's own `ProviderVerificationStatus
   /// = SUSPENDED` decision (which only reflects that one landlord's trust in the provider). When
   /// set, the provider is ineligible everywhere: public marketplace discovery, AI dispatch
   /// candidate selection, and campaign public-eligibility all additionally require this to be
   /// null. Existing historical work/ratings/audit records are never touched by suspension.
-  suspendedAt           DateTime?
-  suspensionReason      String?
-  suspendedByUserId     String?                       @db.Uuid
+  suspendedAt            DateTime?
+  suspensionReason       String?
+  suspendedByUserId      String?                       @db.Uuid
   /// Public logo / profile image. Always a PUBLIC `StorageObject` uploaded through the controlled
   /// `SERVICE_PROVIDER_LOGO` upload target by the provider's owner; never a free-form URL. Public
   /// payloads render it only while the object is PUBLIC and not archived.
-  logoStorageObjectId   String?                       @db.Uuid
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
-  archivedAt            DateTime?
-  individualUser        User?                         @relation("IndividualProviderUser", fields: [individualUserId], references: [id], onDelete: Restrict)
-  companyOrganisation   Organisation?                 @relation("CompanyProviderOrganisation", fields: [companyOrganisationId], references: [id], onDelete: Restrict)
-  administrator         User                          @relation("ProviderAdministrator", fields: [administratorUserId], references: [id], onDelete: Restrict)
-  suspendedBy           User?                         @relation("ProviderSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
-  logo                  StorageObject?                @relation("ServiceProviderLogo", fields: [logoStorageObjectId], references: [id], onDelete: SetNull)
-  categories            ServiceProviderCategory[]
-  serviceAreas          ProviderServiceArea[]
-  evidence              ProviderEvidence[]
-  verificationHistory   ProviderVerificationHistory[]
-  verificationConsents  ProviderVerificationConsent[]
-  directories           ProviderOrganisation[]
-  quotationRequests     ProviderQuotationRequest[]
-  quotations            ProviderQuotation[]
-  assignments           ProviderAssignment[]
-  ratings               ProviderRating[]
-  marketplaceProfile    ProviderMarketplaceProfile?
-  marketplaceEnquiries  MarketplaceEnquiry[]
-  conversations         Conversation[]
-  dispatchAttempts      MaintenanceDispatchAttempt[]
-  campaigns             Campaign[]
-  savedBy               SavedServiceProvider[]
+  logoStorageObjectId    String?                       @db.Uuid
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  archivedAt             DateTime?
+  individualUser         User?                         @relation("IndividualProviderUser", fields: [individualUserId], references: [id], onDelete: Restrict)
+  companyOrganisation    Organisation?                 @relation("CompanyProviderOrganisation", fields: [companyOrganisationId], references: [id], onDelete: Restrict)
+  administrator          User                          @relation("ProviderAdministrator", fields: [administratorUserId], references: [id], onDelete: Restrict)
+  suspendedBy            User?                         @relation("ProviderSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
+  logo                   StorageObject?                @relation("ServiceProviderLogo", fields: [logoStorageObjectId], references: [id], onDelete: SetNull)
+  categories             ServiceProviderCategory[]
+  serviceAreas           ProviderServiceArea[]
+  evidence               ProviderEvidence[]
+  verificationHistory    ProviderVerificationHistory[]
+  verificationConsents   ProviderVerificationConsent[]
+  directories            ProviderOrganisation[]
+  quotationRequests      ProviderQuotationRequest[]
+  quotations             ProviderQuotation[]
+  assignments            ProviderAssignment[]
+  ratings                ProviderRating[]
+  marketplaceProfile     ProviderMarketplaceProfile?
+  marketplaceEnquiries   MarketplaceEnquiry[]
+  conversations          Conversation[]
+  dispatchAttempts       MaintenanceDispatchAttempt[]
+  campaigns              Campaign[]
+  savedBy                SavedServiceProvider[]
+  businessWhatsAppConfig BusinessWhatsAppConfig?
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
   @@index([identityVerifiedAt])
@@ -5906,4 +5908,55 @@ model AuthOtpChallenge {
   @@index([requesterHash, createdAt])
   @@index([channel, createdAt])
   @@index([expiresAt])
+}
+
+model BusinessWhatsAppConfig {
+  id                           String    @id @default(uuid())
+  organisationId               String?   @unique
+  serviceProviderId            String?   @unique
+  whatsappNumber               String
+  whatsappVerified             Boolean   @default(false)
+  whatsappVerifiedAt           DateTime?
+  whatsappOptIn                Boolean   @default(false)
+  whatsappOptInAt              DateTime?
+  whatsappNotificationsEnabled Boolean   @default(false)
+
+  inquiryNotifications         Boolean @default(true)
+  viewingNotifications         Boolean @default(true)
+  leadNotifications            Boolean @default(true)
+  savedPropertyNotifications   Boolean @default(true)
+  bookingNotifications         Boolean @default(true)
+  serviceRequestNotifications  Boolean @default(true)
+  messageNotifications         Boolean @default(true)
+  reviewNotifications          Boolean @default(true)
+  accountActivityNotifications Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organisation    Organisation?    @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  serviceProvider ServiceProvider? @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+
+  verificationChallenges BusinessWhatsAppVerificationChallenge[]
+
+  @@index([whatsappNumber])
+}
+
+model BusinessWhatsAppVerificationChallenge {
+  id                       String    @id @default(uuid()) @db.Uuid
+  businessWhatsAppConfigId String    @db.Uuid
+  whatsappNumber           String
+  requesterHash            String
+  expiresAt                DateTime
+  consumedAt               DateTime?
+  supersededAt             DateTime?
+  failedAttempts           Int       @default(0)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  businessWhatsAppConfig BusinessWhatsAppConfig @relation(fields: [businessWhatsAppConfigId], references: [id], onDelete: Cascade)
+
+  @@index([businessWhatsAppConfigId, createdAt])
+  @@index([requesterHash, createdAt])
+  @@index([createdAt])
 }

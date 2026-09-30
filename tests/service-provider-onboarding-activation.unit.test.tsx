@@ -45,6 +45,17 @@ beforeEach(() => {
       return json(200, savedProvider({ displayName: `${body.displayName} (saved)`, contactPhone: body.contactPhone }));
     },
     [`PATCH /api/marketplace/providers/${PROVIDER_ID}/profile`]: json(200, {}),
+    [`PUT /api/providers/${PROVIDER_ID}/whatsapp-notifications`]: json(200, {
+      id: "wa-config",
+      serviceProviderId: PROVIDER_ID,
+      organisationId: null,
+      whatsappNumber: "+233241234567",
+      whatsappVerified: false,
+      whatsappVerifiedAt: null,
+      whatsappOptIn: true,
+      whatsappOptInAt: "2026-09-30T15:00:00.000Z",
+      whatsappNotificationsEnabled: false,
+    }),
     "GET /api/public/providers/document-requirements": json(200, []),
     [`POST /api/providers/${PROVIDER_ID}/verification/consent`]: json(201, { id: "consent" }),
     [`POST /api/providers/${PROVIDER_ID}/verification`]: json(400, { error: { code: "VALIDATION_ERROR", message: "The request contains invalid input." } }),
@@ -95,7 +106,19 @@ describe("service provider onboarding → workspace", () => {
 
     await continueTo("Business & credential documents");
     await continueTo("Portfolio");
-    await continueTo("Review & consent");
+    await continueTo("WhatsApp notifications");
+    fireEvent.change(screen.getByLabelText("Business WhatsApp number"), {
+      target: { value: "0241234567" },
+    });
+    fireEvent.click(
+      screen.getByLabelText(
+        /I agree to receive NesAfric business notifications/,
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save & continue" }),
+    );
+    await screen.findByText("Review & consent");
     await acceptConsent();
     await continueTo("Submit for verification");
     expect(screen.getByTestId("provider-no-evidence-note")).toBeTruthy();
@@ -145,7 +168,19 @@ describe("service provider onboarding → workspace", () => {
 
     await continueTo("Business & credential documents");
     await continueTo("Portfolio");
-    await continueTo("Review & consent");
+    await continueTo("WhatsApp notifications");
+    fireEvent.change(screen.getByLabelText("Business WhatsApp number"), {
+      target: { value: "0241234567" },
+    });
+    fireEvent.click(
+      screen.getByLabelText(
+        /I agree to receive NesAfric business notifications/,
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save & continue" }),
+    );
+    await screen.findByText("Review & consent");
     const review = screen.getByTestId("provider-review-saved");
     // The server's saved value, not the form's local text.
     expect(review.textContent).toContain("Kofi Plumbing & Sons (saved)");
@@ -202,7 +237,19 @@ describe("service provider onboarding → workspace", () => {
     await screen.findByText("Mandatory identity verification");
     await continueTo("Business & credential documents");
     await continueTo("Portfolio");
-    await continueTo("Review & consent");
+    await continueTo("WhatsApp notifications");
+    fireEvent.change(screen.getByLabelText("Business WhatsApp number"), {
+      target: { value: "0241234567" },
+    });
+    fireEvent.click(
+      screen.getByLabelText(
+        /I agree to receive NesAfric business notifications/,
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save & continue" }),
+    );
+    await screen.findByText("Review & consent");
     await acceptConsent();
     await continueTo("Submit for verification");
     fireEvent.click(screen.getByRole("button", { name: "Finish and open workspace" }));
