@@ -44,3 +44,17 @@ next-env.d.ts
 
 # local/dev object storage adapter (never used when an S3-compatible provider is configured)
 /var/object-storage
+
+# local development-only scripts
+scripts/*.local.ts
+
+# local caches
+.cache/
+.turbo/
+
+# temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo

@@ -80,6 +80,7 @@ export default function RootLayout() {
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="listing/[id]/index" options={{ headerShown: true, title: "", headerBackTitle: "Back" }} />
                 <Stack.Screen name="listing/[id]/enquire" options={{ headerShown: true, presentation: "modal", title: "Contact" }} />
+                <Stack.Screen name="listing/[id]/book" options={{ headerShown: true, presentation: "modal", title: "Request booking" }} />
                 <Stack.Screen name="marketplace/services/index" />
                 <Stack.Screen name="marketplace/services/[providerId]/index" options={{ headerShown: true, title: "", headerBackTitle: "Back" }} />
                 <Stack.Screen name="marketplace/services/[providerId]/request" options={{ headerShown: true, presentation: "modal", title: "Request service" }} />

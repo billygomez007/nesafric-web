@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ACCOMMODATION_CATEGORY_LABELS, isBookableCategory } from "@/lib/listing-categories";
 import { photosCoverFirst } from "@/lib/listing-cover";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -10,12 +11,19 @@ import { buttonClass } from "@/components/ui/button-styles";
 import { formatListingPrice, humanize, listingLocation, listingTypeLabel, priceUnitText, scopeLabel, specLine } from "@/lib/listing-display";
 import { categorical, compactParams, trackEvent } from "@/platform/analytics";
 
-export type PublicListing = { id: string; isTopAd?: boolean; listingType: string; scope: string; category: string; title: string; description: string; pricing: { askingAmountMinor: string | null; rentAmountMinor: string | null; currencyCode: string; frequency: string | null }; availability: { availableFrom: string; actual: boolean }; attributes: { bedrooms: number | null; bathrooms: string | null; sizeSqm: string | null }; location: { countryCode: string; region: string | null; city: string | null; district: string | null; locality: string | null; label: string | null; map: { latitude: string | null; longitude: string | null; precision: string | null; geocodingRequired: boolean } }; amenities: { key: string; label: string; category: string | null }[]; media: { id: string; type: string; url: string; altText: string | null; title: string | null; isCover?: boolean }[]; contact: { name: string | null; email: string | null; phone: string | null; enquiryEnabled: boolean }; verification: { status: string; evidenceReady: boolean }; attribution: { listedBy: string; professional: { displayName: string; slug: string; type: string; verificationStatus: string } | null }; publishedAt: string };
+export type PublicListing = { id: string; isTopAd?: boolean; listingType: string; scope: string; category: string; title: string; description: string; pricing: { askingAmountMinor: string | null; rentAmountMinor: string | null; currencyCode: string; frequency: string | null }; availability: { availableFrom: string; actual: boolean }; attributes: { bedrooms: number | null; bathrooms: string | null; sizeSqm: string | null }; bookable?: boolean; stay?: { maxGuests: number | null; minimumNights: number | null; checkInTime: string | null; checkOutTime: string | null; houseRules: string | null } | null; location: { countryCode: string; region: string | null; city: string | null; district: string | null; locality: string | null; label: string | null; map: { latitude: string | null; longitude: string | null; precision: string | null; geocodingRequired: boolean } }; amenities: { key: string; label: string; category: string | null }[]; media: { id: string; type: string; url: string; altText: string | null; title: string | null; isCover?: boolean }[]; contact: { name: string | null; email: string | null; phone: string | null; enquiryEnabled: boolean }; verification: { status: string; evidenceReady: boolean }; attribution: { listedBy: string; professional: { displayName: string; slug: string; type: string; verificationStatus: string } | null }; publishedAt: string };
 type Result = { items: PublicListing[]; pagination: { page: number; pageSize: number; total: number; totalPages: number }; meta: { availability: string; map: { countryNeutral: boolean } } };
 
 const fieldClass =
   "h-11 w-full rounded-[var(--radius-control)] border border-hairline bg-white px-3 text-sm text-ink outline-none transition placeholder:text-slate-500 focus:border-forest focus:ring-2 focus:ring-forest/10";
 const labelClass = "mb-1.5 block text-xs font-medium text-muted";
+
+/** The property types the marketplace lists, as stored by the listing forms. */
+const SEARCH_CATEGORIES = [
+  ["HOUSE", "House"], ["APARTMENT", "Apartment"], ["TOWNHOUSE", "Townhouse"], ["VILLA", "Villa"], ["GUEST_HOUSE", "Guest house"],
+  ["HOTEL", "Hotel"], ["SHORT_STAY", "Short stay"],
+  ["LAND", "Land"], ["OFFICE", "Office"], ["SHOP", "Shop / Retail"], ["WAREHOUSE", "Warehouse"], ["COMMERCIAL", "Commercial space"],
+] as const;
 
 const PASS_THROUGH_KEYS = ["q", "listingType", "category", "scope", "country", "region", "city", "district", "bedroomsMin", "bathroomsMin", "currencyCode", "availableOn", "amenities"] as const;
 const ADVANCED_KEYS = ["category", "scope", "country", "region", "city", "district", "bathroomsMin", "currencyCode", "availableOn", "amenities", "minPrice"];
@@ -150,7 +158,12 @@ export function PropertyMarketplaceSearch() {
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className={labelClass} htmlFor="pms-category">Property type</label>
-              <input className={fieldClass} defaultValue={initial.form.category ?? ""} id="pms-category" name="category" placeholder="e.g. Apartment, House, Land" />
+              <select className={fieldClass} defaultValue={initial.form.category ?? ""} id="pms-category" name="category">
+                <option value="">Any type</option>
+                {SEARCH_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {/* A category from an older link that isn't in the list stays selectable. */}
+                {initial.form.category && !SEARCH_CATEGORIES.some(([value]) => value === initial.form.category) ? <option value={initial.form.category}>{humanize(initial.form.category)}</option> : null}
+              </select>
             </div>
             <div>
               <label className={labelClass} htmlFor="pms-scope">Whole property or unit</label>
@@ -285,6 +298,7 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
   const verified = listing.verification.status === "VERIFIED";
   const lister = listing.attribution.professional?.displayName ?? listing.attribution.listedBy;
 
+  const stayLabel = isBookableCategory(listing.category) ? ACCOMMODATION_CATEGORY_LABELS[listing.category] : null;
   const listingBadgeClass =
     listing.listingType === "RENT"
       ? "border-market-rent/35 bg-market-rent-tint text-market-rent"
@@ -293,7 +307,7 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
   const categoryBadgeClass =
     listing.category === "LAND"
       ? "border-market-land/35 bg-market-land-tint text-market-land"
-      : listing.category === "COMMERCIAL"
+      : listing.category === "COMMERCIAL" || listing.category === "WAREHOUSE"
         ? "border-market-commercial/35 bg-market-commercial-tint text-market-commercial"
         : null;
 
@@ -316,8 +330,9 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
           <div className="flex h-full items-center justify-center text-sm text-muted">Photos coming soon</div>
         )}
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+          {/* A hotel or short stay is labelled as what it is, not as a rental. */}
           <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm ${listingBadgeClass}`}>
-            {listingTypeLabel(listing.listingType)}
+            {stayLabel ?? listingTypeLabel(listing.listingType)}
           </span>
           {categoryBadgeClass && (
             <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm ${categoryBadgeClass}`}>
@@ -329,6 +344,7 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
 
       <div className="pt-4">
         <p className="text-xl font-semibold tracking-[-0.01em] text-forest-deep tabular-nums" data-money>
+          {amount && listing.category === "HOTEL" && <span className="text-sm font-normal text-muted">From </span>}
           {amount ? formatListingPrice(amount, listing.pricing.currencyCode) : "Price on request"}
           {amount && suffix && <span className="text-sm font-normal text-muted"> / {suffix}</span>}
         </p>
@@ -337,6 +353,7 @@ export function ListingCard({ listing }: { listing: PublicListing }) {
 
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-hairline pt-3 text-[13px] text-slate-600">
           {specs.map((part) => <span key={part}>{part}</span>)}
+          {listing.stay?.maxGuests ? <span>Up to {listing.stay.maxGuests} guests</span> : null}
           <span>{humanize(listing.category)}{listing.scope === "UNIT" ? ` · ${scopeLabel(listing.scope)}` : ""}</span>
         </div>
 

@@ -14,6 +14,7 @@ import {
 } from "@/lib/listing-image-upload";
 import { formatMegabytes, MAX_LISTING_PHOTO_SOURCE_BYTES } from "@/lib/listing-media-rules";
 import { PRICE_UNIT_LABELS, priceUnitsFor } from "@/lib/price-units";
+import { isBookableCategory } from "@/lib/listing-categories";
 
 
 const PROPERTY_TYPES = [
@@ -27,6 +28,8 @@ const PROPERTY_TYPES = [
   ["WAREHOUSE", "Warehouse"],
   ["COMMERCIAL", "Commercial space"],
   ["GUEST_HOUSE", "Guest house"],
+  ["HOTEL", "Hotel"],
+  ["SHORT_STAY", "Short stay"],
 ] as const;
 
 const AMENITIES = [
@@ -78,6 +81,11 @@ export type EditableMarketplaceListing = {
   parkingSpaces: number | null;
   furnishing: string | null;
   propertyCondition: string | null;
+  maxGuests?: number | null;
+  minimumNights?: number | null;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  houseRules?: string | null;
   negotiable: boolean;
   yearBuilt: number | null;
   region: string | null;
@@ -127,9 +135,13 @@ export function MarketplaceListingForm({
   const totalImages = existingMedia.length + images.length;
   const existingPrice = existing ? existing.rentAmountMinor ?? existing.askingAmountMinor : null;
 
+  // Hotels and short stays are nightly rentals: always "for rent", priced per night, with stay details.
+  const isStay = isBookableCategory(category);
+  const listingPurpose = isStay ? "RENT" : purpose;
+
   const isResidential = useMemo(
     () =>
-      ["APARTMENT", "HOUSE", "TOWNHOUSE", "VILLA", "GUEST_HOUSE"].includes(
+      ["APARTMENT", "HOUSE", "TOWNHOUSE", "VILLA", "GUEST_HOUSE", "HOTEL", "SHORT_STAY"].includes(
         category,
       ),
     [category],
@@ -290,19 +302,26 @@ export function MarketplaceListingForm({
     const availableFrom = String(form.get("availableFrom"));
 
     const listing = {
-      listingType: purpose,
+      listingType: listingPurpose,
       category,
       title,
       publicDescription: String(form.get("description")),
       currencyCode: "GHS",
 
-      askingAmountMinor: purpose === "SALE" ? priceMinor : null,
-      rentAmountMinor: purpose === "RENT" ? priceMinor : null,
+      askingAmountMinor: listingPurpose === "SALE" ? priceMinor : null,
+      rentAmountMinor: listingPurpose === "RENT" ? priceMinor : null,
       // Price unit: required for a rental, optional for a sale (none means a total price).
-      frequency:
-        purpose === "RENT"
+      frequency: isStay
+        ? "PER_NIGHT"
+        : listingPurpose === "RENT"
           ? String(form.get("frequency") || "MONTHLY")
           : String(form.get("frequency") || "") || null,
+
+      maxGuests: isStay ? numberOrNull("maxGuests") : null,
+      minimumNights: isStay ? numberOrNull("minimumNights") : null,
+      checkInTime: isStay ? textOrNull("checkInTime") : null,
+      checkOutTime: isStay ? textOrNull("checkOutTime") : null,
+      houseRules: isStay ? textOrNull("houseRules") : null,
 
       availableFrom,
 
@@ -356,7 +375,7 @@ export function MarketplaceListingForm({
       asset: {
         name: title,
         category,
-        purpose,
+        purpose: listingPurpose,
         currencyCode: "GHS",
         priceMinor,
         countryCode: "GH",
@@ -497,8 +516,9 @@ export function MarketplaceListingForm({
             Listing purpose
             <select
               className={input}
+              disabled={isStay}
               name="purpose"
-              value={purpose}
+              value={listingPurpose}
               onChange={(event) => setPurpose(event.target.value)}
             >
               <option value="RENT">For rent</option>
@@ -589,6 +609,33 @@ export function MarketplaceListingForm({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">
           3. Property details
         </p>
+
+        {isStay && (
+          <fieldset className="mt-4 grid gap-4 rounded-xl border border-hairline p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="stay-details">
+            <legend className="px-1 text-sm font-semibold">Stay details</legend>
+            <label className="text-sm font-medium">
+              Maximum guests
+              <input className={input} defaultValue={text(existing?.maxGuests)} max="50" min="1" name="maxGuests" type="number" />
+            </label>
+            <label className="text-sm font-medium">
+              Minimum nights
+              <input className={input} defaultValue={text(existing?.minimumNights)} max="90" min="1" name="minimumNights" type="number" />
+            </label>
+            <label className="text-sm font-medium">
+              Check-in from
+              <input className={input} defaultValue={existing?.checkInTime ?? "14:00"} name="checkInTime" type="time" />
+            </label>
+            <label className="text-sm font-medium">
+              Check-out by
+              <input className={input} defaultValue={existing?.checkOutTime ?? "11:00"} name="checkOutTime" type="time" />
+            </label>
+            <label className="text-sm font-medium sm:col-span-2 lg:col-span-4">
+              House rules <span className="font-normal text-muted">(optional)</span>
+              <textarea className={input} defaultValue={text(existing?.houseRules)} maxLength={2000} name="houseRules" rows={3} />
+            </label>
+            <p className="text-xs text-muted sm:col-span-2 lg:col-span-4">Guests send you booking requests for this listing. Nothing is confirmed until you accept a request.</p>
+          </fieldset>
+        )}
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {isResidential && (
@@ -899,12 +946,12 @@ export function MarketplaceListingForm({
             Price unit
             <select
               className={input}
-              defaultValue={existing?.listingType === purpose ? existing.frequency ?? "" : purpose === "RENT" ? "MONTHLY" : ""}
-              key={purpose}
+              defaultValue={isStay ? "PER_NIGHT" : existing?.listingType === listingPurpose && existing.frequency !== "PER_NIGHT" ? existing.frequency ?? "" : listingPurpose === "RENT" ? "MONTHLY" : ""}
+              key={`${listingPurpose}:${isStay}`}
               name="frequency"
             >
-              {purpose === "SALE" && <option value="">Total price</option>}
-              {priceUnitsFor(purpose).map((unit) => (
+              {listingPurpose === "SALE" && <option value="">Total price</option>}
+              {priceUnitsFor(listingPurpose, category).map((unit) => (
                 <option key={unit} value={unit}>{PRICE_UNIT_LABELS[unit]}</option>
               ))}
             </select>

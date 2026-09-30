@@ -6,9 +6,9 @@
 --   * serviceProviderId for individual service providers.
 
 CREATE TABLE "BusinessWhatsAppConfig" (
-    "id" TEXT NOT NULL,
-    "organisationId" TEXT,
-    "serviceProviderId" TEXT,
+    "id" UUID NOT NULL,
+    "organisationId" UUID,
+    "serviceProviderId" UUID,
     "whatsappNumber" TEXT NOT NULL,
     "whatsappVerified" BOOLEAN NOT NULL DEFAULT false,
     "whatsappVerifiedAt" TIMESTAMP(3),

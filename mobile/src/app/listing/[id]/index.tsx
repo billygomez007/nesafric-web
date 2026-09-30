@@ -13,6 +13,7 @@ import { QueryState } from "@/components/query-state";
 import { SaveButton } from "@/components/save-button";
 import { AppText, Button } from "@/components/ui";
 import { formatFacts, formatListingPrice, formatLocation, humanise, isVerified, listingPhotos } from "@/marketplace/format";
+import { stayLabel } from "@/marketplace/listing-categories";
 import { colors, radii, spacing } from "@/theme/tokens";
 
 export default function ListingDetailScreen() {
@@ -65,12 +66,16 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
   const location = formatLocation(listing.location);
   const facts = formatFacts(listing.attributes);
   const canContact = listing.contact.enquiryEnabled;
+  // Hotels and short stays: the main action is a booking request, not an enquiry.
+  const bookable = listing.bookable === true;
+  const hasActions = bookable || canContact;
+  const kind = stayLabel(listing.category);
   // Public locations are deliberately approximate (APPROXIMATE / DISTRICT / CITY / REGION).
   const approximate = Boolean(listing.location.map.precision);
 
   return (
     <>
-      <ScrollView contentContainerStyle={{ paddingBottom: canContact ? 120 + insets.bottom : spacing.xxl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: hasActions ? 120 + insets.bottom : spacing.xxl }}>
         <Gallery listing={listing} />
         <View style={styles.body}>
           <View style={styles.titleBlock}>
@@ -95,11 +100,21 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
           ) : null}
 
           <Section title="Key facts">
-            <Fact label="Listing" value={listing.listingType === "RENT" ? "For rent" : "For sale"} />
+            <Fact label="Listing" value={kind ?? (listing.listingType === "RENT" ? "For rent" : "For sale")} />
             <Fact label="Property type" value={humanise(listing.category)} />
             {listing.availability.availableFrom ? <Fact label="Available from" value={formatDate(listing.availability.availableFrom)} /> : null}
             <Fact label="Listed by" value={listing.attribution.professional ? `${listing.attribution.professional.displayName} (${listing.attribution.listedBy})` : listing.attribution.listedBy} />
           </Section>
+
+          {bookable && listing.stay ? (
+            <Section title="Stay details">
+              {listing.stay.maxGuests ? <Fact label="Guests" value={`Up to ${listing.stay.maxGuests}`} /> : null}
+              {listing.stay.minimumNights && listing.stay.minimumNights > 1 ? <Fact label="Minimum stay" value={`${listing.stay.minimumNights} nights`} /> : null}
+              {listing.stay.checkInTime ? <Fact label="Check-in" value={`From ${listing.stay.checkInTime}`} /> : null}
+              {listing.stay.checkOutTime ? <Fact label="Check-out" value={`By ${listing.stay.checkOutTime}`} /> : null}
+              {listing.stay.houseRules ? <AppText variant="caption">{listing.stay.houseRules}</AppText> : null}
+            </Section>
+          ) : null}
 
           {listing.description ? (
             <Section title="About this property">
@@ -119,11 +134,27 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
             </Section>
           ) : null}
 
-          {!canContact ? <AppText variant="caption">The lister isn’t taking enquiries through NesAfric for this property right now.</AppText> : null}
+          {!hasActions ? <AppText variant="caption">The lister isn’t taking enquiries through NesAfric for this property right now.</AppText> : null}
         </View>
       </ScrollView>
 
-      {canContact ? (
+      {bookable ? (
+        <View style={[styles.actions, { paddingBottom: spacing.md + insets.bottom }]}>
+          {canContact ? (
+            <View style={styles.action}>
+              <Button
+                label="Contact property"
+                variant="secondary"
+                onPress={() => router.push({ pathname: "/listing/[id]/enquire", params: { id: listing.id, mode: "contact" } })}
+                testID="contact-property"
+              />
+            </View>
+          ) : null}
+          <View style={styles.action}>
+            <Button label="Request booking" onPress={() => router.push({ pathname: "/listing/[id]/book", params: { id: listing.id } })} testID="request-booking" />
+          </View>
+        </View>
+      ) : canContact ? (
         <View style={[styles.actions, { paddingBottom: spacing.md + insets.bottom }]}>
           <View style={styles.action}>
             <Button

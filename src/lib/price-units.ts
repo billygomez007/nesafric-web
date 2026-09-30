@@ -7,7 +7,9 @@
  * The mobile app mirrors this list in `mobile/src/marketplace/price-units.ts`.
  */
 
-export const LISTING_PRICE_UNITS = ["DAILY", "MONTHLY", "QUARTERLY", "ANNUAL", "PER_SQM", "PER_KM", "CUSTOM"] as const;
+import { isBookableCategory } from "./listing-categories";
+
+export const LISTING_PRICE_UNITS = ["DAILY", "MONTHLY", "QUARTERLY", "ANNUAL", "PER_SQM", "PER_KM", "CUSTOM", "PER_NIGHT"] as const;
 export type ListingPriceUnit = (typeof LISTING_PRICE_UNITS)[number];
 
 /** Units a sale may be quoted in. A sale with no unit is a total price. */
@@ -24,6 +26,7 @@ export const PRICE_UNIT_LABELS: Record<ListingPriceUnit, string> = {
   PER_SQM: "Per square metre (m²)",
   PER_KM: "Per kilometre (km)",
   CUSTOM: "Custom terms",
+  PER_NIGHT: "Per night",
 };
 
 /** Suffix after an amount: "GH₵1,200/m²". CUSTOM has none (its terms are in the description). */
@@ -35,6 +38,7 @@ const PRICE_UNIT_SUFFIX: Record<ListingPriceUnit, string> = {
   PER_SQM: "/m²",
   PER_KM: "/km",
   CUSTOM: "",
+  PER_NIGHT: "/night",
 };
 
 export function isListingPriceUnit(value: unknown): value is ListingPriceUnit {
@@ -49,9 +53,14 @@ export function isLeaseRentPeriod(value: unknown): value is (typeof LEASE_RENT_P
   return typeof value === "string" && (LEASE_RENT_PERIODS as readonly string[]).includes(value);
 }
 
-/** Units offered in a listing form for the chosen listing type, in display order. */
-export function priceUnitsFor(listingType: string): readonly ListingPriceUnit[] {
-  return listingType === "SALE" ? SALE_PRICE_UNITS : LISTING_PRICE_UNITS;
+/** Hotels and short stays are priced per night, and only they are. */
+export const STAY_PRICE_UNITS = ["PER_NIGHT"] as const satisfies readonly ListingPriceUnit[];
+const RENT_PRICE_UNITS = LISTING_PRICE_UNITS.filter((unit) => unit !== "PER_NIGHT");
+
+/** Units offered in a listing form for the chosen listing type (and category), in display order. */
+export function priceUnitsFor(listingType: string, category?: string | null): readonly ListingPriceUnit[] {
+  if (isBookableCategory(category)) return STAY_PRICE_UNITS;
+  return listingType === "SALE" ? SALE_PRICE_UNITS : RENT_PRICE_UNITS;
 }
 
 export function priceUnitLabel(unit: string | null | undefined): string {

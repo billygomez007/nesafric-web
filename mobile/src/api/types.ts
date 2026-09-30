@@ -5,7 +5,7 @@
  */
 export type ListingType = "RENT" | "SALE";
 /** Listing price unit (`ListingPriceUnit` on the server; the field keeps its historic name). */
-export type Frequency = "DAILY" | "MONTHLY" | "QUARTERLY" | "ANNUAL" | "CUSTOM" | "PER_SQM" | "PER_KM";
+export type Frequency = "DAILY" | "MONTHLY" | "QUARTERLY" | "ANNUAL" | "CUSTOM" | "PER_SQM" | "PER_KM" | "PER_NIGHT";
 
 export type ListingMedia = {
   id: string;
@@ -29,6 +29,9 @@ export type PublicListing = {
   pricing: { askingAmountMinor: string | null; rentAmountMinor: string | null; currencyCode: string; frequency: Frequency | null };
   availability: { availableFrom: string | null };
   attributes: { bedrooms: number | null; bathrooms: string | null; sizeSqm: string | null };
+  /** Hotels and short stays: guests request a booking instead of enquiring. Older servers omit it. */
+  bookable?: boolean;
+  stay?: { maxGuests: number | null; minimumNights: number | null; checkInTime: string | null; checkOutTime: string | null; houseRules: string | null } | null;
   location: {
     countryCode: string;
     region: string | null;
@@ -60,6 +63,31 @@ export type LeadInput = {
   message?: string;
   marketingConsent: boolean;
   source: string;
+};
+
+/** `POST /api/public/listings/:id/bookings` — a hotel or short-stay booking request. */
+export type BookingInput = {
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  name: string;
+  email: string;
+  phone?: string;
+  specialRequest?: string;
+};
+
+export type BookingRequested = {
+  reference: string;
+  status: "REQUESTED" | "CONFIRMED" | "DECLINED" | "CANCELLED";
+  listingId: string;
+  listingTitle: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  adults: number;
+  children: number;
+  createdAt: string;
 };
 
 export type LeadCreated = { id: string; listingId: string; status: string; createdAt: string };
