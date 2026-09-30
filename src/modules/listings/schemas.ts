@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { safeHttpUrl } from "@/platform/validation/url";
 import { isSalePriceUnit, LISTING_PRICE_UNITS, type ListingPriceUnit } from "@/lib/price-units";
+import { isBookableCategory, MAX_GUESTS, MAX_STAY_NIGHTS } from "@/lib/listing-categories";
 
 const id = z.string().uuid();
 const optionalText = (max: number) => z.string().trim().min(1).max(max).nullable().optional();
@@ -9,6 +10,8 @@ const currency = z.string().trim().length(3).transform((value) => value.toUpperC
   .refine((value) => /^[A-Z]{3}$/.test(value), "Currency must be a three-letter code.");
 const country = z.string().trim().length(2).transform((value) => value.toUpperCase())
   .refine((value) => /^[A-Z]{2}$/.test(value), "Country must be a two-letter code.");
+/** "14:00": a 24-hour clock time. */
+const clockTime = z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a 24-hour time such as 14:00.");
 const amenityKey = z.string().trim().min(1).max(80).transform((value) => value.toLowerCase())
   .refine((value) => /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(value), "Amenity keys must be URL-safe.");
 
@@ -67,6 +70,12 @@ const listingFields = {
   propertyCondition: z.enum(["NEW", "NEWLY_RENOVATED", "EXCELLENT", "GOOD", "NEEDS_RENOVATION"]).nullable().optional(),
   negotiable: z.boolean().default(false),
   yearBuilt: z.number().int().min(1800).max(2200).nullable().optional(),
+  /// Hotels and short stays only (see validateListing).
+  maxGuests: z.number().int().min(1).max(MAX_GUESTS).nullable().optional(),
+  minimumNights: z.number().int().min(1).max(MAX_STAY_NIGHTS).nullable().optional(),
+  checkInTime: clockTime.nullable().optional(),
+  checkOutTime: clockTime.nullable().optional(),
+  houseRules: optionalText(2_000),
   countryCode: country,
   region: optionalText(150),
   city: optionalText(150),
@@ -96,6 +105,12 @@ const listingFields = {
 
 function validateListing(
   listing: {
+    category?: string;
+    maxGuests?: number | null;
+    minimumNights?: number | null;
+    checkInTime?: string | null;
+    checkOutTime?: string | null;
+    houseRules?: string | null;
     propertyId?: string | null;
     marketplaceAssetId?: string | null;
     unitId?: string | null;
@@ -130,6 +145,16 @@ function validateListing(
     if (listing.rentAmountMinor != null) context.addIssue({ code: "custom", path: ["rentAmountMinor"], message: "Rent amount is only valid for rental listings." });
     if (listing.frequency != null && !isSalePriceUnit(listing.frequency)) {
       context.addIssue({ code: "custom", path: ["frequency"], message: "A sale price is a total price, per square metre, or per kilometre." });
+    }
+  }
+  // Hotels and short stays are rented by the night; only they are, and only they carry stay details.
+  if (isBookableCategory(listing.category)) {
+    if (listing.listingType !== "RENT") context.addIssue({ code: "custom", path: ["listingType"], message: "Hotels and short stays are listed for rent (booked by the night)." });
+    if (listing.frequency !== "PER_NIGHT") context.addIssue({ code: "custom", path: ["frequency"], message: "Hotels and short stays are priced per night." });
+  } else {
+    if (listing.frequency === "PER_NIGHT") context.addIssue({ code: "custom", path: ["frequency"], message: "Only hotels and short stays are priced per night." });
+    for (const field of ["maxGuests", "minimumNights", "checkInTime", "checkOutTime", "houseRules"] as const) {
+      if (listing[field] != null) context.addIssue({ code: "custom", path: [field], message: "Stay details apply to hotels and short stays only." });
     }
   }
   if ((listing.mapLatitude == null) !== (listing.mapLongitude == null)) {

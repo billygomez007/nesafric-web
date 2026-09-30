@@ -10,7 +10,11 @@ const listing = (listingType: "RENT" | "SALE", frequency: string | null) => ({
 
 describe("listing price units", () => {
   it("supports per day, month, year, square metre and kilometre with customer-facing labels, keeping quarterly and custom", () => {
-    expect(LISTING_PRICE_UNITS).toEqual(["DAILY", "MONTHLY", "QUARTERLY", "ANNUAL", "PER_SQM", "PER_KM", "CUSTOM"]);
+    expect(LISTING_PRICE_UNITS).toEqual(["DAILY", "MONTHLY", "QUARTERLY", "ANNUAL", "PER_SQM", "PER_KM", "CUSTOM", "PER_NIGHT"]);
+    expect(PRICE_UNIT_LABELS.PER_NIGHT).toBe("Per night");
+    // Hotels and short stays are priced per night, and only they are.
+    expect(priceUnitsFor("RENT", "HOTEL")).toEqual(["PER_NIGHT"]);
+    expect(priceUnitsFor("RENT")).not.toContain("PER_NIGHT");
     expect([PRICE_UNIT_LABELS.DAILY, PRICE_UNIT_LABELS.MONTHLY, PRICE_UNIT_LABELS.ANNUAL, PRICE_UNIT_LABELS.PER_SQM, PRICE_UNIT_LABELS.PER_KM])
       .toEqual(["Per day", "Per month", "Per year", "Per square metre (m²)", "Per kilometre (km)"]);
     expect(priceUnitsFor("SALE")).toEqual(["PER_SQM", "PER_KM"]);
@@ -31,7 +35,11 @@ describe("listing price units", () => {
   });
 
   it("validates units per listing type in the API schema", () => {
-    for (const unit of LISTING_PRICE_UNITS) expect(createListingSchema.safeParse(listing("RENT", unit)).success).toBe(true);
+    for (const unit of LISTING_PRICE_UNITS.filter((value) => value !== "PER_NIGHT")) expect(createListingSchema.safeParse(listing("RENT", unit)).success).toBe(true);
+    // PER_NIGHT belongs to hotels and short stays only.
+    expect(createListingSchema.safeParse(listing("RENT", "PER_NIGHT")).success).toBe(false);
+    expect(createListingSchema.safeParse({ ...listing("RENT", "PER_NIGHT"), category: "HOTEL" }).success).toBe(true);
+    expect(priceUnitSuffix("RENT", "PER_NIGHT")).toBe("/night");
     expect(createListingSchema.safeParse(listing("RENT", null)).success).toBe(false);
     expect(createListingSchema.safeParse(listing("SALE", null)).success).toBe(true);
     expect(createListingSchema.safeParse(listing("SALE", "PER_SQM")).success).toBe(true);

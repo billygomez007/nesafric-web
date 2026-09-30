@@ -2,7 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { FlatList, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { FlatList, Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useApi } from "@/api/provider";
@@ -13,6 +13,7 @@ import { QueryState } from "@/components/query-state";
 import { SaveButton } from "@/components/save-button";
 import { AppText, Button } from "@/components/ui";
 import { formatFacts, formatListingPrice, formatLocation, humanise, isVerified, listingPhotos } from "@/marketplace/format";
+import { stayLabel } from "@/marketplace/listing-categories";
 import { colors, radii, spacing } from "@/theme/tokens";
 
 export default function ListingDetailScreen() {
@@ -22,10 +23,41 @@ export default function ListingDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <Stack.Screen options={{ title: "", headerRight: listing ? () => <SaveButton listing={listing} /> : undefined }} />
+      <Stack.Screen
+        options={{
+          title: "",
+          headerRight: listing
+            ? () => (
+                <View style={styles.headerActions}>
+                  <Pressable
+                    accessibilityLabel="Share property"
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => shareListing(listing)}
+                    style={styles.headerShare}
+                    testID="share-property"
+                  >
+                    <Ionicons name="share-outline" size={23} color={colors.ink} />
+                  </Pressable>
+                  <SaveButton listing={listing} />
+                </View>
+              )
+            : undefined,
+        }}
+      />
       {!listing ? <QueryState isPending={query.isPending} error={query.error} onRetry={() => query.refetch()} /> : <ListingDetail listing={listing} />}
     </View>
   );
+}
+
+async function shareListing(listing: PublicListing) {
+  const url = `https://www.nesafric.com/marketplace/properties/${listing.id}`;
+
+  await Share.share({
+    title: listing.title,
+    message: `${listing.title}\n${url}`,
+    url,
+  });
 }
 
 function ListingDetail({ listing }: { listing: PublicListing }) {
@@ -34,12 +66,16 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
   const location = formatLocation(listing.location);
   const facts = formatFacts(listing.attributes);
   const canContact = listing.contact.enquiryEnabled;
+  // Hotels and short stays: the main action is a booking request, not an enquiry.
+  const bookable = listing.bookable === true;
+  const hasActions = bookable || canContact;
+  const kind = stayLabel(listing.category);
   // Public locations are deliberately approximate (APPROXIMATE / DISTRICT / CITY / REGION).
   const approximate = Boolean(listing.location.map.precision);
 
   return (
     <>
-      <ScrollView contentContainerStyle={{ paddingBottom: canContact ? 120 + insets.bottom : spacing.xxl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: hasActions ? 120 + insets.bottom : spacing.xxl }}>
         <Gallery listing={listing} />
         <View style={styles.body}>
           <View style={styles.titleBlock}>
@@ -64,11 +100,21 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
           ) : null}
 
           <Section title="Key facts">
-            <Fact label="Listing" value={listing.listingType === "RENT" ? "For rent" : "For sale"} />
+            <Fact label="Listing" value={kind ?? (listing.listingType === "RENT" ? "For rent" : "For sale")} />
             <Fact label="Property type" value={humanise(listing.category)} />
             {listing.availability.availableFrom ? <Fact label="Available from" value={formatDate(listing.availability.availableFrom)} /> : null}
             <Fact label="Listed by" value={listing.attribution.professional ? `${listing.attribution.professional.displayName} (${listing.attribution.listedBy})` : listing.attribution.listedBy} />
           </Section>
+
+          {bookable && listing.stay ? (
+            <Section title="Stay details">
+              {listing.stay.maxGuests ? <Fact label="Guests" value={`Up to ${listing.stay.maxGuests}`} /> : null}
+              {listing.stay.minimumNights && listing.stay.minimumNights > 1 ? <Fact label="Minimum stay" value={`${listing.stay.minimumNights} nights`} /> : null}
+              {listing.stay.checkInTime ? <Fact label="Check-in" value={`From ${listing.stay.checkInTime}`} /> : null}
+              {listing.stay.checkOutTime ? <Fact label="Check-out" value={`By ${listing.stay.checkOutTime}`} /> : null}
+              {listing.stay.houseRules ? <AppText variant="caption">{listing.stay.houseRules}</AppText> : null}
+            </Section>
+          ) : null}
 
           {listing.description ? (
             <Section title="About this property">
@@ -88,11 +134,27 @@ function ListingDetail({ listing }: { listing: PublicListing }) {
             </Section>
           ) : null}
 
-          {!canContact ? <AppText variant="caption">The lister isn’t taking enquiries through NesAfric for this property right now.</AppText> : null}
+          {!hasActions ? <AppText variant="caption">The lister isn’t taking enquiries through NesAfric for this property right now.</AppText> : null}
         </View>
       </ScrollView>
 
-      {canContact ? (
+      {bookable ? (
+        <View style={[styles.actions, { paddingBottom: spacing.md + insets.bottom }]}>
+          {canContact ? (
+            <View style={styles.action}>
+              <Button
+                label="Contact property"
+                variant="secondary"
+                onPress={() => router.push({ pathname: "/listing/[id]/enquire", params: { id: listing.id, mode: "contact" } })}
+                testID="contact-property"
+              />
+            </View>
+          ) : null}
+          <View style={styles.action}>
+            <Button label="Request booking" onPress={() => router.push({ pathname: "/listing/[id]/book", params: { id: listing.id } })} testID="request-booking" />
+          </View>
+        </View>
+      ) : canContact ? (
         <View style={[styles.actions, { paddingBottom: spacing.md + insets.bottom }]}>
           <View style={styles.action}>
             <Button
@@ -185,6 +247,8 @@ function formatDate(value: string) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  headerShare: { alignItems: "center", justifyContent: "center", minWidth: 32, minHeight: 32 },
   body: { padding: spacing.xl, gap: spacing.xl },
   titleBlock: { gap: spacing.xs },
   inline: { flexDirection: "row", alignItems: "center", gap: 4 },

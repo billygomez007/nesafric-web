@@ -1,5 +1,5 @@
 import type { ApiClient } from "./client";
-import type { LeadCreated, LeadInput, ListingDetailResult, ListingSearchResult, ViewingInput } from "./types";
+import type { BookingInput, BookingRequested, LeadCreated, LeadInput, ListingDetailResult, ListingSearchResult, ViewingInput } from "./types";
 import type { SearchFilters } from "@/marketplace/filters";
 import { filtersToQuery } from "@/marketplace/filters";
 
@@ -21,6 +21,14 @@ export const createEnquiry = (api: ApiClient, listingId: string, input: LeadInpu
 /** `POST /api/public/listings/:id/viewings` — needs the lead created by `createEnquiry`. */
 export const requestViewing = (api: ApiClient, listingId: string, input: ViewingInput, idempotencyKey: string) =>
   api.request<unknown>(`/api/public/listings/${encodeURIComponent(listingId)}/viewings`, {
+    method: "POST",
+    body: input,
+    headers: { "idempotency-key": idempotencyKey },
+  });
+
+/** `POST /api/public/listings/:id/bookings` — hotel or short-stay booking request (no account needed). */
+export const requestBooking = (api: ApiClient, listingId: string, input: BookingInput, idempotencyKey: string) =>
+  api.request<BookingRequested>(`/api/public/listings/${encodeURIComponent(listingId)}/bookings`, {
     method: "POST",
     body: input,
     headers: { "idempotency-key": idempotencyKey },

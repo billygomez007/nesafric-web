@@ -1,3 +1,4 @@
+import { isBookableCategory } from "@/marketplace/listing-categories";
 import type { ApiClient } from "./client";
 
 /**
@@ -32,6 +33,8 @@ export type EditableListing = {
   frequency: string | null;
   availableFrom: string;
   bedrooms: number | null;
+  maxGuests?: number | null;
+  minimumNights?: number | null;
   bathrooms: number | null;
   sizeSqm: number | null;
   landSizeSqm: number | null;
@@ -60,6 +63,8 @@ type RawListing = {
   rentAmountMinor: string | null;
   currencyCode: string;
   frequency: string | null;
+  maxGuests?: number | null;
+  minimumNights?: number | null;
   availableFrom: string;
   bedrooms: number | null;
   bathrooms: string | number | null;
@@ -94,6 +99,8 @@ export function toEditableListing(raw: RawListing): EditableListing {
     frequency: raw.frequency ?? null,
     availableFrom: raw.availableFrom,
     bedrooms: raw.bedrooms ?? null,
+    maxGuests: raw.maxGuests ?? null,
+    minimumNights: raw.minimumNights ?? null,
     bathrooms: numberOrNull(raw.bathrooms),
     sizeSqm: numberOrNull(raw.sizeSqm),
     landSizeSqm: numberOrNull(raw.landSizeSqm),
@@ -132,9 +139,12 @@ export type ListingDraft = {
   locality: string;
   amenities: string[];
   listingAuthority: ListingAuthority;
+  /** Hotels and short stays only. */
+  maxGuests?: string;
+  minimumNights?: string;
 };
 
-const RESIDENTIAL = new Set(["APARTMENT", "HOUSE", "TOWNHOUSE", "VILLA", "GUEST_HOUSE"]);
+const RESIDENTIAL = new Set(["APARTMENT", "HOUSE", "TOWNHOUSE", "VILLA", "GUEST_HOUSE", "HOTEL", "SHORT_STAY"]);
 
 /** "1,200.5" → "120050" minor units; null when not a valid non-negative amount. */
 export function toMinorUnits(price: string): string | null {
@@ -155,17 +165,22 @@ export function listingPayload(draft: ListingDraft) {
   const priceMinor = toMinorUnits(draft.price) ?? "";
   const residential = RESIDENTIAL.has(draft.category);
   const land = draft.category === "LAND";
+  // Hotels and short stays are nightly rentals (the server insists on it too).
+  const stay = isBookableCategory(draft.category);
+  const listingType = stay ? "RENT" : draft.listingType;
   const amenities = draft.amenities.map((label) => ({ key: label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), label }));
   const location = { region: trimmed(draft.region), city: trimmed(draft.city), district: trimmed(draft.district), locality: trimmed(draft.locality) };
   const listing = {
-    listingType: draft.listingType,
+    listingType,
     category: draft.category,
     title: draft.title.trim(),
     publicDescription: draft.description.trim(),
     currencyCode: "GHS",
-    askingAmountMinor: draft.listingType === "SALE" ? priceMinor : null,
-    rentAmountMinor: draft.listingType === "RENT" ? priceMinor : null,
-    frequency: draft.priceUnit || null,
+    askingAmountMinor: listingType === "SALE" ? priceMinor : null,
+    rentAmountMinor: listingType === "RENT" ? priceMinor : null,
+    frequency: stay ? "PER_NIGHT" : draft.priceUnit || null,
+    maxGuests: stay ? numeric(draft.maxGuests ?? "") : null,
+    minimumNights: stay ? numeric(draft.minimumNights ?? "") : null,
     availableFrom: draft.availableFrom,
     bedrooms: residential ? numeric(draft.bedrooms) : null,
     bathrooms: residential ? numeric(draft.bathrooms) : null,
@@ -183,7 +198,7 @@ export function listingPayload(draft: ListingDraft) {
     asset: {
       name: listing.title,
       category: draft.category,
-      purpose: draft.listingType,
+      purpose: listingType,
       currencyCode: "GHS",
       priceMinor,
       countryCode: "GH",

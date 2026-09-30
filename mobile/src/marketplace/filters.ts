@@ -31,6 +31,9 @@ export const PROPERTY_TYPES = [
   { value: "COMMERCIAL", label: "Commercial" },
   { value: "OFFICE", label: "Offices" },
   { value: "SHOP", label: "Shops" },
+  { value: "HOTEL", label: "Hotels" },
+  { value: "SHORT_STAY", label: "Short stays" },
+  { value: "WAREHOUSE", label: "Warehouses" },
 ] as const;
 
 export const INTENTS: { label: string; filters: SearchFilters }[] = [
@@ -38,6 +41,9 @@ export const INTENTS: { label: string; filters: SearchFilters }[] = [
   { label: "Buy", filters: { listingType: "SALE" } },
   { label: "Land", filters: { category: "LAND" } },
   { label: "Commercial", filters: { category: "COMMERCIAL" } },
+  { label: "Hotels", filters: { category: "HOTEL" } },
+  { label: "Short stays", filters: { category: "SHORT_STAY" } },
+  { label: "Warehouses", filters: { category: "WAREHOUSE" } },
 ];
 
 const MAX_MAJOR = 1_000_000_000_000;

@@ -10,6 +10,7 @@ import { VerifiedBadge } from "@/components/listing-card";
 import { SaveButton } from "@/components/save-button";
 import { AppText } from "@/components/ui";
 import { formatFacts, formatListingPrice, formatLocation, isVerified, listingPhotos } from "@/marketplace/format";
+import { stayLabel } from "@/marketplace/listing-categories";
 import { colors, fonts, radii } from "@/theme/tokens";
 
 /** A listing counts as new for this long after it was published. */
@@ -22,8 +23,10 @@ export function isNewListing(listing: Pick<PublicListing, "publishedAt">, now = 
 }
 
 function describe(listing: PublicListing) {
-  const type = listing.listingType === "RENT" ? "For rent" : "For sale";
-  const price = formatListingPrice(listing);
+  // A hotel or short stay is labelled as what it is (priced per night), not as a rental.
+  const type = stayLabel(listing.category) ?? (listing.listingType === "RENT" ? "For rent" : "For sale");
+  const nightly = formatListingPrice(listing);
+  const price = nightly && listing.category.toUpperCase() === "HOTEL" ? `From ${nightly}` : nightly;
   const location = formatLocation(listing.location);
   return { type, price, location, facts: formatFacts(listing.attributes), label: [listing.title, type, price, location].filter(Boolean).join(", ") };
 }

@@ -35,6 +35,7 @@ import {
   RESIDENTIAL_TYPES,
   SUBMITTABLE_LISTING_STATUSES,
 } from "@/marketplace/listing-options";
+import { isBookableCategory } from "@/marketplace/listing-categories";
 import { PRICE_UNIT_LABELS, priceUnitsFor } from "@/marketplace/price-units";
 import { colors, radii, spacing } from "@/theme/tokens";
 import { ChoiceField, describeError, FieldRow, FormError, FormScreen, FormSection, isIsoDate, RecordState, today, useInvalidateWorkspace } from "@/workspace/forms";
@@ -82,6 +83,8 @@ export function draftFromListing(listing: EditableListing): ListingDraft {
     priceUnit: listing.frequency ?? "",
     availableFrom: listing.availableFrom.slice(0, 10),
     bedrooms: text(listing.bedrooms),
+    maxGuests: text(listing.maxGuests ?? null),
+    minimumNights: text(listing.minimumNights ?? null),
     bathrooms: text(listing.bathrooms),
     sizeSqm: text(listing.sizeSqm),
     landSizeSqm: text(listing.landSizeSqm),
@@ -153,10 +156,19 @@ export function ListingEditorScreen({ professionalId, listingId }: { professiona
   const update = (patch: Partial<ListingDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const residential = RESIDENTIAL_TYPES.has(draft.category);
   const land = draft.category === "LAND";
-  const units = priceUnitsFor(draft.listingType);
-  const unitOptions: (readonly [string, string])[] = [...(draft.listingType === "SALE" ? [["", "Total price"] as const] : []), ...units.map((unit) => [unit, PRICE_UNIT_LABELS[unit]] as const)];
+  // Hotels and short stays are nightly rentals with stay details (the server insists on it too).
+  const stay = isBookableCategory(draft.category);
+  const units = priceUnitsFor(draft.listingType, draft.category);
+  const unitOptions: (readonly [string, string])[] = [...(draft.listingType === "SALE" && !stay ? [["", "Total price"] as const] : []), ...units.map((unit) => [unit, PRICE_UNIT_LABELS[unit]] as const)];
+
+  function setCategory(category: string) {
+    if (isBookableCategory(category)) return update({ category, listingType: "RENT", priceUnit: "PER_NIGHT" });
+    // Leaving a stay: back to an ordinary rent unit.
+    update({ category, ...(draft.priceUnit === "PER_NIGHT" ? { priceUnit: draft.listingType === "RENT" ? "MONTHLY" : "" } : {}) });
+  }
 
   function setIntent(listingType: "RENT" | "SALE") {
+    if (stay) return;
     // A sale keeps only a per-quantity unit (else it is a total price); a rental always needs one.
     const keep = listingType === "RENT" ? draft.priceUnit || "MONTHLY" : priceUnitsFor("SALE").includes(draft.priceUnit as never) ? draft.priceUnit : "";
     update({ listingType, priceUnit: keep });
@@ -268,7 +280,7 @@ export function ListingEditorScreen({ professionalId, listingId }: { professiona
 
       <FormSection title="Property">
         <ChoiceField label="Listing type" options={LISTING_INTENTS} value={draft.listingType} onChange={setIntent} testID="listing-intent" />
-        <ChoiceField label="Property type" options={PROPERTY_TYPES} value={draft.category} onChange={(category) => update({ category })} />
+        <ChoiceField label="Property type" options={PROPERTY_TYPES} value={draft.category} onChange={setCategory} testID="listing-category" />
         <TextField label="Title" value={draft.title} onChangeText={(title) => update({ title })} error={errors.title} editable={editable} testID="listing-title" />
         <TextField label="Description" value={draft.description} onChangeText={(description) => update({ description })} error={errors.description} multiline style={styles.multiline} editable={editable} testID="listing-description" />
       </FormSection>
@@ -279,6 +291,15 @@ export function ListingEditorScreen({ professionalId, listingId }: { professiona
         <Checkbox checked={draft.negotiable} onChange={(negotiable) => update({ negotiable })} label="Price is negotiable" />
         <TextField label="Available from (YYYY-MM-DD)" value={draft.availableFrom} onChangeText={(availableFrom) => update({ availableFrom })} error={errors.availableFrom} autoCapitalize="none" editable={editable} testID="listing-available-from" />
       </FormSection>
+
+      {stay ? (
+        <FormSection title="Stay details" hint="Guests send booking requests for this listing; nothing is confirmed until you accept one.">
+          <FieldRow>
+            <TextField label="Maximum guests" value={draft.maxGuests ?? ""} onChangeText={(maxGuests) => update({ maxGuests })} keyboardType="number-pad" editable={editable} testID="listing-max-guests" />
+            <TextField label="Minimum nights" value={draft.minimumNights ?? ""} onChangeText={(minimumNights) => update({ minimumNights })} keyboardType="number-pad" editable={editable} testID="listing-minimum-nights" />
+          </FieldRow>
+        </FormSection>
+      ) : null}
 
       <FormSection title="Details">
         {residential ? (
