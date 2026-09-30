@@ -60,7 +60,7 @@ export default function Home() {
     <>
       <script dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} type="application/ld+json" />
       <SiteNav />
-      <main className="bg-warm-white">
+      <main className="bg-background">
         <section className="marketing-grid bg-forest-deep">
           <div className="mx-auto max-w-[1400px] px-5 pb-6 pt-6 sm:px-8 sm:pb-8 sm:pt-8 lg:pt-9">
             <div className="max-w-3xl text-white">

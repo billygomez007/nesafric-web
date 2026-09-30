@@ -392,7 +392,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-warm-white text-ink">
+    <div className="min-h-screen bg-background text-ink">
       <AppSidebar />
 
       {mobileOpen && (

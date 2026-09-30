@@ -38,7 +38,7 @@ export function CampaignCreative({ campaign, onClick, priority = false }: { camp
   const aspect = `${mobileIsDesktopArt ? MOBILE_ASPECT_FROM_DESKTOP_ART : MOBILE_ASPECT} ${desktopIsMobileArt ? DESKTOP_ASPECT_FROM_MOBILE_ART : DESKTOP_ASPECT}`;
 
   const picture = (
-    <picture>
+    <picture className="block h-full w-full">
       {desktopArt && desktopArt !== mobileArt ? <source media="(min-width: 640px)" srcSet={desktopArt} /> : null}
       <img
         alt={campaign.headline}
