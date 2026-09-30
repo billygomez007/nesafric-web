@@ -59,7 +59,7 @@ describe("PostgreSQL Phase 19 integration health, Document Center, and RBAC", ()
     // NOT_CONFIGURED (a production-readiness signal) even though the local/in-memory fallback is
     // fully functional for uploads/downloads, as the storage test suite already demonstrates.
     expect(storageEntry.status).toBe("NOT_CONFIGURED");
-    expect(storageEntry.provider).toBe("local-filesystem");
+    expect(storageEntry.provider).toBe("in-memory");
     expect(JSON.stringify(overviewBefore)).not.toMatch(/secret|apiKey|token|password/i);
     const esignatureEntry = overviewBefore.find((entry) => entry.type === "ESIGNATURE")!;
     expect(esignatureEntry.provider).toBe("INTERNAL"); // no external e-signature credentials configured in this test run

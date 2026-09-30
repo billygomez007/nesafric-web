@@ -123,7 +123,13 @@ export async function getOrganisationIntegrationOverview(userId: string, organis
   const storageOverviewItem = (config: (typeof configs)[number] | undefined): IntegrationOverviewItem => {
     // Both buckets, not just one — a deployment with only the public bucket configured is not
     // "production ready" for storage as a whole; Ghana Card uploads would still fail closed.
-    const productionReady = s3Adapter.isPrivateConfigured() && s3Adapter.isPublicConfigured();
+    const explicitProvider = process.env.STORAGE_PROVIDER?.trim().toLowerCase();
+    const durableProviderSelected = explicitProvider === "s3" || explicitProvider === "gcs";
+    const productionReady =
+      durableProviderSelected &&
+      s3Adapter.isPrivateConfigured() &&
+      s3Adapter.isPublicConfigured();
+
     const status: IntegrationOverviewItem["status"] = productionReady
       ? (config?.status ?? "CONNECTED")
       : config?.lastFailureAt
