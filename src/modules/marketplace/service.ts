@@ -694,6 +694,7 @@ export async function createMarketplaceEnquiry(
           verificationStatus: "VERIFIED",
           suspendedAt: null,
           acceptingWork: true,
+          availabilityStatus: { not: "UNAVAILABLE" },
         },
         categories: {
           some: {

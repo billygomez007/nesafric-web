@@ -8,6 +8,7 @@ import { deliverTenantAccessInvitation } from "@/modules/tenants/access-delivery
 import { requireUser } from "@/platform/auth/session";
 import { errorResponse } from "@/platform/errors";
 import { requireOrganisationId } from "@/platform/organisations/request";
+import { isUuid } from "@/platform/validation/uuid";
 
 export async function GET(
   request: Request,
@@ -44,6 +45,13 @@ export async function POST(
       typeof body?.leaseId === "string" && body.leaseId.trim()
         ? body.leaseId.trim()
         : undefined;
+
+    if (leaseId && !isUuid(leaseId)) {
+      return NextResponse.json(
+        { error: { code: "INVALID_LEASE_ID", message: "leaseId must be a valid UUID." } },
+        { status: 422 },
+      );
+    }
 
     const result = await createTenantAccessInvitation(
       user.id,
