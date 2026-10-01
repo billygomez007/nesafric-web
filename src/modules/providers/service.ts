@@ -1899,7 +1899,11 @@ async function reviewQuotation(
       include: {
         request: {
           include: {
-            maintenanceRequest: true,
+            maintenanceRequest: {
+              include: {
+                conversations: true,
+              },
+            },
           },
         },
       },
