@@ -113,11 +113,7 @@ export function ServicesHome() {
     <>
       <View style={styles.hero}>
         <AppText accessibilityRole="header" style={styles.title}>
-          Find your perfect service professional
-        </AppText>
-
-        <AppText style={styles.lead}>
-          Find trusted professionals and companies for every stage of your property.
+          Find your perfect professional
         </AppText>
 
         <View style={styles.searchBox}>
@@ -142,7 +138,6 @@ export function ServicesHome() {
       <View style={styles.section}>
         <SectionHeading
           title="Property Services"
-          subtitle="Choose a major service category."
         />
 
         <View>
@@ -169,39 +164,48 @@ export function ServicesHome() {
               contentContainerStyle={styles.primaryRail}
               accessibilityLabel="Major service categories"
             >
-              {primaryCategories.map((category) => (
-                <Pressable
-                  key={category.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={category.name}
-                  testID={`service-category-${category.key}`}
-                  onPress={() => selectCategory(category)}
-                  style={({ pressed }) => [
-                    styles.primaryCard,
-                    pressed && styles.primaryCardPressed,
-                  ]}
-                >
-                  <View style={styles.primaryIcon}>
-                    <MaterialCommunityIcons
-                      name={categoryIcon(category.key)}
-                      size={24}
-                      color={colors.forestDeep}
-                    />
-                  </View>
+              {Array.from(
+                { length: Math.ceil(primaryCategories.length / 2) },
+                (_, columnIndex) => {
+                  const categories = primaryCategories.slice(
+                    columnIndex * 2,
+                    columnIndex * 2 + 2,
+                  );
 
-                  <AppText style={styles.primaryLabel} numberOfLines={3}>
-                    {category.name}
-                  </AppText>
+                  return (
+                    <View
+                      key={`service-category-column-${columnIndex}`}
+                      style={styles.primaryColumn}
+                    >
+                      {categories.map((category) => (
+                        <Pressable
+                          key={category.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={category.name}
+                          testID={`service-category-${category.key}`}
+                          onPress={() => selectCategory(category)}
+                          style={({ pressed }) => [
+                            styles.primaryCard,
+                            pressed && styles.primaryCardPressed,
+                          ]}
+                        >
+                          <View style={styles.primaryIcon}>
+                            <MaterialCommunityIcons
+                              name={categoryIcon(category.key)}
+                              size={20}
+                              color={colors.forestDeep}
+                            />
+                          </View>
 
-                  {hierarchical ? (
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={18}
-                      color={colors.muted}
-                    />
-                  ) : null}
-                </Pressable>
-              ))}
+                          <AppText style={styles.primaryLabel} numberOfLines={2}>
+                            {category.name}
+                          </AppText>
+                        </Pressable>
+                      ))}
+                    </View>
+                  );
+                },
+              )}
             </ScrollView>
           )}
         </View>
@@ -377,14 +381,22 @@ const styles = StyleSheet.create({
 
   primaryRail: {
     paddingHorizontal: HOME_GUTTER,
-    gap: 10,
+    gap: 8,
+  },
+
+  primaryColumn: {
+    width: 178,
+    gap: 8,
   },
 
   primaryCard: {
-    width: 154,
-    minHeight: 112,
-    padding: 14,
-    gap: 9,
+    width: "100%",
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 10,
     borderRadius: radii.shell,
     borderWidth: 1,
     borderColor: colors.hairline,
@@ -396,9 +408,9 @@ const styles = StyleSheet.create({
   },
 
   primaryIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.cream,
@@ -407,8 +419,8 @@ const styles = StyleSheet.create({
   primaryLabel: {
     flex: 1,
     fontFamily: fonts.bold,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
     color: colors.forestDeep,
   },
 
