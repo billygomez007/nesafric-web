@@ -182,6 +182,10 @@ export function ServiceProviderOnboardingForm() {
     reviewNotifications: true,
     accountActivityNotifications: true,
   });
+  const [identityFiles, setIdentityFiles] = useState<Record<string, File | null>>({});
+  const [businessFiles, setBusinessFiles] = useState<Record<string, File | null>>({});
+  const [portfolioFile, setPortfolioFile] = useState<File | null>(null);
+
   const [submittedEvidence, setSubmittedEvidence] = useState<
     { type: string; reference: string }[]
   >([]);
@@ -306,6 +310,122 @@ export function ServiceProviderOnboardingForm() {
     }
     setSaved(await response.json());
     await syncMarketplaceProfile(id);
+  }
+
+  async function submitIdentityDocuments() {
+    if (!providerId) return;
+
+    const missing = identityRequirements.filter(
+      (requirement) =>
+        requirement.required && !identityFiles[requirement.evidenceType],
+    );
+
+    if (missing.length) {
+      setError(
+        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
+      );
+      return;
+    }
+
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const uploaded: { type: string; reference: string }[] = [];
+
+      for (const requirement of identityRequirements) {
+        const file = identityFiles[requirement.evidenceType];
+        if (!file) continue;
+
+        uploaded.push(
+          await uploadEvidence(providerId, requirement.evidenceType, file),
+        );
+      }
+
+      setSubmittedEvidence((current) => [...current, ...uploaded]);
+      setStep(6);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to upload identity documents.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitBusinessDocuments() {
+    if (!providerId) return;
+
+    const missing = businessRequirements.filter(
+      (requirement) =>
+        requirement.required && !businessFiles[requirement.evidenceType],
+    );
+
+    if (missing.length) {
+      setError(
+        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
+      );
+      return;
+    }
+
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const uploaded: { type: string; reference: string }[] = [];
+
+      for (const requirement of businessRequirements) {
+        const file = businessFiles[requirement.evidenceType];
+        if (!file) continue;
+
+        uploaded.push(
+          await uploadEvidence(providerId, requirement.evidenceType, file),
+        );
+      }
+
+      setSubmittedEvidence((current) => [...current, ...uploaded]);
+      setStep(7);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to upload business documents.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitPortfolio() {
+    if (!providerId) {
+      setStep(8);
+      return;
+    }
+
+    setError("");
+    setSubmitting(true);
+
+    try {
+      if (portfolioFile) {
+        await uploadEvidence(
+          providerId,
+          "PORTFOLIO_EVIDENCE",
+          portfolioFile,
+        );
+      }
+
+      setStep(8);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to upload portfolio evidence.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function createProviderAndFetchRequirements() {
@@ -784,6 +904,153 @@ export function ServiceProviderOnboardingForm() {
         </div>
       )}
 
+      {step === 5 && (
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
+          <p className="text-sm font-medium">Mandatory identity verification</p>
+          <p className="text-sm text-muted">
+            NesAfric requires identity verification to help keep the marketplace safe and trustworthy.
+            Your verification documents are private and are not shown publicly.
+          </p>
+
+          {identityRequirements.map((requirement) => (
+            <label className="text-sm font-medium" key={requirement.evidenceType}>
+              {requirement.label}
+              {requirement.required && <span className="text-red-600"> *</span>}
+              <input
+                accept="image/*"
+                capture="environment"
+                className="mt-1 w-full rounded border border-hairline p-3"
+                onChange={(event) =>
+                  setIdentityFiles((current) => ({
+                    ...current,
+                    [requirement.evidenceType]:
+                      event.target.files?.[0] ?? null,
+                  }))
+                }
+                type="file"
+              />
+            </label>
+          ))}
+
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(4)}
+              type="button"
+            >
+              ← Back
+            </button>
+
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={submitIdentityDocuments}
+              type="button"
+            >
+              {submitting ? "Uploading…" : "Continue"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 6 && (
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
+          <p className="text-sm font-medium">
+            Business & credential documents
+          </p>
+
+          {businessRequirements.length === 0 ? (
+            <p className="text-sm text-muted">
+              No additional documents are required for your account type and services.
+            </p>
+          ) : (
+            businessRequirements.map((requirement) => (
+              <label
+                className="text-sm font-medium"
+                key={requirement.evidenceType}
+              >
+                {requirement.label}
+                {requirement.required && (
+                  <span className="text-red-600"> *</span>
+                )}
+
+                <input
+                  accept="image/*,application/pdf"
+                  className="mt-1 w-full rounded border border-hairline p-3"
+                  onChange={(event) =>
+                    setBusinessFiles((current) => ({
+                      ...current,
+                      [requirement.evidenceType]:
+                        event.target.files?.[0] ?? null,
+                    }))
+                  }
+                  type="file"
+                />
+              </label>
+            ))
+          )}
+
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(5)}
+              type="button"
+            >
+              ← Back
+            </button>
+
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={submitBusinessDocuments}
+              type="button"
+            >
+              {submitting ? "Uploading…" : "Continue"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 7 && (
+        <div className="grid gap-4 rounded-xl border border-hairline p-6">
+          <p className="text-sm font-medium">
+            Portfolio <span className="font-normal text-muted">(optional)</span>
+          </p>
+
+          <p className="text-sm text-muted">
+            Show examples of your past work. You can add more later from your workspace.
+          </p>
+
+          <input
+            accept="image/*"
+            className="rounded border border-hairline p-3"
+            onChange={(event) =>
+              setPortfolioFile(event.target.files?.[0] ?? null)
+            }
+            type="file"
+          />
+
+          <div className="flex justify-between">
+            <button
+              className="text-sm font-semibold text-muted"
+              onClick={() => setStep(6)}
+              type="button"
+            >
+              ← Back
+            </button>
+
+            <button
+              className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
+              disabled={submitting}
+              onClick={submitPortfolio}
+              type="button"
+            >
+              {submitting ? "Saving…" : "Continue"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {step === 8 && (
         <div className="grid gap-5 rounded-xl border border-hairline p-6">
           <div className="grid gap-2">
@@ -874,12 +1141,12 @@ export function ServiceProviderOnboardingForm() {
               disabled={submitting || (whatsappOptIn && !whatsappNumber.trim())}
               onClick={async () => {
                 if (!providerId) {
-                  setStep(10);
+                  setStep(9);
                   return;
                 }
 
                 if (!whatsappNumber.trim() && !whatsappOptIn) {
-                  setStep(10);
+                  setStep(9);
                   return;
                 }
 
@@ -916,7 +1183,7 @@ export function ServiceProviderOnboardingForm() {
                     return;
                   }
 
-                  setStep(10);
+                  setStep(9);
                 } catch {
                   setError(
                     "We could not save your WhatsApp notification settings. Please try again.",
