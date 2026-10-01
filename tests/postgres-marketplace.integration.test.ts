@@ -448,19 +448,17 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
     expect(await db.providerOrganisation.count({ where: { providerId: provider.id, landlordOrganisationId: organisation.id } })).toBe(1);
     expect(await db.serviceProvider.count({ where: { individualUserId: providerUser.id } })).toBe(1);
 
-    const unreadyEnquiry = await createMarketplaceEnquiry(landlord.id, organisation.id, {
+    await expect(createMarketplaceEnquiry(landlord.id, organisation.id, {
       providerId: unready.id,
       categoryId: plumbing.id,
       maintenanceRequestId: maintenance.id,
-      message: "This enquiry is allowed, but a quote request is not.",
-    });
-    await expect(requestMarketplaceQuote(landlord.id, organisation.id, unreadyEnquiry.id, { scope: "Must fail readiness" }))
-      .rejects.toMatchObject({ code: "PROVIDER_NOT_READY" });
+      message: "This provider is not accepting new work.",
+    })).rejects.toMatchObject({ code: "MARKETPLACE_PROVIDER_UNAVAILABLE" });
 
     const viewerRole = await db.role.findUniqueOrThrow({ where: { key: "viewer" } });
     const viewerMember = await db.organisationMember.create({ data: { organisationId: organisation.id, userId: viewer.id } });
     await db.membershipRole.create({ data: { memberId: viewerMember.id, roleId: viewerRole.id } });
-    expect((await listMarketplaceEnquiries(viewer.id, organisation.id)).items).toHaveLength(2);
+    expect((await listMarketplaceEnquiries(viewer.id, organisation.id)).items).toHaveLength(1);
     await expect(createMarketplaceEnquiry(viewer.id, organisation.id, {
       providerId: provider.id,
       categoryId: plumbing.id,

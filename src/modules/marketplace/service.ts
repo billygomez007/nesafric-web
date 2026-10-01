@@ -693,6 +693,7 @@ export async function createMarketplaceEnquiry(
           archivedAt: null,
           verificationStatus: "VERIFIED",
           suspendedAt: null,
+          acceptingWork: true,
         },
         categories: {
           some: {
