@@ -166,13 +166,9 @@ export function ServiceProviderOnboardingForm() {
 
   const [providerId, setProviderId] = useState<string | null>(null);
   const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
-  const [identityFiles, setIdentityFiles] = useState<
-    Record<string, File | null>
-  >({});
-  const [businessFiles, setBusinessFiles] = useState<
-    Record<string, File | null>
-  >({});
-  const [portfolioFile, setPortfolioFile] = useState<File | null>(null);
+
+
+
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   const [whatsappPreferences, setWhatsappPreferences] = useState({
@@ -396,93 +392,6 @@ export function ServiceProviderOnboardingForm() {
       );
     } finally {
       inFlight.current = false;
-      setSubmitting(false);
-    }
-  }
-
-  async function submitIdentityDocuments() {
-    if (!providerId) return;
-    const missing = identityRequirements.filter(
-      (requirement) =>
-        requirement.required && !identityFiles[requirement.evidenceType],
-    );
-    if (missing.length)
-      return setError(
-        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
-      );
-    setError("");
-    setSubmitting(true);
-    try {
-      const uploaded: { type: string; reference: string }[] = [];
-      for (const requirement of identityRequirements) {
-        const file = identityFiles[requirement.evidenceType];
-        if (!file) continue;
-        uploaded.push(
-          await uploadEvidence(providerId, requirement.evidenceType, file),
-        );
-      }
-      setSubmittedEvidence((current) => [...current, ...uploaded]);
-      setStep(6);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to upload identity documents.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitBusinessDocuments() {
-    if (!providerId) return;
-    const missing = businessRequirements.filter(
-      (requirement) =>
-        requirement.required && !businessFiles[requirement.evidenceType],
-    );
-    if (missing.length)
-      return setError(
-        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
-      );
-    setError("");
-    setSubmitting(true);
-    try {
-      const uploaded: { type: string; reference: string }[] = [];
-      for (const requirement of businessRequirements) {
-        const file = businessFiles[requirement.evidenceType];
-        if (!file) continue;
-        uploaded.push(
-          await uploadEvidence(providerId, requirement.evidenceType, file),
-        );
-      }
-      setSubmittedEvidence((current) => [...current, ...uploaded]);
-      setStep(7);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to upload business documents.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitPortfolio() {
-    if (!providerId) return setStep(8);
-    setError("");
-    setSubmitting(true);
-    try {
-      if (portfolioFile)
-        await uploadEvidence(providerId, "PORTFOLIO_EVIDENCE", portfolioFile);
-      setStep(8);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to upload portfolio evidence.",
-      );
-    } finally {
       setSubmitting(false);
     }
   }
