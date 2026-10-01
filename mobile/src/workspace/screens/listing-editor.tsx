@@ -167,10 +167,27 @@ export function ListingEditorScreen({ professionalId, listingId }: { professiona
   const units = priceUnitsFor(draft.listingType, draft.category);
   const unitOptions: (readonly [string, string])[] = [...(draft.listingType === "SALE" && !stay ? [["", "Total price"] as const] : []), ...units.map((unit) => [unit, PRICE_UNIT_LABELS[unit]] as const)];
 
-  const regionNames = GHANA_REGIONS.map((region) => region.name);
+  const catalogueRegionNames = GHANA_REGIONS.map((region) => region.name);
+  const regionNames =
+    draft.region && !catalogueRegionNames.includes(draft.region)
+      ? [draft.region, ...catalogueRegionNames]
+      : catalogueRegionNames;
+
   const districts = districtsForRegion(draft.region);
-  const districtNames = districts.map((district) => district.name);
-  const localityNames = placesForDistrict(draft.region, draft.district);
+  const catalogueDistrictNames = districts.map((district) => district.name);
+  const districtNames =
+    draft.district && !catalogueDistrictNames.includes(draft.district)
+      ? [draft.district, ...catalogueDistrictNames]
+      : catalogueDistrictNames;
+
+  const catalogueLocalityNames = placesForDistrict(
+    draft.region,
+    draft.district,
+  );
+  const localityNames =
+    draft.locality && !catalogueLocalityNames.includes(draft.locality)
+      ? [draft.locality, ...catalogueLocalityNames]
+      : catalogueLocalityNames;
 
   function setCategory(category: string) {
     if (isBookableCategory(category)) return update({ category, listingType: "RENT", priceUnit: "PER_NIGHT" });
