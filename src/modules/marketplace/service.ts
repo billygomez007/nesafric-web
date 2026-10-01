@@ -934,6 +934,27 @@ export async function requestMarketplaceQuote(
       where: { id: enquiry.id },
       data: { quotationRequestId: quotationRequest.id },
     });
+
+    if (enquiry.conversationId) {
+      await tx.message.create({
+        data: {
+          organisationId,
+          conversationId: enquiry.conversationId,
+          channel: "IN_APP",
+          direction: "OUTBOUND",
+          senderType: "SYSTEM",
+          body: "Quotation request created. The provider can now submit pricing and response details.",
+        },
+      });
+
+      await tx.conversation.update({
+        where: { id: enquiry.conversationId },
+        data: {
+          lastMessageAt: new Date(),
+          lastOutboundAt: new Date(),
+        },
+      });
+    }
     await record(tx, organisationId, userId, "marketplace.quote_requested", "provider_quotation_request", quotationRequest.id, {
       enquiryId: enquiry.id,
       providerId: provider.id,
