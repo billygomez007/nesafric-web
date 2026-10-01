@@ -12,6 +12,7 @@ import {
   ratingSummary,
   responseTimeLabel,
   startingRateLabel,
+  TrustSummary,
   VerificationBadges,
 } from "@/components/marketplace-provider-trust";
 import { SaveProviderButton, SavedProvidersProvider, signInHrefForCurrentPage, useSavedProviders } from "@/components/saved-providers";
@@ -108,7 +109,13 @@ function ProviderProfile({ providerId, slug }: { providerId?: string; slug?: str
             <a className={buttonClass("primary")} href="#request-service">Request service</a>
           </div>
         </div>
-        <div className="mt-4"><VerificationBadges provider={provider} /></div>
+        <div className="mt-4">
+          <VerificationBadges provider={provider} />
+        </div>
+
+        <div className="mt-4">
+          <TrustSummary provider={provider} />
+        </div>
       </section>
 
       <section aria-labelledby="nesafric-record" className={card}>
