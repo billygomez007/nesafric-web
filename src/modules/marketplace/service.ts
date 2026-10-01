@@ -671,6 +671,27 @@ export async function createMarketplaceEnquiry(userId: string, organisationId: s
     if (maintenance && data.propertyId && maintenance.propertyId !== data.propertyId) {
       throw new AppError("INVALID_ENQUIRY_SCOPE", 422, "The maintenance request does not belong to the scoped property.");
     }
+    const conversation = await tx.conversation.create({
+      data: {
+        organisationId,
+        channel: "IN_APP",
+        status: "OPEN",
+        subject: "Service provider enquiry",
+        identityLevel: "VERIFIED",
+        propertyId: data.propertyId ?? maintenance?.propertyId,
+        serviceProviderId: data.providerId,
+        messages: {
+          create: {
+            organisationId,
+            channel: "IN_APP",
+            direction: "INBOUND",
+            senderType: "TENANT",
+            body: data.message,
+          },
+        },
+      },
+    });
+
     const enquiry = await tx.marketplaceEnquiry.create({
       data: {
         requestingOrganisationId: organisationId,
@@ -680,6 +701,7 @@ export async function createMarketplaceEnquiry(userId: string, organisationId: s
         maintenanceRequestId: data.maintenanceRequestId,
         requestedByUserId: userId,
         message: data.message,
+        conversationId: conversation.id,
         history: { create: { actorUserId: userId, toStatus: "NEW" } },
       },
       include: enquiryInclude,
