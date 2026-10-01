@@ -11,7 +11,6 @@ import {
   listServiceCategories,
   reviewProviderEvidence,
   reviewProviderIdentity,
-  reviewProviderVerification,
   submitProviderVerification,
   suspendProviderForPlatform,
 } from "@/modules/providers/service";
@@ -50,8 +49,9 @@ async function verifyAndPublish(userId: string, organisationId: string, listingI
   return transitionListing(userId, organisationId, listingId, { status: "PUBLISHED" });
 }
 
-/** Drives the mandatory platform Ghana Card identity-verification gate to VERIFIED — a
- * `ServiceProvider` can only reach public-marketplace eligibility once this has run. */
+/** Drives authoritative platform identity verification to VERIFIED.
+ * Uploaded evidence remains independent metadata and is not a prerequisite
+ * for a SUPER_ADMIN verification decision. */
 async function verifyProviderIdentity(providerId: string, email: string) {
   const platformUser = await registerUser({ displayName: "Platform Reviewer", email, password: "secure-password-123" });
   await db.platformPrincipal.create({ data: { userId: platformUser.id, role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "MANUAL" } });
@@ -138,7 +138,6 @@ describe("PostgreSQL sitemap eligibility queries", () => {
         ],
       });
       await verifyProviderIdentity(provider.id, `platform-reviewer-${provider.id}@example.com`);
-      await reviewProviderVerification(landlord.id, organisation.id, provider.id, { status: "VERIFIED" });
       await updateMarketplaceProfile(artisan.id, provider.id, {
         listed: true,
         publicDescription: "Public provider profile.",
