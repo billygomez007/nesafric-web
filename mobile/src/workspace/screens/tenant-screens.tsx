@@ -50,6 +50,38 @@ const RENT_PERIODS = [
 
 type Placement = Omit<TenancyInput, "propertyId"> & { propertyId: string };
 
+type TenantAccessDelivery = {
+  email: "QUEUED" | "SKIPPED" | "FAILED";
+  sms: "SENT" | "SKIPPED" | "FAILED";
+};
+
+function tenantAccessDeliveryMessage(delivery: TenantAccessDelivery) {
+  const emailSent = delivery.email === "QUEUED";
+  const smsSent = delivery.sms === "SENT";
+
+  if (emailSent && smsSent) {
+    return "Tenant access code sent by email and SMS.";
+  }
+
+  if (emailSent) {
+    return delivery.sms === "FAILED"
+      ? "Tenant access code sent by email, but SMS delivery failed."
+      : "Tenant access code sent by email.";
+  }
+
+  if (smsSent) {
+    return delivery.email === "FAILED"
+      ? "Tenant access code sent by SMS, but email delivery failed."
+      : "Tenant access code sent by SMS.";
+  }
+
+  if (delivery.email === "FAILED" || delivery.sms === "FAILED") {
+    return "Tenant access code was created, but delivery failed.";
+  }
+
+  return "Tenant access code was created, but no email address or phone number was available for delivery.";
+}
+
 function newReference() {
   return `LSE-${today().replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
 }
@@ -255,12 +287,23 @@ export function NewTenantScreen({
         (!place || !placementError)
       ) {
         try {
-          await createPmTenantAccessInvitation(
+          const accessInvitation = await createPmTenantAccessInvitation(
             api,
             workspaceId!,
             tenantId,
             createdLeaseId,
           );
+          const deliveryMessage = tenantAccessDeliveryMessage(
+            accessInvitation.delivery,
+          );
+          if (
+            accessInvitation.delivery.email === "FAILED" ||
+            accessInvitation.delivery.sms === "FAILED"
+          ) {
+            placementError = placementError
+              ? `${placementError} ${deliveryMessage}`
+              : deliveryMessage;
+          }
         } catch (cause) {
           const inviteError = describeError(cause);
           placementError = placementError
@@ -435,13 +478,15 @@ export function TenantDetailScreen({
       let accessNotice = "";
       if (data.email || data.phone) {
         try {
-          await createPmTenantAccessInvitation(
+          const accessInvitation = await createPmTenantAccessInvitation(
             api,
             workspaceId!,
             data.id,
             createdLease.id,
           );
-          accessNotice = " Tenant access code sent.";
+          accessNotice = ` ${tenantAccessDeliveryMessage(
+            accessInvitation.delivery,
+          )}`;
         } catch (cause) {
           accessNotice = ` Tenant access code was not sent: ${describeError(cause)}`;
         }
