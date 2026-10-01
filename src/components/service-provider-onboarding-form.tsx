@@ -39,6 +39,25 @@ async function fileToBase64(file: File) {
   return Buffer.from(buffer).toString("base64");
 }
 
+async function uploadProviderLogo(providerId: string, file: File) {
+  const response = await fetch(`/api/providers/${providerId}/logo`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type || "application/octet-stream",
+      dataBase64: await fileToBase64(file),
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await readError(response);
+    throw new Error(error?.message ?? "We couldn’t upload your business logo.");
+  }
+
+  return response.json();
+}
+
 async function uploadEvidence(
   providerId: string,
   evidenceType: string,
@@ -156,6 +175,7 @@ export function ServiceProviderOnboardingForm() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [biography, setBiography] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
@@ -275,6 +295,9 @@ export function ServiceProviderOnboardingForm() {
           region: area.region || undefined,
           city: area.city || undefined,
         })),
+        listed: true,
+        showContactEmail: false,
+        showContactPhone: false,
       }),
     }).catch(() => {});
   }
@@ -430,6 +453,10 @@ export function ServiceProviderOnboardingForm() {
 
   async function createProviderAndFetchRequirements() {
     if (inFlight.current) return;
+    if (!logoFile) {
+      setError("Add your business logo before creating your public marketplace profile.");
+      return;
+    }
     inFlight.current = true;
     setError("");
     setSubmitting(true);
@@ -498,6 +525,8 @@ export function ServiceProviderOnboardingForm() {
       const body = await response.json();
       setProviderId(body.id);
       setSaved(body);
+      setWorkspaceReady(true);
+      await uploadProviderLogo(body.id, logoFile);
       await syncMarketplaceProfile(body.id);
 
       await loadRequirements();
@@ -760,6 +789,20 @@ export function ServiceProviderOnboardingForm() {
               value={biography}
             />
           </label>
+          <label className="text-sm font-medium">
+            Business logo
+            <input
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              aria-label="Business logo"
+              className="mt-1 block w-full rounded border p-3"
+              onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)}
+              required
+              type="file"
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Required for your public marketplace profile.
+            </span>
+          </label>
           <div className="flex justify-between">
             <button
               className="text-sm font-semibold text-muted"
@@ -770,7 +813,7 @@ export function ServiceProviderOnboardingForm() {
             </button>
             <button
               className="rounded bg-forest px-6 py-3 font-semibold text-ink transition-colors hover:bg-forest-hover disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted"
-              disabled={!displayName || (!contactEmail && !contactPhone)}
+              disabled={!displayName || !logoFile || (!contactEmail && !contactPhone)}
               onClick={() => setStep(3)}
               type="button"
             >

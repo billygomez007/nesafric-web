@@ -93,6 +93,7 @@ function ProviderProfile({ providerId, slug }: { providerId?: string; slug?: str
   const completion = completionRatePercent(provider);
   const rate = startingRateLabel(provider);
   const response = responseTimeLabel(provider.responseTimeHours);
+  const canReceiveWork = provider.verification === "VERIFIED";
   const card = "rounded-3xl border border-hairline bg-white p-6 shadow-sm";
   return <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
     <div className="grid min-w-0 content-start gap-6">
@@ -106,7 +107,7 @@ function ProviderProfile({ providerId, slug }: { providerId?: string; slug?: str
           </div>
           <div className="flex items-start gap-2">
             <SaveProviderButton name={provider.displayName} providerId={provider.id} variant="full" />
-            <a className={buttonClass("primary")} href="#request-service">Request service</a>
+            {canReceiveWork ? <a className={buttonClass("primary")} href="#request-service">Request service</a> : null}
           </div>
         </div>
         <div className="mt-4">
