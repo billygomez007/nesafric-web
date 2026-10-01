@@ -424,7 +424,7 @@ export function TenantDetailScreen({
   >({});
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"save" | "place" | null>(null);
+  const [busy, setBusy] = useState<"save" | "place" | "invite" | null>(null);
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -457,6 +457,32 @@ export function TenantDetailScreen({
       await updatePmTenant(api, workspaceId!, data.id, form);
       await invalidate();
       setNotice("Tenant details saved.");
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendAccessInvitation() {
+    setError(null);
+    setNotice(null);
+
+    if (!data.email?.trim() && !data.phone?.trim()) {
+      setNotice(
+        "Add and save an email address or phone number before sending tenant access.",
+      );
+      return;
+    }
+
+    setBusy("invite");
+    try {
+      const accessInvitation = await createPmTenantAccessInvitation(
+        api,
+        workspaceId!,
+        data.id,
+      );
+      setNotice(tenantAccessDeliveryMessage(accessInvitation.delivery));
     } catch (cause) {
       setError(cause);
     } finally {
@@ -603,6 +629,14 @@ export function TenantDetailScreen({
           loading={busy === "save"}
           disabled={Boolean(busy)}
           testID="tenant-save"
+        />
+        <Button
+          label="Send tenant access"
+          variant="secondary"
+          onPress={() => void sendAccessInvitation()}
+          loading={busy === "invite"}
+          disabled={Boolean(busy)}
+          testID="tenant-access-send"
         />
       </FormSection>
     </FormScreen>
