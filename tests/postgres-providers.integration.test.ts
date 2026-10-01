@@ -180,12 +180,10 @@ describe("PostgreSQL Phase 7 service providers", () => {
       .rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(reviewProviderVerification(owner.id, organisation.id, provider.id, { status: "VERIFIED" }))
       .rejects.toMatchObject({ code: "PLATFORM_IDENTITY_VERIFICATION_REQUIRED" });
-    // Platform identity review only clears the prerequisite (`identityVerifiedAt`) for a provider
-    // that already has an active landlord directory — the landlord's own `reviewProviderVerification`
-    // remains the one that actually finishes the VERIFIED transition (and its audit trail).
+    // Platform identity review is authoritative and completes the VERIFIED transition even
+    // when the provider belongs to an active landlord directory.
     await verifyProviderIdentity(provider.id, "provider-platform-reviewer-1@example.com");
-    expect((await db.serviceProvider.findUniqueOrThrow({ where: { id: provider.id } })).verificationStatus).toBe("PENDING");
-    await reviewProviderVerification(owner.id, organisation.id, provider.id, { status: "VERIFIED" });
+    expect((await db.serviceProvider.findUniqueOrThrow({ where: { id: provider.id } })).verificationStatus).toBe("VERIFIED");
     await updateServiceProvider(providerUser.id, provider.id, {
       availabilityStatus: "AVAILABLE",
       acceptingWork: true,
@@ -293,7 +291,6 @@ describe("PostgreSQL Phase 7 service providers", () => {
     const actions = [
       "provider.directory_added",
       "provider.verification_submitted",
-      "provider.verified",
       "provider.quotation_requested",
       "provider.quotation_submitted",
       "provider.quotation_approved",
@@ -327,7 +324,7 @@ describe("PostgreSQL Phase 7 service providers", () => {
       ],
     });
     await verifyProviderIdentity(provider.id, "quote-platform-reviewer@example.com");
-    await reviewProviderVerification(owner.id, organisation.id, provider.id, { status: "VERIFIED" });
+    expect((await db.serviceProvider.findUniqueOrThrow({ where: { id: provider.id } })).verificationStatus).toBe("VERIFIED");
     const property = await createProperty(owner.id, organisation.id, {
       name: "Quote Property", referenceNumber: "QUOTE-1", category: "Residential", countryCode: "GH", currencyCode: "GHS",
     });

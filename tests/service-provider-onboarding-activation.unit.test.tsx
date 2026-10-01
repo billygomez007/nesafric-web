@@ -44,6 +44,9 @@ beforeEach(() => {
       const body = calls.at(-1)!.body as { displayName: string; contactPhone: string | null };
       return json(200, savedProvider({ displayName: `${body.displayName} (saved)`, contactPhone: body.contactPhone }));
     },
+    [`POST /api/providers/${PROVIDER_ID}/logo`]: json(201, {
+      logoUrl: "https://images.nesafric.com/providers/kofi-plumbing.png",
+    }),
     [`PATCH /api/marketplace/providers/${PROVIDER_ID}/profile`]: json(200, {}),
     [`PUT /api/providers/${PROVIDER_ID}/whatsapp-notifications`]: json(200, {
       id: "wa-config",
@@ -82,6 +85,11 @@ async function fillToServiceAreas() {
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.change(screen.getByPlaceholderText("e.g. Kofi Mensah Electrical"), { target: { value: "Kofi Plumbing" } });
   fireEvent.change(screen.getByLabelText(/Contact phone/), { target: { value: "0241234567" } });
+  fireEvent.change(screen.getByLabelText("Business logo"), {
+    target: {
+      files: [new File(["nesafric-logo"], "logo.png", { type: "image/png" })],
+    },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByLabelText("Plumbing"));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -103,6 +111,20 @@ describe("service provider onboarding → workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create profile & continue" }));
     await screen.findByText("Mandatory identity verification");
     expect(posts("/api/providers")).toHaveLength(1);
+    expect(posts(`/api/providers/${PROVIDER_ID}/logo`)).toHaveLength(1);
+
+    const marketplacePatch = calls.find(
+      (call) =>
+        call.method === "PATCH" &&
+        call.url === `/api/marketplace/providers/${PROVIDER_ID}/profile`,
+    );
+    expect(marketplacePatch?.body).toMatchObject({
+      listed: true,
+      showContactEmail: false,
+      showContactPhone: false,
+      categoryIds: ["c1"],
+      serviceAreas: [{ countryCode: "GH", city: "Accra" }],
+    });
 
     await continueTo("Business & credential documents");
     await continueTo("Portfolio");

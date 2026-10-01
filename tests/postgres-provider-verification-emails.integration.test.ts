@@ -97,7 +97,7 @@ describe("PostgreSQL service-professional verification emails", () => {
     expect(jobs).toHaveLength(1);
   });
 
-  it("does NOT send an approved email when the VERIFIED identity decision is deferred to an active landlord directory", async () => {
+  it("sends an approved email when platform verification approves a provider with an active landlord directory", async () => {
     const providerUser = await registerUser({ displayName: "Nana Yeboah", email: "nana@provider-email.test", password: "secure-password-123" });
     const provider = await createServiceProvider(providerUser.id, { type: "INDIVIDUAL", displayName: "Nana Tiling", contactEmail: "nana@provider-email.test" });
     const landlordUser = await registerUser({ displayName: "Landlord Owner", email: "landlord@provider-email.test", password: "secure-password-123" });
@@ -114,12 +114,11 @@ describe("PostgreSQL service-professional verification emails", () => {
     await reviewProviderEvidence(reviewer, backEvidence.id, { status: "APPROVED" });
     const updated = await reviewProviderIdentity(reviewer, provider.id, { status: "VERIFIED" });
 
-    // The identity check passed, but this provider has an active landlord directory relationship,
-    // so verificationStatus is deliberately left for that landlord's own review — nothing
-    // customer-visible changed yet, so no "you're verified" email should exist.
-    expect(updated.verificationStatus).not.toBe("VERIFIED");
+    // Platform verification is authoritative regardless of landlord-directory membership.
+    // The provider becomes VERIFIED and receives the normal approval notification.
+    expect(updated.verificationStatus).toBe("VERIFIED");
     const jobs = await jobsFor(providerUser.id, "PROVIDER_VERIFICATION_APPROVED");
-    expect(jobs).toHaveLength(0);
+    expect(jobs).toHaveLength(1);
   });
 
   it("queues a rejected email with a respectful, neutral reason and no internal jargon", async () => {

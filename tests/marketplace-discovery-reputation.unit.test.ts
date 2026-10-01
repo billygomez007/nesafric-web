@@ -130,7 +130,7 @@ describe("provider text search", () => {
     await service.discoverMarketplaceProviders({ q: "plumber", category: "plumbing", providerType: "COMPANY" });
     const { sql, values } = state.queries[0];
     const flat = sql.replace(/\s+/g, " ");
-    for (const gate of [`mp."listed" = true`, `p."archivedAt" IS NULL`, `p."verificationStatus" = 'VERIFIED'`, `p."suspendedAt" IS NULL`]) expect(flat).toContain(gate);
+    for (const gate of [`mp."listed" = true`, `p."archivedAt" IS NULL`, `p."verificationStatus" NOT IN ('REJECTED', 'SUSPENDED')`, `p."suspendedAt" IS NULL`]) expect(flat).toContain(gate);
     expect(flat).toContain(`p."displayName" ILIKE ANY(`);
     expect(flat).toContain(`sc."name" ILIKE ANY(`);
     expect(flat).toContain(`smsa."city" ILIKE ANY(`);

@@ -166,7 +166,7 @@ describe("PostgreSQL marketplace discovery & reputation", () => {
     expect((await getPublicMarketplaceProvider(seasoned.id)).provider.completionRate).toBe(0.833);
   });
 
-  it("searches names, categories and areas on the server, behind every public gate", async () => {
+  it("searches names, categories and areas while publicly listing unverified providers", async () => {
     const kwame = await listedProvider("Kwame & Sons", "plumbing", accra, "Pipes and bathrooms.");
     const volt = await listedProvider("Volt Masters", "electrical", accra);
     const kumasiVolt = await listedProvider("Garden City Power", "electrical", kumasi);
@@ -179,8 +179,8 @@ describe("PostgreSQL marketplace discovery & reputation", () => {
 
     expect(ids(await discoverMarketplaceProviders({ q: "kwame" }))).toEqual([kwame.id]);
     expect(ids(await discoverMarketplaceProviders({ q: "KWAME sons" }))).toEqual([kwame.id]);
-    expect(ids(await discoverMarketplaceProviders({ q: "plumber" }))).toEqual([kwame.id]);
-    expect(ids(await discoverMarketplaceProviders({ q: "plumbing" }))).toEqual([kwame.id]);
+    expect(ids(await discoverMarketplaceProviders({ q: "plumber" }))).toEqual([kwame.id, unverified.id]);
+    expect(ids(await discoverMarketplaceProviders({ q: "plumbing" }))).toEqual([kwame.id, unverified.id]);
     expect(ids(await discoverMarketplaceProviders({ q: "bathroom" }))).toEqual([kwame.id]);
     expect(new Set(ids(await discoverMarketplaceProviders({ q: "electrician" })))).toEqual(new Set([volt.id, kumasiVolt.id]));
     expect(ids(await discoverMarketplaceProviders({ q: "Kumasi electrician" }))).toEqual([kumasiVolt.id]);
@@ -188,15 +188,17 @@ describe("PostgreSQL marketplace discovery & reputation", () => {
     expect(ids(await discoverMarketplaceProviders({ q: "plumb", category: "electrical" }))).toEqual([]);
     expect((await discoverMarketplaceProviders({ q: "roofing" })).pagination.total).toBe(0);
 
-    // Gates hold for text that names the hidden providers directly.
-    for (const q of ["Unverified", "Suspended", "Unlisted", "Plumbing Co"]) {
+    // Unverified providers remain public. Suspended and explicitly unlisted providers do not.
+    expect(ids(await discoverMarketplaceProviders({ q: "Unverified" }))).toEqual([unverified.id]);
+    expect(ids(await discoverMarketplaceProviders({ q: "Plumbing Co" }))).toEqual([unverified.id]);
+    for (const q of ["Suspended", "Unlisted"]) {
       expect(ids(await discoverMarketplaceProviders({ q }))).toEqual([]);
     }
 
     // Empty / whitespace q is ordinary discovery, and search keeps the ranking order.
     const all = await discoverMarketplaceProviders({});
     expect(ids(await discoverMarketplaceProviders({ q: "   " }))).toEqual(ids(all));
-    expect(new Set(ids(all))).toEqual(new Set([kwame.id, volt.id, kumasiVolt.id]));
+    expect(new Set(ids(all))).toEqual(new Set([kwame.id, volt.id, kumasiVolt.id, unverified.id]));
     const electricians = ids(await discoverMarketplaceProviders({ q: "electric" }));
     expect(electricians).toEqual(ids(all).filter((id) => electricians.includes(id)));
   });

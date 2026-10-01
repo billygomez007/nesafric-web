@@ -120,6 +120,7 @@ export function ProviderCard({ provider }: { provider: PublicProvider }) {
   const completion = completionRatePercent(provider);
   const rate = startingRateLabel(provider);
   const mainCategory = provider.categories[0]?.name;
+  const canReceiveWork = provider.verification === "VERIFIED";
   return (
     <article aria-labelledby={`provider-${provider.id}-name`} className="flex min-w-0 flex-col gap-4 rounded-3xl border border-hairline bg-white p-5 shadow-sm" data-testid={`provider-card-${provider.id}`}>
       <div className="flex items-start gap-3">
@@ -148,7 +149,7 @@ export function ProviderCard({ provider }: { provider: PublicProvider }) {
       </dl>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-4">
         <AvailabilityBadge provider={provider} />
-        {rate ? <p className="text-right text-sm font-semibold text-forest-deep">{rate}<span className="block text-xs font-normal text-muted">Provider’s starting rate</span></p> : <p className="text-sm font-semibold text-forest-deep">Request a quote</p>}
+        {rate ? <p className="text-right text-sm font-semibold text-forest-deep">{rate}<span className="block text-xs font-normal text-muted">Provider’s starting rate</span></p> : <p className="text-sm font-semibold text-forest-deep">{canReceiveWork ? "Request a quote" : "Verification pending"}</p>}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Link className={buttonClass("secondary")} href={href}>View profile</Link>
