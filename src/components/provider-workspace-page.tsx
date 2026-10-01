@@ -58,6 +58,7 @@ export function ProviderWorkspacePage({
   section?: ProviderDetailSection;
 }) {
   const [providerName, setProviderName] = useState("Service Provider");
+  const [verificationStatus, setVerificationStatus] = useState("PENDING");
   const copy = SECTION_COPY[section];
 
   useEffect(() => {
@@ -76,8 +77,15 @@ export function ProviderWorkspacePage({
         return (await response.json()) as ProviderResponse;
       })
       .then((result) => {
-        if (!cancelled && result?.provider?.displayName) {
-          setProviderName(result.provider.displayName);
+        if (!cancelled && result?.provider) {
+          if (result.provider.displayName) {
+            setProviderName(result.provider.displayName);
+          }
+
+          setVerificationStatus(
+            (result.provider as { verificationStatus?: string })
+              .verificationStatus ?? "PENDING",
+          );
         }
       })
       .catch(() => undefined);
@@ -101,6 +109,22 @@ export function ProviderWorkspacePage({
             {copy.title}
           </h1>
           <p className="mt-1 text-sm text-muted">{copy.description}</p>
+        </div>
+
+        <div className="mb-6 rounded-xl border border-hairline bg-surface p-5">
+          <p className="text-sm font-semibold text-forest">
+            Verification status
+          </p>
+
+          <p className="mt-1 text-sm text-muted">
+            {verificationStatus === "VERIFIED"
+              ? "Your service provider profile is verified and eligible for marketplace visibility."
+              : "Your profile is active. NesAfric will review your verification details and contact you if additional documents are required."}
+          </p>
+
+          <div className="mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold">
+            {verificationStatus}
+          </div>
         </div>
 
         <ProviderDetail providerId={providerId} section={section} />
