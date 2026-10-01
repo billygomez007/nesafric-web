@@ -11,6 +11,10 @@ type ProviderResponse = {
   provider: {
     id: string;
     displayName: string;
+    verificationStatus?: string;
+    identityVerifiedAt?: string | null;
+    businessVerifiedAt?: string | null;
+    skillVerifiedAt?: string | null;
   };
 };
 
@@ -58,6 +62,12 @@ export function ProviderWorkspacePage({
   section?: ProviderDetailSection;
 }) {
   const [providerName, setProviderName] = useState("Service Provider");
+  const [verification, setVerification] = useState({
+    status: "PENDING",
+    identity: false,
+    business: false,
+    skill: false,
+  });
   const [verificationStatus, setVerificationStatus] = useState("PENDING");
   const copy = SECTION_COPY[section];
 
@@ -126,6 +136,33 @@ export function ProviderWorkspacePage({
             {verificationStatus}
           </div>
         </div>
+
+        {section === "dashboard" && (
+          <div className="mb-6 rounded-2xl border border-hairline bg-white p-5">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-forest">
+                Verification progress
+              </p>
+
+              <span className="rounded-full bg-gold/10 px-3 py-1 text-xs font-semibold">
+                {verification.status}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-sm">
+              <p>{verification.identity ? "✓" : "○"} Identity verification</p>
+              <p>{verification.business ? "✓" : "○"} Business verification</p>
+              <p>{verification.skill ? "✓" : "○"} Skills / credentials</p>
+            </div>
+
+            <a
+              className="mt-4 inline-flex rounded-lg bg-forest px-4 py-2 text-sm font-semibold text-white"
+              href={`/providers/${providerId}/verification`}
+            >
+              Complete verification
+            </a>
+          </div>
+        )}
 
         <ProviderDetail providerId={providerId} section={section} />
       </div>
