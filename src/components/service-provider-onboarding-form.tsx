@@ -328,7 +328,7 @@ export function ServiceProviderOnboardingForm() {
       if (providerId) {
         await updateExistingProvider(providerId);
         await loadRequirements();
-        setStep(8);
+        setStep(5);
         return;
       }
       const response = await fetch("/api/providers", {
@@ -383,7 +383,7 @@ export function ServiceProviderOnboardingForm() {
       await loadRequirements();
 
       trackCampaignEvent("service_provider_registration_started");
-      setStep(8);
+      setStep(5);
     } catch (cause) {
       setError(
         cause instanceof Error
