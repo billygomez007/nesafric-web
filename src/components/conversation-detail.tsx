@@ -103,6 +103,19 @@ export function ConversationDetailView({ conversationId }: { conversationId: str
     await load(organisationId);
   }
 
+  async function reviewQuotation(quotationId: string, action: "approve" | "reject") {
+    const response = await fetch(`/api/provider-quotations/${quotationId}/${action}`, {
+      method: "POST",
+      headers: headers(organisationId, true),
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) return setError(await errorMessage(response));
+
+    setNotice(`Quotation ${action}d.`);
+    await load(organisationId);
+  }
+
   async function updateStatus(status: string) {
     const response = await fetch(`/api/conversations/${conversationId}/status`, { method: "PATCH", headers: headers(organisationId, true), body: JSON.stringify({ status }) });
     if (!response.ok) return setError(await errorMessage(response));
@@ -153,6 +166,26 @@ export function ConversationDetailView({ conversationId }: { conversationId: str
               <p>Total: {quote.currencyCode} {quote.totalAmountMinor}</p>
               <p>ETA: {quote.etaDays} days</p>
               {quote.notes && <p className="mt-1 text-muted">{quote.notes}</p>}
+
+              {quote.status === "SUBMITTED" && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
+                    onClick={() => void reviewQuotation(quote.id, "approve")}
+                    type="button"
+                  >
+                    Approve quotation
+                  </button>
+
+                  <button
+                    className="rounded-xl border border-hairline px-3 py-2 text-xs font-semibold text-forest"
+                    onClick={() => void reviewQuotation(quote.id, "reject")}
+                    type="button"
+                  >
+                    Reject quotation
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </section>
