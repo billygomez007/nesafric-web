@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
-import { createMarketplaceEnquiry, listMarketplaceEnquiries } from "@/modules/marketplace/service";
+import {
+  createMarketplaceEnquiry,
+  listMarketplaceEnquiries,
+} from "@/modules/marketplace/service";
 import { requireUser } from "@/platform/auth/session";
 import { errorResponse } from "@/platform/errors";
-import { requireOrganisationId } from "@/platform/organisations/request";
+import { getOrganisationIdHeader } from "@/platform/organisations/request";
 
 export async function GET(request: Request) {
   try {
     const query = Object.fromEntries(new URL(request.url).searchParams);
+
     return NextResponse.json(
       await listMarketplaceEnquiries(
         (await requireUser()).id,
-        request.headers.get("x-organisation-id"),
+        getOrganisationIdHeader(request),
         query,
       ),
     );
@@ -24,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       await createMarketplaceEnquiry(
         (await requireUser()).id,
-        requireOrganisationId(request),
+        getOrganisationIdHeader(request),
         await request.json(),
       ),
       { status: 201 },

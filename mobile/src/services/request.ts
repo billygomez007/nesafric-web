@@ -15,12 +15,11 @@ export type ServiceRequestForm = {
   requestQuote: boolean;
 };
 
-export type ServiceRequestErrors = Partial<Record<"organisationId" | "categoryId" | "message" | "requestQuote", string>>;
+export type ServiceRequestErrors = Partial<Record<"categoryId" | "message" | "requestQuote", string>>;
 
 export function validateServiceRequest(form: ServiceRequestForm): ServiceRequestErrors {
   const errors: ServiceRequestErrors = {};
   const message = form.message.trim();
-  if (!form.organisationId) errors.organisationId = "Choose the workspace this request is for.";
   if (!form.categoryId) errors.categoryId = "Choose the service you need.";
   if (message.length < MIN_REQUEST_MESSAGE) errors.message = "Describe the job in a sentence or two.";
   else if (message.length > MAX_REQUEST_MESSAGE) errors.message = "Keep the description under 10,000 characters.";

@@ -114,6 +114,19 @@ function mockServer(server: Server = {}) {
         return json(200, [{ id: TENANT_ID, createdAt: "2026-08-01T00:00:00.000Z", tenant: { legalName: "Kwame Boateng", preferredName: null } }]);
       case "POST /api/tenants":
         return json(201, { tenant: { id: "t-root" }, relationship: { id: TENANT_ID } });
+      case `POST /api/tenants/${TENANT_ID}/access-invitations`:
+        return json(201, {
+          invitation: {
+            id: "invite-1",
+            status: "active",
+            createdAt: "2026-10-01T00:00:00.000Z",
+            expiresAt: "2026-10-08T00:00:00.000Z",
+          },
+          delivery: {
+            email: "QUEUED",
+            sms: "SKIPPED",
+          },
+        });
       case `GET /api/tenants/${TENANT_ID}`:
         return json(200, { id: TENANT_ID, email: "kwame@example.com", phone: null, tenant: { legalName: "Kwame Boateng", preferredName: null }, leaseParties: [] });
       case `PATCH /api/tenants/${TENANT_ID}`:
@@ -140,6 +153,7 @@ beforeEach(async () => {
   setWorkspaceIntent(null);
   resetWorkspaceNavigator();
   jest.clearAllMocks();
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockReset();
 });
 
 const photoAsset = (name: string, base64 = "/9j/4AAQSkZJRgABAQ==") => ({ uri: `file:///${name}`, fileName: name, mimeType: "image/jpeg", base64, width: 1200, height: 800, assetId: name, type: "image" as const });
@@ -166,7 +180,23 @@ describe("real estate professional: native listings", () => {
     fireEvent.changeText(screen.getByTestId("listing-description"), "A serviced residential plot close to the main road.");
     fireEvent.changeText(screen.getByTestId("listing-price"), "1,200");
     fireEvent.press(screen.getByText("Per square metre (m²)"));
-    fireEvent.changeText(screen.getByTestId("listing-city"), "Accra");
+    fireEvent.press(screen.getByTestId("listing-region"));
+    fireEvent.press(await screen.findByText("Greater Accra"));
+
+    fireEvent.press(screen.getByTestId("listing-district"));
+    fireEvent.changeText(
+      screen.getByPlaceholderText("Search district / municipality"),
+      "Ayawaso West",
+    );
+    fireEvent.press(await screen.findByText("Ayawaso West"));
+
+    fireEvent.press(screen.getByTestId("listing-locality"));
+    fireEvent.changeText(
+      screen.getByPlaceholderText("Search location / area"),
+      "East Legon",
+    );
+    fireEvent.press(await screen.findByText("East Legon"));
+
     await act(async () => fireEvent.press(screen.getByTestId("listing-add-photos")));
     expect(await screen.findByText("Uploads on save")).toBeTruthy();
     await act(async () => fireEvent.press(screen.getByTestId("listing-save")));
@@ -175,7 +205,16 @@ describe("real estate professional: native listings", () => {
     const [create] = writesTo("POST", `/api/marketplace-professionals/${PRO.id}/listings`);
     expect(create.headers.authorization).toBe(`Bearer ${TOKEN}`);
     expect(create.body).toMatchObject({
-      asset: { purpose: "SALE", category: "LAND", priceMinor: "120000", currencyCode: "GHS", countryCode: "GH", city: "Accra" },
+      asset: {
+        purpose: "SALE",
+        category: "LAND",
+        priceMinor: "120000",
+        currencyCode: "GHS",
+        countryCode: "GH",
+        region: "Greater Accra",
+        district: "Ayawaso West",
+        locality: "East Legon",
+      },
       listing: { listingType: "SALE", askingAmountMinor: "120000", rentAmountMinor: null, frequency: "PER_SQM", title: "Serviced plot in Oyarifa" },
       listingAuthority: "OWNER_SELF",
     });

@@ -661,53 +661,122 @@ async function canAccessProviderEnquiry(userId: string, providerId: string, tx: 
   return Boolean(await ownsProvider(userId, providerId, tx));
 }
 
-export async function createMarketplaceEnquiry(userId: string, organisationId: string, input: unknown) {
-  await requirePermission(userId, organisationId, PERMISSIONS.marketplaceEnquiryCreate);
+export async function createMarketplaceEnquiry(
+  userId: string,
+  organisationId: string | null,
+  input: unknown,
+) {
+  if (organisationId) {
+    await requirePermission(
+      userId,
+      organisationId,
+      PERMISSIONS.marketplaceEnquiryCreate,
+    );
+  }
+
   const data = createMarketplaceEnquirySchema.parse(input);
+
+  if (!organisationId && (data.propertyId || data.maintenanceRequestId)) {
+    throw new AppError(
+      "INVALID_ENQUIRY_SCOPE",
+      422,
+      "A personal service request cannot include a property or maintenance request.",
+    );
+  }
+
   return db.$transaction(async (tx) => {
     const profile = await tx.providerMarketplaceProfile.findFirst({
       where: {
         providerId: data.providerId,
         listed: true,
-        provider: { archivedAt: null, verificationStatus: "VERIFIED" },
-        categories: { some: { categoryId: data.categoryId, category: { active: true } } },
-      },
-    });
-    if (!profile) throw new AppError("MARKETPLACE_PROVIDER_UNAVAILABLE", 409, "The listed provider does not publish this category.");
-    const maintenance = data.maintenanceRequestId
-      ? await tx.maintenanceRequest.findFirst({
-        where: { id: data.maintenanceRequestId, organisationId },
-        select: { id: true, propertyId: true },
-      })
-      : null;
-    if (data.maintenanceRequestId && !maintenance) throw notFound();
-    if (data.propertyId) {
-      const property = await tx.property.findFirst({ where: { id: data.propertyId, organisationId }, select: { id: true } });
-      if (!property) throw notFound();
-    }
-    if (maintenance && data.propertyId && maintenance.propertyId !== data.propertyId) {
-      throw new AppError("INVALID_ENQUIRY_SCOPE", 422, "The maintenance request does not belong to the scoped property.");
-    }
-    const conversation = await tx.conversation.create({
-      data: {
-        organisationId,
-        channel: "IN_APP",
-        status: "OPEN",
-        subject: "Service provider enquiry",
-        identityLevel: "VERIFIED",
-        propertyId: data.propertyId ?? maintenance?.propertyId,
-        serviceProviderId: data.providerId,
-        messages: {
-          create: {
-            organisationId,
-            channel: "IN_APP",
-            direction: "INBOUND",
-            senderType: "TENANT",
-            body: data.message,
+        provider: {
+          archivedAt: null,
+          verificationStatus: "VERIFIED",
+          suspendedAt: null,
+          acceptingWork: true,
+          availabilityStatus: { not: "UNAVAILABLE" },
+        },
+        categories: {
+          some: {
+            categoryId: data.categoryId,
+            category: { active: true },
           },
         },
       },
     });
+
+    if (!profile) {
+      throw new AppError(
+        "MARKETPLACE_PROVIDER_UNAVAILABLE",
+        409,
+        "The listed provider cannot receive this service request.",
+      );
+    }
+
+    const maintenance =
+      organisationId && data.maintenanceRequestId
+        ? await tx.maintenanceRequest.findFirst({
+            where: {
+              id: data.maintenanceRequestId,
+              organisationId,
+            },
+            select: {
+              id: true,
+              propertyId: true,
+            },
+          })
+        : null;
+
+    if (organisationId && data.maintenanceRequestId && !maintenance) {
+      throw notFound();
+    }
+
+    if (organisationId && data.propertyId) {
+      const property = await tx.property.findFirst({
+        where: {
+          id: data.propertyId,
+          organisationId,
+        },
+        select: { id: true },
+      });
+
+      if (!property) throw notFound();
+    }
+
+    if (
+      maintenance
+      && data.propertyId
+      && maintenance.propertyId !== data.propertyId
+    ) {
+      throw new AppError(
+        "INVALID_ENQUIRY_SCOPE",
+        422,
+        "The maintenance request does not belong to the scoped property.",
+      );
+    }
+
+    const conversation = organisationId
+      ? await tx.conversation.create({
+          data: {
+            organisationId,
+            channel: "IN_APP",
+            status: "OPEN",
+            subject: "Service provider enquiry",
+            identityLevel: "VERIFIED",
+            propertyId: data.propertyId ?? maintenance?.propertyId,
+            serviceProviderId: data.providerId,
+            messages: {
+              create: {
+                organisationId,
+                channel: "IN_APP",
+                direction: "INBOUND",
+                senderType: "TENANT",
+                body: data.message,
+              },
+            },
+          },
+        })
+      : null;
 
     const enquiry = await tx.marketplaceEnquiry.create({
       data: {
@@ -718,17 +787,34 @@ export async function createMarketplaceEnquiry(userId: string, organisationId: s
         maintenanceRequestId: data.maintenanceRequestId,
         requestedByUserId: userId,
         message: data.message,
-        conversationId: conversation.id,
-        history: { create: { actorUserId: userId, toStatus: "NEW" } },
+        conversationId: conversation?.id,
+        history: {
+          create: {
+            actorUserId: userId,
+            toStatus: "NEW",
+          },
+        },
       },
       include: enquiryInclude,
     });
-    await record(tx, organisationId, userId, "marketplace.enquiry_created", "marketplace_enquiry", enquiry.id, {
-      providerId: enquiry.providerId,
-      categoryId: enquiry.categoryId,
-      hasPropertyScope: Boolean(enquiry.propertyId),
-      hasMaintenanceScope: Boolean(enquiry.maintenanceRequestId),
-    });
+
+    if (organisationId) {
+      await record(
+        tx,
+        organisationId,
+        userId,
+        "marketplace.enquiry_created",
+        "marketplace_enquiry",
+        enquiry.id,
+        {
+          providerId: enquiry.providerId,
+          categoryId: enquiry.categoryId,
+          hasPropertyScope: Boolean(enquiry.propertyId),
+          hasMaintenanceScope: Boolean(enquiry.maintenanceRequestId),
+        },
+      );
+    }
+
     return enquiry;
   });
 }
@@ -739,19 +825,39 @@ export async function listMarketplaceEnquiries(
   query: unknown = {},
 ) {
   const filters = marketplaceEnquiryListSchema.parse(query);
+
   const providerOwned = filters.providerId
     ? await canAccessProviderEnquiry(userId, filters.providerId)
     : false;
-  if (!providerOwned) {
-    if (!organisationId) throw new AppError("ORGANISATION_REQUIRED", 400, "An active organisation is required.");
-    await requirePermission(userId, organisationId, PERMISSIONS.marketplaceEnquiryRead);
+
+  if (!providerOwned && organisationId) {
+    await requirePermission(
+      userId,
+      organisationId,
+      PERMISSIONS.marketplaceEnquiryRead,
+    );
   }
+
   const where: Prisma.MarketplaceEnquiryWhereInput = {
     ...(providerOwned
       ? { providerId: filters.providerId }
-      : { requestingOrganisationId: organisationId!, ...(filters.providerId ? { providerId: filters.providerId } : {}) }),
+      : organisationId
+        ? {
+            requestingOrganisationId: organisationId,
+            ...(filters.providerId
+              ? { providerId: filters.providerId }
+              : {}),
+          }
+        : {
+            requestedByUserId: userId,
+            requestingOrganisationId: null,
+            ...(filters.providerId
+              ? { providerId: filters.providerId }
+              : {}),
+          }),
     ...(filters.status ? { status: filters.status } : {}),
   };
+
   const [items, total] = await db.$transaction([
     db.marketplaceEnquiry.findMany({
       where,
@@ -762,6 +868,7 @@ export async function listMarketplaceEnquiries(
     }),
     db.marketplaceEnquiry.count({ where }),
   ]);
+
   return {
     items,
     pagination: {
@@ -778,12 +885,37 @@ export async function getMarketplaceEnquiry(
   organisationId: string | null,
   enquiryId: string,
 ) {
-  const enquiry = await db.marketplaceEnquiry.findUnique({ where: { id: enquiryId }, include: enquiryInclude });
+  const enquiry = await db.marketplaceEnquiry.findUnique({
+    where: { id: enquiryId },
+    include: enquiryInclude,
+  });
+
   if (!enquiry) throw notFound();
-  if (!await canAccessProviderEnquiry(userId, enquiry.providerId)) {
-    if (!organisationId || enquiry.requestingOrganisationId !== organisationId) throw notFound();
-    await requirePermission(userId, organisationId, PERMISSIONS.marketplaceEnquiryRead);
+
+  const providerOwned = await canAccessProviderEnquiry(
+    userId,
+    enquiry.providerId,
+  );
+
+  const personalRequester =
+    enquiry.requestingOrganisationId === null
+    && enquiry.requestedByUserId === userId;
+
+  if (!providerOwned && !personalRequester) {
+    if (
+      !organisationId
+      || enquiry.requestingOrganisationId !== organisationId
+    ) {
+      throw notFound();
+    }
+
+    await requirePermission(
+      userId,
+      organisationId,
+      PERMISSIONS.marketplaceEnquiryRead,
+    );
   }
+
   return enquiry;
 }
 
@@ -802,31 +934,102 @@ export async function updateMarketplaceEnquiry(
   input: unknown,
 ) {
   const data = updateMarketplaceEnquirySchema.parse(input);
+
   return db.$transaction(async (tx) => {
-    const enquiry = await tx.marketplaceEnquiry.findUnique({ where: { id: enquiryId } });
+    const enquiry = await tx.marketplaceEnquiry.findUnique({
+      where: { id: enquiryId },
+    });
+
     if (!enquiry) throw notFound();
-    const providerOwned = await canAccessProviderEnquiry(userId, enquiry.providerId, tx);
-    if (["VIEWED", "RESPONDED"].includes(data.status) && !providerOwned) throw forbidden();
-    if (data.status === "CANCELLED") {
-      if (!organisationId || organisationId !== enquiry.requestingOrganisationId) throw notFound();
-      await requirePermission(userId, organisationId, PERMISSIONS.marketplaceEnquiryManage);
+
+    const providerOwned = await canAccessProviderEnquiry(
+      userId,
+      enquiry.providerId,
+      tx,
+    );
+
+    const personalRequester =
+      enquiry.requestingOrganisationId === null
+      && enquiry.requestedByUserId === userId;
+
+    if (
+      ["VIEWED", "RESPONDED"].includes(data.status)
+      && !providerOwned
+    ) {
+      throw forbidden();
     }
-    if (data.status === "CLOSED" && !providerOwned) {
-      if (!organisationId || organisationId !== enquiry.requestingOrganisationId) throw notFound();
-      await requirePermission(userId, organisationId, PERMISSIONS.marketplaceEnquiryManage);
+
+    if (data.status === "CANCELLED" && providerOwned) {
+      throw forbidden();
     }
+
+    if (
+      data.status === "CANCELLED"
+      && !personalRequester
+    ) {
+      if (
+        !organisationId
+        || organisationId !== enquiry.requestingOrganisationId
+      ) {
+        throw notFound();
+      }
+
+      await requirePermission(
+        userId,
+        organisationId,
+        PERMISSIONS.marketplaceEnquiryManage,
+      );
+    }
+
+    if (
+      data.status === "CLOSED"
+      && !providerOwned
+      && !personalRequester
+    ) {
+      if (
+        !organisationId
+        || organisationId !== enquiry.requestingOrganisationId
+      ) {
+        throw notFound();
+      }
+
+      await requirePermission(
+        userId,
+        organisationId,
+        PERMISSIONS.marketplaceEnquiryManage,
+      );
+    }
+
     if (!enquiryTransitions[enquiry.status].includes(data.status)) {
-      throw new AppError("INVALID_ENQUIRY_TRANSITION", 409, "The enquiry cannot transition to that status.");
+      throw new AppError(
+        "INVALID_ENQUIRY_TRANSITION",
+        409,
+        "The enquiry cannot transition to that status.",
+      );
     }
+
     const now = new Date();
+
     const updated = await tx.marketplaceEnquiry.update({
       where: { id: enquiry.id },
       data: {
         status: data.status,
-        viewedAt: data.status === "VIEWED" ? now : enquiry.viewedAt,
-        respondedAt: data.status === "RESPONDED" ? now : enquiry.respondedAt,
-        closedAt: data.status === "CLOSED" ? now : enquiry.closedAt,
-        cancelledAt: data.status === "CANCELLED" ? now : enquiry.cancelledAt,
+        viewedAt:
+          data.status === "VIEWED"
+            ? now
+            : enquiry.viewedAt,
+        respondedAt:
+          data.status === "RESPONDED"
+            ? now
+            : enquiry.respondedAt,
+        closedAt:
+          data.status === "CLOSED"
+            ? now
+            : enquiry.closedAt,
+        cancelledAt:
+          data.status === "CANCELLED"
+            ? now
+            : enquiry.cancelledAt,
         history: {
           create: {
             actorUserId: userId,
@@ -838,11 +1041,23 @@ export async function updateMarketplaceEnquiry(
       },
       include: enquiryInclude,
     });
-    await record(tx, enquiry.requestingOrganisationId, userId, "marketplace.enquiry_updated", "marketplace_enquiry", enquiry.id, {
-      providerId: enquiry.providerId,
-      fromStatus: enquiry.status,
-      toStatus: data.status,
-    });
+
+    if (enquiry.requestingOrganisationId) {
+      await record(
+        tx,
+        enquiry.requestingOrganisationId,
+        userId,
+        "marketplace.enquiry_updated",
+        "marketplace_enquiry",
+        enquiry.id,
+        {
+          providerId: enquiry.providerId,
+          fromStatus: enquiry.status,
+          toStatus: data.status,
+        },
+      );
+    }
+
     return updated;
   });
 }

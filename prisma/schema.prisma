@@ -1318,6 +1318,7 @@ model Tenant {
 model TenantAccessInvitation {
   id                   String    @id @default(uuid()) @db.Uuid
   tenantOrganisationId String    @db.Uuid
+  leaseId              String?   @db.Uuid
   tokenHash            String    @unique
   createdByUserId      String    @db.Uuid
   redeemedByUserId     String?   @db.Uuid
@@ -1327,6 +1328,7 @@ model TenantAccessInvitation {
   revokedAt            DateTime?
 
   tenantOrganisation TenantOrganisation @relation(fields: [tenantOrganisationId], references: [id], onDelete: Cascade)
+  lease              Lease?             @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   createdBy          User               @relation("TenantAccessInvitationCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   redeemedBy         User?              @relation("TenantAccessInvitationRedeemedBy", fields: [redeemedByUserId], references: [id], onDelete: SetNull)
 
@@ -1334,6 +1336,7 @@ model TenantAccessInvitation {
   @@index([tenantOrganisationId, revokedAt, redeemedAt, expiresAt], map: "TenantAccessInvitation_tenantOrg_status_expiry_idx")
   @@index([createdByUserId])
   @@index([redeemedByUserId])
+  @@index([leaseId])
 }
 
 model TenantOrganisation {
@@ -1434,6 +1437,7 @@ model Lease {
   depositSettlement          DepositSettlement?
   conversations              Conversation[]
   generatedDocuments         GeneratedDocument[]
+  accessInvitations          TenantAccessInvitation[]
 
   @@unique([organisationId, referenceNumber])
   @@index([organisationId, status, endDate])
@@ -3111,7 +3115,7 @@ model ProviderMarketplaceProfileHistory {
 
 model MarketplaceEnquiry {
   id                       String                            @id @default(uuid()) @db.Uuid
-  requestingOrganisationId String                            @db.Uuid
+  requestingOrganisationId String?                           @db.Uuid
   providerId               String                            @db.Uuid
   categoryId               String                            @db.Uuid
   propertyId               String?                           @db.Uuid
@@ -3127,7 +3131,7 @@ model MarketplaceEnquiry {
   respondedAt              DateTime?
   closedAt                 DateTime?
   cancelledAt              DateTime?
-  requestingOrganisation   Organisation                      @relation("MarketplaceRequestingOrganisation", fields: [requestingOrganisationId], references: [id], onDelete: Restrict)
+  requestingOrganisation   Organisation?                     @relation("MarketplaceRequestingOrganisation", fields: [requestingOrganisationId], references: [id], onDelete: Restrict)
   provider                 ServiceProvider                   @relation(fields: [providerId], references: [id], onDelete: Restrict)
   category                 ServiceCategory                   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   property                 Property?                         @relation(fields: [propertyId], references: [id], onDelete: Restrict)

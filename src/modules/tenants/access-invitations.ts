@@ -1,6 +1,9 @@
 import { createHmac, randomInt } from "crypto";
 
-import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
+import {
+  PERMISSIONS,
+  requirePermission,
+} from "@/platform/authorization/permissions";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 
@@ -11,7 +14,10 @@ const DEFAULT_EXPIRY_DAYS = 7;
 
 function secret() {
   const value = process.env.SESSION_SECRET;
-  if (!value) throw new Error("SESSION_SECRET is required for tenant access invitations.");
+  if (!value)
+    throw new Error(
+      "SESSION_SECRET is required for tenant access invitations.",
+    );
   return value;
 }
 
@@ -39,11 +45,14 @@ export function generateTenantAccessCode() {
   return `NT-${groups.join("-")}`;
 }
 
-function invitationStatus(invitation: {
-  redeemedAt: Date | null;
-  revokedAt: Date | null;
-  expiresAt: Date;
-}, now = new Date()) {
+function invitationStatus(
+  invitation: {
+    redeemedAt: Date | null;
+    revokedAt: Date | null;
+    expiresAt: Date;
+  },
+  now = new Date(),
+) {
   if (invitation.redeemedAt) return "redeemed" as const;
   if (invitation.revokedAt) return "revoked" as const;
   if (invitation.expiresAt <= now) return "expired" as const;
@@ -95,6 +104,7 @@ export async function createTenantAccessInvitation(
   userId: string,
   organisationId: string,
   tenantOrganisationId: string,
+  leaseId?: string,
 ) {
   await requirePermission(userId, organisationId, PERMISSIONS.tenantUpdate);
 
@@ -120,6 +130,30 @@ export async function createTenantAccessInvitation(
     );
   }
 
+  if (leaseId) {
+    const leaseParty = await db.leaseParty.findFirst({
+      where: {
+        leaseId,
+        tenantOrganisationId,
+        lease: {
+          organisationId,
+          archivedAt: null,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!leaseParty) {
+      throw new AppError(
+        "TENANT_LEASE_NOT_FOUND",
+        404,
+        "That tenancy is not available for this tenant.",
+      );
+    }
+  }
+
   const rawCode = generateTenantAccessCode();
   const tokenHash = hashTenantAccessCode(rawCode);
   const expiresAt = new Date(
@@ -139,6 +173,7 @@ export async function createTenantAccessInvitation(
     const created = await tx.tenantAccessInvitation.create({
       data: {
         tenantOrganisationId,
+        leaseId: leaseId ?? null,
         tokenHash,
         createdByUserId: userId,
         expiresAt,
@@ -157,7 +192,11 @@ export async function createTenantAccessInvitation(
         action: "tenant.access_invitation_created",
         entityType: "tenant",
         entityId: tenantOrganisationId,
-        metadata: { invitationId: created.id, expiresAt },
+        metadata: {
+          invitationId: created.id,
+          expiresAt,
+          leaseId: leaseId ?? null,
+        },
       },
     });
 
@@ -167,7 +206,11 @@ export async function createTenantAccessInvitation(
         name: "tenant.access_invitation_created",
         aggregateType: "tenant",
         aggregateId: tenantOrganisationId,
-        payload: { invitationId: created.id, expiresAt },
+        payload: {
+          invitationId: created.id,
+          expiresAt,
+          leaseId: leaseId ?? null,
+        },
       },
     });
 

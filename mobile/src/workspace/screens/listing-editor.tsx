@@ -21,8 +21,14 @@ import {
 import { useProListing } from "@/api/workspace-queries";
 import { Checkbox } from "@/components/checkbox";
 import { Chip } from "@/components/chip";
+import { SearchableSelect } from "@/components/searchable-select";
 import { AppText, Button, Notice, TextField } from "@/components/ui";
 import { resolveMediaUrl } from "@/marketplace/format";
+import {
+  GHANA_REGIONS,
+  districtsForRegion,
+  placesForDistrict,
+} from "@/marketplace/ghana-locations";
 import {
   AMENITIES,
   EDITABLE_LISTING_STATUSES,
@@ -160,6 +166,28 @@ export function ListingEditorScreen({ professionalId, listingId }: { professiona
   const stay = isBookableCategory(draft.category);
   const units = priceUnitsFor(draft.listingType, draft.category);
   const unitOptions: (readonly [string, string])[] = [...(draft.listingType === "SALE" && !stay ? [["", "Total price"] as const] : []), ...units.map((unit) => [unit, PRICE_UNIT_LABELS[unit]] as const)];
+
+  const catalogueRegionNames = GHANA_REGIONS.map((region) => region.name);
+  const regionNames =
+    draft.region && !catalogueRegionNames.includes(draft.region)
+      ? [draft.region, ...catalogueRegionNames]
+      : catalogueRegionNames;
+
+  const districts = districtsForRegion(draft.region);
+  const catalogueDistrictNames = districts.map((district) => district.name);
+  const districtNames =
+    draft.district && !catalogueDistrictNames.includes(draft.district)
+      ? [draft.district, ...catalogueDistrictNames]
+      : catalogueDistrictNames;
+
+  const catalogueLocalityNames = placesForDistrict(
+    draft.region,
+    draft.district,
+  );
+  const localityNames =
+    draft.locality && !catalogueLocalityNames.includes(draft.locality)
+      ? [draft.locality, ...catalogueLocalityNames]
+      : catalogueLocalityNames;
 
   function setCategory(category: string) {
     if (isBookableCategory(category)) return update({ category, listingType: "RENT", priceUnit: "PER_NIGHT" });
@@ -328,15 +356,74 @@ export function ListingEditorScreen({ professionalId, listingId }: { professiona
         </View>
       </FormSection>
 
-      <FormSection title="Location" hint="Shown publicly as an area, never an exact address.">
-        <FieldRow>
-          <TextField label="Region" value={draft.region} onChangeText={(region) => update({ region })} editable={editable} />
-          <TextField label="City" value={draft.city} onChangeText={(city) => update({ city })} editable={editable} testID="listing-city" />
-        </FieldRow>
-        <FieldRow>
-          <TextField label="District" value={draft.district} onChangeText={(district) => update({ district })} editable={editable} />
-          <TextField label="Area / locality" value={draft.locality} onChangeText={(locality) => update({ locality })} editable={editable} />
-        </FieldRow>
+      <FormSection
+        title="Location"
+        hint="Choose the Ghana region, district / municipality and local area. The exact street address is not published."
+      >
+        <SearchableSelect
+          label="Country"
+          value="Ghana"
+          options={["Ghana"]}
+          disabled
+          onChange={() => undefined}
+          testID="listing-country"
+        />
+
+        <SearchableSelect
+          label="Region"
+          value={draft.region}
+          options={regionNames}
+          disabled={!editable}
+          placeholder="Choose a region"
+          testID="listing-region"
+          onChange={(region) =>
+            update({
+              region,
+              city: "",
+              district: "",
+              locality: "",
+            })
+          }
+        />
+
+        <SearchableSelect
+          label="District / Municipality"
+          value={draft.district}
+          options={districtNames}
+          disabled={!editable || !draft.region}
+          placeholder={
+            draft.region
+              ? "Choose a district / municipality"
+              : "Choose a region first"
+          }
+          testID="listing-district"
+          onChange={(district) =>
+            update({
+              district,
+              city: "",
+              locality: "",
+            })
+          }
+        />
+
+        <SearchableSelect
+          label="Location / Area"
+          value={draft.locality}
+          options={localityNames}
+          disabled={!editable || !draft.district}
+          placeholder={
+            draft.district
+              ? "Choose a location"
+              : "Choose a district first"
+          }
+          testID="listing-locality"
+          onChange={(locality) =>
+            update({
+              locality,
+              city: locality,
+            })
+          }
+        />
       </FormSection>
 
       <FormSection title="Your authority" hint="Your professional relationship to this property. NesAfric may ask for proof during review.">

@@ -430,6 +430,9 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
       .rejects.toMatchObject({ code: "FORBIDDEN" });
     await updateMarketplaceEnquiry(providerUser.id, null, enquiry.id, { status: "VIEWED" });
     await updateMarketplaceEnquiry(providerUser.id, null, enquiry.id, { status: "RESPONDED", note: "Ready to quote" });
+    await expect(
+      updateMarketplaceEnquiry(providerUser.id, null, enquiry.id, { status: "CANCELLED" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect((await getMarketplaceEnquiry(landlord.id, organisation.id, enquiry.id)).history.map(({ toStatus }) => toStatus))
       .toEqual(["NEW", "VIEWED", "RESPONDED"]);
 
@@ -448,19 +451,17 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
     expect(await db.providerOrganisation.count({ where: { providerId: provider.id, landlordOrganisationId: organisation.id } })).toBe(1);
     expect(await db.serviceProvider.count({ where: { individualUserId: providerUser.id } })).toBe(1);
 
-    const unreadyEnquiry = await createMarketplaceEnquiry(landlord.id, organisation.id, {
+    await expect(createMarketplaceEnquiry(landlord.id, organisation.id, {
       providerId: unready.id,
       categoryId: plumbing.id,
       maintenanceRequestId: maintenance.id,
-      message: "This enquiry is allowed, but a quote request is not.",
-    });
-    await expect(requestMarketplaceQuote(landlord.id, organisation.id, unreadyEnquiry.id, { scope: "Must fail readiness" }))
-      .rejects.toMatchObject({ code: "PROVIDER_NOT_READY" });
+      message: "This provider is not accepting new work.",
+    })).rejects.toMatchObject({ code: "MARKETPLACE_PROVIDER_UNAVAILABLE" });
 
     const viewerRole = await db.role.findUniqueOrThrow({ where: { key: "viewer" } });
     const viewerMember = await db.organisationMember.create({ data: { organisationId: organisation.id, userId: viewer.id } });
     await db.membershipRole.create({ data: { memberId: viewerMember.id, roleId: viewerRole.id } });
-    expect((await listMarketplaceEnquiries(viewer.id, organisation.id)).items).toHaveLength(2);
+    expect((await listMarketplaceEnquiries(viewer.id, organisation.id)).items).toHaveLength(1);
     await expect(createMarketplaceEnquiry(viewer.id, organisation.id, {
       providerId: provider.id,
       categoryId: plumbing.id,
@@ -479,6 +480,190 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
     }
   });
 
+
+  it("isolates personal customer enquiries while preserving provider and organisation boundaries", async () => {
+    const customerA = await registerUser({
+      displayName: "Personal Marketplace Customer A",
+      email: "personal-marketplace-a@example.com",
+      password: "secure-password-123",
+    });
+    const customerB = await registerUser({
+      displayName: "Personal Marketplace Customer B",
+      email: "personal-marketplace-b@example.com",
+      password: "secure-password-123",
+    });
+    const landlord = await registerUser({
+      displayName: "Personal Scope Landlord",
+      email: "personal-scope-landlord@example.com",
+      password: "secure-password-123",
+    });
+    const providerUser = await registerUser({
+      displayName: "Personal Scope Provider",
+      email: "personal-scope-provider@example.com",
+      password: "secure-password-123",
+    });
+
+    const organisation = await createOrganisation(landlord.id, {
+      name: "Personal Scope Organisation",
+      type: "PROPERTY_MANAGEMENT",
+      countryCode: "GH",
+    });
+
+    const plumbing = (await listServiceCategories()).find(
+      ({ key }) => key === "plumbing",
+    )!;
+
+    const provider = await createServiceProvider(providerUser.id, {
+      type: "INDIVIDUAL",
+      displayName: "Personal Scope Provider",
+      contactEmail: "personal-scope-provider@example.com",
+      categoryIds: [plumbing.id],
+    });
+
+    await submitProviderVerification(providerUser.id, provider.id, {
+      evidence: [
+        {
+          type: "GHANA_CARD_FRONT",
+          reference: "private/personal-scope-ghana-card-front",
+        },
+        {
+          type: "GHANA_CARD_BACK",
+          reference: "private/personal-scope-ghana-card-back",
+        },
+      ],
+    });
+
+    await verifyProviderIdentity(
+      provider.id,
+      "personal-scope-platform-reviewer@example.com",
+    );
+
+    await updateServiceProvider(providerUser.id, provider.id, {
+      availabilityStatus: "AVAILABLE",
+      acceptingWork: true,
+    });
+
+    await updateMarketplaceProfile(providerUser.id, provider.id, {
+      listed: true,
+      categoryIds: [plumbing.id],
+      serviceAreas: [{ countryCode: "GH", city: "Accra" }],
+    });
+
+    const property = await createProperty(landlord.id, organisation.id, {
+      name: "Personal Scope House",
+      referenceNumber: "PERSONAL-SCOPE-HOUSE",
+      category: "Residential",
+      countryCode: "GH",
+      currencyCode: "GHS",
+    });
+
+    const maintenance = await createMaintenanceRequest(
+      landlord.id,
+      organisation.id,
+      {
+        propertyId: property.id,
+        title: "Personal scope plumbing request",
+        description: "Must remain organisation scoped",
+        category: "plumbing",
+      },
+    );
+
+    const personalA = await createMarketplaceEnquiry(customerA.id, null, {
+      providerId: provider.id,
+      categoryId: plumbing.id,
+      message: "I need help with a personal plumbing job.",
+    });
+
+    const personalB = await createMarketplaceEnquiry(customerB.id, null, {
+      providerId: provider.id,
+      categoryId: plumbing.id,
+      message: "I have a different personal plumbing job.",
+    });
+
+    expect(personalA).toMatchObject({
+      status: "NEW",
+      providerId: provider.id,
+      requestingOrganisationId: null,
+      requestedByUserId: customerA.id,
+      conversationId: null,
+    });
+
+    expect(personalB).toMatchObject({
+      requestingOrganisationId: null,
+      requestedByUserId: customerB.id,
+      conversationId: null,
+    });
+
+    const customerAInbox = await listMarketplaceEnquiries(customerA.id, null);
+    expect(customerAInbox.items.map(({ id }) => id)).toEqual([personalA.id]);
+    expect(customerAInbox.items.map(({ id }) => id)).not.toContain(personalB.id);
+
+    const customerBInbox = await listMarketplaceEnquiries(customerB.id, null);
+    expect(customerBInbox.items.map(({ id }) => id)).toEqual([personalB.id]);
+    expect(customerBInbox.items.map(({ id }) => id)).not.toContain(personalA.id);
+
+    expect((await getMarketplaceEnquiry(customerA.id, null, personalA.id)).id)
+      .toBe(personalA.id);
+
+    await expect(
+      getMarketplaceEnquiry(customerB.id, null, personalA.id),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const providerInbox = await listMarketplaceEnquiries(
+      providerUser.id,
+      null,
+      { providerId: provider.id },
+    );
+
+    expect(providerInbox.items.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([personalA.id, personalB.id]),
+    );
+
+    await expect(
+      createMarketplaceEnquiry(customerA.id, null, {
+        providerId: provider.id,
+        categoryId: plumbing.id,
+        propertyId: property.id,
+        message: "A personal request must not attach a property.",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_ENQUIRY_SCOPE" });
+
+    await expect(
+      createMarketplaceEnquiry(customerA.id, null, {
+        providerId: provider.id,
+        categoryId: plumbing.id,
+        maintenanceRequestId: maintenance.id,
+        message: "A personal request must not attach maintenance.",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_ENQUIRY_SCOPE" });
+
+    const organisationEnquiry = await createMarketplaceEnquiry(
+      landlord.id,
+      organisation.id,
+      {
+        providerId: provider.id,
+        categoryId: plumbing.id,
+        propertyId: property.id,
+        maintenanceRequestId: maintenance.id,
+        message: "This request belongs to the organisation.",
+      },
+    );
+
+    const organisationInbox = await listMarketplaceEnquiries(
+      landlord.id,
+      organisation.id,
+    );
+
+    expect(organisationInbox.items.map(({ id }) => id))
+      .toContain(organisationEnquiry.id);
+    expect(organisationInbox.items.map(({ id }) => id))
+      .not.toContain(personalA.id);
+    expect(organisationInbox.items.map(({ id }) => id))
+      .not.toContain(personalB.id);
+
+    expect((await listMarketplaceEnquiries(customerA.id, null)).items)
+      .toHaveLength(1);
+  });
 
   it("publicly lists an unverified provider but hides contact and blocks enquiries and work", async () => {
     const landlord = await registerUser({

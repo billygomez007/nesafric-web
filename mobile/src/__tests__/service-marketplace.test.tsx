@@ -118,7 +118,8 @@ function mockServer(server: Server = {}) {
       return json(200, { providerId: savedMatch[1], saved: false });
     }
     if (url.pathname === "/api/marketplace/enquiries" && init.method === "POST") {
-      if (!orgAllowed()) return json(403, { error: { code: "FORBIDDEN", message: "Forbidden" } });
+      if (!authed) return json(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+      if (headers["x-organisation-id"] && !orgAllowed()) return json(403, { error: { code: "FORBIDDEN", message: "Forbidden" } });
       return json(...(server.enquiry?.() ?? [201, { id: "e0000000-0000-4000-8000-000000000001", status: "NEW", providerId: kwame.id, categoryId: kwame.categories[0].id }]));
     }
     if (url.pathname.endsWith("/quote-request") && init.method === "POST") {
@@ -192,7 +193,7 @@ describe("marketplace selector", () => {
     fireEvent.press(screen.getByTestId("marketplace-mode-services"));
     expect(await screen.findByText("Find trusted professionals and companies for every stage of your property.")).toBeTruthy();
     expect(screen.getByPlaceholderText("Search plumbers, electricians, cleaners…")).toBeTruthy();
-    expect(await screen.findByText("Kwame Plumbing Services")).toBeTruthy();
+    expect((await screen.findAllByText("Kwame Plumbing Services")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Find your perfect property")).toBeNull();
     expect(selected("marketplace-mode-services")).toBe(true);
 
@@ -351,6 +352,57 @@ describe("provider profile", () => {
     expect(within(screen.getByTestId("stat-completion")).getByText("96%")).toBeTruthy();
   });
 
+  it("does not offer service actions when a verified provider is not accepting work", async () => {
+    const paused = provider({ acceptingWork: false });
+    mockServer({ providers: [paused] });
+    renderRouter(APP_DIR, {
+      initialUrl: `/marketplace/services/${paused.id}`,
+    });
+
+    expect(await screen.findByText(paused.displayName)).toBeTruthy();
+    expect(
+      screen.getByText("This provider isn’t taking new work right now and may not respond."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Request service")).toBeNull();
+    expect(screen.queryByText("Get quote")).toBeNull();
+  });
+
+  it("does not offer service actions when a provider is unavailable", async () => {
+    const unavailable = provider({ availability: "UNAVAILABLE" });
+    mockServer({ providers: [unavailable] });
+    renderRouter(APP_DIR, {
+      initialUrl: `/marketplace/services/${unavailable.id}`,
+    });
+
+    expect(await screen.findByText(unavailable.displayName)).toBeTruthy();
+    expect(screen.queryByText("Request service")).toBeNull();
+    expect(screen.queryByText("Get quote")).toBeNull();
+  });
+
+  it("does not offer service actions before provider verification", async () => {
+    const unverified = provider({
+      verification: "UNVERIFIED",
+      verificationBadges: {
+        identity: false,
+        business: false,
+        skill: false,
+      },
+    });
+    mockServer({ providers: [unverified] });
+    renderRouter(APP_DIR, {
+      initialUrl: `/marketplace/services/${unverified.id}`,
+    });
+
+    expect(await screen.findByText(unverified.displayName)).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Verification is required before this provider can receive service requests.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Request service")).toBeNull();
+    expect(screen.queryByText("Get quote")).toBeNull();
+  });
+
   it("opens from a provider card", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
@@ -401,6 +453,7 @@ describe("request service", () => {
     mockServer({ workspaces: { ...NONE, propertyOsOrganisations: [ORG] } });
     renderRouter(APP_DIR, { initialUrl: `/marketplace/services/${kwame.id}/request?categoryId=${kwame.categories[0].id}` });
     fireEvent.changeText(await screen.findByLabelText("What do you need done?"), "Kitchen sink pipe is leaking under the cabinet.");
+    fireEvent.press(await screen.findByText("Golden Coast Properties"));
     fireEvent.press(await screen.findByText("Ocean View Apartments"));
     // Completed maintenance can't be linked.
     expect(screen.queryByText(/Old repair/)).toBeNull();
@@ -418,6 +471,39 @@ describe("request service", () => {
       message: "Kitchen sink pipe is leaking under the cabinet.",
     });
     expect(calls.some((entry) => entry.url.pathname.endsWith("/quote-request"))).toBe(false);
+  });
+
+  it("preserves Get quote intent when the customer chooses a workspace", async () => {
+    signedIn();
+    const SECOND_ORG = {
+      id: "0b8f6a52-5b0c-4a1e-9c1c-000000000002",
+      name: "Second Property Workspace",
+    };
+    mockServer({
+      workspaces: {
+        ...NONE,
+        propertyOsOrganisations: [ORG, SECOND_ORG],
+      },
+    });
+
+    renderRouter(APP_DIR, {
+      initialUrl: `/marketplace/services/${kwame.id}/request?quote=1`,
+    });
+
+    // With multiple workspaces, Get quote starts on the personal context.
+    // The quotation control appears after the customer chooses a workspace,
+    // and the original Get quote intent must still be preserved.
+    // Wait for workspace loading to finish before checking the initial
+    // personal context. The quotation control is intentionally hidden there.
+    const workspace = await screen.findByText("Golden Coast Properties");
+    expect(screen.queryByTestId("request-quote")).toBeNull();
+
+    fireEvent.press(workspace);
+
+    // The original Get quote intent survives workspace selection.
+    expect(
+      (await screen.findByTestId("request-quote")).props.accessibilityState.checked,
+    ).toBe(true);
   });
 
   it("requests a formal quotation only with a maintenance request", async () => {
@@ -440,12 +526,56 @@ describe("request service", () => {
     expect(JSON.parse(String(quote.init.body))).toEqual({ scope: "Burst pipe flooding the bathroom floor." });
   });
 
-  it("explains that requests come from a property workspace when the account has none", async () => {
+  it("downgrades Get quote to a personal request when the customer has no workspace", async () => {
+    signedIn();
+    mockServer();
+
+    renderRouter(APP_DIR, {
+      initialUrl: `/marketplace/services/${kwame.id}/request?quote=1`,
+    });
+
+    expect(
+      await screen.findByText(
+        "Formal quotations require a PropertyOS workspace and maintenance request. You can still send this provider a personal service request.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("request-quote")).toBeNull();
+
+    fireEvent.changeText(
+      screen.getByLabelText("What do you need done?"),
+      "I need help repairing a leaking kitchen pipe.",
+    );
+
+    await act(async () =>
+      fireEvent.press(screen.getByTestId("send-service-request")),
+    );
+
+    expect(
+      await screen.findByText("Request sent to Kwame Plumbing Services"),
+    ).toBeTruthy();
+
+    const [call] = callsTo("/api/marketplace/enquiries");
+    expect(
+      (call.init.headers as Record<string, string>)["x-organisation-id"],
+    ).toBeUndefined();
+    expect(
+      calls.some((entry) => entry.url.pathname.endsWith("/quote-request")),
+    ).toBe(false);
+  });
+
+  it("allows a signed-in marketplace customer to request a service without a property workspace", async () => {
     signedIn();
     mockServer();
     renderRouter(APP_DIR, { initialUrl: `/marketplace/services/${kwame.id}/request` });
-    expect(await screen.findByText("Requests come from a property workspace")).toBeTruthy();
-    expect(screen.getByText("Set up property management")).toBeTruthy();
+    fireEvent.changeText(await screen.findByLabelText("What do you need done?"), "I need help repairing a leaking kitchen pipe.");
+    await act(async () => fireEvent.press(screen.getByTestId("send-service-request")));
+    expect(await screen.findByText("Request sent to Kwame Plumbing Services")).toBeTruthy();
+    const [call] = callsTo("/api/marketplace/enquiries");
+    expect((call.init.headers as Record<string, string>)["x-organisation-id"]).toBeUndefined();
+    expect(JSON.parse(String(call.init.body))).toMatchObject({
+      providerId: kwame.id,
+      message: "I need help repairing a leaking kitchen pipe.",
+    });
   });
 
   it("shows the server's refusal instead of claiming success", async () => {
