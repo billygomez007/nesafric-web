@@ -136,10 +136,6 @@ export function ServicesHome() {
       </View>
 
       <View style={styles.section}>
-        <SectionHeading
-          title="Property Services"
-        />
-
         <View>
           {!categoriesQuery.data ? (
             <View style={styles.gutter}>

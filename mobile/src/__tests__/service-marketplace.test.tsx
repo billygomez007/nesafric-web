@@ -214,7 +214,7 @@ describe("service provider marketplace home", () => {
   it("lists services from the categories API, core services first and admin-added ones kept", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    expect((await screen.findAllByText("Property Services")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Property Services")).toBeNull();
     const tiles = (await screen.findAllByTestId(/^service-category-/)).map((tile) => tile.props.testID);
     expect(tiles).toEqual([
       "service-category-plumbing",
