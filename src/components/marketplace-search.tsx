@@ -134,6 +134,13 @@ export function ProviderCard({ provider }: { provider: PublicProvider }) {
         <SaveProviderButton name={provider.displayName} providerId={provider.id} />
       </div>
       <VerificationBadges provider={provider} />
+
+      {provider.ranking?.score !== undefined && (
+        <div className="inline-flex w-fit rounded-full bg-teal/10 px-3 py-1 text-xs font-semibold text-forest">
+          NesAfric quality score {Math.round(provider.ranking.score)}
+        </div>
+      )}
+
       <dl aria-label="NesAfric record" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <div><dt className="sr-only">Rating</dt><dd><RatingLine provider={provider} /></dd></div>
         <div><dt className="sr-only">Completed jobs</dt><dd className="font-semibold text-ink">{provider.completedJobs > 0 ? completedJobsLabel(provider.completedJobs) : "New on NesAfric"}</dd></div>
