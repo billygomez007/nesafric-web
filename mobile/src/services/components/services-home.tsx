@@ -1,47 +1,83 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 
-import { useProviderCollection, useServiceCategories } from "@/api/service-queries";
+import {
+  useProviderCollection,
+  useServiceCategories,
+} from "@/api/service-queries";
 import type { ServiceCategory } from "@/api/types";
 import { AppText, Button } from "@/components/ui";
+import { FeaturedAdsCarousel } from "@/home/components/featured-ads-carousel";
 import { HOME_GUTTER } from "@/home/components/layout";
 import { SectionHeading } from "@/home/components/section-heading";
 import { orderCategories } from "@/services/format";
 import { openProviderSearch } from "@/services/navigation";
-import { colors, fonts, radii } from "@/theme/tokens";
-import { CategoryTiles } from "./category-tiles";
+import { colors, fonts, radii, spacing } from "@/theme/tokens";
+import { categoryIcon, CategoryTiles } from "./category-tiles";
 import { InlineState } from "./inline-state";
 import { ProviderCard } from "./provider-card";
+import { TrustedServiceCompanies } from "./trusted-service-companies";
 
 const HOME_PROVIDERS = 5;
 
 /**
- * Service Provider Marketplace home: heading and provider search (run by the server on Search) →
- * services (from the server's category list) → providers in the server's ranking order. No sample providers: an empty or
- * failed response is shown as such.
+ * The eight primary categories approved for the Service Marketplace landing page.
+ * The complete taxonomy remains available through each parent's subcategories/search;
+ * the three later parent groups are deliberately not shown in this first rail.
  */
+const PRIMARY_CATEGORY_KEYS = [
+  "property_services_construction_building_works",
+  "property_services_repairs_maintenance",
+  "property_services_cleaning_property_care",
+  "property_services_landscaping_outdoor",
+  "property_services_energy_power_utilities",
+  "property_services_security_access_safety",
+  "property_services_interior_design_fitout",
+  "property_services_architecture_engineering",
+] as const;
+
 export function ServicesHome() {
   const categoriesQuery = useServiceCategories();
   const providersQuery = useProviderCollection({}, HOME_PROVIDERS);
   const [text, setText] = useState("");
-  const [selectedParent, setSelectedParent] = useState<ServiceCategory | null>(null);
+  const [selectedParent, setSelectedParent] =
+    useState<ServiceCategory | null>(null);
 
   const ordered = useMemo(
     () => orderCategories(categoriesQuery.data ?? []),
     [categoriesQuery.data],
   );
 
-  const explicitTopLevelCategories = useMemo(
+  const explicitParents = useMemo(
     () => ordered.filter((category) => category.parentId === null),
     [ordered],
   );
 
-  const hierarchical = explicitTopLevelCategories.length > 0;
+  const hierarchical = explicitParents.length > 0;
 
-  const topLevelCategories = hierarchical
-    ? explicitTopLevelCategories
-    : ordered;
+  const primaryCategories = useMemo(() => {
+    if (!hierarchical) {
+      // Backwards compatibility for older/local fixtures that predate the hierarchy.
+      return ordered.slice(0, 8);
+    }
+
+    const byKey = new Map(
+      explicitParents.map((category) => [category.key, category]),
+    );
+
+    return PRIMARY_CATEGORY_KEYS.flatMap((key) => {
+      const category = byKey.get(key);
+      return category ? [category] : [];
+    });
+  }, [explicitParents, hierarchical, ordered]);
 
   const subcategories = useMemo(
     () =>
@@ -61,10 +97,10 @@ export function ServicesHome() {
       return;
     }
 
+    setSelectedParent(null);
     openProviderSearch({ service: category.key });
   }
 
-  /** Hands the text to Search, where the server searches providers. */
   function submit() {
     const q = text.trim();
     if (q) openProviderSearch({ q });
@@ -76,10 +112,20 @@ export function ServicesHome() {
   return (
     <>
       <View style={styles.hero}>
-        <AppText accessibilityRole="header" style={styles.title}>Property Services</AppText>
-        <AppText style={styles.lead}>Find trusted professionals and companies for every stage of your property.</AppText>
+        <AppText accessibilityRole="header" style={styles.title}>
+          Find your perfect service professional
+        </AppText>
+
+        <AppText style={styles.lead}>
+          Find trusted professionals and companies for every stage of your property.
+        </AppText>
+
         <View style={styles.searchBox}>
-          <MaterialCommunityIcons name="magnify" size={22} color={colors.muted} />
+          <MaterialCommunityIcons
+            name="magnify"
+            size={22}
+            color={colors.muted}
+          />
           <TextInput
             value={text}
             onChangeText={setText}
@@ -95,40 +141,166 @@ export function ServicesHome() {
 
       <View style={styles.section}>
         <SectionHeading
-          title={selectedParent ? selectedParent.name : "Property Services"}
-          subtitle={
-            selectedParent
-              ? "Choose the service you need."
-              : "Browse all property service categories."
+          title="Property Services"
+          subtitle="Choose a major service category."
+        />
+
+        <View>
+          {!categoriesQuery.data ? (
+            <View style={styles.gutter}>
+              <InlineState
+                loading={categoriesQuery.isPending}
+                error={categoriesQuery.error}
+                onRetry={() => categoriesQuery.refetch()}
+                testID="service-categories-state"
+              />
+            </View>
+          ) : !primaryCategories.length ? (
+            <View style={styles.gutter}>
+              <InlineState
+                emptyTitle="No services listed yet"
+                emptyMessage="Service categories will appear here once NesAfric publishes them."
+              />
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.primaryRail}
+              accessibilityLabel="Major service categories"
+            >
+              {primaryCategories.map((category) => (
+                <Pressable
+                  key={category.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={category.name}
+                  testID={`service-category-${category.key}`}
+                  onPress={() => selectCategory(category)}
+                  style={({ pressed }) => [
+                    styles.primaryCard,
+                    pressed && styles.primaryCardPressed,
+                  ]}
+                >
+                  <View style={styles.primaryIcon}>
+                    <MaterialCommunityIcons
+                      name={categoryIcon(category.key)}
+                      size={24}
+                      color={colors.forestDeep}
+                    />
+                  </View>
+
+                  <AppText style={styles.primaryLabel} numberOfLines={3}>
+                    {category.name}
+                  </AppText>
+
+                  {hierarchical ? (
+                    <MaterialCommunityIcons
+                      name="chevron-right"
+                      size={18}
+                      color={colors.muted}
+                    />
+                  ) : null}
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+
+      <FeaturedAdsCarousel />
+
+      <TrustedServiceCompanies />
+
+      <View style={styles.section}>
+        <SectionHeading
+          title="Service providers"
+          subtitle="Discover professionals and companies available on NesAfric."
+          action={
+            providers.length
+              ? {
+                  label: "See all",
+                  onPress: () => openProviderSearch(),
+                }
+              : undefined
           }
         />
-        <View style={styles.gutter}>
-          {!categoriesQuery.data ? (
-            <InlineState loading={categoriesQuery.isPending} error={categoriesQuery.error} onRetry={() => categoriesQuery.refetch()} testID="service-categories-state" />
-          ) : !topLevelCategories.length ? (
+
+        <View style={[styles.gutter, styles.providers]}>
+          {!providersQuery.data ? (
             <InlineState
-              emptyTitle="No services listed yet"
-              emptyMessage="Service categories will appear here once NesAfric publishes them."
+              loading={providersQuery.isPending}
+              error={providersQuery.error}
+              onRetry={() => providersQuery.refetch()}
+              testID="service-providers-state"
             />
-          ) : selectedParent ? (
-            <View style={styles.categories}>
+          ) : !providers.length ? (
+            <InlineState
+              testID="service-providers-empty"
+              emptyTitle="No service providers listed yet"
+              emptyMessage="Service providers will appear here once they publish a marketplace profile."
+            />
+          ) : (
+            <>
+              {providers.map((provider) => (
+                <ProviderCard key={provider.id} provider={provider} />
+              ))}
+
+              {total > providers.length ? (
+                <Button
+                  label={`See all ${total.toLocaleString()} providers`}
+                  variant="dark"
+                  onPress={() => openProviderSearch()}
+                />
+              ) : null}
+            </>
+          )}
+        </View>
+      </View>
+
+      <Modal
+        visible={Boolean(selectedParent)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedParent(null)}
+      >
+        <View style={styles.modalRoot}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            accessibilityLabel="Close service categories"
+            onPress={() => setSelectedParent(null)}
+          />
+
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleWrap}>
+                <AppText accessibilityRole="header" style={styles.sheetTitle}>
+                  {selectedParent?.name}
+                </AppText>
+                <AppText style={styles.sheetSubtitle}>
+                  Choose the service you need.
+                </AppText>
+              </View>
+
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Back to Property Services"
+                accessibilityLabel="Close"
                 onPress={() => setSelectedParent(null)}
-                style={({ pressed }) => [
-                  styles.backButton,
-                  pressed && styles.backButtonPressed,
-                ]}
+                style={styles.closeButton}
               >
                 <MaterialCommunityIcons
-                  name="chevron-left"
-                  size={20}
+                  name="close"
+                  size={22}
                   color={colors.forestDeep}
                 />
-                <AppText style={styles.backLabel}>All Property Services</AppText>
               </Pressable>
+            </View>
 
+            <ScrollView
+              contentContainerStyle={styles.sheetContent}
+              showsVerticalScrollIndicator={false}
+            >
               {subcategories.length ? (
                 <CategoryTiles
                   categories={subcategories}
@@ -140,56 +312,41 @@ export function ServicesHome() {
                   emptyMessage="Services will appear here once NesAfric publishes them."
                 />
               )}
-            </View>
-          ) : (
-            <View style={styles.categories}>
-              <CategoryTiles
-                categories={topLevelCategories}
-                onSelect={selectCategory}
-              />
-            </View>
-          )}
+            </ScrollView>
+          </View>
         </View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeading
-          title="Providers on NesAfric"
-          subtitle="Verified by NesAfric, ranked by their record on the platform."
-          action={providers.length ? { label: "See all", onPress: () => openProviderSearch() } : undefined}
-        />
-        <View style={[styles.gutter, styles.providers]}>
-          {!providersQuery.data ? (
-            <InlineState loading={providersQuery.isPending} error={providersQuery.error} onRetry={() => providersQuery.refetch()} testID="service-providers-state" />
-          ) : !providers.length ? (
-            <InlineState
-              testID="service-providers-empty"
-              emptyTitle="No service providers listed yet"
-              emptyMessage="Verified providers appear here as soon as they publish a marketplace profile."
-            />
-          ) : (
-            <>
-              {providers.map((provider) => <ProviderCard key={provider.id} provider={provider} />)}
-              {total > providers.length ? (
-                <Button label={`See all ${total.toLocaleString()} providers`} variant="dark" onPress={() => openProviderSearch()} />
-              ) : null}
-            </>
-          )}
-        </View>
-      </View>
+      </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { paddingHorizontal: HOME_GUTTER, gap: 6 },
-  title: { fontFamily: fonts.bold, fontSize: 25, lineHeight: 31, letterSpacing: -0.4, color: colors.forestDeep },
-  lead: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 21, color: colors.muted, marginBottom: 6 },
+  hero: {
+    paddingHorizontal: HOME_GUTTER,
+    gap: 6,
+  },
+
+  title: {
+    fontFamily: fonts.bold,
+    fontSize: 25,
+    lineHeight: 31,
+    letterSpacing: -0.4,
+    color: colors.forestDeep,
+  },
+
+  lead: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.muted,
+    marginBottom: 6,
+  },
+
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    height: 42,
+    height: 46,
     paddingHorizontal: 16,
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -201,23 +358,126 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  input: { flex: 1, fontFamily: fonts.regular, fontSize: 16, color: colors.ink, paddingVertical: 0 },
-  section: { gap: 10 },
-  gutter: { paddingHorizontal: HOME_GUTTER },
-  categories: { gap: 10 },
-  backButton: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    minHeight: 44,
-    paddingHorizontal: 4,
+
+  input: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    color: colors.ink,
+    paddingVertical: 0,
   },
-  backButtonPressed: { opacity: 0.72 },
-  backLabel: {
+
+  section: {
+    gap: 10,
+  },
+
+  gutter: {
+    paddingHorizontal: HOME_GUTTER,
+  },
+
+  primaryRail: {
+    paddingHorizontal: HOME_GUTTER,
+    gap: 10,
+  },
+
+  primaryCard: {
+    width: 154,
+    minHeight: 112,
+    padding: 14,
+    gap: 9,
+    borderRadius: radii.shell,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.elevated,
+  },
+
+  primaryCardPressed: {
+    backgroundColor: colors.surface,
+  },
+
+  primaryIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.cream,
+  },
+
+  primaryLabel: {
+    flex: 1,
     fontFamily: fonts.bold,
     fontSize: 14,
+    lineHeight: 18,
     color: colors.forestDeep,
   },
-  providers: { gap: 12 },
+
+  providers: {
+    gap: 12,
+  },
+
+  modalRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+
+  sheet: {
+    maxHeight: "78%",
+    paddingTop: 10,
+    paddingBottom: spacing.xxl,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: colors.background,
+  },
+
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    alignSelf: "center",
+    marginBottom: 12,
+    borderRadius: 2,
+    backgroundColor: colors.hairline,
+  },
+
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: HOME_GUTTER,
+    paddingBottom: 14,
+    gap: 12,
+  },
+
+  sheetTitleWrap: {
+    flex: 1,
+    gap: 2,
+  },
+
+  sheetTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    color: colors.forestDeep,
+  },
+
+  sheetSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 19,
+    color: colors.muted,
+  },
+
+  closeButton: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 21,
+    backgroundColor: colors.elevated,
+  },
+
+  sheetContent: {
+    paddingHorizontal: HOME_GUTTER,
+    paddingBottom: spacing.xxl,
+  },
 });

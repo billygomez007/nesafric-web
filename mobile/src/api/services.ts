@@ -28,12 +28,17 @@ export const getMarketplaceProvider = (api: ApiClient, idOrSlug: string, signal?
   );
 
 /**
- * `POST /api/marketplace/enquiries` — the existing marketplace enquiry, sent on behalf of a
- * property management organisation the signed-in user belongs to (the server checks the
- * `marketplace.enquiry.create` permission and that the provider publishes the category).
+ * `POST /api/marketplace/enquiries` — any signed-in NesAfric customer may send a direct
+ * provider enquiry. A property-management organisation is optional and is included only when
+ * the requester deliberately scopes the job to one of their workspaces.
  */
-export const createServiceEnquiry = (api: ApiClient, organisationId: string, input: ServiceEnquiryInput) =>
-  api.request<ServiceEnquiryCreated>("/api/marketplace/enquiries", { method: "POST", auth: true, organisationId, body: input });
+export const createServiceEnquiry = (api: ApiClient, organisationId: string | undefined, input: ServiceEnquiryInput) =>
+  api.request<ServiceEnquiryCreated>("/api/marketplace/enquiries", {
+    method: "POST",
+    auth: true,
+    ...(organisationId ? { organisationId } : {}),
+    body: input,
+  });
 
 /** `POST /api/marketplace/enquiries/:id/quote-request` — needs the enquiry to be scoped to a maintenance request. */
 export const requestServiceQuote = (api: ApiClient, organisationId: string, enquiryId: string, scope: string) =>

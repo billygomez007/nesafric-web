@@ -118,7 +118,8 @@ function mockServer(server: Server = {}) {
       return json(200, { providerId: savedMatch[1], saved: false });
     }
     if (url.pathname === "/api/marketplace/enquiries" && init.method === "POST") {
-      if (!orgAllowed()) return json(403, { error: { code: "FORBIDDEN", message: "Forbidden" } });
+      if (!authed) return json(401, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+      if (headers["x-organisation-id"] && !orgAllowed()) return json(403, { error: { code: "FORBIDDEN", message: "Forbidden" } });
       return json(...(server.enquiry?.() ?? [201, { id: "e0000000-0000-4000-8000-000000000001", status: "NEW", providerId: kwame.id, categoryId: kwame.categories[0].id }]));
     }
     if (url.pathname.endsWith("/quote-request") && init.method === "POST") {
@@ -192,7 +193,7 @@ describe("marketplace selector", () => {
     fireEvent.press(screen.getByTestId("marketplace-mode-services"));
     expect(await screen.findByText("Find trusted professionals and companies for every stage of your property.")).toBeTruthy();
     expect(screen.getByPlaceholderText("Search plumbers, electricians, cleaners…")).toBeTruthy();
-    expect(await screen.findByText("Kwame Plumbing Services")).toBeTruthy();
+    expect((await screen.findAllByText("Kwame Plumbing Services")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Find your perfect property")).toBeNull();
     expect(selected("marketplace-mode-services")).toBe(true);
 
@@ -401,6 +402,7 @@ describe("request service", () => {
     mockServer({ workspaces: { ...NONE, propertyOsOrganisations: [ORG] } });
     renderRouter(APP_DIR, { initialUrl: `/marketplace/services/${kwame.id}/request?categoryId=${kwame.categories[0].id}` });
     fireEvent.changeText(await screen.findByLabelText("What do you need done?"), "Kitchen sink pipe is leaking under the cabinet.");
+    fireEvent.press(await screen.findByText("Golden Coast Properties"));
     fireEvent.press(await screen.findByText("Ocean View Apartments"));
     // Completed maintenance can't be linked.
     expect(screen.queryByText(/Old repair/)).toBeNull();
@@ -440,12 +442,19 @@ describe("request service", () => {
     expect(JSON.parse(String(quote.init.body))).toEqual({ scope: "Burst pipe flooding the bathroom floor." });
   });
 
-  it("explains that requests come from a property workspace when the account has none", async () => {
+  it("allows a signed-in marketplace customer to request a service without a property workspace", async () => {
     signedIn();
     mockServer();
     renderRouter(APP_DIR, { initialUrl: `/marketplace/services/${kwame.id}/request` });
-    expect(await screen.findByText("Requests come from a property workspace")).toBeTruthy();
-    expect(screen.getByText("Set up property management")).toBeTruthy();
+    fireEvent.changeText(await screen.findByLabelText("What do you need done?"), "I need help repairing a leaking kitchen pipe.");
+    await act(async () => fireEvent.press(screen.getByTestId("send-service-request")));
+    expect(await screen.findByText("Request sent to Kwame Plumbing Services")).toBeTruthy();
+    const [call] = callsTo("/api/marketplace/enquiries");
+    expect((call.init.headers as Record<string, string>)["x-organisation-id"]).toBeUndefined();
+    expect(JSON.parse(String(call.init.body))).toMatchObject({
+      providerId: kwame.id,
+      message: "I need help repairing a leaking kitchen pipe.",
+    });
   });
 
   it("shows the server's refusal instead of claiming success", async () => {

@@ -31,6 +31,7 @@ export type AccountEmailTemplate =
   | "MARKETPLACE_LEAD_CREATED"
   | "VIEWING_REQUEST_CREATED"
   | "TEAM_INVITATION"
+  | "TENANT_ACCESS_INVITATION"
   | "ACCOMMODATION_BOOKING_REQUESTED"
   | "ACCOMMODATION_BOOKING_RECEIPT"
   | "ACCOMMODATION_BOOKING_CONFIRMED"
@@ -86,6 +87,12 @@ export type AccountEmailPayload = {
   invitationExpiresAt?: string;
   invitationId?: string;
   invitationTokenEncrypted?: EncryptedInvitationToken;
+
+  /** Tenant access invitation. The raw access code is encrypted before it is
+   * persisted in the background-job payload and decrypted only for delivery. */
+  tenantAccessCodeEncrypted?: EncryptedInvitationToken;
+  tenantOrganisationId?: string;
+  propertyName?: string;
 
   /** The exact idempotency identity for this send — reused as both the job's BackgroundJob key
    * (set by the caller at enqueue time) and the message id handed to the email provider, so a
@@ -223,6 +230,45 @@ export async function enqueueGuestBookingEmail(template: "ACCOMMODATION_BOOKING_
   });
 }
 
+export async function enqueueTenantAccessInvitationEmail(input: {
+  invitationId: string;
+  tenantOrganisationId: string;
+  recipientEmail: string;
+  recipientDisplayName: string;
+  workspaceName: string;
+  propertyName?: string;
+  invitationExpiresAt: Date;
+  accessCode: string;
+}) {
+  const dedupeKey =
+    `account-email:TENANT_ACCESS_INVITATION:${input.invitationId}`;
+
+  const tenantAccessCodeEncrypted =
+    encryptInvitationToken(
+      input.accessCode,
+      input.invitationId,
+    );
+
+  return enqueueJob({
+    type: "account-email",
+    idempotencyKey: dedupeKey,
+    payload: {
+      userId: "",
+      template: "TENANT_ACCESS_INVITATION",
+      dedupeKey,
+      recipientEmail: input.recipientEmail.toLowerCase(),
+      recipientDisplayName: input.recipientDisplayName,
+      workspaceName: input.workspaceName,
+      propertyName: input.propertyName,
+      invitationExpiresAt:
+        input.invitationExpiresAt.toISOString(),
+      invitationId: input.invitationId,
+      tenantOrganisationId: input.tenantOrganisationId,
+      tenantAccessCodeEncrypted,
+    } satisfies AccountEmailPayload,
+  });
+}
+
 export async function enqueueTeamInvitationEmail(input: {
   invitationId: string;
   recipientEmail: string;
@@ -277,6 +323,7 @@ export function contentFor(
     | "inviterName"
     | "roleLabel"
     | "invitationExpiresAt"
+    | "propertyName"
     | "bookingId"
     | "bookingReference"
     | "checkInLabel"
@@ -453,6 +500,61 @@ export function contentFor(
           cta: lead?.leadId ? { label: "Open the lead", path: `/leasing/leads/${lead.leadId}` } : undefined,
         },
       };
+    case "TENANT_ACCESS_INVITATION": {
+      const expiry = lead?.invitationExpiresAt
+        ? new Date(lead.invitationExpiresAt).toLocaleDateString(
+            "en-GB",
+            {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            },
+          )
+        : "7 days";
+
+      return {
+        subject: `Your tenant access code for ${workspaceName ?? BRAND.name}`,
+        sender: "notifications",
+        content: {
+          preheader: `Use your tenant access code to connect your tenancy to your ${BRAND.name} account.`,
+          heading: "Your tenant access code",
+          greeting: `Hi ${displayName},`,
+          paragraphs: [
+            `${workspaceName ?? "Your landlord or property manager"} has added you as a tenant on ${BRAND.name}.`,
+            lead?.propertyName
+              ? `This invitation is connected to ${lead.propertyName}.`
+              : "This invitation is connected to your tenant record.",
+            "Sign in or create your NesAfric account using this email address, then enter the tenant access code below.",
+            `This code expires on ${expiry}.`,
+          ],
+          details: [
+            {
+              label: "Tenant access code",
+              value: lead?.invitationToken ?? "—",
+            },
+            ...(lead?.propertyName
+              ? [
+                  {
+                    label: "Property",
+                    value: lead.propertyName,
+                  },
+                ]
+              : []),
+            {
+              label: "Workspace",
+              value:
+                workspaceName ?? "NesAfric property workspace",
+            },
+          ],
+          cta: {
+            label: "Open NesAfric",
+            path: "/account",
+          },
+          supportNote: `Keep this code private. If you were not expecting this invitation, contact ${BRAND.contact.support}.`,
+        },
+      };
+    }
+
     case "TEAM_INVITATION": {
       const expiry = lead?.invitationExpiresAt
         ? new Date(lead.invitationExpiresAt).toLocaleDateString("en-GB", {
@@ -564,8 +666,14 @@ export function contentFor(
 
 export async function sendAccountEmail(payload: AccountEmailPayload) {
   const invitationDelivery = payload.template === "TEAM_INVITATION";
-  // Sent to an address in the payload rather than to an account: invitations and guest booking emails.
-  const directDelivery = invitationDelivery || GUEST_BOOKING_TEMPLATES.has(payload.template);
+  const tenantInvitationDelivery =
+    payload.template === "TENANT_ACCESS_INVITATION";
+
+  // Sent to an address in the payload rather than to an account.
+  const directDelivery =
+    invitationDelivery
+    || tenantInvitationDelivery
+    || GUEST_BOOKING_TEMPLATES.has(payload.template);
 
   const user = directDelivery || !payload.userId
     ? null
@@ -613,13 +721,30 @@ export async function sendAccountEmail(payload: AccountEmailPayload) {
       );
   }
 
+  if (tenantInvitationDelivery) {
+    if (
+      !payload.invitationId
+      || !payload.tenantAccessCodeEncrypted
+    ) {
+      throw new Error(
+        "Tenant invitation email payload is missing its encrypted access code.",
+      );
+    }
+
+    transientInvitationToken =
+      decryptInvitationToken(
+        payload.tenantAccessCodeEncrypted,
+        payload.invitationId,
+      );
+  }
+
   const { subject, sender, content } = contentFor(
     payload.template,
     displayName,
     payload.workspaceName,
     payload.providerId,
     payload.reason,
-    invitationDelivery
+    invitationDelivery || tenantInvitationDelivery
       ? {
           ...payload,
           invitationToken:

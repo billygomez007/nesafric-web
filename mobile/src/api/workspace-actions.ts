@@ -361,6 +361,34 @@ export async function updatePmTenant(api: ApiClient, organisationId: string, ten
   return api.request<{ id: string }>(`/api/tenants/${encodeURIComponent(tenantId)}`, { method: "PATCH", auth: true, organisationId, body: tenantBody(input) });
 }
 
+export async function createPmTenantAccessInvitation(
+  api: ApiClient,
+  organisationId: string,
+  tenantId: string,
+  leaseId?: string,
+) {
+  return api.request<{
+    invitation: {
+      id: string;
+      createdAt: string;
+      expiresAt: string;
+      status: string;
+    };
+    delivery: {
+      email: "QUEUED" | "SKIPPED" | "FAILED";
+      sms: "SENT" | "SKIPPED" | "FAILED";
+    };
+  }>(
+    `/api/tenants/${encodeURIComponent(tenantId)}/access-invitations`,
+    {
+      method: "POST",
+      auth: true,
+      organisationId,
+      ...(leaseId ? { body: { leaseId } } : {}),
+    },
+  );
+}
+
 export type TenancyInput = { propertyId: string; unitId: string | null; referenceNumber: string; startDate: string; endDate: string; rent: string; rentFrequency: "MONTHLY" | "QUARTERLY" | "ANNUAL" };
 
 /**

@@ -94,9 +94,9 @@ describe("provider filters", () => {
 
 describe("request validation", () => {
   const base = { organisationId: "o1", categoryId: "c1", propertyId: null, maintenanceRequestId: null, message: "Leaking pipe under the sink.", requestQuote: false };
-  it("needs a workspace, a service and a description", () => {
+  it("needs a service and a description; a property workspace is optional", () => {
     expect(validateServiceRequest(base)).toEqual({});
-    expect(Object.keys(validateServiceRequest({ ...base, organisationId: null, categoryId: null, message: "fix" })).sort()).toEqual(["categoryId", "message", "organisationId"]);
+    expect(Object.keys(validateServiceRequest({ ...base, organisationId: null, categoryId: null, message: "fix" })).sort()).toEqual(["categoryId", "message"]);
   });
   it("only allows a formal quotation with a maintenance request", () => {
     expect(validateServiceRequest({ ...base, requestQuote: true }).requestQuote).toBeDefined();

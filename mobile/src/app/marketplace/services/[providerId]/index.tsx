@@ -124,14 +124,20 @@ function ProviderProfile({ provider }: { provider: PublicProvider }) {
 
       <View style={[styles.bar, { paddingBottom: spacing.md + insets.bottom }]}>
         {notTakingWork ? <AppText variant="caption" style={styles.center}>This provider isn’t taking new work right now and may not respond.</AppText> : null}
-        <View style={styles.actions}>
-          <View style={styles.action}>
-            <Button label="Get quote" variant="secondary" onPress={() => openRequestService(provider.id, firstCategory, true)} />
+        {provider.verification === "VERIFIED" ? (
+          <View style={styles.actions}>
+            <View style={styles.action}>
+              <Button label="Get quote" variant="secondary" onPress={() => openRequestService(provider.id, firstCategory, true)} />
+            </View>
+            <View style={styles.action}>
+              <Button label="Request service" onPress={() => openRequestService(provider.id, firstCategory)} testID="profile-request-service" />
+            </View>
           </View>
-          <View style={styles.action}>
-            <Button label="Request service" onPress={() => openRequestService(provider.id, firstCategory)} testID="profile-request-service" />
-          </View>
-        </View>
+        ) : (
+          <AppText variant="caption" style={styles.center}>
+            Verification is required before this provider can receive service requests.
+          </AppText>
+        )}
       </View>
     </>
   );

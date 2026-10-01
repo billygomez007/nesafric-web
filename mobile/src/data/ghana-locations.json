@@ -1,0 +1,3696 @@
+[
+  {
+    "id": "GH01",
+    "name": "Ahafo",
+    "districts": [
+      {
+        "id": "GH0101",
+        "name": "Asunafo North Municipal",
+        "places": [
+          "Akrodie",
+          "Ampenkro",
+          "Asumura",
+          "Ayomso",
+          "Fawohoyeden",
+          "Gaoso",
+          "Goaso",
+          "Kasapin",
+          "Mim"
+        ]
+      },
+      {
+        "id": "GH0102",
+        "name": "Asunafo South",
+        "places": [
+          "Abuom",
+          "Asarekrom",
+          "Kokooso",
+          "Kukuom",
+          "Kwapong",
+          "Norbeko",
+          "Sankore"
+        ]
+      },
+      {
+        "id": "GH0103",
+        "name": "Asutifi North",
+        "places": [
+          "Gambia  No.1",
+          "Nkensere"
+        ]
+      },
+      {
+        "id": "GH0104",
+        "name": "Asutifi South",
+        "places": [
+          "Dadiesoaba",
+          "Kenyasi",
+          "Nkasiem",
+          "Siekyemu",
+          "Twabidi No.1"
+        ]
+      },
+      {
+        "id": "GH0105",
+        "name": "Tano North Municipal",
+        "places": [
+          "Adrobaa",
+          "Bomaa",
+          "Duayaw Nkwanta",
+          "Gyedu",
+          "Tanoso",
+          "Yamfo"
+        ]
+      },
+      {
+        "id": "GH0106",
+        "name": "Tano South Municipal",
+        "places": [
+          "Bechem",
+          "Brosankro",
+          "Derma",
+          "Sabronum",
+          "Techimantia"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH02",
+    "name": "Ashanti",
+    "districts": [
+      {
+        "id": "GH0201",
+        "name": "Adansi Akrofuom",
+        "places": []
+      },
+      {
+        "id": "GH0202",
+        "name": "Adansi Asokwa",
+        "places": []
+      },
+      {
+        "id": "GH0203",
+        "name": "Adansi North",
+        "places": [
+          "Aboabo No 2",
+          "Akrokerri",
+          "Asokwa",
+          "Bodwesango",
+          "Dompoase",
+          "Fomena",
+          "Fumso",
+          "Fumso Ketewa",
+          "New Akrofrom",
+          "New Ayaasi",
+          "Wioso"
+        ]
+      },
+      {
+        "id": "GH0204",
+        "name": "Adansi South",
+        "places": [
+          "Akrofrom",
+          "Akutreso",
+          "Ampunyasi",
+          "Ataasi Nkwanta",
+          "Atwereboana",
+          "Edwafo",
+          "Hwidiem",
+          "Mansonso",
+          "New Edubiase",
+          "Obonsu",
+          "Sikaman",
+          "Subin Camp",
+          "Wamasi"
+        ]
+      },
+      {
+        "id": "GH0205",
+        "name": "Afigya Kwabre North",
+        "places": [
+          "Boamang",
+          "Kyekyewere",
+          "Tetrem"
+        ]
+      },
+      {
+        "id": "GH0206",
+        "name": "Afigya Kwabre South",
+        "places": [
+          "Aboabogya",
+          "Aboaso",
+          "Afrancho",
+          "Ahenkro",
+          "Ankaase",
+          "Fawade",
+          "Kwamang",
+          "Mamponteng",
+          "Mpobi",
+          "Nkukua Buoho"
+        ]
+      },
+      {
+        "id": "GH0207",
+        "name": "Ahafo Ano North",
+        "places": [
+          "Acherensua",
+          "Akwasiase",
+          "Anyinasuso",
+          "Betiako",
+          "Hwidiem",
+          "Manfo",
+          "Matang",
+          "Subriso",
+          "Tepa"
+        ]
+      },
+      {
+        "id": "GH0208",
+        "name": "Ahafo Ano South East",
+        "places": [
+          "Adinyana",
+          "Adwinyama",
+          "Essienkyem",
+          "Mankranso",
+          "Pokukrom"
+        ]
+      },
+      {
+        "id": "GH0209",
+        "name": "Ahafo Ano South West",
+        "places": [
+          "Abuakwa",
+          "Achiase",
+          "Adankwame",
+          "Akropong",
+          "Asuofia",
+          "Atwima",
+          "Barekese",
+          "Domeabra",
+          "Maakro",
+          "Mpasaso",
+          "Nkawie",
+          "Ntensere",
+          "Sepase",
+          "Toase",
+          "Wioso"
+        ]
+      },
+      {
+        "id": "GH0210",
+        "name": "Amansie Central",
+        "places": [
+          "Akrofrom",
+          "Hia",
+          "Jacobu",
+          "Mile 14",
+          "Numereso"
+        ]
+      },
+      {
+        "id": "GH0211",
+        "name": "Amansie South",
+        "places": []
+      },
+      {
+        "id": "GH0212",
+        "name": "Amansie West",
+        "places": [
+          "Abuoso",
+          "Adimposo",
+          "Agroyesum",
+          "Assuowin",
+          "Datano",
+          "Esaase",
+          "Keniago",
+          "Manso Abore",
+          "Manso Moseaso",
+          "Manso Nkran",
+          "Manso Nkwanta",
+          "Manso-Adubia",
+          "Mpatoum",
+          "Mpatuom",
+          "Nipankyeremia",
+          "Odaho",
+          "Pakyi  No 2",
+          "Tontokrom",
+          "Watreso"
+        ]
+      },
+      {
+        "id": "GH0213",
+        "name": "Asante Akim Central Municipal",
+        "places": [
+          "Nobewam",
+          "Peminase"
+        ]
+      },
+      {
+        "id": "GH0214",
+        "name": "Asante Akim North",
+        "places": [
+          "Abosomtweagya",
+          "Agogo",
+          "Ahenebronuum",
+          "Akratiebesa",
+          "Ananekrom",
+          "Bebome",
+          "Dwease",
+          "Juansa",
+          "Konongo",
+          "Nyinamponase",
+          "Praaso"
+        ]
+      },
+      {
+        "id": "GH0215",
+        "name": "Asante Akim South",
+        "places": [
+          "Banka",
+          "Banso",
+          "Bompata",
+          "Dwendwenase",
+          "Juaso",
+          "Kumeso",
+          "Morso",
+          "Muronam",
+          "Nnadieso",
+          "Obogu",
+          "Ofoase"
+        ]
+      },
+      {
+        "id": "GH0216",
+        "name": "Asokore Mampong Municipal",
+        "places": [
+          "Kokobra",
+          "Okyerekrom"
+        ]
+      },
+      {
+        "id": "GH0217",
+        "name": "Asokwa Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0218",
+        "name": "Atwima Kwanwoma",
+        "places": [
+          "Aburaso",
+          "Ahenema kokoben",
+          "Bebu",
+          "Brofoyeduru",
+          "Foase",
+          "Kwanwoma",
+          "Trabuom",
+          "Trede"
+        ]
+      },
+      {
+        "id": "GH0219",
+        "name": "Atwima Mponua",
+        "places": [
+          "Barniekrom",
+          "Bayerebon",
+          "Bibiani",
+          "Enyinamoso",
+          "Gyeresu",
+          "Mpasatia",
+          "Ntobroso",
+          "Nyinahin",
+          "Saakrom",
+          "Sreso Tinpom",
+          "Tano-Odumasi"
+        ]
+      },
+      {
+        "id": "GH0220",
+        "name": "Atwima Nwabiagya North",
+        "places": [
+          "Dwenwoho",
+          "Essibey Nkwata"
+        ]
+      },
+      {
+        "id": "GH0221",
+        "name": "Atwima Nwabiagya South",
+        "places": []
+      },
+      {
+        "id": "GH0222",
+        "name": "Bekwai Municipal",
+        "places": [
+          "Amoaful",
+          "Anwiankwanta",
+          "Apau",
+          "Bekwai",
+          "Dominase",
+          "Huntade",
+          "Kokofu",
+          "Kortwia",
+          "Nsuaem #2",
+          "Tebeso #2",
+          "Yapesa"
+        ]
+      },
+      {
+        "id": "GH0223",
+        "name": "Bosome Freho",
+        "places": [
+          "Achiase",
+          "Asiwa",
+          "Brofoyedru",
+          "Detieso",
+          "Duasi",
+          "Gyasikrom"
+        ]
+      },
+      {
+        "id": "GH0224",
+        "name": "Bosomtwe",
+        "places": [
+          "Amakom",
+          "Apinkra",
+          "Brodekwanu",
+          "Esereso",
+          "Feyiase",
+          "Jachie",
+          "Konkoma",
+          "Kuntenase",
+          "Kwaso",
+          "New Kokobiriko (Abijan-Nkwant",
+          "Nyameani",
+          "Piase",
+          "Pramso"
+        ]
+      },
+      {
+        "id": "GH0225",
+        "name": "Ejisu Municipal",
+        "places": [
+          "Boamadumase",
+          "Bomfa"
+        ]
+      },
+      {
+        "id": "GH0226",
+        "name": "Ejura-Sekyedumase",
+        "places": [
+          "Ahyiayem",
+          "Babaso",
+          "Ejura",
+          "Ejura Nkwanta",
+          "Homako",
+          "Kasei",
+          "Kontokori Line",
+          "Zambrama"
+        ]
+      },
+      {
+        "id": "GH0227",
+        "name": "Juaben Municipal",
+        "places": [
+          "Adadientam",
+          "Akyawkrom",
+          "Besease",
+          "Hwireso",
+          "Juaben",
+          "Oyoko"
+        ]
+      },
+      {
+        "id": "GH0228",
+        "name": "Kumasi Metropolitan",
+        "places": [
+          "Abed-Pankrono",
+          "Aboabo",
+          "Abrepo",
+          "Abrepo Junction",
+          "Adoato",
+          "Adukrom",
+          "Adum",
+          "Afful Nkwanta",
+          "Ahenbronum-Tafo",
+          "Ahinsan",
+          "Ahodwo Kumasi",
+          "Akrome",
+          "Akwatialine",
+          "Akwatialine Zongo",
+          "Amakom",
+          "Amanfrom",
+          "Amena",
+          "Ampabame",
+          "Anloga",
+          "Anwiam",
+          "Anwomase",
+          "Anwomase-Bebre",
+          "Anwomaso-High Tension",
+          "Apatrapa",
+          "Asawase",
+          "Ash Town",
+          "Ashanti New Town",
+          "Ashanti Town",
+          "Asokore Mampong",
+          "Asokwa",
+          "Asuogya",
+          "Asuoyeboa",
+          "Ataafoa-Pankrono",
+          "Atafoa - Pankrono",
+          "Atasemanso",
+          "Atonsu",
+          "Atonsu-Agogo",
+          "Atonsu-Bokro",
+          "Ayigya",
+          "Bantama",
+          "Barracks-Bantama",
+          "Boadi",
+          "Bokro-Atonsu",
+          "Bompata",
+          "Bomso",
+          "Bremang",
+          "Bremang - Azar Junction",
+          "Bremang North",
+          "Buokrom",
+          "Buokrom Estate",
+          "Cocobod-Adum",
+          "Dichemso",
+          "Dompoase",
+          "Dr. Mensah - Ash Town",
+          "Gyinase",
+          "Kaase",
+          "Kentinkrono",
+          "Krofrom",
+          "Kronum",
+          "Kropo",
+          "Kumasi",
+          "Kwadaso",
+          "Maakro",
+          "Magazine",
+          "Makro",
+          "Manhyia",
+          "Manhyia Zongo",
+          "Mbrom Dichemso",
+          "Mile 3 Old Tafo",
+          "Mile 4 - Tafo",
+          "Mile 4- Old Tafo",
+          "Moshie Zongo",
+          "New Amakom",
+          "New Asokwa",
+          "New Suame",
+          "New Tafo",
+          "Nkontwima-Bremang",
+          "North Zong-Manhyia",
+          "Oduom",
+          "Oforikrom",
+          "Old Suame",
+          "Old Tafo",
+          "Osborn Junction - Suame",
+          "Pankrono",
+          "Pankrono Estate",
+          "Railways Adum",
+          "S-line Atonsu",
+          "Sawaba",
+          "Sepe Dote",
+          "Sepe Timpon",
+          "Sepe-Tinpom",
+          "Sokoban",
+          "South Suntreso",
+          "Stadium",
+          "Suntreso",
+          "Susanso",
+          "Tafo",
+          "Tafo Nhyiaeso",
+          "Tafo Nhyiaso",
+          "Tafo Zongo",
+          "Tanoso",
+          "UGC - Bremang",
+          "Zone 3 Suame",
+          "Zone 5 - Suame",
+          "Zongo-Ayigya"
+        ]
+      },
+      {
+        "id": "GH0229",
+        "name": "Kwabre East",
+        "places": [
+          "Abira",
+          "Abirem",
+          "Adwumakase Kese",
+          "Antoa",
+          "Asonamaso",
+          "Bonwire",
+          "Ejuratia",
+          "Kenyasi",
+          "Kodie",
+          "Medoma",
+          "Mowre",
+          "Ntonso",
+          "Sakora Wonoo",
+          "Tikrom"
+        ]
+      },
+      {
+        "id": "GH0230",
+        "name": "Kwadaso Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0231",
+        "name": "Mampong Municipal",
+        "places": [
+          "Adidwan",
+          "Anyinasu",
+          "Apaa",
+          "Asaam",
+          "Benim",
+          "Birem",
+          "Kofiase",
+          "Krobo",
+          "Kumasi",
+          "Mampong",
+          "Mampong Kokoase",
+          "Mampong New Town"
+        ]
+      },
+      {
+        "id": "GH0232",
+        "name": "Obuasi East",
+        "places": []
+      },
+      {
+        "id": "GH0233",
+        "name": "Obuasi Municipal",
+        "places": [
+          "Aboagye Krom",
+          "Abompe    New  Site",
+          "Akaporiso",
+          "Bedieso-Obuasi",
+          "Boete",
+          "Brahabebome",
+          "Brahabebome New Site",
+          "Estate Extension",
+          "Gausu",
+          "Kofi Krom",
+          "Kwabrafoso",
+          "New  Estate-Obuasi",
+          "New Estate-Obuasi",
+          "Obuasi",
+          "Obuasi - Stadium",
+          "Obuasi Central",
+          "Obuasi-Anyinam",
+          "Rams Hill"
+        ]
+      },
+      {
+        "id": "GH0234",
+        "name": "Offinso Municipal",
+        "places": [
+          "Abofour",
+          "Amoawi",
+          "Anyinasuso",
+          "Bonsua",
+          "Brofoyedru",
+          "Kokoben",
+          "Offinso",
+          "Offinso Adikuro"
+        ]
+      },
+      {
+        "id": "GH0235",
+        "name": "Offinso North",
+        "places": [
+          "Aboffour",
+          "Afrancho",
+          "Akomadan",
+          "Akomadan zongo",
+          "Anyinasusu",
+          "Nkenkasu"
+        ]
+      },
+      {
+        "id": "GH0236",
+        "name": "Oforikrom Municipal",
+        "places": [
+          "Apromase",
+          "Donyina",
+          "Ejisu",
+          "Essienimpong",
+          "Krapa-Ejisu",
+          "Kwamo",
+          "Onwe",
+          "Serwaa Akura"
+        ]
+      },
+      {
+        "id": "GH0237",
+        "name": "Old Tafo Municipal",
+        "places": [
+          "Ahwiaa",
+          "Atimatim"
+        ]
+      },
+      {
+        "id": "GH0238",
+        "name": "Sekyere Afram Plains North",
+        "places": [
+          "Anyinofi"
+        ]
+      },
+      {
+        "id": "GH0239",
+        "name": "Sekyere Central",
+        "places": [
+          "Aframso No.3",
+          "Asubuasu",
+          "Atonsu",
+          "Beposo",
+          "Isaaka Akura-Afram  Plains",
+          "Jeduako",
+          "Kwamang",
+          "Nsuta",
+          "Oku"
+        ]
+      },
+      {
+        "id": "GH0240",
+        "name": "Sekyere East",
+        "places": [
+          "Akokuaso",
+          "Banko",
+          "Dadiase",
+          "Effiduase",
+          "Okaikrom",
+          "Sekyere",
+          "Seniagya",
+          "Senkyi"
+        ]
+      },
+      {
+        "id": "GH0241",
+        "name": "Sekyere Kumawu",
+        "places": [
+          "Drobonso",
+          "Kumawu",
+          "Kumawu Bodomasi",
+          "Woraso"
+        ]
+      },
+      {
+        "id": "GH0242",
+        "name": "Sekyere South",
+        "places": [
+          "Afamaso",
+          "Agona",
+          "Asamang",
+          "Bepoase",
+          "Boanim",
+          "Domeabra",
+          "Jamasi",
+          "Kona",
+          "Wiamoase",
+          "Wiamose"
+        ]
+      },
+      {
+        "id": "GH0243",
+        "name": "Suame Municipal",
+        "places": [
+          "Bronkong"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH03",
+    "name": "Bono",
+    "districts": [
+      {
+        "id": "GH0301",
+        "name": "Banda",
+        "places": []
+      },
+      {
+        "id": "GH0302",
+        "name": "Berekum East Municipal",
+        "places": [
+          "Akrofro",
+          "Berekum",
+          "Berekum Zongo",
+          "Mpatasei"
+        ]
+      },
+      {
+        "id": "GH0303",
+        "name": "Berekum West",
+        "places": [
+          "Amomaso",
+          "Botokrom",
+          "Jinijini"
+        ]
+      },
+      {
+        "id": "GH0304",
+        "name": "Dormaa East",
+        "places": [
+          "Akontanim",
+          "Dormaa Akwamu",
+          "Kyeremasu",
+          "Wamanafo",
+          "Wamfi"
+        ]
+      },
+      {
+        "id": "GH0305",
+        "name": "Dormaa Municipal",
+        "places": [
+          "Aboabo",
+          "Ammasua",
+          "Asikasu",
+          "Danyame",
+          "Dormaa",
+          "Dwomokrom",
+          "Kofibadukrom",
+          "Kojokumikrom",
+          "Kwameasua",
+          "Nkrankwanta",
+          "Yuwusukrom"
+        ]
+      },
+      {
+        "id": "GH0306",
+        "name": "Dormaa West",
+        "places": []
+      },
+      {
+        "id": "GH0307",
+        "name": "Jaman North",
+        "places": [
+          ".Sampa",
+          "Asiri",
+          "Asuoko.",
+          "Buni",
+          "Goka",
+          "Sampa",
+          "Seketia",
+          "Suma"
+        ]
+      },
+      {
+        "id": "GH0308",
+        "name": "Jaman South Municipal",
+        "places": [
+          "Abirikasu",
+          "Adamsu",
+          "Adiokor",
+          "Asare",
+          "Atuna",
+          "Baano",
+          "Bodaa",
+          "Drobo",
+          "Dwenem",
+          "Gonasua",
+          "Jejemiraja",
+          "Kofitiakrom",
+          "Kwameseikrom",
+          "Zezera"
+        ]
+      },
+      {
+        "id": "GH0309",
+        "name": "Sunyani Municipal",
+        "places": [
+          "Abesim",
+          "Antwtkrom",
+          "Atuahenekrom",
+          "Berekum",
+          "Bofourkrom",
+          "Chiraa",
+          "Fiapre",
+          "Kofibadukrom",
+          "Kwatire",
+          "Nsoatre",
+          "Odumase",
+          "Suniyani",
+          "Sunyani",
+          "Sunyani-Barracks",
+          "Sunyani-Penkwasi"
+        ]
+      },
+      {
+        "id": "GH0310",
+        "name": "Sunyani West",
+        "places": []
+      },
+      {
+        "id": "GH0311",
+        "name": "Tain",
+        "places": [
+          "Badu",
+          "Banda Ahenkro",
+          "Brohani",
+          "Bui",
+          "Debibi",
+          "Hani",
+          "Mamase",
+          "Menji",
+          "Nsawkaw",
+          "Sabiye",
+          "Seikwa"
+        ]
+      },
+      {
+        "id": "GH0312",
+        "name": "Wenchi Municipal",
+        "places": [
+          "Droboso",
+          "Nchiraa",
+          "Subinso",
+          "Wenchi",
+          "Wenchi Bandaline"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH04",
+    "name": "Bono East",
+    "districts": [
+      {
+        "id": "GH0401",
+        "name": "Atebubu Amantin",
+        "places": [
+          "Akokoa",
+          "Amanteng",
+          "Atebubu",
+          "Jato Zongo"
+        ]
+      },
+      {
+        "id": "GH0402",
+        "name": "Kintampo North Municipal",
+        "places": [
+          "Busuama",
+          "Dawadawa",
+          "Kintampo",
+          "Kunsu",
+          "New Longoro"
+        ]
+      },
+      {
+        "id": "GH0403",
+        "name": "Kintampo South",
+        "places": [
+          "Amoma",
+          "Anyima",
+          "Apesika",
+          "Jema"
+        ]
+      },
+      {
+        "id": "GH0404",
+        "name": "Nkoranza North",
+        "places": [
+          "Busunyaa",
+          "Dromankese",
+          "Yefri"
+        ]
+      },
+      {
+        "id": "GH0405",
+        "name": "Nkoranza South",
+        "places": [
+          "Akuma",
+          "Ayerede",
+          "Bonsu",
+          "Donkro-Nkwanta",
+          "Nkoranza",
+          "Nkwabeng",
+          "Sekyedumase Health Centre"
+        ]
+      },
+      {
+        "id": "GH0406",
+        "name": "Pru East",
+        "places": [
+          "Parambo",
+          "Prang",
+          "Yeji"
+        ]
+      },
+      {
+        "id": "GH0407",
+        "name": "Pru West",
+        "places": [
+          "Abease"
+        ]
+      },
+      {
+        "id": "GH0408",
+        "name": "Sene East",
+        "places": [
+          "Kajaji",
+          "Kojokrom",
+          "Nyakontre"
+        ]
+      },
+      {
+        "id": "GH0409",
+        "name": "Sene West",
+        "places": [
+          "Bantama",
+          "Bassa",
+          "Kwame Danso",
+          "Kwami Danso"
+        ]
+      },
+      {
+        "id": "GH0410",
+        "name": "Techiman Municipal",
+        "places": [
+          "Asantanso",
+          "Aworowa",
+          "Buotem",
+          "Fiaso",
+          "Forikrom",
+          "Gyako",
+          "Koraso",
+          "Nsuta",
+          "Offuman",
+          "Tanoso",
+          "Techiman",
+          "Tuobodom"
+        ]
+      },
+      {
+        "id": "GH0411",
+        "name": "Techiman North",
+        "places": [
+          "Kranka"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH05",
+    "name": "Central",
+    "districts": [
+      {
+        "id": "GH0501",
+        "name": "Abura-Asebu-Kwamankese",
+        "places": [
+          "Abakrampa",
+          "Abura Dunkwa",
+          "Abura Gyabankrom",
+          "Asomdwee",
+          "Ayeldu",
+          "Bronyi Krom",
+          "Kwamankese",
+          "Moree",
+          "Nkwantanan",
+          "Nyamedom",
+          "Obohen",
+          "Putubiw"
+        ]
+      },
+      {
+        "id": "GH0502",
+        "name": "Agona East",
+        "places": [
+          "Agona Asafo",
+          "Agona Nsaba",
+          "Duakwa",
+          "Kwanyako",
+          "Mankrong"
+        ]
+      },
+      {
+        "id": "GH0503",
+        "name": "Agona West Municipal",
+        "places": [
+          "Agona Abodom",
+          "Agona Nyakrom",
+          "Desuanim",
+          "Nkum",
+          "Otsenkorang",
+          "Swedru",
+          "Tsimtsimhe",
+          "Upper Bobikuma"
+        ]
+      },
+      {
+        "id": "GH0504",
+        "name": "Ajumako-Enyan-Essiam",
+        "places": [
+          "Ajumako",
+          "Ajumako Ba",
+          "Ajumako Bisease",
+          "Ajumako Entumbil",
+          "Ekukrom",
+          "Enyan Abaasa",
+          "Enyan Maim",
+          "Etsi Sonkwaa",
+          "Kwanyako",
+          "Nkodwo",
+          "Nkwantanum",
+          "Zion Denkyira"
+        ]
+      },
+      {
+        "id": "GH0505",
+        "name": "Asikuma-Odoben-Brakwa",
+        "places": [
+          "Anhwiam",
+          "Asikuma",
+          "Bedum",
+          "Breman Amanfopong",
+          "Breman Asikuma",
+          "Breman Brakwa",
+          "Odoben"
+        ]
+      },
+      {
+        "id": "GH0506",
+        "name": "Assin Fosu",
+        "places": []
+      },
+      {
+        "id": "GH0507",
+        "name": "Assin North",
+        "places": [
+          "Assin Akropong",
+          "Assin Bereku",
+          "Assin Praso",
+          "Bediadua",
+          "Foso",
+          "Foso Station",
+          "Kushea",
+          "Praso"
+        ]
+      },
+      {
+        "id": "GH0508",
+        "name": "Assin South",
+        "places": [
+          "Anyinabrim",
+          "Assin Ongwa",
+          "Jakai",
+          "Kyekyewere",
+          "Manso",
+          "Nsuta",
+          "Nyaokumasi Ahenkro"
+        ]
+      },
+      {
+        "id": "GH0509",
+        "name": "Awutu Senya",
+        "places": [
+          "Ahentia",
+          "Akrabon",
+          "Awutu Bereku",
+          "Awutu-Bereku",
+          "Bawjiase",
+          "Bontrase",
+          "Kasoa",
+          "Senya Bereku"
+        ]
+      },
+      {
+        "id": "GH0510",
+        "name": "Awutu Senya East",
+        "places": [
+          "Gyangyanadze"
+        ]
+      },
+      {
+        "id": "GH0511",
+        "name": "Cape Coast Metropolitan",
+        "places": [
+          "Aboom",
+          "Abura",
+          "Adiebikrom-Abura",
+          "Adisadel",
+          "Bakano",
+          "Borofoyedur",
+          "Brimsu",
+          "Brofoyedu",
+          "Cape Coast",
+          "Efutu",
+          "Ekon",
+          "Ewim",
+          "Jukwa",
+          "Municipal Road",
+          "Nkanfoa",
+          "North OLA",
+          "Ola",
+          "Pedu",
+          "Pedu Junction",
+          "Tantri"
+        ]
+      },
+      {
+        "id": "GH0512",
+        "name": "Effutu Municipal",
+        "places": [
+          "Winneba"
+        ]
+      },
+      {
+        "id": "GH0513",
+        "name": "Ekumfi",
+        "places": []
+      },
+      {
+        "id": "GH0514",
+        "name": "Gomoa Central",
+        "places": []
+      },
+      {
+        "id": "GH0515",
+        "name": "Gomoa East",
+        "places": [
+          "Buduatta",
+          "Buduburam Camp",
+          "Budumburam Camp",
+          "Fetteh",
+          "Mankoadze",
+          "Nyanyano",
+          "Obuasi",
+          "Ojobi",
+          "Okyerko",
+          "Potsin"
+        ]
+      },
+      {
+        "id": "GH0516",
+        "name": "Gomoa West",
+        "places": [
+          "Ankamu",
+          "Apam",
+          "Mankoadze",
+          "Ngyiresi",
+          "Noguchi",
+          "Ogua"
+        ]
+      },
+      {
+        "id": "GH0517",
+        "name": "Komenda-Edina-Eguafo-Abirem Municipal",
+        "places": [
+          "Abrem Agona",
+          "Aburansa",
+          "Ankaful",
+          "Antseamboa",
+          "Atonkwa",
+          "Benyadze",
+          "Chaple Square",
+          "Elmina",
+          "Kissi",
+          "Komenda",
+          "Low Cost"
+        ]
+      },
+      {
+        "id": "GH0518",
+        "name": "Mfantseman Municipal",
+        "places": [
+          "Abeadze Dominase",
+          "Anomabo",
+          "Biriwa",
+          "Essuehyia",
+          "Mankessim",
+          "Nanabeng",
+          "Otuam",
+          "Saltpond",
+          "Yamoransa"
+        ]
+      },
+      {
+        "id": "GH0519",
+        "name": "Twifo Atti-Morkwa",
+        "places": [
+          "Atieku",
+          "Bempongagye",
+          "Twifo",
+          "Twifo Wamase",
+          "Twifu Praso",
+          "TwifuMokwa"
+        ]
+      },
+      {
+        "id": "GH0520",
+        "name": "Twifo Hemang Lower Denkyira",
+        "places": [
+          "Akutuase",
+          "Frami"
+        ]
+      },
+      {
+        "id": "GH0521",
+        "name": "Upper Denkyira East Municipal",
+        "places": [
+          "Atechem",
+          "Buaben",
+          "Dunkwa",
+          "Dunkwa-On-Offin",
+          "Kyekyewere",
+          "Mbraem",
+          "Opponso"
+        ]
+      },
+      {
+        "id": "GH0522",
+        "name": "Upper Denkyira West",
+        "places": [
+          "Ayanfuri",
+          "Diaso",
+          "Dominase",
+          "Dominasi",
+          "Nkotomso",
+          "Ntom",
+          "Subin"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH06",
+    "name": "Eastern",
+    "districts": [
+      {
+        "id": "GH0601",
+        "name": "Abuakwa North",
+        "places": [
+          "Bomponso",
+          "Bonsu",
+          "Bosuso",
+          "Crig (Tafo)",
+          "Hemang",
+          "Kukurantumi",
+          "Mid Tafo",
+          "Osiem",
+          "Tafo"
+        ]
+      },
+      {
+        "id": "GH0602",
+        "name": "Abuakwa South",
+        "places": [
+          "Amanfrom",
+          "Apedwa",
+          "Asafo",
+          "Asiakwa",
+          "Kwasi Komfo"
+        ]
+      },
+      {
+        "id": "GH0603",
+        "name": "Achiase",
+        "places": []
+      },
+      {
+        "id": "GH0604",
+        "name": "Akwapem North",
+        "places": [
+          "Adawso",
+          "Adwaso",
+          "Kwamoso",
+          "Mampong",
+          "Mangoase",
+          "Tadankro"
+        ]
+      },
+      {
+        "id": "GH0605",
+        "name": "Akwapem South",
+        "places": [
+          "Aburi",
+          "Adoagire Zongo",
+          "Brekuso",
+          "Kitase",
+          "Obosonmase",
+          "Obothebire",
+          "Pokrom"
+        ]
+      },
+      {
+        "id": "GH0606",
+        "name": "Akyem Mansa",
+        "places": []
+      },
+      {
+        "id": "GH0607",
+        "name": "Asene Akroso Manso",
+        "places": []
+      },
+      {
+        "id": "GH0608",
+        "name": "Asuogyaman",
+        "places": [
+          "Adjena",
+          "Akosombo",
+          "Akwamufie",
+          "Apeguso",
+          "Atimpoku",
+          "Frankadua",
+          "Gyakiti",
+          "Kodikofe"
+        ]
+      },
+      {
+        "id": "GH0609",
+        "name": "Atiwa East",
+        "places": [
+          "Akrofufu",
+          "Asunafo",
+          "Dwenease",
+          "Enyiresi",
+          "Kwabeng/Akropong",
+          "Osino",
+          "Sekyere"
+        ]
+      },
+      {
+        "id": "GH0610",
+        "name": "Atiwa West",
+        "places": [
+          "Abomosu",
+          "Anyinam",
+          "Apapam",
+          "Awenare",
+          "Kibi",
+          "Kyebi"
+        ]
+      },
+      {
+        "id": "GH0611",
+        "name": "Ayensuano",
+        "places": [
+          "Akyeansa",
+          "Amanase",
+          "Asuboi",
+          "Coaltar",
+          "Dokruchiwa"
+        ]
+      },
+      {
+        "id": "GH0612",
+        "name": "Birim Central Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0613",
+        "name": "Birim North",
+        "places": [
+          "Adausena",
+          "Adjobue",
+          "Adubease",
+          "Adwafo",
+          "Afosu",
+          "Akoase",
+          "Akoasi",
+          "Akokooso",
+          "Amoana Paroso",
+          "Anyinase",
+          "Ayirebi",
+          "Brenase",
+          "Gyaha",
+          "Mukyia",
+          "New Abirem",
+          "Nkwateng",
+          "Ntronang",
+          "Nyafoman",
+          "Ofoase",
+          "Okaikrom",
+          "Okoasi",
+          "Otwereso",
+          "Pankese",
+          "Tweapeasi"
+        ]
+      },
+      {
+        "id": "GH0614",
+        "name": "Birim South",
+        "places": [
+          "Achiase",
+          "Akenkenso",
+          "Akim Swedru",
+          "Akotekrom",
+          "Akroso",
+          "Anamase",
+          "Apoli",
+          "Aprade",
+          "Asene",
+          "Assam",
+          "Asuoso",
+          "Atiankama",
+          "Atiankama Nkwanta",
+          "Ehyiam",
+          "Kyeremase",
+          "Manso",
+          "Oda",
+          "Oda Nkwanta",
+          "Old Town"
+        ]
+      },
+      {
+        "id": "GH0615",
+        "name": "Denkyembour",
+        "places": []
+      },
+      {
+        "id": "GH0616",
+        "name": "Fanteakwa North",
+        "places": [
+          "Aboso",
+          "Ahodwahomasu",
+          "Dedeso"
+        ]
+      },
+      {
+        "id": "GH0617",
+        "name": "Fanteakwa South",
+        "places": [
+          "Begoro",
+          "Ehiamenkyene",
+          "Nkankama"
+        ]
+      },
+      {
+        "id": "GH0618",
+        "name": "Kwaebibirem",
+        "places": [
+          "Abamm",
+          "Akwatia",
+          "Asuom",
+          "Boadua",
+          "Bomso",
+          "Dwenase",
+          "Kade",
+          "Kwae",
+          "Larbikom",
+          "Okumaning",
+          "Okumaning Camp",
+          "Okyenso",
+          "Otumi",
+          "Pramkese",
+          "Subi",
+          "Takrowase",
+          "Takyiman",
+          "Takyimann",
+          "Topremang",
+          "Wenchi"
+        ]
+      },
+      {
+        "id": "GH0619",
+        "name": "Kwahu Afram Plains North",
+        "places": [
+          "Amankwah",
+          "Donkorkrom",
+          "Forifori",
+          "Samanhyia"
+        ]
+      },
+      {
+        "id": "GH0620",
+        "name": "Kwahu Afram Plains South",
+        "places": [
+          "Ekye Amanfram",
+          "Kwasi Fante",
+          "Maame Krobo",
+          "Tease"
+        ]
+      },
+      {
+        "id": "GH0621",
+        "name": "Kwahu East",
+        "places": []
+      },
+      {
+        "id": "GH0622",
+        "name": "Kwahu South",
+        "places": [
+          "Abetifi",
+          "Abetifi Nkwanta",
+          "Achiase",
+          "Aduamoah",
+          "Ankoma",
+          "Asakraka",
+          "Atibie",
+          "Atuobikrom",
+          "Awueregya",
+          "Bepong",
+          "Bepong Oworobong",
+          "Fodoa",
+          "Hweehwee",
+          "Hweehwewe",
+          "Kwawu Tafo",
+          "Miaso",
+          "Nkwatia",
+          "Nkyenekyene",
+          "Obo",
+          "Obomeng",
+          "Oframanso",
+          "Onyemso",
+          "Pepease",
+          "Praso"
+        ]
+      },
+      {
+        "id": "GH0623",
+        "name": "Kwahu West",
+        "places": [
+          "Adoagyiri",
+          "Apradan",
+          "Asubone",
+          "Asuboni",
+          "Danteng",
+          "Domiabra",
+          "Kadewaso",
+          "Kwahu Jejeti",
+          "New Jejeti",
+          "Nkawkaw",
+          "Nkawkaw Asuboni",
+          "Nkawkaw West",
+          "Nkawkaw Zongo"
+        ]
+      },
+      {
+        "id": "GH0624",
+        "name": "Lower Manya",
+        "places": [
+          "Agomanya",
+          "Agormanya",
+          "Akuse",
+          "Apaaso New Senchi",
+          "Atua",
+          "Ayipala",
+          "Menekpo",
+          "New Senchi",
+          "Obopa",
+          "Odumase",
+          "Odumasi",
+          "Otrokper",
+          "Senchi Fery",
+          "South Senchi",
+          "Tafo Ati"
+        ]
+      },
+      {
+        "id": "GH0625",
+        "name": "New Juaben North Municipal",
+        "places": [
+          "Akwadom",
+          "Jumapo",
+          "Oyoko"
+        ]
+      },
+      {
+        "id": "GH0626",
+        "name": "New Juaben South Municipal",
+        "places": [
+          "Adweso",
+          "Agavenya",
+          "Asokore",
+          "Betom",
+          "Bronya Junction",
+          "Densuano",
+          "Effiduasi",
+          "Galloway",
+          "Koforidua",
+          "Magazine",
+          "Medical Village",
+          "Nanabanyin",
+          "New Zongo",
+          "Okorase",
+          "Srodae"
+        ]
+      },
+      {
+        "id": "GH0627",
+        "name": "Nsawam Adoagyiri",
+        "places": [
+          "Adoagire",
+          "Ahodjo Ketewa",
+          "Djankrom",
+          "Marfo",
+          "Nsawam",
+          "Pakro"
+        ]
+      },
+      {
+        "id": "GH0628",
+        "name": "Okere",
+        "places": [
+          "Abiriw",
+          "Adukrom",
+          "Agomeda",
+          "Akropong",
+          "Amanfro",
+          "Aseseso",
+          "Konko",
+          "Larteh",
+          "Okrakwadwo",
+          "Twum Guaso"
+        ]
+      },
+      {
+        "id": "GH0629",
+        "name": "Suhum Municipal",
+        "places": [
+          "Akorabo",
+          "Nankese",
+          "Ntunkum",
+          "Obomofedensua",
+          "Oforikrom",
+          "Suhum"
+        ]
+      },
+      {
+        "id": "GH0630",
+        "name": "Upper Manya",
+        "places": [
+          "Akateng",
+          "Anyaboni",
+          "Asesewa",
+          "Djamam",
+          "Odometta",
+          "Sekesua"
+        ]
+      },
+      {
+        "id": "GH0631",
+        "name": "Upper West Akim",
+        "places": []
+      },
+      {
+        "id": "GH0632",
+        "name": "West Akim",
+        "places": [
+          "Abamkrom",
+          "Adeiso",
+          "Adieso",
+          "Akim Bremang",
+          "Anumapapam",
+          "Asamankese",
+          "Asamankese Beposo",
+          "Asamanketewa",
+          "Asikasu",
+          "Asuokwa",
+          "Beposo",
+          "Brekumanso",
+          "Ekoso",
+          "Kofipare",
+          "Mepom",
+          "Osenase",
+          "Oworam"
+        ]
+      },
+      {
+        "id": "GH0633",
+        "name": "Yilo Krobo",
+        "places": [
+          "Boti",
+          "Bukunor",
+          "Huhunya",
+          "Klo-Agogo",
+          "Labolabo",
+          "New Somanya/Sra",
+          "Nkurakan",
+          "Nsutapong",
+          "Obawale",
+          "Okornya",
+          "Opesika",
+          "Otorkpolu",
+          "Sawer",
+          "Somanya",
+          "Sra"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH07",
+    "name": "Greater Accra",
+    "districts": [
+      {
+        "id": "GH0701",
+        "name": "Ablekuma Central Municipal",
+        "places": [
+          "Abossey Okai",
+          "Abossey Okai (near Mosque)",
+          "Awudome",
+          "Kaneshie",
+          "Kaneshie (near mkt)",
+          "Korle-Bu",
+          "Korle-bu (before mortuary turn right to korlebu flats)",
+          "Lartebiokorshie",
+          "Lartebiokorshie (near Nkruma flats)",
+          "Lartebiokorshie (Nkrumah flats)",
+          "Lartebiokorshie (opposite hope sch)",
+          "Lartebiokoshie",
+          "Lartebiokoshie (k'shie mamprobi rd)",
+          "Mamprobi",
+          "Mamprobi (near mytrs of Uganda)",
+          "Mamprobi (off juncion before salvation army)",
+          "Mamprobi (opposite mtyr uganda)",
+          "Mataheko",
+          "Russia",
+          "Sukura",
+          "Zongo (near night mkt)",
+          "Zongo junction"
+        ]
+      },
+      {
+        "id": "GH0702",
+        "name": "Ablekuma North Municipal",
+        "places": [
+          "Abaka Lapas",
+          "Abeka Lapas",
+          "Akweteman",
+          "Awoshie",
+          "Awoshie (last stop)",
+          "Bubuashie",
+          "Bubuashie (Atico last stop)",
+          "Darkuman",
+          "Demond (North Kaneshie)",
+          "Fadama",
+          "Kaneshie (Sports Complex)",
+          "North Kaneshie",
+          "Nyamekye (Darkuman)",
+          "Odorkor",
+          "Tesano"
+        ]
+      },
+      {
+        "id": "GH0703",
+        "name": "Ablekuma West Municipal",
+        "places": [
+          "Agege (Agege road -Karikari area)",
+          "Agege (Glefe near largoon)",
+          "Agege (Karikari area)",
+          "Chemuna (Chorkor)",
+          "Chorkor (near Abodwe)",
+          "Dansoman",
+          "Dansoman (before sahara)",
+          "Dansoman (Control market)",
+          "Dansoman (Ebenezer rd)",
+          "Dansoman (Sahara)",
+          "Dansoman (SSNIT flats)",
+          "Glefe (Behing the largoon)",
+          "Mpoase (off Glefe rd)"
+        ]
+      },
+      {
+        "id": "GH0704",
+        "name": "Accra Metropolis",
+        "places": [
+          "Accra",
+          "Adabraka (near Goil headoffice)",
+          "Adabraka (near NCR Offices & cinema area)",
+          "Adjabeng",
+          "Agbogbloshie",
+          "High Street",
+          "James Town",
+          "Korle-bu",
+          "Makola",
+          "Odorna (Adabraka)",
+          "Okaishie",
+          "Opera Square",
+          "Paladium",
+          "Tema Station (near Lotteries)"
+        ]
+      },
+      {
+        "id": "GH0705",
+        "name": "Ada East",
+        "places": [
+          "Ada",
+          "Kasseh",
+          "Pediator Kope"
+        ]
+      },
+      {
+        "id": "GH0706",
+        "name": "Ada West",
+        "places": [
+          "Anyamam",
+          "Bornikope",
+          "Sege"
+        ]
+      },
+      {
+        "id": "GH0707",
+        "name": "Adenta Municipal",
+        "places": [
+          "Adenta"
+        ]
+      },
+      {
+        "id": "GH0708",
+        "name": "Ashaiman Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0709",
+        "name": "Ayawaso Central Municipal",
+        "places": [
+          "Asylum Down",
+          "Caprice (Near carprice hotel)",
+          "Circle",
+          "Kokomlemle",
+          "Mallam Atta",
+          "New Town",
+          "New Town ( school compound)",
+          "Nima (Mallam atta gutter. market road)",
+          "Nima (near Police station)",
+          "North Ridge"
+        ]
+      },
+      {
+        "id": "GH0710",
+        "name": "Ayawaso East Municipal",
+        "places": [
+          "37",
+          "37 Licencing Office",
+          "Bostal Institution",
+          "Cantoments",
+          "Maamobi",
+          "Maamobi (near market)",
+          "Nima",
+          "Nima (near gutter )",
+          "Nima (near Gutter)",
+          "Nima 441 (area near bridge)",
+          "Roman Ridge",
+          "Roman Ridge (near Jack and Jill)"
+        ]
+      },
+      {
+        "id": "GH0711",
+        "name": "Ayawaso North Municipal",
+        "places": [
+          "Abelemkpe",
+          "Alajo",
+          "Alajo (ask at Faith medical centre for direction)",
+          "Alajo (near T junction)",
+          "Dzorwulu (junction)",
+          "Kotobabi",
+          "New Town (Nkasan-Djan junction)",
+          "Pig Farm (lorry station)",
+          "Roman Ridge (near Ghana inst of engineers buidling)"
+        ]
+      },
+      {
+        "id": "GH0712",
+        "name": "Ayawaso West",
+        "places": [
+          "Airport residential area",
+          "East Legon",
+          "East Legon (before America house road)",
+          "East Legon (towards America house -Social X'tian centre)",
+          "Legon",
+          "Mempeasem"
+        ]
+      },
+      {
+        "id": "GH0713",
+        "name": "Ga Central Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0714",
+        "name": "Ga East",
+        "places": [
+          "Abokobi",
+          "Adenta",
+          "Amasaman",
+          "Atomic",
+          "Atomic Road",
+          "Danfa",
+          "Kokrobite",
+          "Korle-bu",
+          "Madina",
+          "Madina (near market)",
+          "Madina (Old road)",
+          "North Legon (off Atomic Energy Road)",
+          "Pantang",
+          "Pantang hosp road",
+          "Taifa"
+        ]
+      },
+      {
+        "id": "GH0715",
+        "name": "Ga North Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0716",
+        "name": "Ga South Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0717",
+        "name": "Ga West Municipal",
+        "places": [
+          "Amasaman",
+          "Antiaku (near north kwashieman)",
+          "Asabaham (near Domiabra)",
+          "Awoshie (last stop)",
+          "Chorkor (behind police station)",
+          "Dome Sampah-mang",
+          "Domiabra",
+          "Gbawe",
+          "Horbor",
+          "Jei Krodua",
+          "Kokrobite",
+          "Mallam",
+          "Mamprobi (salvation army schls)",
+          "Marcathy Hill Junction",
+          "Medie",
+          "Ngleshie Amamfrom",
+          "North Kaneshie",
+          "North Kwashieman",
+          "Nsakina",
+          "Obom",
+          "Oduman",
+          "Ofankor",
+          "Osuwem",
+          "Pokuase",
+          "Santamaria",
+          "Taifa",
+          "Trantra Hill",
+          "Weija"
+        ]
+      },
+      {
+        "id": "GH0718",
+        "name": "Korle Klottey Municipal",
+        "places": [
+          "Adabraka",
+          "La",
+          "Osu",
+          "Osu (Nyaniba Estate)",
+          "Ridge"
+        ]
+      },
+      {
+        "id": "GH0719",
+        "name": "Kpone Katamanso",
+        "places": [
+          "Afienya",
+          "Dodowa",
+          "New Dawhenya"
+        ]
+      },
+      {
+        "id": "GH0720",
+        "name": "Krowor Municipal",
+        "places": [
+          "Nungua"
+        ]
+      },
+      {
+        "id": "GH0721",
+        "name": "La Dade-Kotopon",
+        "places": [
+          "Airport",
+          "Burma Camp"
+        ]
+      },
+      {
+        "id": "GH0722",
+        "name": "La-Nkwantanang-Madina",
+        "places": []
+      },
+      {
+        "id": "GH0723",
+        "name": "Ledzokuku Municipal",
+        "places": [
+          "Teshie",
+          "Teshie/Nungua"
+        ]
+      },
+      {
+        "id": "GH0724",
+        "name": "Ningo/Prampram",
+        "places": [
+          "Dawhenya",
+          "Lower Prampram",
+          "Nugbenya",
+          "Old Ningo",
+          "Prampram"
+        ]
+      },
+      {
+        "id": "GH0725",
+        "name": "Okaikwei North Municipal",
+        "places": [
+          "Abofu (Achimota)",
+          "Achimota",
+          "Dzorwulu",
+          "Greenhill",
+          "New Achimota (mile 7)"
+        ]
+      },
+      {
+        "id": "GH0726",
+        "name": "Shai Osudoku",
+        "places": [
+          "Akuse/Kpong",
+          "Asutsuare",
+          "Kordiabe",
+          "Osuwem"
+        ]
+      },
+      {
+        "id": "GH0727",
+        "name": "Tema Metropolitan",
+        "places": [
+          "Adabraka (near Goil headoffice)",
+          "Adenta",
+          "Adenta Estate",
+          "Adenta Estate (Housing Down)",
+          "Amrahia",
+          "Ashaima",
+          "Ashaima New Town",
+          "Ashaiman",
+          "Ashaiman (Nii Amui Park {Manannanyo}",
+          "Ashaiman Community 12",
+          "Ashaiman Lebanon",
+          "Ashalebotwe",
+          "Baba Yara (Madina)",
+          "Betlehem (near Michael Camp)",
+          "Kaneshie (near mkt)",
+          "Kpone",
+          "Kpone Bawaleshi",
+          "Lashibi",
+          "Lashibi Community 19",
+          "Lashibi Community 20",
+          "Maamobi",
+          "Mile 7 (New Achimota)",
+          "Nima",
+          "Osu",
+          "Oyibi",
+          "Sakumano Estate",
+          "Spintex road",
+          "Tema",
+          "Tema Community 1",
+          "Tema Community 10",
+          "Tema Community 11",
+          "Tema Community 2",
+          "Tema Community 4",
+          "Tema Community 5",
+          "Tema Community 6",
+          "Tema Community 7",
+          "Tema Community 8",
+          "Tema Community 9",
+          "Tema Fishing Habour",
+          "Tema Heavy Industrial Town",
+          "Tema Main Habour",
+          "Tema Manhean",
+          "Tema Mataheko",
+          "Tema New Town"
+        ]
+      },
+      {
+        "id": "GH0728",
+        "name": "Tema West Municipal",
+        "places": []
+      },
+      {
+        "id": "GH0729",
+        "name": "Weija Gbawe Municipal",
+        "places": []
+      }
+    ]
+  },
+  {
+    "id": "GH08",
+    "name": "Northern",
+    "districts": [
+      {
+        "id": "GH0801",
+        "name": "Gushegu",
+        "places": [
+          "Galwei",
+          "Gushegu",
+          "Katani",
+          "Kpatinga",
+          "Zinindo"
+        ]
+      },
+      {
+        "id": "GH0802",
+        "name": "Karaga",
+        "places": [
+          "Karaga",
+          "Nyong",
+          "Pishegu"
+        ]
+      },
+      {
+        "id": "GH0803",
+        "name": "Kpandai",
+        "places": []
+      },
+      {
+        "id": "GH0804",
+        "name": "Kumbungu",
+        "places": [
+          "Dalun",
+          "Kpendua",
+          "Singa"
+        ]
+      },
+      {
+        "id": "GH0805",
+        "name": "Mion",
+        "places": []
+      },
+      {
+        "id": "GH0806",
+        "name": "Nanton",
+        "places": [
+          "Janjori",
+          "Nanton",
+          "Pong Tamale",
+          "Savelugu",
+          "Zoggu"
+        ]
+      },
+      {
+        "id": "GH0807",
+        "name": "Nanumba North",
+        "places": [
+          "Bimbilla",
+          "Binchera",
+          "Chamba",
+          "Juo",
+          "Lanja",
+          "Makayili"
+        ]
+      },
+      {
+        "id": "GH0808",
+        "name": "Nanumba South",
+        "places": [
+          "Kukuo",
+          "Lungni",
+          "Nakpayili",
+          "Pudua",
+          "Welensi",
+          "Wulensi"
+        ]
+      },
+      {
+        "id": "GH0809",
+        "name": "Saboba",
+        "places": [
+          "Garinkuka",
+          "Gbangbanpong",
+          "Kpalba",
+          "Saboba",
+          "Sambuli",
+          "Wapuli"
+        ]
+      },
+      {
+        "id": "GH0810",
+        "name": "Sagnerigu",
+        "places": [
+          "Bontanga",
+          "Cheshegu",
+          "Gbulun",
+          "Kpiliyin",
+          "Kunbungu",
+          "Moglaa",
+          "Nyankpala"
+        ]
+      },
+      {
+        "id": "GH0811",
+        "name": "Savelugu",
+        "places": [
+          "Diare",
+          "Pigu",
+          "Tampion"
+        ]
+      },
+      {
+        "id": "GH0812",
+        "name": "Tamale Metropolitan",
+        "places": [
+          "Agric",
+          "Bagabaga",
+          "Bulpela",
+          "Changli",
+          "Choggu",
+          "Choggu Yapalsi",
+          "Gariziegu",
+          "Gurugu",
+          "Industrial Area",
+          "Jusonayilli",
+          "Kalpohini",
+          "Kamina",
+          "Kotingli",
+          "Kpanvo",
+          "Lahagu",
+          "Lamashegu",
+          "Ministries",
+          "Nyohini",
+          "Rivoly",
+          "Sabonjida",
+          "Sangani",
+          "Tamale",
+          "Tamale Central",
+          "Vitting/Dabogbh",
+          "Zagyuri",
+          "Zobogu",
+          "Zogyele"
+        ]
+      },
+      {
+        "id": "GH0813",
+        "name": "Tatale Sanguli",
+        "places": [
+          "Kandin",
+          "Kpalbutabu",
+          "Tatale",
+          "Zabzugu"
+        ]
+      },
+      {
+        "id": "GH0814",
+        "name": "Tolon",
+        "places": [
+          "Lingbinga",
+          "Tolon",
+          "Tonlon",
+          "Wantugu"
+        ]
+      },
+      {
+        "id": "GH0815",
+        "name": "Yendi Municipal",
+        "places": [
+          "Adibo",
+          "Balogu  East",
+          "Bunbon",
+          "Dabogni",
+          "Jimle",
+          "Kuni",
+          "Nyani",
+          "Sang",
+          "Sunsong",
+          "Yendi"
+        ]
+      },
+      {
+        "id": "GH0816",
+        "name": "Zabzugu",
+        "places": [
+          "Kukpalgu",
+          "Nakpale",
+          "Sabare",
+          "Woriborgu"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH09",
+    "name": "Northern East",
+    "districts": [
+      {
+        "id": "GH0901",
+        "name": "Bunkpurugu Nakpanduri",
+        "places": [
+          "Binde",
+          "Yunyoo"
+        ]
+      },
+      {
+        "id": "GH0902",
+        "name": "Chereponi",
+        "places": [
+          "Bunburika",
+          "Chereponi",
+          "Wanjuga",
+          "Wenchiki"
+        ]
+      },
+      {
+        "id": "GH0903",
+        "name": "East Mamprusi",
+        "places": [
+          "Gambaga",
+          "Gbingbani",
+          "Gbintiri",
+          "Langbinsi",
+          "Nalerigu",
+          "Sakogu",
+          "Wundua"
+        ]
+      },
+      {
+        "id": "GH0904",
+        "name": "Mamprugu Moagduri",
+        "places": [
+          "Gbedembilisi"
+        ]
+      },
+      {
+        "id": "GH0905",
+        "name": "West Mamprusi Municipal",
+        "places": [
+          "Gbeo",
+          "Janga",
+          "Kparigu",
+          "Kpesenkpe",
+          "Kubori",
+          "Loagri",
+          "Nasia",
+          "Walewale",
+          "West Mamprusi",
+          "Wulugu",
+          "Yagaba",
+          "Yama",
+          "Yikpabongo",
+          "Yizesi"
+        ]
+      },
+      {
+        "id": "GH0906",
+        "name": "Yunyoo-Nasuan",
+        "places": [
+          "Bunkpurugu",
+          "Gimbale",
+          "Nasuan"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH10",
+    "name": "Oti",
+    "districts": [
+      {
+        "id": "GH1001",
+        "name": "Biakoye",
+        "places": []
+      },
+      {
+        "id": "GH1002",
+        "name": "Jasikan",
+        "places": [
+          "Abotoase",
+          "Akaa",
+          "Amanya",
+          "Baglo",
+          "Baika",
+          "Bodada",
+          "Bowiri",
+          "Jasikan",
+          "Kute",
+          "Kwamekrom",
+          "New Ayoma",
+          "New Teteman",
+          "Nkonya Ahenkro",
+          "Nkonya Wurupong",
+          "Nsuta",
+          "Old Ayoma",
+          "Teteman",
+          "Worawora H"
+        ]
+      },
+      {
+        "id": "GH1003",
+        "name": "Kadjebi",
+        "places": [
+          "Ahamansu",
+          "Dodi Papase",
+          "Dodi-Mempeasem",
+          "Dodo Amanfrom",
+          "Dzamlome",
+          "Dzindjiso",
+          "Kadjebi",
+          "Obanda",
+          "Pampawie",
+          "Poase Cement",
+          "Woraworso"
+        ]
+      },
+      {
+        "id": "GH1004",
+        "name": "Krachi East Municipal",
+        "places": [
+          "Adumadum",
+          "Asukawkaw",
+          "Dambai",
+          "Dormabin",
+          "Katanga",
+          "Tokronu"
+        ]
+      },
+      {
+        "id": "GH1005",
+        "name": "Krachi Nchumuru",
+        "places": []
+      },
+      {
+        "id": "GH1006",
+        "name": "Krachi West",
+        "places": [
+          "Anyiname",
+          "Banda",
+          "Borae",
+          "Chinderi",
+          "Ehiamankyene",
+          "Gyatoakroa",
+          "Krachi",
+          "Monkra",
+          "Ntewusa",
+          "Ostramani"
+        ]
+      },
+      {
+        "id": "GH1007",
+        "name": "Nkwanta North",
+        "places": [
+          "Damanko",
+          "Kpassa",
+          "Sibi",
+          "Tinjase"
+        ]
+      },
+      {
+        "id": "GH1008",
+        "name": "Nkwanta South Municipal",
+        "places": [
+          "Bonakye",
+          "Bontibor",
+          "Brewaniase",
+          "Kechebi",
+          "Keri",
+          "Nkwanta",
+          "Nyambong",
+          "Pusupu",
+          "Tutukpene"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH11",
+    "name": "Savannah",
+    "districts": [
+      {
+        "id": "GH1101",
+        "name": "Bole",
+        "places": [
+          "Bamboi",
+          "Banda-Nkwanta",
+          "Bole",
+          "Jama",
+          "Mandari",
+          "Tinga"
+        ]
+      },
+      {
+        "id": "GH1102",
+        "name": "Central Gonja",
+        "places": [
+          "Buipe",
+          "Kusawgu",
+          "Mpaha",
+          "Sankpala",
+          "Tuluwe",
+          "Yapei"
+        ]
+      },
+      {
+        "id": "GH1103",
+        "name": "East Gonja Municipal",
+        "places": [
+          "Abromase",
+          "Blajai",
+          "Buma",
+          "Bunjai",
+          "Ekumde",
+          "Gulbi Quarters",
+          "Jantong",
+          "Kitare",
+          "Kpalbe",
+          "Kpandai",
+          "Loloto",
+          "Lonton",
+          "Makango",
+          "Nkanchina",
+          "Sabonjida",
+          "Salaga"
+        ]
+      },
+      {
+        "id": "GH1104",
+        "name": "North East Gonja",
+        "places": []
+      },
+      {
+        "id": "GH1105",
+        "name": "North Gonja",
+        "places": []
+      },
+      {
+        "id": "GH1106",
+        "name": "Sawla-Tuna-Kalba",
+        "places": [
+          "Gindabuo",
+          "Kalba",
+          "Kulmasa",
+          "Sawla",
+          "Soma",
+          "Tuna"
+        ]
+      },
+      {
+        "id": "GH1107",
+        "name": "West Gonja",
+        "places": [
+          "Bawena",
+          "Busunu",
+          "Daboya",
+          "Damongo",
+          "Lingbinsi",
+          "Mankarigu",
+          "Mole Game",
+          "West Gonja"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH12",
+    "name": "Upper East",
+    "districts": [
+      {
+        "id": "GH1201",
+        "name": "Bawku Municipal",
+        "places": [
+          "Bansi",
+          "Bawku",
+          "Bawku-Kariamah",
+          "Bazua",
+          "Binduri",
+          "Kuka",
+          "Kukparigu",
+          "Kultamise",
+          "Kulungungu",
+          "Manga",
+          "Mognori Gumbo",
+          "Nafkoliga",
+          "Pusiga Natinga",
+          "Pusiga Zongo",
+          "Sarabogo",
+          "Widana",
+          "Wiidi",
+          "Zawse",
+          "Zuabulga"
+        ]
+      },
+      {
+        "id": "GH1202",
+        "name": "Bawku West",
+        "places": [
+          "Apodabogo",
+          "Asogummore",
+          "Azuwera",
+          "Binaba",
+          "Bulinga",
+          "Googo",
+          "Kansoogo",
+          "Kukore",
+          "Sapelliga",
+          "Tanga-Central",
+          "Teshie",
+          "Tilli",
+          "Timonde",
+          "Timonde-Natriga",
+          "Widnaba",
+          "Yarigu",
+          "Yelwoko",
+          "Zebilla",
+          "Zongoire/Natinga"
+        ]
+      },
+      {
+        "id": "GH1203",
+        "name": "Binduri",
+        "places": []
+      },
+      {
+        "id": "GH1204",
+        "name": "Bolga East",
+        "places": [
+          "Gorgo",
+          "Kpatia",
+          "Namolgo",
+          "Tongo",
+          "Zanlerigu",
+          "Zubeogo"
+        ]
+      },
+      {
+        "id": "GH1205",
+        "name": "Bolgatanga Municipal",
+        "places": [
+          "Aguusi",
+          "Atulbabisi",
+          "Bolga",
+          "Bolga Soe",
+          "Bolgatanga",
+          "Damweo",
+          "Daporetidongo",
+          "Gambibgo",
+          "Gonigo/Awaradone",
+          "Kalbeo",
+          "Mirigu",
+          "Nyariga",
+          "Pwalugu Soe",
+          "Sherigu",
+          "Sokabisi",
+          "Sumbrungu",
+          "Winkogo",
+          "Zaare",
+          "Zuarungu",
+          "Zuarungu-Moshie"
+        ]
+      },
+      {
+        "id": "GH1206",
+        "name": "Bongo",
+        "places": [
+          "Adaboya",
+          "Akolpolsiga",
+          "Anafobisi",
+          "Apatanga",
+          "Atampiisi",
+          "Balungu",
+          "Bembisi",
+          "Beo Tankoo",
+          "Bogrigo",
+          "Boko",
+          "Bongo",
+          "Bongo/Soe",
+          "Bongo/Wegurugo",
+          "Bugsongo/Nyangolingo",
+          "Dua",
+          "Feo",
+          "Gambrongo",
+          "Goo",
+          "Gowrie",
+          "Kabre",
+          "Kadare",
+          "Kodorogo",
+          "Kunkua",
+          "Manyoro",
+          "Nakolo",
+          "Namoo",
+          "Natugnia",
+          "Nayorogo",
+          "Saporo",
+          "Sirigu",
+          "Soe",
+          "Vea",
+          "Wagliga",
+          "Yua",
+          "Zorko"
+        ]
+      },
+      {
+        "id": "GH1207",
+        "name": "Builsa North",
+        "places": [
+          "Bachongsa",
+          "Builsa",
+          "Kalijiisa",
+          "Kori",
+          "Sandema",
+          "Siniensi",
+          "Wiaga"
+        ]
+      },
+      {
+        "id": "GH1208",
+        "name": "Builsa South",
+        "places": [
+          "Chansa",
+          "Dooninga",
+          "Fumbisi",
+          "Gbedema",
+          "Kaadema",
+          "Kanjarga",
+          "Kunkwak",
+          "Uwasi",
+          "Wupiensa"
+        ]
+      },
+      {
+        "id": "GH1209",
+        "name": "Garu",
+        "places": [
+          "Denegu",
+          "Denugu",
+          "Garu",
+          "Kpatia",
+          "Kpattia",
+          "Nakpanduri",
+          "Songo",
+          "Worikambo"
+        ]
+      },
+      {
+        "id": "GH1210",
+        "name": "Kasena Nankana East",
+        "places": [
+          "Azugyera",
+          "Bawiu",
+          "Biu",
+          "Doba",
+          "Gia",
+          "Gongnia",
+          "Kajelo",
+          "Kologo",
+          "Naaga",
+          "Namonsa",
+          "Navio",
+          "Navrongo",
+          "Nayagnia",
+          "Nyangania",
+          "Paga",
+          "Pungu South",
+          "Vunania",
+          "Wuru",
+          "Wusungu"
+        ]
+      },
+      {
+        "id": "GH1211",
+        "name": "Kasena Nankana West",
+        "places": [
+          "Adognia",
+          "Chiana",
+          "Kalvio",
+          "Kanania",
+          "Katiu",
+          "Kayoro",
+          "Kayoro/Wuru",
+          "Nakong",
+          "Nyagnia",
+          "Pinda"
+        ]
+      },
+      {
+        "id": "GH1212",
+        "name": "Nabdam",
+        "places": [
+          "Duusi",
+          "Kongo",
+          "Nangodi",
+          "Pelungu",
+          "Sakote"
+        ]
+      },
+      {
+        "id": "GH1213",
+        "name": "Pusiga",
+        "places": []
+      },
+      {
+        "id": "GH1214",
+        "name": "Talensi",
+        "places": [
+          "Datuko",
+          "Tolla"
+        ]
+      },
+      {
+        "id": "GH1215",
+        "name": "Tempane",
+        "places": [
+          "Basyonde",
+          "Benwoko",
+          "Bimpeka",
+          "Bugri",
+          "Kpikpira",
+          "Kugasheigu",
+          "Nagani",
+          "Sumaduri",
+          "Woriyanga",
+          "Yapala"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH13",
+    "name": "Upper West",
+    "districts": [
+      {
+        "id": "GH1301",
+        "name": "Daffiama Bussie Issa",
+        "places": [
+          "Duong",
+          "Issa",
+          "Kojokpere",
+          "Ping",
+          "Samanbo",
+          "Suke"
+        ]
+      },
+      {
+        "id": "GH1302",
+        "name": "Jirapa",
+        "places": [
+          "Bussie",
+          "Dahile",
+          "Duori",
+          "Hain",
+          "Henteng",
+          "Jirapa",
+          "Kamahegu",
+          "Karni",
+          "Ping",
+          "Sabuli",
+          "Somboro",
+          "Tampaala",
+          "Tuggo",
+          "Ullo",
+          "Yagha"
+        ]
+      },
+      {
+        "id": "GH1303",
+        "name": "Lambussie-Karni",
+        "places": [
+          "Billaw",
+          "Dapuori",
+          "Piina",
+          "Samoa"
+        ]
+      },
+      {
+        "id": "GH1304",
+        "name": "Lawra",
+        "places": [
+          "Babile",
+          "Badi",
+          "Biro",
+          "Dikpe",
+          "Domwine",
+          "Gbieri",
+          "Gengenkpe",
+          "Ketuo",
+          "Ko",
+          "Konyugang",
+          "Lawra",
+          "Nandom residential ar",
+          "Nanyaari",
+          "Segru",
+          "Tuopare"
+        ]
+      },
+      {
+        "id": "GH1305",
+        "name": "Nadowli-Kaleo",
+        "places": [
+          "Chekali",
+          "Cheri-sombo",
+          "Fian",
+          "Gabilee",
+          "Goli",
+          "Kaleo",
+          "Nadowli",
+          "Nanvilli",
+          "Naro",
+          "Nator",
+          "Sankana",
+          "Sombo",
+          "Takpo"
+        ]
+      },
+      {
+        "id": "GH1306",
+        "name": "Nandom",
+        "places": [
+          "Hamile",
+          "Lambussie"
+        ]
+      },
+      {
+        "id": "GH1307",
+        "name": "Sissala East",
+        "places": [
+          "Bawiesibella",
+          "Kulfuo",
+          "Kunchogu",
+          "Nabugubelle",
+          "Nabulo",
+          "Sakia",
+          "Tumu",
+          "Wellembelle"
+        ]
+      },
+      {
+        "id": "GH1308",
+        "name": "Sissala West",
+        "places": [
+          "Fiemuo",
+          "Gwollu",
+          "Jeffisi",
+          "Zini"
+        ]
+      },
+      {
+        "id": "GH1309",
+        "name": "Wa East",
+        "places": [
+          "Bulenga",
+          "Challa",
+          "Charingu",
+          "Ducie",
+          "Funsi",
+          "Goh",
+          "Holomuni",
+          "Katua",
+          "Kundugu",
+          "Loggu",
+          "Yaala"
+        ]
+      },
+      {
+        "id": "GH1310",
+        "name": "Wa Municipal",
+        "places": [
+          "Airstrip",
+          "Boli",
+          "Busa",
+          "Charia",
+          "Dobile",
+          "Dondoli",
+          "Jang",
+          "Jonga",
+          "Kanyini",
+          "Konta",
+          "Kpaguri",
+          "Kperisi",
+          "Kumbiehi",
+          "Sampina",
+          "Tendamba",
+          "Wa",
+          "Wa kabanye",
+          "Wa Urban",
+          "Wapani"
+        ]
+      },
+      {
+        "id": "GH1311",
+        "name": "Wa West",
+        "places": [
+          "Chogsia",
+          "Dabo",
+          "Dorimon",
+          "Dornye",
+          "Eggu",
+          "Gurungu",
+          "Kunchelleyiri",
+          "Lassia tuolu",
+          "Nyoli",
+          "Poyentanga",
+          "Vieri",
+          "Wechau"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH14",
+    "name": "Volta",
+    "districts": [
+      {
+        "id": "GH1401",
+        "name": "Adaklu",
+        "places": [
+          "Adaklu Hlekpe"
+        ]
+      },
+      {
+        "id": "GH1402",
+        "name": "Afadzato South",
+        "places": []
+      },
+      {
+        "id": "GH1403",
+        "name": "Agotime Ziope",
+        "places": [
+          "Adaklu Sopa",
+          "Adaklu Waya",
+          "Dzalele",
+          "Keyime",
+          "Kpetoe",
+          "Wudzedeke",
+          "Ziope"
+        ]
+      },
+      {
+        "id": "GH1404",
+        "name": "Akatsi North",
+        "places": [
+          "Ave Dakpa",
+          "Ave-Afiadenyigba",
+          "Avevi"
+        ]
+      },
+      {
+        "id": "GH1405",
+        "name": "Akatsi South",
+        "places": [
+          "Agormor",
+          "Akatsi",
+          "Asafotsi",
+          "Atidzive",
+          "Avenorpedo",
+          "Dzogadze",
+          "Gefia",
+          "Ohawu",
+          "Wute"
+        ]
+      },
+      {
+        "id": "GH1406",
+        "name": "Anloga",
+        "places": []
+      },
+      {
+        "id": "GH1407",
+        "name": "Central Tongu",
+        "places": [
+          "Adaklu Ahunda"
+        ]
+      },
+      {
+        "id": "GH1408",
+        "name": "Ho Municipal",
+        "places": [
+          "Abutia Agove",
+          "Abutia Kloe",
+          "Abutia Kpota",
+          "Akoefe",
+          "Akrofu",
+          "Amedzope",
+          "Atikpui",
+          "Dodome Awiasu",
+          "Dodome Teleafenu",
+          "Dzolo Gbogame",
+          "Dzolo Kpuita",
+          "Fume",
+          "Gbadzeme",
+          "Hlefi",
+          "Ho",
+          "Hodzoga",
+          "Klefe",
+          "Kpedze",
+          "Lume",
+          "Matse",
+          "Nyive",
+          "Saviefe Agorkpo",
+          "Shia",
+          "Tanyigbe",
+          "Taviafe",
+          "Tokokoe",
+          "Tsibu",
+          "Tsito",
+          "Vane",
+          "Ziavi"
+        ]
+      },
+      {
+        "id": "GH1409",
+        "name": "Ho West",
+        "places": []
+      },
+      {
+        "id": "GH1410",
+        "name": "Hohoe Municipal",
+        "places": [
+          "Akpafu Adorkor",
+          "Akpafu Mempeasem",
+          "Akpafu Odomi",
+          "Alavanyo",
+          "Fodome Ahor",
+          "Fodome Helu",
+          "Fodome Woe",
+          "Gbi Wegbe",
+          "Gbledi",
+          "Goviefe Agodome",
+          "Hohoe",
+          "Leklebi  Duga",
+          "Leklebi Kame",
+          "Liati Wote",
+          "Likpe Abrani",
+          "Likpe Bakwa",
+          "Likpe Bala",
+          "Likpe Kukurntumi",
+          "Logba Alakpeti",
+          "Logba Tota",
+          "Logba Vuinta",
+          "Lolobi Kumase",
+          "Nyagbo Gagbefe",
+          "Nyangbo Sroe",
+          "Santrokofi",
+          "Soba Liati",
+          "Tafi Agoeme",
+          "Ve Golokwati",
+          "Ve Hoeme",
+          "Ve Koloenu",
+          "Wli Afegame"
+        ]
+      },
+      {
+        "id": "GH1411",
+        "name": "Keta Municipal",
+        "places": [
+          "Abor",
+          "Afife",
+          "Agbledome",
+          "Alakple",
+          "Angloga",
+          "Anlo-Afiadenyigba",
+          "Anloga",
+          "Anyako",
+          "Anyanui",
+          "Asadame",
+          "Atiavi",
+          "Avenorpeme",
+          "Avuime",
+          "Galo-Sota",
+          "Hatorgodo",
+          "Keta",
+          "Tegbi",
+          "Tregui",
+          "Vui"
+        ]
+      },
+      {
+        "id": "GH1412",
+        "name": "Ketu North",
+        "places": [
+          "Devego",
+          "Dzodze",
+          "Ehie",
+          "Penyi",
+          "Tadzewu"
+        ]
+      },
+      {
+        "id": "GH1413",
+        "name": "Ketu South",
+        "places": [
+          "Adina",
+          "Aflao",
+          "Agavedzi",
+          "Agbozume",
+          "Akporkploe",
+          "Avoeme  Aflao",
+          "Blekusu",
+          "Denu",
+          "Hedzranawo",
+          "Klikoor",
+          "Kopeyia",
+          "Kpoglu",
+          "Nogokpo",
+          "Srohume",
+          "Viefe  Aflao",
+          "Wheta"
+        ]
+      },
+      {
+        "id": "GH1414",
+        "name": "Kpando Municipal",
+        "places": [
+          "Agbenorhoe",
+          "Anfoega",
+          "Aveme Beme",
+          "Aveme Danyigba",
+          "Awate",
+          "Botoku",
+          "Gadza",
+          "Kpando",
+          "Kpando Torkor",
+          "Kpando Ziavi",
+          "Kudzra",
+          "Sabadu",
+          "Tsrukpe",
+          "Vakpo",
+          "Wusuta"
+        ]
+      },
+      {
+        "id": "GH1415",
+        "name": "North Dayi",
+        "places": []
+      },
+      {
+        "id": "GH1416",
+        "name": "North Tongu",
+        "places": [
+          "Adidome",
+          "Avedo",
+          "Battor",
+          "Dofor Adidome",
+          "Fodzoku",
+          "Juapong",
+          "Kpoviadzi",
+          "Mafi Kumasi",
+          "Mafi Sasekpe",
+          "Podoe",
+          "Torgome",
+          "Volo"
+        ]
+      },
+      {
+        "id": "GH1417",
+        "name": "South Dayi",
+        "places": [
+          "Adzokoe",
+          "Anum",
+          "Asikuma",
+          "Boso",
+          "Dzakeh",
+          "Dzemeni",
+          "Have",
+          "Kpalime Duga",
+          "Kpeve",
+          "Peki",
+          "Tongo Dzemeni",
+          "Tongor Tsanakpe",
+          "Wegbe"
+        ]
+      },
+      {
+        "id": "GH1418",
+        "name": "South Tongu",
+        "places": [
+          "Adutor",
+          "Agbakope",
+          "Agorta",
+          "Asidowui",
+          "Dabala",
+          "Dordoekope",
+          "Dorkplorme",
+          "Gamenu",
+          "Kpotame",
+          "Sogakope",
+          "Tefle"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH15",
+    "name": "Western",
+    "districts": [
+      {
+        "id": "GH1501",
+        "name": "Ahanta West Municipal",
+        "places": [
+          "Abura",
+          "Agona Nkwanta",
+          "Apowa",
+          "Asemasa",
+          "Dixcove",
+          "Egyam",
+          "Egyambra",
+          "Fasin",
+          "Fretsi",
+          "Princesstown"
+        ]
+      },
+      {
+        "id": "GH1502",
+        "name": "Effia Kwesimintsim Municipal",
+        "places": [
+          "Airport  Ridge",
+          "Airport Ridge",
+          "Apollo Junction Apremdo",
+          "Apremdo",
+          "Kwesimintsim",
+          "Kwesimintsim Zongo",
+          "Mpohor"
+        ]
+      },
+      {
+        "id": "GH1503",
+        "name": "Ellembelle",
+        "places": []
+      },
+      {
+        "id": "GH1504",
+        "name": "Jomoro",
+        "places": [
+          "Bonyere",
+          "Bonyere Junction",
+          "Ekabeku",
+          "Ellubo",
+          "Enzemetianu.",
+          "Half Assini",
+          "Kengen",
+          "Mpataba",
+          "Newtown",
+          "Nuba",
+          "Sameye",
+          "Sowodadzem",
+          "Takinta",
+          "Tikobo No 1",
+          "Tikobo No 2",
+          "Twenen"
+        ]
+      },
+      {
+        "id": "GH1505",
+        "name": "Mpohor",
+        "places": [
+          "Adansi",
+          "Adum Bamso",
+          "Manso"
+        ]
+      },
+      {
+        "id": "GH1506",
+        "name": "Nzema East",
+        "places": [
+          "Aiyinase",
+          "Asasetre",
+          "Awiebo",
+          "Axim",
+          "Bamiankor",
+          "Eikwe",
+          "Essiama",
+          "Gwira  Eshiem",
+          "Gwira Banso",
+          "Nkroful"
+        ]
+      },
+      {
+        "id": "GH1507",
+        "name": "Prestea/Huni Valley",
+        "places": [
+          "Aboso",
+          "Asompa",
+          "Awudua",
+          "Bogoso",
+          "Cemetery",
+          "Dagarti Compound",
+          "Edikanfo Village",
+          "Enyinabrim",
+          "Himan",
+          "Huniso",
+          "Hunivalley",
+          "Old Destimony",
+          "Prestea"
+        ]
+      },
+      {
+        "id": "GH1508",
+        "name": "Sekondi Takoradi Metropolis",
+        "places": [
+          "Adiembra",
+          "Air Force Base",
+          "Anaji",
+          "Cape Coast Road",
+          "Esikafoambantem No. 1",
+          "Esikafoambantem No1",
+          "Essikadu",
+          "Essikafo  Anbantem No3",
+          "European  Town",
+          "European Town",
+          "Fijai",
+          "Fijai Hill",
+          "Harbour  Area",
+          "Industrial Area",
+          "John Sarbah Road",
+          "Ketan",
+          "Kojokrom",
+          "Liberation Road Chapel Hill",
+          "Location",
+          "Maxwell Road",
+          "New  Takoradi",
+          "New Site",
+          "New Takoradi",
+          "Old  Hospital",
+          "Sekondi",
+          "Takoradi",
+          "Takoradi Harbour Main",
+          "Takoradi Market Circle",
+          "Takoradi Market Clinic",
+          "Timber  Bar",
+          "Windy Ridge"
+        ]
+      },
+      {
+        "id": "GH1509",
+        "name": "Shama",
+        "places": [
+          "Aboadze",
+          "Daboase",
+          "Dompim No 1",
+          "Inchaban",
+          "Shama",
+          "Supomu  Dunkwa",
+          "Supomu Dunkwa"
+        ]
+      },
+      {
+        "id": "GH1510",
+        "name": "Tarkwa Nsuaem",
+        "places": [
+          "Abontiakoon",
+          "Aboso Road",
+          "Akyempim",
+          "Bankyim",
+          "Benso",
+          "Commercial Street",
+          "Dompim",
+          "Iduapriem",
+          "Kwaminakrom",
+          "New Atuabo",
+          "New Layout",
+          "Nsuaem",
+          "Nsuta",
+          "Nyarso",
+          "Simpa",
+          "Tamso Estates",
+          "Tarkwa",
+          "Tarkwa Naboso"
+        ]
+      },
+      {
+        "id": "GH1511",
+        "name": "Wassa Amenfi Central",
+        "places": []
+      },
+      {
+        "id": "GH1512",
+        "name": "Wassa Amenfi East",
+        "places": [
+          "Asankragwa",
+          "Bawdie",
+          "Dawurampong",
+          "Jukwa Hemang",
+          "Oppon Valley",
+          "Pewuako",
+          "Wassa Akoropong",
+          "Wassa Akropong",
+          "Wassa Manpong",
+          "Wassa Saa"
+        ]
+      },
+      {
+        "id": "GH1513",
+        "name": "Wassa Amenfi West",
+        "places": [
+          "Adjakaa Manso",
+          "Agona Amenfi",
+          "Anyinabrim",
+          "Asankra Saa",
+          "Asankragwa",
+          "Asankran Breman",
+          "Gravel Yard",
+          "Manso Amenfi",
+          "Nope",
+          "Prestea Nkwanta",
+          "Samreboi",
+          "Wassa Juabo"
+        ]
+      },
+      {
+        "id": "GH1514",
+        "name": "Wassa East",
+        "places": [
+          "Atobiase",
+          "Enyinabrim",
+          "Hemang",
+          "Manponso",
+          "Sekyere Krobo",
+          "Senchem",
+          "Shed"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "GH16",
+    "name": "Western North",
+    "districts": [
+      {
+        "id": "GH1601",
+        "name": "Aowin",
+        "places": [
+          "Achimfo",
+          "Acquai Allah",
+          "Adjoum",
+          "Amonie",
+          "Boinso",
+          "Enchi",
+          "Papueso",
+          "Sewum",
+          "Yiwabra"
+        ]
+      },
+      {
+        "id": "GH1602",
+        "name": "Bia East",
+        "places": [
+          "Adabokrom",
+          "Adiema",
+          "Adumkrom",
+          "Ahimakrom",
+          "Alhajikrom",
+          "Camp15",
+          "Camp15 Junction",
+          "Kaase",
+          "Mangoase",
+          "Mayera",
+          "Nkwantakese",
+          "Yawatwa",
+          "Yawmatwa"
+        ]
+      },
+      {
+        "id": "GH1603",
+        "name": "Bia West",
+        "places": [
+          "Akaatiso",
+          "Amoakrom",
+          "Asuonta",
+          "Brebre",
+          "Debiso",
+          "Essam",
+          "Essem",
+          "Kojoaba",
+          "Kwamebikrom",
+          "New Abesim",
+          "Osei Kojokrom",
+          "Oseikojokrom",
+          "Prampamase",
+          "Sukusuko"
+        ]
+      },
+      {
+        "id": "GH1604",
+        "name": "Bibiani-Anhwiaso-Bekwai Municipal",
+        "places": [
+          "Anhwiaso",
+          "Asawinso A'",
+          "Asempaneye",
+          "Awaso",
+          "Bassengele",
+          "Bibiani",
+          "Bibiani Afram Clinic",
+          "Chirano",
+          "Humjibre",
+          "Merewa",
+          "Sefwi  Bekwai",
+          "Sefwi Wenchi",
+          "Subri"
+        ]
+      },
+      {
+        "id": "GH1605",
+        "name": "Bodi",
+        "places": [
+          "Ahinbenso",
+          "Amoaya",
+          "Denchemoisue",
+          "Juabeso",
+          "Mamudukrom",
+          "Sefwi Boadi",
+          "Sefwi Bodi",
+          "Sui-Ano"
+        ]
+      },
+      {
+        "id": "GH1606",
+        "name": "Juaboso",
+        "places": [
+          "Anhwiafutu",
+          "Asempaneye",
+          "Boinzan",
+          "Bonsu Nkwanta",
+          "Elluokrom",
+          "Kofikrom",
+          "Mempeasem",
+          "New Brekum"
+        ]
+      },
+      {
+        "id": "GH1607",
+        "name": "Sefwi Akontombra",
+        "places": [
+          "Akontombra",
+          "Asantekrom",
+          "Nsawora",
+          "Nsawura",
+          "Wiawso"
+        ]
+      },
+      {
+        "id": "GH1608",
+        "name": "Sefwi-Wiawso",
+        "places": [
+          "Ackaakrom",
+          "Akontombra",
+          "Anyinabrim",
+          "Asafo",
+          "Asawinso",
+          "Edewarakrom",
+          "Kramokrom",
+          "Nkonya",
+          "Nyamegyeso",
+          "Wiawso"
+        ]
+      },
+      {
+        "id": "GH1609",
+        "name": "Suaman",
+        "places": [
+          "Akontombra Nkwanta",
+          "Dadieso",
+          "Gyatokrom",
+          "Helehele",
+          "Kwesikrom"
+        ]
+      }
+    ]
+  }
+]
