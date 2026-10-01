@@ -547,8 +547,8 @@ export function contentFor(
             },
           ],
           cta: {
-            label: "Open NesAfric",
-            path: "/account",
+            label: "Open NesAfric app",
+            path: "nesafric://tenant-access",
           },
           supportNote: `Keep this code private. If you were not expecting this invitation, contact ${BRAND.contact.support}.`,
         },

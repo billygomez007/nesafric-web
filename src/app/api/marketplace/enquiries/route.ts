@@ -5,6 +5,7 @@ import {
 } from "@/modules/marketplace/service";
 import { requireUser } from "@/platform/auth/session";
 import { errorResponse } from "@/platform/errors";
+import { getOrganisationIdHeader } from "@/platform/organisations/request";
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       await listMarketplaceEnquiries(
         (await requireUser()).id,
-        request.headers.get("x-organisation-id"),
+        getOrganisationIdHeader(request),
         query,
       ),
     );
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       await createMarketplaceEnquiry(
         (await requireUser()).id,
-        request.headers.get("x-organisation-id"),
+        getOrganisationIdHeader(request),
         await request.json(),
       ),
       { status: 201 },

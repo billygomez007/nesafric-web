@@ -185,7 +185,9 @@ function RequestForm({
     propertyId: null,
     maintenanceRequestId: null,
     message: "",
-    requestQuote: wantsQuote && Boolean(quoteOrganisationId),
+    // A formal quotation is PropertyOS/maintenance scoped. Customers with
+    // no workspace can still send the provider an ordinary personal request.
+    requestQuote: wantsQuote && organisations.length > 0,
   });
 
   const [errors, setErrors] = useState<ServiceRequestErrors>({});
@@ -316,6 +318,13 @@ function RequestForm({
           </AppText>
         </Card>
 
+        {wantsQuote && organisations.length === 0 ? (
+          <Notice
+            tone="info"
+            message="Formal quotations require a PropertyOS workspace and maintenance request. You can still send this provider a personal service request."
+          />
+        ) : null}
+
         {organisations.length ? (
           <Group title="Request for">
             <Chip
@@ -341,6 +350,7 @@ function RequestForm({
                     organisationId: organisation.id,
                     propertyId: null,
                     maintenanceRequestId: null,
+                    requestQuote: wantsQuote || form.requestQuote,
                   })
                 }
               />

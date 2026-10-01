@@ -70,7 +70,9 @@ export function ProviderCard({ provider, focusCategoryId }: { provider: PublicPr
         <View style={styles.action}>
           <Button label="View profile" variant="secondary" onPress={() => openProvider(provider.id)} />
         </View>
-        {provider.verification === "VERIFIED" ? (
+        {provider.verification === "VERIFIED"
+          && provider.acceptingWork
+          && provider.availability !== "UNAVAILABLE" ? (
           <View style={styles.action}>
             <Button label="Request service" onPress={() => openRequestService(provider.id, mainCategory?.id)} />
           </View>

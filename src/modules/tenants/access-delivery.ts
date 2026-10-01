@@ -89,6 +89,9 @@ export async function deliverTenantAccessInvitation(input: {
     }
   }
 
+  // A tenant access code is a one-time transactional access credential,
+  // not an optional notification. If the landlord/property manager supplied
+  // a phone number for this tenant relationship, deliver the invitation code.
   if (relationship.phone) {
     try {
       const place = propertyName ? ` for ${propertyName}` : "";
