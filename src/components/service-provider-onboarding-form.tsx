@@ -26,12 +26,8 @@ const STEP_LABELS = [
   "Business information",
   "Services",
   "Service areas",
-  "Identity verification",
-  "Business documents",
-  "Portfolio",
   "WhatsApp notifications",
-  "Review & consent",
-  "Submit",
+  "Complete",
 ];
 
 async function fileToBase64(file: File) {
@@ -166,13 +162,9 @@ export function ServiceProviderOnboardingForm() {
 
   const [providerId, setProviderId] = useState<string | null>(null);
   const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
-  const [identityFiles, setIdentityFiles] = useState<
-    Record<string, File | null>
-  >({});
-  const [businessFiles, setBusinessFiles] = useState<
-    Record<string, File | null>
-  >({});
-  const [portfolioFile, setPortfolioFile] = useState<File | null>(null);
+
+
+
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   const [whatsappPreferences, setWhatsappPreferences] = useState({
@@ -214,56 +206,6 @@ export function ServiceProviderOnboardingForm() {
       .catch(() => {});
   }, [accountType]);
 
-  const identityRequirements = requirements.filter((requirement) =>
-    requirement.evidenceType.startsWith("GHANA_CARD"),
-  );
-  const businessRequirements = requirements.filter(
-    (requirement) => !requirement.evidenceType.startsWith("GHANA_CARD"),
-  );
-
-  const categoryGroups = Array.from(
-    categories
-      .reduce((groups, category) => {
-        const key = category.parent?.id ?? "other";
-        const current = groups.get(key) ?? {
-          id: key,
-          name: category.parent?.name ?? "Other property services",
-          sortOrder: category.parent?.sortOrder ?? Number.MAX_SAFE_INTEGER,
-          categories: [] as Category[],
-        };
-        current.categories.push(category);
-        groups.set(key, current);
-        return groups;
-      }, new Map<string, { id: string; name: string; sortOrder: number; categories: Category[] }>())
-      .values(),
-  ).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-
-  function updateServiceArea(index: number, patch: Partial<ServiceArea>) {
-    setServiceAreas((current) =>
-      current.map((area, position) =>
-        position === index ? { ...area, ...patch } : area,
-      ),
-    );
-  }
-
-  async function loadRequirements() {
-    const requirementParams = new URLSearchParams({
-      countryCode: "GH",
-      providerType: accountType,
-    });
-    for (const categoryId of categoryIds)
-      requirementParams.append("categoryId", categoryId);
-    const requirementResponse = await fetch(
-      `/api/public/providers/document-requirements?${requirementParams}`,
-    );
-    if (requirementResponse.ok)
-      setRequirements(await requirementResponse.json());
-  }
-
-  const editableServiceAreas = () =>
-    serviceAreas.filter((area) => area.city || area.region);
-
-  /** The provider's own marketplace profile keeps the structured areas (best effort, as on create). */
   async function syncMarketplaceProfile(id: string) {
     await fetch("/api/marketplace/providers/" + id + "/profile", {
       method: "PATCH",
@@ -332,7 +274,7 @@ export function ServiceProviderOnboardingForm() {
       if (providerId) {
         await updateExistingProvider(providerId);
         await loadRequirements();
-        setStep(5);
+        setStep(8);
         return;
       }
       const response = await fetch("/api/providers", {
@@ -387,7 +329,7 @@ export function ServiceProviderOnboardingForm() {
       await loadRequirements();
 
       trackCampaignEvent("service_provider_registration_started");
-      setStep(5);
+      setStep(8);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -400,111 +342,7 @@ export function ServiceProviderOnboardingForm() {
     }
   }
 
-  async function submitIdentityDocuments() {
-    if (!providerId) return;
-    const missing = identityRequirements.filter(
-      (requirement) =>
-        requirement.required && !identityFiles[requirement.evidenceType],
-    );
-    if (missing.length)
-      return setError(
-        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
-      );
-    setError("");
-    setSubmitting(true);
-    try {
-      const uploaded: { type: string; reference: string }[] = [];
-      for (const requirement of identityRequirements) {
-        const file = identityFiles[requirement.evidenceType];
-        if (!file) continue;
-        uploaded.push(
-          await uploadEvidence(providerId, requirement.evidenceType, file),
-        );
-      }
-      setSubmittedEvidence((current) => [...current, ...uploaded]);
-      setStep(6);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to upload identity documents.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitBusinessDocuments() {
-    if (!providerId) return;
-    const missing = businessRequirements.filter(
-      (requirement) =>
-        requirement.required && !businessFiles[requirement.evidenceType],
-    );
-    if (missing.length)
-      return setError(
-        `Please upload: ${missing.map((requirement) => requirement.label).join(", ")}.`,
-      );
-    setError("");
-    setSubmitting(true);
-    try {
-      const uploaded: { type: string; reference: string }[] = [];
-      for (const requirement of businessRequirements) {
-        const file = businessFiles[requirement.evidenceType];
-        if (!file) continue;
-        uploaded.push(
-          await uploadEvidence(providerId, requirement.evidenceType, file),
-        );
-      }
-      setSubmittedEvidence((current) => [...current, ...uploaded]);
-      setStep(7);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to upload business documents.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitPortfolio() {
-    if (!providerId) return setStep(8);
-    setError("");
-    setSubmitting(true);
-    try {
-      if (portfolioFile)
-        await uploadEvidence(providerId, "PORTFOLIO_EVIDENCE", portfolioFile);
-      setStep(8);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to upload portfolio evidence.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function openWorkspace() {
-    if (providerId) router.push(`/providers/${providerId}`);
-  }
-
-  /**
-   * Finishing onboarding opens the provider's private workspace. Submitting for verification is
-   * part of it only when there is evidence to submit: public verification never gates access to
-   * the owner's own workspace, where documents can be added later.
-   */
-  async function finalSubmit() {
-    if (!providerId || inFlight.current) return;
-    if (
-      !consent.accurate ||
-      !consent.authorized ||
-      !consent.reviewConsented ||
-      !consent.termsAccepted
-    ) {
-      return setError(
+  return setError(
         "All four consent statements must be confirmed before submitting for review.",
       );
     }
@@ -567,7 +405,6 @@ export function ServiceProviderOnboardingForm() {
       inFlight.current = false;
       setSubmitting(false);
     }
-  }
 
   return (
     <div className="mt-8 grid gap-6">
@@ -1104,12 +941,12 @@ export function ServiceProviderOnboardingForm() {
               disabled={submitting || (whatsappOptIn && !whatsappNumber.trim())}
               onClick={async () => {
                 if (!providerId) {
-                  setStep(9);
+                  setStep(10);
                   return;
                 }
 
                 if (!whatsappNumber.trim() && !whatsappOptIn) {
-                  setStep(9);
+                  setStep(10);
                   return;
                 }
 
@@ -1146,7 +983,7 @@ export function ServiceProviderOnboardingForm() {
                     return;
                   }
 
-                  setStep(9);
+                  setStep(10);
                 } catch {
                   setError(
                     "We could not save your WhatsApp notification settings. Please try again.",
