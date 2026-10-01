@@ -332,7 +332,7 @@ export function ServiceProviderOnboardingForm() {
       if (providerId) {
         await updateExistingProvider(providerId);
         await loadRequirements();
-        setStep(5);
+        setStep(8);
         return;
       }
       const response = await fetch("/api/providers", {
@@ -387,7 +387,7 @@ export function ServiceProviderOnboardingForm() {
       await loadRequirements();
 
       trackCampaignEvent("service_provider_registration_started");
-      setStep(5);
+      setStep(8);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -1104,12 +1104,12 @@ export function ServiceProviderOnboardingForm() {
               disabled={submitting || (whatsappOptIn && !whatsappNumber.trim())}
               onClick={async () => {
                 if (!providerId) {
-                  setStep(9);
+                  setStep(10);
                   return;
                 }
 
                 if (!whatsappNumber.trim() && !whatsappOptIn) {
-                  setStep(9);
+                  setStep(10);
                   return;
                 }
 
@@ -1146,7 +1146,7 @@ export function ServiceProviderOnboardingForm() {
                     return;
                   }
 
-                  setStep(9);
+                  setStep(10);
                 } catch {
                   setError(
                     "We could not save your WhatsApp notification settings. Please try again.",
