@@ -479,6 +479,85 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
     }
   });
 
+
+  it("publicly lists an unverified provider but hides contact and blocks enquiries and work", async () => {
+    const landlord = await registerUser({
+      displayName: "Visibility Landlord",
+      email: "visibility-landlord@example.com",
+      password: "secure-password-123",
+    });
+    const providerUser = await registerUser({
+      displayName: "Visibility Provider",
+      email: "visibility-provider@example.com",
+      password: "secure-password-123",
+    });
+
+    const organisation = await createOrganisation(landlord.id, {
+      name: "Visibility Org",
+      type: "PROPERTY_MANAGEMENT",
+      countryCode: "GH",
+    });
+
+    const plumbing = (await listServiceCategories()).find(
+      ({ key }) => key === "plumbing",
+    )!;
+
+    const provider = await createServiceProvider(providerUser.id, {
+      type: "INDIVIDUAL",
+      displayName: "Visibility Plumbing",
+      contactEmail: "private-visibility@example.com",
+      contactPhone: "+233200000099",
+      categoryIds: [plumbing.id],
+    });
+
+    await updateMarketplaceProfile(providerUser.id, provider.id, {
+      listed: true,
+      showContactEmail: false,
+      showContactPhone: false,
+      categoryIds: [plumbing.id],
+      serviceAreas: [{ countryCode: "GH", city: "Kumasi" }],
+    });
+
+    const publicResult = await discoverMarketplaceProviders({
+      q: "Visibility Plumbing",
+    });
+
+    expect(publicResult.items).toHaveLength(1);
+    expect(publicResult.items[0]).toMatchObject({
+      id: provider.id,
+      displayName: "Visibility Plumbing",
+      verification: "UNVERIFIED",
+      verificationBadges: {
+        identity: false,
+        business: false,
+        skill: false,
+      },
+      contact: {
+        email: null,
+        phone: null,
+      },
+    });
+
+    const property = await createProperty(landlord.id, organisation.id, {
+      name: "Visibility House",
+      referenceNumber: "VISIBILITY-1",
+      category: "Residential",
+      countryCode: "GH",
+      currencyCode: "GHS",
+    });
+
+    await expect(
+      createMarketplaceEnquiry(landlord.id, organisation.id, {
+        providerId: provider.id,
+        categoryId: plumbing.id,
+        propertyId: property.id,
+        message: "Please contact me about this job.",
+      }),
+    ).rejects.toMatchObject({
+      code: "MARKETPLACE_PROVIDER_UNAVAILABLE",
+    });
+  });
+
   it("lets a zero-document Super Admin-approved provider quote, receive, and accept assigned work", async () => {
     const landlord = await registerUser({
       displayName: "Approval Landlord",

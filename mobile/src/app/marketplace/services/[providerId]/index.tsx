@@ -52,7 +52,10 @@ function ProviderProfile({ provider }: { provider: PublicProvider }) {
   const firstCategory = provider.categories[0]?.id;
   // Server-computed only; shown as a whole percentage, never derived here.
   const completion = formatCompletionRate(provider) ? Math.round((provider.completionRate as number) * 100) : null;
-  const notTakingWork = !provider.acceptingWork || provider.availability === "UNAVAILABLE";
+  const notTakingWork =
+    provider.verification !== "VERIFIED"
+    || !provider.acceptingWork
+    || provider.availability === "UNAVAILABLE";
 
   return (
     <>

@@ -58,10 +58,24 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
       categoryIds: [plumbing.id], serviceAreas: [],
     });
 
-    // 1. A brand-new, unverified provider must not be able to become publicly listed.
-    await expect(updateMarketplaceProfile(artisanUser.id, provider.id, {
-      listed: true, categoryIds: [plumbing.id], serviceAreas: [{ countryCode: "GH", city: "Accra" }],
-    })).rejects.toMatchObject({ code: "PROVIDER_NOT_VERIFIED" });
+    // 1. A brand-new provider may be publicly listed before verification.
+    // Public visibility does not grant verification, contact access, or work eligibility.
+    const initialPublicProfile = await updateMarketplaceProfile(artisanUser.id, provider.id, {
+      listed: true,
+      showContactEmail: false,
+      showContactPhone: false,
+      categoryIds: [plumbing.id],
+      serviceAreas: [{ countryCode: "GH", city: "Accra" }],
+    });
+    expect(initialPublicProfile.listed).toBe(true);
+    expect(initialPublicProfile.provider.verificationStatus).toBe("UNVERIFIED");
+    expect(initialPublicProfile.provider.acceptingWork).toBe(false);
+    expect(initialPublicProfile.showContactEmail).toBe(false);
+    expect(initialPublicProfile.showContactPhone).toBe(false);
+    expect((await discoverMarketplaceProviders({ country: "GH" })).items.map((item) => item.id)).toContain(provider.id);
+    const initialPublicView = await getPublicMarketplaceProvider(provider.id);
+    expect(initialPublicView.provider.verification).toBe("UNVERIFIED");
+    expect(initialPublicView.provider.contact).toEqual({ email: null, phone: null });
 
     const frontUpload = await uploadProviderEvidenceDocument(artisanUser.id, provider.id, {
       evidenceType: "GHANA_CARD_FRONT", fileName: "ghana-card-front.jpg", contentType: "image/jpeg", dataBase64: base64(JPEG_BYTES),
@@ -90,10 +104,21 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
       ],
     });
 
-    // Still not listable while the platform review queue is pending — even after evidence exists.
-    await expect(updateMarketplaceProfile(artisanUser.id, provider.id, {
-      listed: true, categoryIds: [plumbing.id], serviceAreas: [{ countryCode: "GH", city: "Accra" }],
-    })).rejects.toMatchObject({ code: "PROVIDER_NOT_VERIFIED" });
+    // Verification submission does not remove the provider from the public marketplace.
+    // The provider remains unverified and unable to receive work until approval.
+    const pendingMarketplaceProfile = await updateMarketplaceProfile(artisanUser.id, provider.id, {
+      listed: true,
+      showContactEmail: false,
+      showContactPhone: false,
+      categoryIds: [plumbing.id],
+      serviceAreas: [{ countryCode: "GH", city: "Accra" }],
+    });
+    expect(pendingMarketplaceProfile.listed).toBe(true);
+    expect(pendingMarketplaceProfile.provider.verificationStatus).toBe("PENDING");
+    expect(pendingMarketplaceProfile.provider.acceptingWork).toBe(false);
+    expect(pendingMarketplaceProfile.showContactEmail).toBe(false);
+    expect(pendingMarketplaceProfile.showContactPhone).toBe(false);
+    expect((await discoverMarketplaceProviders({ country: "GH" })).items.map((item) => item.id)).toContain(provider.id);
 
     // 6. A provider cannot approve their own verification — they hold no PlatformPrincipal.
     await expect(reviewProviderIdentity(artisanUser, provider.id, { status: "VERIFIED" }))
@@ -332,13 +357,20 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
     expect(newFront.reviewStatus).toBe("PENDING");
     expect(supersededFront.supersededByEvidenceId).toBe(newFront.id);
 
-    // Never verified — public discovery must never surface it as VERIFIED, even if `listed` were
-    // somehow forced true out-of-band (defense in depth: the ranking query itself hard-filters on
-    // verificationStatus, independent of the `listed` flag).
+    // Never verified: the provider may still be publicly discoverable, but must remain
+    // visibly unverified with private contact details hidden.
     await db.providerMarketplaceProfile.create({
-      data: { providerId: provider.id, listed: true, serviceAreas: { create: [{ countryCode: "GH", city: "Accra" }] } },
+      data: {
+        providerId: provider.id,
+        listed: true,
+        showContactEmail: false,
+        showContactPhone: false,
+        serviceAreas: { create: [{ countryCode: "GH", city: "Accra" }] },
+      },
     });
-    expect((await discoverMarketplaceProviders({ country: "GH" })).items.map((item) => item.id)).not.toContain(provider.id);
-    await expect(getPublicMarketplaceProvider(provider.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await discoverMarketplaceProviders({ country: "GH" })).items.map((item) => item.id)).toContain(provider.id);
+    const publicUnverified = await getPublicMarketplaceProvider(provider.id);
+    expect(publicUnverified.provider.verification).not.toBe("VERIFIED");
+    expect(publicUnverified.provider.contact).toEqual({ email: null, phone: null });
   });
 });

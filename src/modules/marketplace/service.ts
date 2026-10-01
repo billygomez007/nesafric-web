@@ -189,6 +189,16 @@ export async function updateMarketplaceProfile(userId: string, providerId: strin
         throw new AppError("INVALID_PUBLIC_CATEGORY", 422, "Public categories must be active categories on this provider.");
       }
     }
+    if (
+      provider.verificationStatus !== "VERIFIED"
+      && (data.showContactEmail || data.showContactPhone)
+    ) {
+      throw new AppError(
+        "PROVIDER_NOT_VERIFIED",
+        409,
+        "Contact details cannot be published until the provider is verified.",
+      );
+    }
     if (data.showContactEmail && !provider.contactEmail) {
       throw new AppError("PUBLIC_CONTACT_UNAVAILABLE", 422, "The provider has no email address to publish.");
     }
@@ -209,13 +219,6 @@ export async function updateMarketplaceProfile(userId: string, providerId: strin
     const areaCount = data.serviceAreas?.length ?? current?.serviceAreas.length ?? 0;
     if (data.listed && (!categoryCount || !areaCount)) {
       throw new AppError("INCOMPLETE_MARKETPLACE_PROFILE", 409, "At least one explicit public category and service area are required to list.");
-    }
-    if (data.listed && provider.verificationStatus !== "VERIFIED") {
-      throw new AppError(
-        "PROVIDER_NOT_VERIFIED",
-        409,
-        "Identity verification must be approved before this provider can be publicly listed.",
-      );
     }
     if (data.listed && provider.suspendedAt) {
       throw new AppError("PROVIDER_SUSPENDED", 409, "A suspended provider cannot be publicly listed.");
@@ -400,8 +403,16 @@ const publicProfile = (
     radiusKm: area.radiusKm?.toString() ?? null,
   })),
   contact: {
-    email: profile.showContactEmail ? profile.provider.contactEmail : null,
-    phone: profile.showContactPhone ? profile.provider.contactPhone : null,
+    email:
+      profile.provider.verificationStatus === "VERIFIED"
+      && profile.showContactEmail
+        ? profile.provider.contactEmail
+        : null,
+    phone:
+      profile.provider.verificationStatus === "VERIFIED"
+      && profile.showContactPhone
+        ? profile.provider.contactPhone
+        : null,
   },
   pricing: {
     startingRateMinor: profile.startingRateMinor?.toString() ?? null,
@@ -437,10 +448,10 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
   const conditions: Prisma.Sql[] = [
     Prisma.sql`mp."listed" = true`,
     Prisma.sql`p."archivedAt" IS NULL`,
-    // Unconditional, regardless of any caller-supplied filter — a provider whose verification
-    // status has moved away from VERIFIED (rejected, suspended, flagged for more information)
-    // must disappear from public discovery immediately, not just at the point `listed` was set.
-    Prisma.sql`p."verificationStatus" = 'VERIFIED'`,
+    // Self-registered providers may be publicly discoverable before verification.
+    // Rejected providers are removed from public discovery; verification controls trust badges
+    // and whether the provider may receive enquiries/work, not whether their basic profile exists.
+    Prisma.sql`p."verificationStatus" NOT IN ('REJECTED', 'SUSPENDED')`,
     // Platform-wide suspension (`ServiceProvider.suspendedAt`) is independent of
     // `verificationStatus` — a provider can remain VERIFIED while suspended platform-wide.
     Prisma.sql`p."suspendedAt" IS NULL`,
@@ -557,7 +568,8 @@ export type PublicMarketplaceProvider = Awaited<ReturnType<typeof publicProfiles
 
 /**
  * The given providers that are publicly listed right now (same gates as discovery), keyed by id.
- * Anything unlisted, unverified, suspended or archived is simply absent.
+ * Unverified providers may be publicly visible, but rejected, unlisted, suspended or archived
+ * providers are absent.
  */
 export async function publicMarketplaceProvidersById(providerIds: string[]) {
   if (!providerIds.length) return new Map<string, PublicMarketplaceProvider>();
@@ -609,7 +621,12 @@ export async function listPublicServiceProvidersForSitemap(): Promise<Array<{ id
 
 export async function getPublicMarketplaceProviderBySlug(slug: string) {
   const provider = await db.serviceProvider.findFirst({
-    where: { slug, verificationStatus: "VERIFIED", archivedAt: null },
+    where: {
+      slug,
+      archivedAt: null,
+      suspendedAt: null,
+      verificationStatus: { notIn: ["REJECTED", "SUSPENDED"] },
+    },
     select: { id: true },
   });
   if (!provider) throw notFound();
