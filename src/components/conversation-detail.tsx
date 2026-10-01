@@ -24,7 +24,25 @@ type ConversationDetail = {
   property: { id: string; name: string } | null;
   listing: { id: string; title: string } | null;
   marketplaceLead: { id: string; status: string; name: string } | null;
-  maintenanceRequest: { id: string; title: string; status: string } | null;
+  maintenanceRequest: {
+    id: string;
+    title: string;
+    status: string;
+    quotationRequests: Array<{
+      id: string;
+      status: string;
+      scope: string;
+      responseDueAt: string | null;
+      quotations: Array<{
+        id: string;
+        status: string;
+        totalAmountMinor: string;
+        currencyCode: string;
+        etaDays: number;
+        notes: string | null;
+      }>;
+    }>;
+  } | null;
   messages: Message[];
   handoffs: Handoff[];
   assignments: Array<{ id: string; assigneeType: string; reason: string | null; createdAt: string }>;
@@ -85,6 +103,19 @@ export function ConversationDetailView({ conversationId }: { conversationId: str
     await load(organisationId);
   }
 
+  async function reviewQuotation(quotationId: string, action: "approve" | "reject") {
+    const response = await fetch(`/api/provider-quotations/${quotationId}/${action}`, {
+      method: "POST",
+      headers: headers(organisationId, true),
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) return setError(await errorMessage(response));
+
+    setNotice(`Quotation ${action}d.`);
+    await load(organisationId);
+  }
+
   async function updateStatus(status: string) {
     const response = await fetch(`/api/conversations/${conversationId}/status`, { method: "PATCH", headers: headers(organisationId, true), body: JSON.stringify({ status }) });
     if (!response.ok) return setError(await errorMessage(response));
@@ -122,6 +153,45 @@ export function ConversationDetailView({ conversationId }: { conversationId: str
           <div className="flex justify-between gap-4"><dt className="text-muted">Lead</dt><dd className="text-right">{conversation.marketplaceLead?.name ?? "—"}</dd></div>
           <div className="flex justify-between gap-4"><dt className="text-muted">Maintenance</dt><dd className="text-right">{conversation.maintenanceRequest?.title ?? "—"}</dd></div>
         </dl>
+      </section>
+
+      {conversation.maintenanceRequest?.quotationRequests?.map((request) => (
+        <section className="rounded-3xl border border-hairline bg-white p-5 shadow-sm" key={request.id}>
+          <h2 className="font-semibold text-forest">Quotation</h2>
+          <p className="mt-2 text-sm text-muted">{request.scope}</p>
+          <p className="mt-2 text-sm">Status: <strong>{request.status}</strong></p>
+
+          {request.quotations.map((quote) => (
+            <div className="mt-3 rounded-2xl border border-hairline bg-warm-white p-3 text-sm" key={quote.id}>
+              <p>Total: {quote.currencyCode} {quote.totalAmountMinor}</p>
+              <p>ETA: {quote.etaDays} days</p>
+              {quote.notes && <p className="mt-1 text-muted">{quote.notes}</p>}
+
+              {quote.status === "SUBMITTED" && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    className="rounded-xl bg-forest px-3 py-2 text-xs font-semibold text-white"
+                    onClick={() => void reviewQuotation(quote.id, "approve")}
+                    type="button"
+                  >
+                    Approve quotation
+                  </button>
+
+                  <button
+                    className="rounded-xl border border-hairline px-3 py-2 text-xs font-semibold text-forest"
+                    onClick={() => void reviewQuotation(quote.id, "reject")}
+                    type="button"
+                  >
+                    Reject quotation
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
+      ))}
+
+      <section className="rounded-3xl border border-hairline bg-white p-5 shadow-sm">
       </section>
       {conversation.handoffs.length > 0 && <section className="rounded-3xl border border-gold/30 bg-cream p-5">
         <h2 className="font-semibold text-forest">Handoffs</h2>

@@ -29,6 +29,13 @@ async function cleanDatabase() {
   await db.$executeRaw`TRUNCATE TABLE "MarketplaceEnquiryStatusHistory", "ProviderMarketplaceProfileHistory"`;
   await db.platformPrincipal.deleteMany();
   await db.marketplaceEnquiry.deleteMany();
+
+  await db.voiceCall.deleteMany();
+  await db.conversationAssignment.deleteMany();
+  await db.message.deleteMany();
+  await db.conversationParticipant.deleteMany();
+  await db.conversation.deleteMany();
+
   await db.providerMarketplaceServiceArea.deleteMany();
   await db.providerMarketplaceCategory.deleteMany();
   await db.providerMarketplaceProfile.deleteMany();

@@ -3118,6 +3118,7 @@ model MarketplaceEnquiry {
   maintenanceRequestId     String?                           @db.Uuid
   requestedByUserId        String                            @db.Uuid
   quotationRequestId       String?                           @unique @db.Uuid
+  conversationId           String?                           @unique @db.Uuid
   message                  String
   status                   MarketplaceEnquiryStatus          @default(NEW)
   createdAt                DateTime                          @default(now())
@@ -3133,6 +3134,7 @@ model MarketplaceEnquiry {
   maintenanceRequest       MaintenanceRequest?               @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
   requestedBy              User                              @relation("MarketplaceEnquiryRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
   quotationRequest         ProviderQuotationRequest?         @relation(fields: [quotationRequestId], references: [id], onDelete: Restrict)
+  conversation             Conversation?                     @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   history                  MarketplaceEnquiryStatusHistory[]
 
   @@index([requestingOrganisationId, status, createdAt])
@@ -4143,6 +4145,7 @@ model Conversation {
   messages             Message[]
   assignments          ConversationAssignment[]
   voiceCalls           VoiceCall[]
+  marketplaceEnquiry   MarketplaceEnquiry?
 
   @@index([organisationId, status, updatedAt])
   @@index([organisationId, channel, channelAddress])

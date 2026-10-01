@@ -108,6 +108,53 @@ export function ProviderLogo({ name, url, size = "md" }: { name: string; url?: s
   );
 }
 
+
+
+export function TrustSummary({
+  provider,
+}: {
+  provider: Pick<
+    PublicProvider,
+    "verificationBadges" | "aggregateRating" | "ratingCount" | "completedJobs" | "availability" | "acceptingWork"
+  >;
+}) {
+  const badges = verificationBadgeLabels(provider);
+  const availability = availabilityStatus(provider);
+  const rating = ratingSummary(provider);
+
+  return (
+    <div className="grid gap-3 rounded-2xl bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
+      {badges.slice(0, 2).map((badge) => (
+        <div className="text-sm font-medium" key={badge}>
+          ✓ {badge}
+        </div>
+      ))}
+
+      {availability && (
+        <div className="text-sm font-medium">
+          ✓ {availability.label}
+        </div>
+      )}
+
+      {rating ? (
+        <div className="text-sm font-medium">
+          ★ {rating.score} ({rating.count})
+        </div>
+      ) : (
+        <div className="text-sm font-medium text-muted">
+          New provider
+        </div>
+      )}
+
+      {provider.completedJobs > 0 && (
+        <div className="text-sm font-medium">
+          ✓ {completedJobsLabel(provider.completedJobs)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function VerificationBadges({ provider }: { provider: Pick<PublicProvider, "verificationBadges"> }) {
   const labels = verificationBadgeLabels(provider);
   if (!labels.length) return null;

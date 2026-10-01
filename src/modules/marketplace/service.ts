@@ -671,6 +671,27 @@ export async function createMarketplaceEnquiry(userId: string, organisationId: s
     if (maintenance && data.propertyId && maintenance.propertyId !== data.propertyId) {
       throw new AppError("INVALID_ENQUIRY_SCOPE", 422, "The maintenance request does not belong to the scoped property.");
     }
+    const conversation = await tx.conversation.create({
+      data: {
+        organisationId,
+        channel: "IN_APP",
+        status: "OPEN",
+        subject: "Service provider enquiry",
+        identityLevel: "VERIFIED",
+        propertyId: data.propertyId ?? maintenance?.propertyId,
+        serviceProviderId: data.providerId,
+        messages: {
+          create: {
+            organisationId,
+            channel: "IN_APP",
+            direction: "INBOUND",
+            senderType: "TENANT",
+            body: data.message,
+          },
+        },
+      },
+    });
+
     const enquiry = await tx.marketplaceEnquiry.create({
       data: {
         requestingOrganisationId: organisationId,
@@ -680,6 +701,7 @@ export async function createMarketplaceEnquiry(userId: string, organisationId: s
         maintenanceRequestId: data.maintenanceRequestId,
         requestedByUserId: userId,
         message: data.message,
+        conversationId: conversation.id,
         history: { create: { actorUserId: userId, toStatus: "NEW" } },
       },
       include: enquiryInclude,
@@ -912,6 +934,27 @@ export async function requestMarketplaceQuote(
       where: { id: enquiry.id },
       data: { quotationRequestId: quotationRequest.id },
     });
+
+    if (enquiry.conversationId) {
+      await tx.message.create({
+        data: {
+          organisationId,
+          conversationId: enquiry.conversationId,
+          channel: "IN_APP",
+          direction: "OUTBOUND",
+          senderType: "SYSTEM",
+          body: "Quotation request created. The provider can now submit pricing and response details.",
+        },
+      });
+
+      await tx.conversation.update({
+        where: { id: enquiry.conversationId },
+        data: {
+          lastMessageAt: new Date(),
+          lastOutboundAt: new Date(),
+        },
+      });
+    }
     await record(tx, organisationId, userId, "marketplace.quote_requested", "provider_quotation_request", quotationRequest.id, {
       enquiryId: enquiry.id,
       providerId: provider.id,

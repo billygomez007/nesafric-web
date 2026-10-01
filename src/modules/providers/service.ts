@@ -1896,7 +1896,17 @@ async function reviewQuotation(
   return db.$transaction(async (tx) => {
     const quote = await tx.providerQuotation.findFirst({
       where: { id: quotationId, landlordOrganisationId: organisationId },
-      include: { request: true },
+      include: {
+        request: {
+          include: {
+            maintenanceRequest: {
+              include: {
+                conversations: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (!quote) throw notFound();
     if (quote.status !== "SUBMITTED")

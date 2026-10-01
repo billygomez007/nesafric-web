@@ -123,6 +123,7 @@ describe("passwordless sign-in with one-time codes", () => {
   beforeEach(async () => {
     await cleanDatabase();
     process.env.OTP_HASH_SECRET = "test-otp-secret-that-is-long-enough-0123456789";
+    delete process.env.VERCEL;
     process.env.TRUSTED_CLIENT_IP_HEADER = "x-test-client-ip";
     delete process.env.OTP_SMS_GLOBAL_HOURLY_LIMIT;
     sms.configured = true;
