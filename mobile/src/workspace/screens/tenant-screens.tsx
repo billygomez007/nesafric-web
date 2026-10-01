@@ -517,6 +517,9 @@ export function TenantDetailScreen({
           message={`The tenant was added, but the lease was not created: ${placementError}`}
         />
       ) : null}
+      {accessNotice ? (
+        <Notice tone="warning" message={accessNotice} />
+      ) : null}
       {notice ? <Notice tone="info" message={notice} /> : null}
       <FormError error={error} />
       <FormSection title="Tenancies">
