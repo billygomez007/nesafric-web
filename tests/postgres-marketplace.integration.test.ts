@@ -430,6 +430,9 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
       .rejects.toMatchObject({ code: "FORBIDDEN" });
     await updateMarketplaceEnquiry(providerUser.id, null, enquiry.id, { status: "VIEWED" });
     await updateMarketplaceEnquiry(providerUser.id, null, enquiry.id, { status: "RESPONDED", note: "Ready to quote" });
+    await expect(
+      updateMarketplaceEnquiry(providerUser.id, null, enquiry.id, { status: "CANCELLED" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect((await getMarketplaceEnquiry(landlord.id, organisation.id, enquiry.id)).history.map(({ toStatus }) => toStatus))
       .toEqual(["NEW", "VIEWED", "RESPONDED"]);
 

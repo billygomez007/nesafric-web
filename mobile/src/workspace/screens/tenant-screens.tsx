@@ -263,6 +263,7 @@ export function NewTenantScreen({
       const created = await createPmTenant(api, workspaceId!, form);
       const tenantId = created.relationship.id;
       let placementError: string | null = null;
+      let accessNotice: string | null = null;
       let createdLeaseId: string | undefined;
       if (place) {
         try {
@@ -298,17 +299,17 @@ export function NewTenantScreen({
           );
           if (
             accessInvitation.delivery.email === "FAILED" ||
-            accessInvitation.delivery.sms === "FAILED"
+            accessInvitation.delivery.sms === "FAILED" ||
+            (
+              accessInvitation.delivery.email === "SKIPPED" &&
+              accessInvitation.delivery.sms === "SKIPPED"
+            )
           ) {
-            placementError = placementError
-              ? `${placementError} ${deliveryMessage}`
-              : deliveryMessage;
+            accessNotice = deliveryMessage;
           }
         } catch (cause) {
           const inviteError = describeError(cause);
-          placementError = placementError
-            ? `${placementError} Access code was not sent: ${inviteError}`
-            : `Tenant added, but the access code was not sent: ${inviteError}`;
+          accessNotice = `Tenant access code was not sent: ${inviteError}`;
         }
       }
 
@@ -319,6 +320,7 @@ export function NewTenantScreen({
           organisationId: workspaceId!,
           tenantId,
           ...(placementError ? { placementError } : {}),
+          ...(accessNotice ? { accessNotice } : {}),
         },
       });
     } catch (cause) {
@@ -397,10 +399,12 @@ export function TenantDetailScreen({
   organisationId,
   tenantId,
   placementError,
+  accessNotice,
 }: {
   organisationId: string | undefined;
   tenantId: string | undefined;
   placementError?: string;
+  accessNotice?: string;
 }) {
   const { gate, workspaceId } = useWorkspaceGate(
     "organisation",

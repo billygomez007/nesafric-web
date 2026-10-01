@@ -958,8 +958,30 @@ export async function updateMarketplaceEnquiry(
       throw forbidden();
     }
 
+    if (data.status === "CANCELLED" && providerOwned) {
+      throw forbidden();
+    }
+
     if (
-      ["CANCELLED", "CLOSED"].includes(data.status)
+      data.status === "CANCELLED"
+      && !personalRequester
+    ) {
+      if (
+        !organisationId
+        || organisationId !== enquiry.requestingOrganisationId
+      ) {
+        throw notFound();
+      }
+
+      await requirePermission(
+        userId,
+        organisationId,
+        PERMISSIONS.marketplaceEnquiryManage,
+      );
+    }
+
+    if (
+      data.status === "CLOSED"
       && !providerOwned
       && !personalRequester
     ) {
