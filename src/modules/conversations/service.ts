@@ -35,7 +35,24 @@ const conversationDetailInclude = {
   property: { select: { id: true, name: true } },
   listing: { select: { id: true, title: true } },
   marketplaceLead: { select: { id: true, status: true, name: true } },
-  maintenanceRequest: { select: { id: true, title: true, status: true } },
+  maintenanceRequest: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      quotationRequests: {
+        orderBy: { id: "desc" },
+        include: {
+          quotations: {
+            orderBy: { id: "desc" },
+            include: {
+              reviews: { orderBy: { createdAt: "asc" } },
+            },
+          },
+        },
+      },
+    },
+  },
 } satisfies Prisma.ConversationInclude;
 
 async function record(organisationId: string, actorUserId: string | undefined, name: string, aggregateType: string, aggregateId: string, payload: Record<string, unknown> = {}) {
