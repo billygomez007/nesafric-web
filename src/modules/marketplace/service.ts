@@ -853,15 +853,10 @@ export async function requestMarketplaceQuote(
       throw new AppError("IMMUTABLE_ENQUIRY", 409, "A quotation cannot be requested from a closed enquiry.");
     }
     const provider = await tx.serviceProvider.findUniqueOrThrow({ where: { id: enquiry.providerId } });
-    const evidenceCount = await tx.providerEvidence.count({
-      where: { providerId: provider.id, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-    });
     if (
       provider.verificationStatus !== "VERIFIED"
       || provider.suspendedAt !== null
       || !provider.contactReady
-      || !provider.evidenceReady
-      || evidenceCount === 0
       || !provider.acceptingWork
       || provider.availabilityStatus === "UNAVAILABLE"
     ) {

@@ -76,6 +76,7 @@ async function uniqueProviderSlug(tx: Tx, base: string) {
 }
 
 type Tx = Prisma.TransactionClient;
+type AssignProviderInput = ReturnType<typeof assignProviderSchema.parse>;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const serviceAreaData = (area: {
   areaType: string;
@@ -640,14 +641,13 @@ export async function updateServiceProvider(
     if (
       acceptingWork &&
       (!contactReady ||
-        !current.evidenceReady ||
         current.verificationStatus !== "VERIFIED" ||
         availabilityStatus === "UNAVAILABLE")
     ) {
       throw new AppError(
         "PROVIDER_NOT_READY",
         409,
-        "Verified evidence and contact details are required before accepting work.",
+        "Super Admin approval and contact details are required before accepting work.",
       );
     }
     await tx.serviceProvider.update({
@@ -1088,10 +1088,6 @@ export async function reviewProviderVerification(
   });
 }
 
-const IDENTITY_EVIDENCE_TYPES = [
-  "GHANA_CARD_FRONT",
-  "GHANA_CARD_BACK",
-] as const;
 const SKILL_EVIDENCE_TYPES = [
   "PROFESSIONAL_LICENSE",
   "TRADE_CERTIFICATE",
@@ -1157,14 +1153,14 @@ export async function reviewProviderIdentity(
     });
     if (!provider) throw notFound();
     if (
-      !["PENDING", "REQUIRES_MORE_INFORMATION"].includes(
+      !["UNVERIFIED", "PENDING", "REQUIRES_MORE_INFORMATION"].includes(
         provider.verificationStatus,
       )
     ) {
       throw new AppError(
         "INVALID_VERIFICATION_STATE",
         409,
-        "Only pending or previously-flagged verification may be reviewed.",
+        "Only unverified, pending, or previously-flagged verification may be reviewed.",
       );
     }
     const approved = await tx.providerEvidence.findMany({
@@ -1172,37 +1168,16 @@ export async function reviewProviderIdentity(
       select: { type: true },
     });
     const approvedTypes = new Set(approved.map((row) => row.type));
-    if (data.status === "VERIFIED") {
-      if (!IDENTITY_EVIDENCE_TYPES.every((type) => approvedTypes.has(type))) {
-        throw new AppError(
-          "GHANA_CARD_EVIDENCE_REQUIRED",
-          409,
-          "Both Ghana Card front and back must be approved before identity can be verified.",
-        );
-      }
-      if (
-        provider.type === "COMPANY" &&
-        !approvedTypes.has("BUSINESS_REGISTRATION")
-      ) {
-        throw new AppError(
-          "BUSINESS_REGISTRATION_EVIDENCE_REQUIRED",
-          409,
-          "Approved business registration evidence is required before a company provider can be verified.",
-        );
-      }
-    }
-    // A rejection/more-information outcome always applies immediately, directory or not — a
-    // failed identity check is authoritative. But when this provider already has an active
-    // landlord directory relationship, a VERIFIED identity decision only clears the prerequisite
-    // (`identityVerifiedAt`) and leaves the actual `verificationStatus` transition to that
-    // landlord's own `reviewProviderVerification` — preserving its existing approval/audit flow
-    // instead of silently finishing the job on its behalf. Only a directory-less, self-registered
-    // provider (nobody else who could ever call that landlord path) gets VERIFIED set here too.
-    const hasDirectory =
-      (await tx.providerOrganisation.count({
-        where: { providerId, status: "ACTIVE" },
-      })) > 0;
-    const setsVerificationStatus = data.status !== "VERIFIED" || !hasDirectory;
+    // Verification evidence is optional for a platform-authority decision.
+    // A SUPER_ADMIN/platform reviewer may verify a provider after reviewing
+    // documents offline (for example via WhatsApp) or through another manual
+    // process. Uploaded/approved evidence continues to drive the individual
+    // identity/business/skill badges below, but does not gate marketplace
+    // approval.
+    // Platform approval is authoritative for public Service Marketplace
+    // eligibility. It applies regardless of whether the provider has a landlord
+    // directory relationship or uploaded verification evidence.
+    const setsVerificationStatus = true;
     const now = new Date();
     const updated = await tx.serviceProvider.update({
       where: { id: providerId },
@@ -1233,10 +1208,53 @@ export async function reviewProviderIdentity(
         metadata: json({
           authority: "PLATFORM",
           identityDecision: data.status,
-          deferredToLandlord: !setsVerificationStatus,
+          deferredToLandlord: false,
+          evidenceRequiredForDecision: false,
         }),
       },
     });
+    if (data.status === "VERIFIED") {
+      const marketplaceProfile = await tx.providerMarketplaceProfile.findUnique({
+        where: { providerId },
+        include: {
+          categories: { select: { categoryId: true } },
+          serviceAreas: { select: { id: true } },
+        },
+      });
+
+      // Onboarding normally creates/synchronizes this profile. When its public
+      // categories and service areas are already present, the Super Admin's
+      // Verify action is also the final publication decision.
+      if (
+        marketplaceProfile &&
+        marketplaceProfile.categories.length > 0 &&
+        marketplaceProfile.serviceAreas.length > 0
+      ) {
+        await tx.providerMarketplaceProfile.update({
+          where: { providerId },
+          data: {
+            listed: true,
+            listedAt: marketplaceProfile.listedAt ?? now,
+            unlistedAt: null,
+          },
+        });
+
+        await tx.providerMarketplaceProfileHistory.create({
+          data: {
+            providerId,
+            actorUserId: principal.userId,
+            action: "provider.marketplace_listed_by_platform",
+            changedFields: ["listed"],
+            snapshot: json({
+              listed: true,
+              authority: "PLATFORM",
+              reason: "Super Admin verification approval",
+            }),
+          },
+        });
+      }
+    }
+
     return {
       updated,
       historyId: history.id,
@@ -1679,13 +1697,12 @@ export async function createProviderQuotationRequest(
     });
     if (
       provider.verificationStatus !== "VERIFIED" ||
-      !provider.contactReady ||
-      !provider.evidenceReady
+      !provider.contactReady
     ) {
       throw new AppError(
         "PROVIDER_NOT_READY",
         409,
-        "The provider must be verified with contact details and evidence.",
+        "The provider must be verified with contact details.",
       );
     }
     const maintenance = await tx.maintenanceRequest.findFirst({
@@ -1892,29 +1909,76 @@ async function reviewQuotation(
     organisationId,
     PERMISSIONS.providerQuoteReview,
   );
+
   const data = reviewQuotationSchema.parse(input);
+
+  // Marketplace approval is stronger than a normal quotation review: it creates
+  // and financially seeds a work order, then dispatches the selected provider.
+  // Require every permission that those actions normally require.
+  const marketplaceApproval =
+    decision === "APPROVED"
+      ? await db.providerQuotation.findFirst({
+          where: {
+            id: quotationId,
+            landlordOrganisationId: organisationId,
+            status: "SUBMITTED",
+          },
+          select: {
+            request: {
+              select: {
+                marketplaceEnquiry: {
+                  select: { id: true },
+                },
+              },
+            },
+          },
+        })
+      : null;
+
+  if (marketplaceApproval?.request.marketplaceEnquiry) {
+    await requirePermission(
+      userId,
+      organisationId,
+      PERMISSIONS.maintenanceAssign,
+    );
+    await requirePermission(
+      userId,
+      organisationId,
+      PERMISSIONS.maintenanceCost,
+    );
+    await requirePermission(
+      userId,
+      organisationId,
+      PERMISSIONS.providerAssign,
+    );
+  }
+
   return db.$transaction(async (tx) => {
     const quote = await tx.providerQuotation.findFirst({
-      where: { id: quotationId, landlordOrganisationId: organisationId },
+      where: {
+        id: quotationId,
+        landlordOrganisationId: organisationId,
+      },
       include: {
         request: {
           include: {
-            maintenanceRequest: {
-              include: {
-                conversations: true,
-              },
-            },
+            maintenanceRequest: true,
+            marketplaceEnquiry: true,
           },
         },
       },
     });
+
     if (!quote) throw notFound();
-    if (quote.status !== "SUBMITTED")
+
+    if (quote.status !== "SUBMITTED") {
       throw new AppError(
         "IMMUTABLE_QUOTATION",
         409,
         "This quotation has already been reviewed.",
       );
+    }
+
     if (decision === "APPROVED" && quote.validUntil <= new Date()) {
       throw new AppError(
         "QUOTATION_EXPIRED",
@@ -1922,10 +1986,30 @@ async function reviewQuotation(
         "An expired quotation cannot be approved.",
       );
     }
-    const updated = await tx.providerQuotation.update({
-      where: { id: quote.id },
+
+    // Atomically claim the SUBMITTED quotation so concurrent approvals cannot
+    // create duplicate work orders or assignments.
+    const claimed = await tx.providerQuotation.updateMany({
+      where: {
+        id: quote.id,
+        landlordOrganisationId: organisationId,
+        status: "SUBMITTED",
+      },
       data: { status: decision },
     });
+
+    if (claimed.count !== 1) {
+      throw new AppError(
+        "IMMUTABLE_QUOTATION",
+        409,
+        "This quotation has already been reviewed.",
+      );
+    }
+
+    const updated = await tx.providerQuotation.findUniqueOrThrow({
+      where: { id: quote.id },
+    });
+
     await tx.providerQuotationReview.create({
       data: {
         quotationId: quote.id,
@@ -1934,6 +2018,7 @@ async function reviewQuotation(
         reason: data.reason,
       },
     });
+
     if (decision === "APPROVED") {
       await tx.providerQuotation.updateMany({
         where: {
@@ -1943,11 +2028,192 @@ async function reviewQuotation(
         },
         data: { status: "WITHDRAWN" },
       });
+
       await tx.providerQuotationRequest.update({
         where: { id: quote.requestId },
         data: { status: "CLOSED" },
       });
+
+      const enquiry = quote.request.marketplaceEnquiry;
+
+      if (enquiry) {
+        const maintenance = quote.request.maintenanceRequest;
+
+        if (
+          !["TRIAGED", "APPROVED", "ASSIGNED"].includes(
+            maintenance.status,
+          )
+        ) {
+          throw new AppError(
+            "INVALID_WORK_ORDER_STATE",
+            409,
+            "A work order cannot be created in the current maintenance state.",
+          );
+        }
+
+        const property = await tx.property.findUniqueOrThrow({
+          where: { id: maintenance.propertyId },
+          select: { currencyCode: true },
+        });
+
+        if (property.currencyCode !== quote.currencyCode) {
+          throw new AppError(
+            "CURRENCY_MISMATCH",
+            422,
+            "Work order currency must match the property currency.",
+          );
+        }
+
+        // Defensive idempotency for legacy or partially-completed records.
+        let assignment = await tx.providerAssignment.findFirst({
+          where: {
+            landlordOrganisationId: organisationId,
+            quotationId: quote.id,
+          },
+          include: { workOrder: true },
+        });
+
+        if (!assignment) {
+          const workOrder = await tx.workOrder.create({
+            data: {
+              organisationId,
+              maintenanceRequestId: maintenance.id,
+              propertyId: maintenance.propertyId,
+              unitId: maintenance.unitId,
+              createdByUserId: userId,
+              title: maintenance.title,
+              description: quote.request.scope,
+              estimateAmountMinor: quote.totalAmountMinor,
+              currencyCode: quote.currencyCode,
+              status: "OPEN",
+            },
+          });
+
+          await tx.workOrderHistory.create({
+            data: {
+              workOrderId: workOrder.id,
+              actorUserId: userId,
+              status: workOrder.status,
+              estimateAmountMinor: workOrder.estimateAmountMinor,
+              actualCostAmountMinor: workOrder.actualCostAmountMinor,
+              currencyCode: workOrder.currencyCode,
+              assigneeMemberId: workOrder.assigneeMemberId,
+              assigneeUserId: workOrder.assigneeUserId,
+              note: "Work order created from approved marketplace quotation.",
+              metadata: {
+                action: "created",
+                quotationId: quote.id,
+                quotationRequestId: quote.requestId,
+                marketplaceEnquiryId: enquiry.id,
+              },
+            },
+          });
+
+          await tx.auditEvent.create({
+            data: {
+              organisationId,
+              actorUserId: userId,
+              action: "workorder.created",
+              entityType: "work_order",
+              entityId: workOrder.id,
+              metadata: {
+                maintenanceRequestId: maintenance.id,
+                quotationId: quote.id,
+                marketplaceEnquiryId: enquiry.id,
+              },
+            },
+          });
+
+          await tx.domainEvent.create({
+            data: {
+              organisationId,
+              name: "workorder.created",
+              aggregateType: "work_order",
+              aggregateId: workOrder.id,
+              payload: {
+                maintenanceRequestId: maintenance.id,
+                quotationId: quote.id,
+                marketplaceEnquiryId: enquiry.id,
+              },
+            },
+          });
+
+          await tx.maintenanceHistory.create({
+            data: {
+              maintenanceRequestId: maintenance.id,
+              actorUserId: userId,
+              type: "ESTIMATE",
+              metadata: {
+                workOrderId: workOrder.id,
+                quotationId: quote.id,
+                amountMinor: quote.totalAmountMinor.toString(),
+                currencyCode: quote.currencyCode,
+              },
+            },
+          });
+
+          await assignProviderToWorkOrderInTransaction(
+            tx,
+            userId,
+            organisationId,
+            workOrder.id,
+            {
+              providerId: quote.providerId,
+              quotationId: quote.id,
+            },
+          );
+
+          assignment = await tx.providerAssignment.findFirstOrThrow({
+            where: {
+              landlordOrganisationId: organisationId,
+              quotationId: quote.id,
+            },
+            include: {
+              workOrder: true,
+            },
+          });
+        }
+
+        if (enquiry.conversationId) {
+          const existingApprovalMessage = await tx.message.findFirst({
+            where: {
+              conversationId: enquiry.conversationId,
+              senderType: "SYSTEM",
+              body: {
+                contains: `Quotation ${quote.id} approved`,
+              },
+            },
+            select: { id: true },
+          });
+
+          if (!existingApprovalMessage) {
+            const now = new Date();
+
+            await tx.message.create({
+              data: {
+                organisationId,
+                conversationId: enquiry.conversationId,
+                channel: "IN_APP",
+                direction: "OUTBOUND",
+                senderType: "SYSTEM",
+                body:
+                  `Quotation ${quote.id} approved. ` +
+                  "A work order has been created and sent to the provider for acceptance.",
+              },
+            });
+
+            await tx.conversation.update({
+              where: { id: enquiry.conversationId },
+              data: {
+                lastMessageAt: now,
+                lastOutboundAt: now,
+              },
+            });
+          }
+        }
+      }
     }
+
     await record(
       tx,
       organisationId,
@@ -1961,6 +2227,7 @@ async function reviewQuotation(
         reason: data.reason ?? null,
       },
     );
+
     await record(
       tx,
       organisationId,
@@ -1974,6 +2241,7 @@ async function reviewQuotation(
         reason: data.reason ?? null,
       },
     );
+
     return updated;
   });
 }
@@ -1992,163 +2260,127 @@ export const rejectProviderQuotation = (
   input: unknown,
 ) => reviewQuotation(userId, organisationId, quotationId, input, "REJECTED");
 
-export async function assignProviderToWorkOrder(
+async function assignProviderToWorkOrderInTransaction(
+  tx: Tx,
   userId: string,
   organisationId: string,
   workOrderId: string,
-  input: unknown,
+  data: AssignProviderInput,
 ) {
-  await requirePermission(userId, organisationId, PERMISSIONS.providerAssign);
-  const data = assignProviderSchema.parse(input);
-  return db.$transaction(async (tx) => {
-    await requireDirectory(tx, organisationId, data.providerId);
-    const provider = await tx.serviceProvider.findUniqueOrThrow({
-      where: { id: data.providerId },
-    });
-    const currentEvidence = await tx.providerEvidence.count({
+  await requireDirectory(tx, organisationId, data.providerId);
+  const provider = await tx.serviceProvider.findUniqueOrThrow({
+    where: { id: data.providerId },
+  });
+  if (
+    provider.verificationStatus !== "VERIFIED" ||
+    provider.suspendedAt !== null ||
+    !provider.contactReady ||
+    !provider.acceptingWork ||
+    provider.availabilityStatus === "UNAVAILABLE"
+  ) {
+    throw new AppError(
+      "PROVIDER_NOT_READY",
+      409,
+      "The provider is not ready to accept assignments.",
+    );
+  }
+  const workOrder = await tx.workOrder.findFirst({
+    where: { id: workOrderId, organisationId },
+    include: { maintenanceRequest: true },
+  });
+  if (!workOrder) throw notFound();
+  if (!["OPEN", "ASSIGNED"].includes(workOrder.status)) {
+    throw new AppError(
+      "IMMUTABLE_WORK_ORDER",
+      409,
+      "This work order cannot be assigned.",
+    );
+  }
+  if (
+    await tx.providerAssignment.count({
+      where: { workOrderId, status: { in: ["PENDING", "ACCEPTED"] } },
+    })
+  ) {
+    throw new AppError(
+      "PROVIDER_ASSIGNMENT_EXISTS",
+      409,
+      "This work order already has an active provider assignment.",
+    );
+  }
+  if (data.quotationId) {
+    const quotation = await tx.providerQuotation.findFirst({
       where: {
-        providerId: data.providerId,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      },
-    });
-    if (
-      provider.verificationStatus !== "VERIFIED" ||
-      provider.suspendedAt !== null ||
-      !provider.contactReady ||
-      !provider.evidenceReady ||
-      currentEvidence === 0 ||
-      !provider.acceptingWork ||
-      provider.availabilityStatus === "UNAVAILABLE"
-    ) {
-      throw new AppError(
-        "PROVIDER_NOT_READY",
-        409,
-        "The provider is not ready to accept assignments.",
-      );
-    }
-    const workOrder = await tx.workOrder.findFirst({
-      where: { id: workOrderId, organisationId },
-      include: { maintenanceRequest: true },
-    });
-    if (!workOrder) throw notFound();
-    if (!["OPEN", "ASSIGNED"].includes(workOrder.status)) {
-      throw new AppError(
-        "IMMUTABLE_WORK_ORDER",
-        409,
-        "This work order cannot be assigned.",
-      );
-    }
-    if (
-      await tx.providerAssignment.count({
-        where: { workOrderId, status: { in: ["PENDING", "ACCEPTED"] } },
-      })
-    ) {
-      throw new AppError(
-        "PROVIDER_ASSIGNMENT_EXISTS",
-        409,
-        "This work order already has an active provider assignment.",
-      );
-    }
-    if (data.quotationId) {
-      const quotation = await tx.providerQuotation.findFirst({
-        where: {
-          id: data.quotationId,
-          landlordOrganisationId: organisationId,
-          providerId: data.providerId,
-          status: "APPROVED",
-          request: { maintenanceRequestId: workOrder.maintenanceRequestId },
-        },
-      });
-      if (!quotation)
-        throw new AppError(
-          "INVALID_APPROVED_QUOTATION",
-          422,
-          "Quotation must be approved for this provider and maintenance request.",
-        );
-    }
-    const assignment = await tx.providerAssignment.create({
-      data: {
+        id: data.quotationId,
         landlordOrganisationId: organisationId,
-        workOrderId,
         providerId: data.providerId,
-        quotationId: data.quotationId,
-        assignedByUserId: userId,
-        expectedStartAt: data.expectedStartAt,
-        expectedCompletionAt: data.expectedCompletionAt,
+        status: "APPROVED",
+        request: { maintenanceRequestId: workOrder.maintenanceRequestId },
       },
     });
-    const updatedWorkOrder = await tx.workOrder.update({
-      where: { id: workOrder.id },
-      data: {
-        status: "ASSIGNED",
-        assignedAt: new Date(),
-        assigneeMemberId: null,
-        assigneeUserId: null,
-        ...(data.quotationId
-          ? {
-              estimateAmountMinor: (
-                await tx.providerQuotation.findUniqueOrThrow({
-                  where: { id: data.quotationId },
-                })
-              ).totalAmountMinor,
-            }
-          : {}),
+    if (!quotation)
+      throw new AppError(
+        "INVALID_APPROVED_QUOTATION",
+        422,
+        "Quotation must be approved for this provider and maintenance request.",
+      );
+  }
+  const assignment = await tx.providerAssignment.create({
+    data: {
+      landlordOrganisationId: organisationId,
+      workOrderId,
+      providerId: data.providerId,
+      quotationId: data.quotationId,
+      assignedByUserId: userId,
+      expectedStartAt: data.expectedStartAt,
+      expectedCompletionAt: data.expectedCompletionAt,
+    },
+  });
+  const updatedWorkOrder = await tx.workOrder.update({
+    where: { id: workOrder.id },
+    data: {
+      status: "ASSIGNED",
+      assignedAt: new Date(),
+      assigneeMemberId: null,
+      assigneeUserId: null,
+      ...(data.quotationId
+        ? {
+            estimateAmountMinor: (
+              await tx.providerQuotation.findUniqueOrThrow({
+                where: { id: data.quotationId },
+              })
+            ).totalAmountMinor,
+          }
+        : {}),
+    },
+  });
+  await tx.workOrderHistory.create({
+    data: {
+      workOrderId,
+      actorUserId: userId,
+      status: updatedWorkOrder.status,
+      estimateAmountMinor: updatedWorkOrder.estimateAmountMinor,
+      actualCostAmountMinor: updatedWorkOrder.actualCostAmountMinor,
+      currencyCode: updatedWorkOrder.currencyCode,
+      metadata: {
+        action: "provider_assigned",
+        providerId: data.providerId,
+        assignmentId: assignment.id,
+        quotationId: data.quotationId ?? null,
       },
+    },
+  });
+  if (workOrder.maintenanceRequest.status !== "ASSIGNED") {
+    await tx.maintenanceRequest.update({
+      where: { id: workOrder.maintenanceRequestId },
+      data: { status: "ASSIGNED" },
     });
-    await tx.workOrderHistory.create({
-      data: {
-        workOrderId,
-        actorUserId: userId,
-        status: updatedWorkOrder.status,
-        estimateAmountMinor: updatedWorkOrder.estimateAmountMinor,
-        actualCostAmountMinor: updatedWorkOrder.actualCostAmountMinor,
-        currencyCode: updatedWorkOrder.currencyCode,
-        metadata: {
-          action: "provider_assigned",
-          providerId: data.providerId,
-          assignmentId: assignment.id,
-          quotationId: data.quotationId ?? null,
-        },
-      },
-    });
-    if (workOrder.maintenanceRequest.status !== "ASSIGNED") {
-      await tx.maintenanceRequest.update({
-        where: { id: workOrder.maintenanceRequestId },
-        data: { status: "ASSIGNED" },
-      });
-      await tx.maintenanceHistory.create({
-        data: {
-          maintenanceRequestId: workOrder.maintenanceRequestId,
-          actorUserId: userId,
-          type: "STATUS",
-          fromStatus: workOrder.maintenanceRequest.status,
-          toStatus: "ASSIGNED",
-          metadata: {
-            workOrderId,
-            providerId: data.providerId,
-            assignmentId: assignment.id,
-          },
-        },
-      });
-      await tx.auditEvent.create({
-        data: {
-          organisationId,
-          actorUserId: userId,
-          action: "maintenance.status_changed",
-          entityType: "maintenance_request",
-          entityId: workOrder.maintenanceRequestId,
-          metadata: {
-            fromStatus: workOrder.maintenanceRequest.status,
-            toStatus: "ASSIGNED",
-          },
-        },
-      });
-    }
     await tx.maintenanceHistory.create({
       data: {
         maintenanceRequestId: workOrder.maintenanceRequestId,
         actorUserId: userId,
-        type: "ASSIGNMENT",
+        type: "STATUS",
+        fromStatus: workOrder.maintenanceRequest.status,
+        toStatus: "ASSIGNED",
         metadata: {
           workOrderId,
           providerId: data.providerId,
@@ -2156,59 +2388,109 @@ export async function assignProviderToWorkOrder(
         },
       },
     });
-    await record(
-      tx,
-      organisationId,
-      userId,
-      "provider.assigned",
-      "provider_assignment",
-      assignment.id,
-      {
-        workOrderId,
-        providerId: data.providerId,
-        quotationId: data.quotationId ?? null,
-      },
-    );
-    await record(
-      tx,
-      organisationId,
-      userId,
-      "workorder.provider_assigned",
-      "provider_assignment",
-      assignment.id,
-      {
-        workOrderId,
-        providerId: data.providerId,
-        quotationId: data.quotationId ?? null,
-      },
-    );
     await tx.auditEvent.create({
       data: {
         organisationId,
         actorUserId: userId,
-        action: "workorder.assigned",
-        entityType: "work_order",
-        entityId: workOrderId,
+        action: "maintenance.status_changed",
+        entityType: "maintenance_request",
+        entityId: workOrder.maintenanceRequestId,
         metadata: {
-          providerId: data.providerId,
-          providerAssignmentId: assignment.id,
+          fromStatus: workOrder.maintenanceRequest.status,
+          toStatus: "ASSIGNED",
         },
       },
     });
-    await tx.domainEvent.create({
-      data: {
-        organisationId,
-        name: "workorder.assigned",
-        aggregateType: "work_order",
-        aggregateId: workOrderId,
-        payload: {
-          providerId: data.providerId,
-          providerAssignmentId: assignment.id,
-        },
+  }
+  await tx.maintenanceHistory.create({
+    data: {
+      maintenanceRequestId: workOrder.maintenanceRequestId,
+      actorUserId: userId,
+      type: "ASSIGNMENT",
+      metadata: {
+        workOrderId,
+        providerId: data.providerId,
+        assignmentId: assignment.id,
       },
-    });
-    return assignment;
+    },
   });
+  await record(
+    tx,
+    organisationId,
+    userId,
+    "provider.assigned",
+    "provider_assignment",
+    assignment.id,
+    {
+      workOrderId,
+      providerId: data.providerId,
+      quotationId: data.quotationId ?? null,
+    },
+  );
+  await record(
+    tx,
+    organisationId,
+    userId,
+    "workorder.provider_assigned",
+    "provider_assignment",
+    assignment.id,
+    {
+      workOrderId,
+      providerId: data.providerId,
+      quotationId: data.quotationId ?? null,
+    },
+  );
+  await tx.auditEvent.create({
+    data: {
+      organisationId,
+      actorUserId: userId,
+      action: "workorder.assigned",
+      entityType: "work_order",
+      entityId: workOrderId,
+      metadata: {
+        providerId: data.providerId,
+        providerAssignmentId: assignment.id,
+      },
+    },
+  });
+  await tx.domainEvent.create({
+    data: {
+      organisationId,
+      name: "workorder.assigned",
+      aggregateType: "work_order",
+      aggregateId: workOrderId,
+      payload: {
+        providerId: data.providerId,
+        providerAssignmentId: assignment.id,
+      },
+    },
+  });
+  return assignment;
+}
+
+export async function assignProviderToWorkOrder(
+  userId: string,
+  organisationId: string,
+  workOrderId: string,
+  input: unknown,
+) {
+  await requirePermission(
+    userId,
+    organisationId,
+    PERMISSIONS.providerAssign,
+  );
+
+  const data = assignProviderSchema.parse(input);
+
+  return db.$transaction((tx) =>
+    assignProviderToWorkOrderInTransaction(
+      tx,
+      userId,
+      organisationId,
+      workOrderId,
+      data,
+    ),
+  );
 }
 
 export async function respondToProviderAssignment(
@@ -2236,18 +2518,10 @@ export async function respondToProviderAssignment(
       const provider = await tx.serviceProvider.findUniqueOrThrow({
         where: { id: assignment.providerId },
       });
-      const currentEvidence = await tx.providerEvidence.count({
-        where: {
-          providerId: assignment.providerId,
-          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-        },
-      });
       if (
         provider.verificationStatus !== "VERIFIED" ||
         provider.suspendedAt !== null ||
         !provider.contactReady ||
-        !provider.evidenceReady ||
-        currentEvidence === 0 ||
         !provider.acceptingWork ||
         provider.availabilityStatus === "UNAVAILABLE"
       ) {

@@ -10,6 +10,7 @@ import {
   createServiceProvider,
   listServiceCategories,
   listPendingProviderIdentityReviews,
+  listProvidersForPlatform,
   getProviderIdentityReviewDetail,
   reviewProviderEvidence,
   reviewProviderIdentity,
@@ -48,7 +49,7 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
     await db.$disconnect();
   });
 
-  it("gates public listing on approved Ghana Card evidence and platform identity verification", async () => {
+  it("allows authoritative Super Admin verification without requiring uploaded evidence", async () => {
     const artisanUser = await registerUser({ displayName: "Identity Artisan", email: "identity-artisan@example.com", password: "secure-password-123" });
     const categories = await listServiceCategories();
     const plumbing = categories.find(({ key }) => key === "plumbing")!;
@@ -107,17 +108,19 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
     const platformReviewer = await makePlatformReviewer("identity-reviewer@example.com");
     expect((await listPendingProviderIdentityReviews(platformReviewer)).map((p) => p.id)).toContain(provider.id);
 
-    // Cannot verify identity before Ghana Card evidence is actually approved.
-    await expect(reviewProviderIdentity(platformReviewer, provider.id, { status: "VERIFIED" }))
-      .rejects.toMatchObject({ code: "GHANA_CARD_EVIDENCE_REQUIRED" });
+    // Uploaded evidence is optional for the authoritative platform decision.
+    // Super Admin may complete verification from approved manual/offline checks.
+    const verified = await reviewProviderIdentity(platformReviewer, provider.id, {
+      status: "VERIFIED",
+      reason: "Identity confirmed through manual/offline review",
+    });
 
+    // Evidence remains independent metadata and can still be reviewed when present.
     await reviewProviderEvidence(platformReviewer, frontUpload.attached.id, { status: "APPROVED" });
     await reviewProviderEvidence(platformReviewer, backUpload.attached.id, { status: "APPROVED" });
     // Only pending evidence may be reviewed — a second attempt on an already-decided document fails.
     await expect(reviewProviderEvidence(platformReviewer, frontUpload.attached.id, { status: "APPROVED" }))
       .rejects.toMatchObject({ code: "INVALID_EVIDENCE_REVIEW_STATE" });
-
-    const verified = await reviewProviderIdentity(platformReviewer, provider.id, { status: "VERIFIED" });
     expect(verified.verificationStatus).toBe("VERIFIED");
     expect(verified.identityVerifiedAt).not.toBeNull();
 
@@ -159,6 +162,105 @@ describe("PostgreSQL Phase 23 Property Service Professional identity verificatio
     const workOrder = await createWorkOrder(landlord.id, organisation.id, maintenance.id, { title: "Blocked assignment", currencyCode: "GHS" });
     await expect(assignProviderToWorkOrder(landlord.id, organisation.id, workOrder.id, { providerId: provider.id }))
       .rejects.toMatchObject({ code: "PROVIDER_NOT_READY" });
+  });
+
+  it("lets Super Admin approve and publish a complete provider with zero uploaded documents", async () => {
+    const artisanUser = await registerUser({
+      displayName: "Manual Review Artisan",
+      email: "manual-review-artisan@example.com",
+      password: "secure-password-123",
+    });
+    const categories = await listServiceCategories();
+    const plumbing = categories.find(({ key }) => key === "plumbing")!;
+
+    const provider = await createServiceProvider(artisanUser.id, {
+      type: "INDIVIDUAL",
+      displayName: "Manual Review Artisan",
+      contactEmail: "manual-review-artisan@example.com",
+      categoryIds: [plumbing.id],
+      serviceAreas: [{
+        countryCode: "GH",
+        areaType: "CITY",
+        name: "Accra",
+      }],
+    });
+
+    const evidenceBefore = await db.providerEvidence.count({
+      where: { providerId: provider.id },
+    });
+    expect(evidenceBefore).toBe(0);
+
+    // Marketplace publication data is deliberately separate from private
+    // provider onboarding data. A provider may prepare a complete public
+    // marketplace profile while still UNVERIFIED, but cannot list it yet.
+    const preparedMarketplaceProfile = await updateMarketplaceProfile(
+      artisanUser.id,
+      provider.id,
+      {
+        listed: false,
+        publicDescription: "Plumbing and property maintenance services.",
+        categoryIds: [plumbing.id],
+        serviceAreas: [{
+          countryCode: "GH",
+          region: "Greater Accra",
+          city: "Accra",
+        }],
+      },
+    );
+    expect(preparedMarketplaceProfile.listed).toBe(false);
+
+    const platformReviewer = await makePlatformReviewer(
+      "manual-review-platform-admin@example.com",
+    );
+
+    // A newly onboarded UNVERIFIED provider belongs to the Platform Admin
+    // "Awaiting submission" queue. The legacy pending-identity queue intentionally
+    // remains limited to PENDING / REQUIRES_MORE_INFORMATION providers.
+    const awaitingSubmission = await listProvidersForPlatform(
+      platformReviewer,
+      "AWAITING_SUBMISSION",
+    );
+    expect(awaitingSubmission.map((item) => item.id)).toContain(provider.id);
+
+    const pendingIdentity = await listPendingProviderIdentityReviews(platformReviewer);
+    expect(pendingIdentity.map((item) => item.id)).not.toContain(provider.id);
+
+    const verified = await reviewProviderIdentity(platformReviewer, provider.id, {
+      status: "VERIFIED",
+      reason: "Identity confirmed manually by Super Admin",
+    });
+
+    expect(verified.verificationStatus).toBe("VERIFIED");
+    expect(verified.identityVerifiedAt).not.toBeNull();
+
+    const evidenceAfter = await db.providerEvidence.count({
+      where: { providerId: provider.id },
+    });
+    expect(evidenceAfter).toBe(0);
+
+    const marketplaceProfile = await db.providerMarketplaceProfile.findUniqueOrThrow({
+      where: { providerId: provider.id },
+    });
+    expect(marketplaceProfile.listed).toBe(true);
+    expect(marketplaceProfile.listedAt).not.toBeNull();
+    expect(marketplaceProfile.unlistedAt).toBeNull();
+
+    const results = await discoverMarketplaceProviders({
+      country: "GH",
+      category: "plumbing",
+    });
+    expect(results.items.map((item) => item.id)).toContain(provider.id);
+
+    const publicProfile = await getPublicMarketplaceProvider(provider.id);
+    expect(publicProfile.provider.id).toBe(provider.id);
+    expect(publicProfile.provider.verification).toBe("VERIFIED");
+
+    const serialized = JSON.stringify({
+      discovery: results,
+      profile: publicProfile,
+    });
+    expect(serialized).not.toContain("GHANA_CARD");
+    expect(serialized).not.toContain("reviewStatus");
   });
 
   it("keeps identity evidence private: cross-provider, unrelated-landlord, and cross-organisation access are all denied", async () => {

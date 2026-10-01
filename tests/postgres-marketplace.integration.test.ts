@@ -6,11 +6,12 @@ import { createProperty } from "@/modules/assets/service";
 import { createMaintenanceRequest, createWorkOrder, transitionMaintenanceRequest } from "@/modules/maintenance/service";
 import {
   addProviderToDirectory,
+  approveProviderQuotation,
   createServiceProvider,
   listServiceCategories,
-  reviewProviderEvidence,
+  respondToProviderAssignment,
   reviewProviderIdentity,
-  reviewProviderVerification,
+  submitProviderQuotation,
   submitProviderVerification,
   updateServiceProvider,
 } from "@/modules/providers/service";
@@ -96,20 +97,28 @@ async function cleanDatabase() {
   await db.user.deleteMany();
 }
 
-/** Drives the mandatory platform Ghana Card identity-verification gate to VERIFIED. Public
- * listing (and therefore everything downstream in this file) is gated on `verificationStatus`,
- * which can now only reach VERIFIED once this has run — assumes GHANA_CARD_FRONT/BACK evidence
- * was already submitted for the given provider. */
+/** Authoritative platform/Super Admin verification.
+ * Uploaded evidence is optional and may remain absent when identity verification
+ * was completed through an approved manual/offline process. */
 async function verifyProviderIdentity(providerId: string, email: string) {
-  const platformUser = await registerUser({ displayName: "Platform Reviewer", email, password: "secure-password-123" });
-  await db.platformPrincipal.create({ data: { userId: platformUser.id, role: "SUPER_ADMIN", status: "ACTIVE", createdVia: "MANUAL" } });
-  const identityEvidence = await db.providerEvidence.findMany({
-    where: { providerId, type: { in: ["GHANA_CARD_FRONT", "GHANA_CARD_BACK"] }, reviewStatus: "PENDING" },
+  const platformUser = await registerUser({
+    displayName: "Platform Reviewer",
+    email,
+    password: "secure-password-123",
   });
-  for (const evidence of identityEvidence) {
-    await reviewProviderEvidence(platformUser, evidence.id, { status: "APPROVED" });
-  }
-  return reviewProviderIdentity(platformUser, providerId, { status: "VERIFIED" });
+
+  await db.platformPrincipal.create({
+    data: {
+      userId: platformUser.id,
+      role: "SUPER_ADMIN",
+      status: "ACTIVE",
+      createdVia: "MANUAL",
+    },
+  });
+
+  return reviewProviderIdentity(platformUser, providerId, {
+    status: "VERIFIED",
+  });
 }
 
 describe("PostgreSQL Phase 8 provider marketplace", () => {
@@ -153,7 +162,6 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
       ],
     });
     await verifyProviderIdentity(providerA.id, "market-platform-reviewer-a@example.com");
-    await reviewProviderVerification(landlord.id, organisation.id, providerA.id, { status: "VERIFIED" });
     await updateServiceProvider(artisanA.id, providerA.id, {
       availabilityStatus: "AVAILABLE",
       acceptingWork: true,
@@ -349,7 +357,6 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
       ],
     });
     await verifyProviderIdentity(provider.id, "enquiry-platform-reviewer@example.com");
-    await reviewProviderVerification(landlord.id, organisation.id, provider.id, { status: "VERIFIED" });
     await updateServiceProvider(providerUser.id, provider.id, {
       availabilityStatus: "AVAILABLE",
       acceptingWork: true,
@@ -471,4 +478,240 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
         .toBeGreaterThan(0);
     }
   });
+
+  it("lets a zero-document Super Admin-approved provider quote, receive, and accept assigned work", async () => {
+    const landlord = await registerUser({
+      displayName: "Approval Landlord",
+      email: "approval-landlord@example.com",
+      password: "secure-password-123",
+    });
+    const providerUser = await registerUser({
+      displayName: "Approval Provider",
+      email: "approval-provider@example.com",
+      password: "secure-password-123",
+    });
+
+    const organisation = await createOrganisation(landlord.id, {
+      name: "Approval Landlord Org",
+      type: "PROPERTY_MANAGEMENT",
+      countryCode: "GH",
+    });
+
+    const plumbing = (await listServiceCategories()).find(
+      ({ key }) => key === "plumbing",
+    )!;
+
+    const provider = await createServiceProvider(providerUser.id, {
+      type: "INDIVIDUAL",
+      displayName: "Approval Provider",
+      contactEmail: "approval-provider@example.com",
+      categoryIds: [plumbing.id],
+    });
+
+    await addProviderToDirectory(landlord.id, organisation.id, {
+      providerId: provider.id,
+    });
+
+    // This is intentionally a true zero-document provider. Super Admin
+    // verification is authoritative even when identity checks were completed
+    // manually/offline and no evidence files were uploaded to NesAfric.
+    expect(
+      await db.providerEvidence.count({
+        where: { providerId: provider.id },
+      }),
+    ).toBe(0);
+
+    await verifyProviderIdentity(
+      provider.id,
+      "approval-platform-reviewer@example.com",
+    );
+
+    expect(
+      await db.providerEvidence.count({
+        where: { providerId: provider.id },
+      }),
+    ).toBe(0);
+
+    await updateServiceProvider(providerUser.id, provider.id, {
+      availabilityStatus: "AVAILABLE",
+      acceptingWork: true,
+    });
+
+    await updateMarketplaceProfile(providerUser.id, provider.id, {
+      listed: true,
+      categoryIds: [plumbing.id],
+      serviceAreas: [{ countryCode: "GH", city: "Accra" }],
+    });
+
+    const property = await createProperty(landlord.id, organisation.id, {
+      name: "Approval House",
+      referenceNumber: "APPROVAL-HOUSE",
+      category: "Residential",
+      countryCode: "GH",
+      currencyCode: "GHS",
+    });
+
+    const maintenance = await createMaintenanceRequest(
+      landlord.id,
+      organisation.id,
+      {
+        propertyId: property.id,
+        title: "Approval plumbing request",
+        description: "Repair plumbing after quotation approval",
+        category: "plumbing",
+      },
+    );
+
+    await transitionMaintenanceRequest(
+      landlord.id,
+      organisation.id,
+      maintenance.id,
+      { status: "TRIAGED" },
+    );
+
+    const enquiry = await createMarketplaceEnquiry(
+      landlord.id,
+      organisation.id,
+      {
+        providerId: provider.id,
+        categoryId: plumbing.id,
+        propertyId: property.id,
+        maintenanceRequestId: maintenance.id,
+        message: "Please provide a quotation.",
+      },
+    );
+
+    const quotationRequest = await requestMarketplaceQuote(
+      landlord.id,
+      organisation.id,
+      enquiry.id,
+      { scope: "Supply labour and materials" },
+    );
+
+    const quotation = await submitProviderQuotation(
+      providerUser.id,
+      organisation.id,
+      quotationRequest.id,
+      {
+        labourAmountMinor: "50000",
+        materialsAmountMinor: "30000",
+        totalAmountMinor: "80000",
+        currencyCode: "GHS",
+        validUntil: "2027-02-01T00:00:00.000Z",
+        etaDays: 2,
+      },
+    );
+
+    expect(
+      await db.workOrder.count({
+        where: { maintenanceRequestId: maintenance.id },
+      }),
+    ).toBe(0);
+
+    // Race two approval attempts. The atomic SUBMITTED -> APPROVED transition
+    // must allow exactly one winner so orchestration cannot create duplicate
+    // reviews, work orders, assignments, messages, or events.
+    const approvalResults = await Promise.allSettled([
+      approveProviderQuotation(
+        landlord.id,
+        organisation.id,
+        quotation.id,
+        { reason: "Proceed with this provider" },
+      ),
+      approveProviderQuotation(
+        landlord.id,
+        organisation.id,
+        quotation.id,
+        { reason: "Concurrent duplicate approval" },
+      ),
+    ]);
+
+    expect(
+      approvalResults.filter(({ status }) => status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      approvalResults.filter(({ status }) => status === "rejected"),
+    ).toHaveLength(1);
+
+    expect(
+      await db.providerQuotationReview.count({
+        where: { quotationId: quotation.id },
+      }),
+    ).toBe(1);
+
+    const workOrders = await db.workOrder.findMany({
+      where: { maintenanceRequestId: maintenance.id },
+      include: { providerAssignments: true },
+    });
+
+    expect(workOrders).toHaveLength(1);
+    expect(workOrders[0]).toMatchObject({
+      organisationId: organisation.id,
+      maintenanceRequestId: maintenance.id,
+      status: "ASSIGNED",
+      currencyCode: "GHS",
+    });
+
+    expect(workOrders[0].estimateAmountMinor?.toString()).toBe("80000");
+
+    expect(workOrders[0].providerAssignments).toHaveLength(1);
+    expect(workOrders[0].providerAssignments[0]).toMatchObject({
+      providerId: provider.id,
+      quotationId: quotation.id,
+      status: "PENDING",
+    });
+
+    // Assignment acceptance must also remain independent of uploaded evidence.
+    expect(
+      await db.providerEvidence.count({
+        where: { providerId: provider.id },
+      }),
+    ).toBe(0);
+
+    const acceptedAssignment = await respondToProviderAssignment(
+      providerUser.id,
+      organisation.id,
+      workOrders[0].providerAssignments[0].id,
+      { response: "ACCEPTED" },
+    );
+
+    expect(acceptedAssignment).toMatchObject({
+      id: workOrders[0].providerAssignments[0].id,
+      providerId: provider.id,
+      quotationId: quotation.id,
+      status: "ACCEPTED",
+    });
+
+    expect(
+      await db.providerEvidence.count({
+        where: { providerId: provider.id },
+      }),
+    ).toBe(0);
+
+    expect(
+      await db.maintenanceRequest.findUniqueOrThrow({
+        where: { id: maintenance.id },
+      }),
+    ).toMatchObject({
+      status: "ASSIGNED",
+    });
+
+    const enquiryAfterApproval =
+      await db.marketplaceEnquiry.findUniqueOrThrow({
+        where: { id: enquiry.id },
+      });
+
+    if (enquiryAfterApproval.conversationId) {
+      expect(
+        await db.message.count({
+          where: {
+            conversationId: enquiryAfterApproval.conversationId,
+            senderType: "SYSTEM",
+            body: { contains: "approved" },
+          },
+        }),
+      ).toBe(1);
+    }
+  });
+
 });
