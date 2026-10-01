@@ -191,7 +191,13 @@ describe("marketplace selector", () => {
     await screen.findByText("Find your perfect property");
 
     fireEvent.press(screen.getByTestId("marketplace-mode-services"));
-    expect(await screen.findByText("Find trusted professionals and companies for every stage of your property.")).toBeTruthy();
+    expect(await screen.findByText("Find your perfect professional")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Find trusted professionals and companies for every stage of your property.",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText("Choose a major service category.")).toBeNull();
     expect(screen.getByPlaceholderText("Search plumbers, electricians, cleaners…")).toBeTruthy();
     expect((await screen.findAllByText("Kwame Plumbing Services")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Find your perfect property")).toBeNull();
