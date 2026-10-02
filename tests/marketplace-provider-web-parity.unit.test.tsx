@@ -140,7 +140,7 @@ describe("provider cards", () => {
     mockServer();
     render(<MarketplaceSearch />);
     const k = await card(KWAME);
-    expect(k.getByLabelText("Rated 4.8 out of 5 from 84 verified ratings").textContent).toBe("★4.8(84)");
+    expect(k.getByLabelText("Rated 4.8 out of 5 from 84 ratings").textContent).toBe("★4.8(84)");
     expect(k.getByText("127 jobs completed")).toBeTruthy();
     expect(k.getByText("96% completion rate")).toBeTruthy();
     expect(k.getByText("Available for work")).toBeTruthy();
@@ -261,7 +261,7 @@ describe("public provider profile", () => {
     expect(await screen.findByRole("heading", { name: "Kwame Plumbing Services" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Logo for Kwame Plumbing Services" })).toBeTruthy();
     expect(within(screen.getByTestId("stat-rating")).getByText(/4\.8/)).toBeTruthy();
-    expect(within(screen.getByTestId("stat-rating")).getByText("(84 verified ratings)")).toBeTruthy();
+    expect(within(screen.getByTestId("stat-rating")).getByText("(84 ratings)")).toBeTruthy();
     expect(within(screen.getByTestId("stat-jobs")).getByText("127")).toBeTruthy();
     expect(within(screen.getByTestId("stat-completion")).getByText("96%")).toBeTruthy();
     expect(screen.getByText("Verified Identity")).toBeTruthy();

@@ -32,11 +32,11 @@ describe("Super Admin campaign visibility", () => {
     ]);
     render(<CampaignsAdminContent />);
     const live = await screen.findByTestId("campaign-visibility-c1");
-    expect(live.textContent).toBe("Showing in Homepage Advertising Carousel (web + app)");
+    expect(live.textContent).toBe("Showing in Homepage Advertising Carousel");
     expect(screen.getByTestId("campaign-visibility-c2").textContent).toContain("Not currently showing: Starts 2026-10-01 at 00:00 UTC");
     expect(screen.getByTestId("campaign-visibility-c2").textContent).toContain("No own app artwork");
     expect(screen.getByTestId("campaign-visibility-c3").textContent).toContain("Not currently showing: Draft — publish it to go live");
-    expect(screen.getAllByText("Property Search Carousel").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Property Marketplace Advertising Carousel").length).toBeGreaterThan(0);
   });
 
   it("Preview shows the uploaded artwork exactly as the public carousel does: no label, copy, CTA or gradient", async () => {

@@ -25,7 +25,7 @@ export type PlacementCreativeSpec = { desktop: CreativeDimension; mobile: Creati
  * `contentFit="contain"`, so an older 1200 x 792 native upload still shows whole and undistorted:
  * it is centred with plain side margins in the card's neutral surface, never cropped or stretched.
  *
- * MARKETPLACE_PRIMARY and MARKETPLACE_INLINE are live measured placements.
+ * MARKETPLACE_PRIMARY, MARKETPLACE_INLINE and SERVICE_MARKETPLACE_PRIMARY are live measured placements.
  * DEVELOPMENT_FEATURED, PROFESSIONAL_FEATURED and SEARCH_FEATURED remain
  * provisional until their final public renderers are independently measured.
  *
@@ -34,6 +34,7 @@ export type PlacementCreativeSpec = { desktop: CreativeDimension; mobile: Creati
 export const PLACEMENT_CREATIVE_SPECS: Partial<Record<$Enums.CampaignPlacement, PlacementCreativeSpec>> = {
   MARKETPLACE_PRIMARY: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 480 }, measured: true },
   MARKETPLACE_INLINE: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 480 }, measured: true },
+  SERVICE_MARKETPLACE_PRIMARY: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 480 }, measured: true },
   DEVELOPMENT_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 480 }, measured: false },
   PROFESSIONAL_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 480 }, measured: false },
   SEARCH_FEATURED: { desktop: { width: 1600, height: 220 }, mobile: { width: 800, height: 320 }, nativeApp: { width: 1200, height: 480 }, measured: false },

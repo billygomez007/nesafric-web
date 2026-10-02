@@ -833,6 +833,7 @@ model User {
   providerAssignmentsCreated         ProviderAssignment[]                       @relation("ProviderAssignmentCreator")
   providerAssignmentResponses        ProviderAssignment[]                       @relation("ProviderAssignmentResponder")
   providerRatings                    ProviderRating[]                           @relation("ProviderRatingCreator")
+  marketplaceProviderRatings         MarketplaceProviderRating[]                @relation("MarketplaceProviderRatingCreator")
   marketplaceProfileChanges          ProviderMarketplaceProfileHistory[]        @relation("MarketplaceProfileHistoryActor")
   marketplaceEnquiriesCreated        MarketplaceEnquiry[]                       @relation("MarketplaceEnquiryRequester")
   marketplaceEnquiryHistory          MarketplaceEnquiryStatusHistory[]          @relation("MarketplaceEnquiryStatusActor")
@@ -2653,74 +2654,75 @@ model WorkOrderHistory {
 }
 
 model ServiceProvider {
-  id                     String                        @id @default(uuid()) @db.Uuid
-  type                   ServiceProviderType
-  individualUserId       String?                       @unique @db.Uuid
-  companyOrganisationId  String?                       @unique @db.Uuid
-  administratorUserId    String                        @db.Uuid
-  displayName            String
-  legalName              String?
+  id                         String                        @id @default(uuid()) @db.Uuid
+  type                       ServiceProviderType
+  individualUserId           String?                       @unique @db.Uuid
+  companyOrganisationId      String?                       @unique @db.Uuid
+  administratorUserId        String                        @db.Uuid
+  displayName                String
+  legalName                  String?
   /// Public profile URL segment: `/marketplace/services/{slug}`. Nullable — existing
   /// landlord-only-directory providers created before this field existed are never forced to
   /// have one; only providers actually intended for public listing need it, and application code
   /// always generates one on create going forward.
-  slug                   String?                       @unique
-  contactEmail           String?                       @db.Citext
-  contactPhone           String?
-  verificationStatus     ProviderVerificationStatus    @default(UNVERIFIED)
-  availabilityStatus     ProviderAvailabilityStatus    @default(UNAVAILABLE)
-  contactReady           Boolean                       @default(false)
-  evidenceReady          Boolean                       @default(false)
-  acceptingWork          Boolean                       @default(false)
-  biography              String?
+  slug                       String?                       @unique
+  contactEmail               String?                       @db.Citext
+  contactPhone               String?
+  verificationStatus         ProviderVerificationStatus    @default(UNVERIFIED)
+  availabilityStatus         ProviderAvailabilityStatus    @default(UNAVAILABLE)
+  contactReady               Boolean                       @default(false)
+  evidenceReady              Boolean                       @default(false)
+  acceptingWork              Boolean                       @default(false)
+  biography                  String?
   /// Set only by a platform reviewer (`PlatformPrincipal` with `providerIdentityReview`) once
   /// mandatory Ghana Card identity evidence has been approved. This is the gate that actually
   /// governs public marketplace discoverability and UmoAfric-initiated work assignment — separate
   /// from `verificationStatus`, which a landlord organisation can also drive for its own private
   /// directory, but which can only reach VERIFIED once this is set.
-  identityVerifiedAt     DateTime?
+  identityVerifiedAt         DateTime?
   /// Set once business-registration evidence (COMPANY-type providers) has been approved.
-  businessVerifiedAt     DateTime?
+  businessVerifiedAt         DateTime?
   /// Set once a category-relevant credential (trade certificate, professional licence, etc.) has
   /// been approved. Optional — many categories have no credential requirement.
-  skillVerifiedAt        DateTime?
+  skillVerifiedAt            DateTime?
   /// Platform-wide suspension — distinct from a single landlord's own `ProviderVerificationStatus
   /// = SUSPENDED` decision (which only reflects that one landlord's trust in the provider). When
   /// set, the provider is ineligible everywhere: public marketplace discovery, AI dispatch
   /// candidate selection, and campaign public-eligibility all additionally require this to be
   /// null. Existing historical work/ratings/audit records are never touched by suspension.
-  suspendedAt            DateTime?
-  suspensionReason       String?
-  suspendedByUserId      String?                       @db.Uuid
+  suspendedAt                DateTime?
+  suspensionReason           String?
+  suspendedByUserId          String?                       @db.Uuid
   /// Public logo / profile image. Always a PUBLIC `StorageObject` uploaded through the controlled
   /// `SERVICE_PROVIDER_LOGO` upload target by the provider's owner; never a free-form URL. Public
   /// payloads render it only while the object is PUBLIC and not archived.
-  logoStorageObjectId    String?                       @db.Uuid
-  createdAt              DateTime                      @default(now())
-  updatedAt              DateTime                      @updatedAt
-  archivedAt             DateTime?
-  individualUser         User?                         @relation("IndividualProviderUser", fields: [individualUserId], references: [id], onDelete: Restrict)
-  companyOrganisation    Organisation?                 @relation("CompanyProviderOrganisation", fields: [companyOrganisationId], references: [id], onDelete: Restrict)
-  administrator          User                          @relation("ProviderAdministrator", fields: [administratorUserId], references: [id], onDelete: Restrict)
-  suspendedBy            User?                         @relation("ProviderSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
-  logo                   StorageObject?                @relation("ServiceProviderLogo", fields: [logoStorageObjectId], references: [id], onDelete: SetNull)
-  categories             ServiceProviderCategory[]
-  serviceAreas           ProviderServiceArea[]
-  evidence               ProviderEvidence[]
-  verificationHistory    ProviderVerificationHistory[]
-  verificationConsents   ProviderVerificationConsent[]
-  directories            ProviderOrganisation[]
-  quotationRequests      ProviderQuotationRequest[]
-  quotations             ProviderQuotation[]
-  assignments            ProviderAssignment[]
-  ratings                ProviderRating[]
-  marketplaceProfile     ProviderMarketplaceProfile?
-  marketplaceEnquiries   MarketplaceEnquiry[]
-  conversations          Conversation[]
-  dispatchAttempts       MaintenanceDispatchAttempt[]
-  campaigns              Campaign[]
-  savedBy                SavedServiceProvider[]
-  businessWhatsAppConfig BusinessWhatsAppConfig?
+  logoStorageObjectId        String?                       @db.Uuid
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
+  archivedAt                 DateTime?
+  individualUser             User?                         @relation("IndividualProviderUser", fields: [individualUserId], references: [id], onDelete: Restrict)
+  companyOrganisation        Organisation?                 @relation("CompanyProviderOrganisation", fields: [companyOrganisationId], references: [id], onDelete: Restrict)
+  administrator              User                          @relation("ProviderAdministrator", fields: [administratorUserId], references: [id], onDelete: Restrict)
+  suspendedBy                User?                         @relation("ProviderSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
+  logo                       StorageObject?                @relation("ServiceProviderLogo", fields: [logoStorageObjectId], references: [id], onDelete: SetNull)
+  categories                 ServiceProviderCategory[]
+  serviceAreas               ProviderServiceArea[]
+  evidence                   ProviderEvidence[]
+  verificationHistory        ProviderVerificationHistory[]
+  verificationConsents       ProviderVerificationConsent[]
+  directories                ProviderOrganisation[]
+  quotationRequests          ProviderQuotationRequest[]
+  quotations                 ProviderQuotation[]
+  assignments                ProviderAssignment[]
+  ratings                    ProviderRating[]
+  marketplaceCustomerRatings MarketplaceProviderRating[]
+  marketplaceProfile         ProviderMarketplaceProfile?
+  marketplaceEnquiries       MarketplaceEnquiry[]
+  conversations              Conversation[]
+  dispatchAttempts           MaintenanceDispatchAttempt[]
+  campaigns                  Campaign[]
+  savedBy                    SavedServiceProvider[]
+  businessWhatsAppConfig     BusinessWhatsAppConfig?
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
   @@index([identityVerifiedAt])
@@ -3047,6 +3049,21 @@ model ProviderRating {
 
   @@index([providerId, createdAt])
   @@index([landlordOrganisationId, createdAt])
+}
+
+model MarketplaceProviderRating {
+  id              String          @id @default(uuid()) @db.Uuid
+  providerId      String          @db.Uuid
+  createdByUserId String          @db.Uuid
+  score           Int
+  comment         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  provider        ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  createdBy       User            @relation("MarketplaceProviderRatingCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([providerId, createdByUserId])
+  @@index([providerId, createdAt])
 }
 
 model ProviderMarketplaceProfile {
@@ -5307,19 +5324,19 @@ enum CampaignPlacement {
   /// The one homepage placement (item 18/24): a small dismissible announcement bar,
   /// NesAfric-owned only — never available to `createCampaign` (self-service).
   HOMEPAGE_ANNOUNCEMENT
-  /// Historical naming note (Phase 24): this was originally intended as the Property
-  /// Marketplace's top/primary promotional slot, but that slot shipped and was approved under
-  /// `MARKETPLACE_INLINE` instead (see that value's own comment) — renaming a live, in-use
-  /// placement purely for naming symmetry would break "existing campaign placement
-  /// compatibility," so this value is repurposed for the Property *Services* Marketplace
-  /// (`/marketplace`) carousel instead. The Platform Admin UI's placement labels are the
-  /// source of truth for what each value actually means to an operator, not this identifier.
+  /// Existing homepage advertising carousel placement. Kept under its historical
+  /// technical identifier so existing campaigns, tracking and homepage behaviour remain
+  /// compatible. Property and Service Marketplaces use their own independent placements.
   MARKETPLACE_PRIMARY
   /// The Property Marketplace's (`/marketplace/properties`) approved, live promotional
   /// carousel, positioned above the search panel. Labeled "Marketplace Primary Carousel" in
   /// the Platform Admin UI — kept as this technical identifier for compatibility with already
   /// existing campaigns/tracking rather than renamed to match that label.
   MARKETPLACE_INLINE
+  /// Independent advertising carousel for the Property Services Marketplace.
+  /// Existing MARKETPLACE_PRIMARY and MARKETPLACE_INLINE campaigns are not
+  /// reclassified or migrated into this placement.
+  SERVICE_MARKETPLACE_PRIMARY
   DEVELOPMENT_FEATURED
   PROFESSIONAL_FEATURED
   SEARCH_FEATURED

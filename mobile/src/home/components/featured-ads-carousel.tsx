@@ -51,7 +51,7 @@ export function openSlideTarget(target: SlideTarget) {
 }
 
 /**
- * The homepage advertising carousel: live campaigns only (see `buildFeaturedSlides`). With no
+ * Placement-specific advertising carousel: live campaigns only (see `buildFeaturedSlides`). With no
  * campaign that has artwork, nothing renders, not even a placeholder. Each campaign's artwork is
  * shown exactly as uploaded, uncropped, in a 2.5:1 card (the 1200 x 480 native upload); the dots
  * sit below the card, never over the artwork. There are no arrow buttons: people swipe.
@@ -61,10 +61,14 @@ export function openSlideTarget(target: SlideTarget) {
  * the visible screen or the app is in the background (so impressions stay "actually seen"), when
  * the system asks for reduced motion, and when there is only one campaign.
  */
-export function FeaturedAdsCarousel() {
+export function FeaturedAdsCarousel({
+  placement,
+}: {
+  placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "SERVICE_MARKETPLACE_PRIMARY";
+}) {
   const { api, apiUrl } = useApi();
   const { width } = useWindowDimensions();
-  const campaigns = useFeaturedCampaigns();
+  const campaigns = useFeaturedCampaigns(placement);
   const [index, setIndex] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [appActive, setAppActive] = useState(AppState.currentState !== "background");

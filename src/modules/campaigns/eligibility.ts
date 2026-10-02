@@ -16,14 +16,15 @@ export const LIVE_CAMPAIGN_STATUSES = ["APPROVED", "SCHEDULED", "ACTIVE"] as con
 export const PLACEMENT_SURFACES: Record<string, string> = {
   HOMEPAGE_ANNOUNCEMENT: "Homepage announcement bar (web)",
   MARKETPLACE_PRIMARY: "Homepage advertising carousel (web and app)",
-  MARKETPLACE_INLINE: "Property search carousel (web)",
+  MARKETPLACE_INLINE: "Property Marketplace advertising carousel (web and app)",
+  SERVICE_MARKETPLACE_PRIMARY: "Service Marketplace advertising carousel (web and app)",
   PROFESSIONAL_FEATURED: "Professional directory banner (web)",
   DEVELOPMENT_FEATURED: "Development feature (not yet shown publicly)",
   SEARCH_FEATURED: "Search results feature (not yet shown publicly)",
 };
 
 /** Placements with a public renderer today. The others can be prepared but never appear. */
-const RENDERED_PLACEMENTS = new Set(["HOMEPAGE_ANNOUNCEMENT", "MARKETPLACE_PRIMARY", "MARKETPLACE_INLINE", "PROFESSIONAL_FEATURED"]);
+const RENDERED_PLACEMENTS = new Set(["HOMEPAGE_ANNOUNCEMENT", "MARKETPLACE_PRIMARY", "MARKETPLACE_INLINE", "SERVICE_MARKETPLACE_PRIMARY", "PROFESSIONAL_FEATURED"]);
 
 export type CampaignSurface = "desktopWeb" | "mobileWeb" | "nativeApp";
 
@@ -51,7 +52,7 @@ export function selectCampaignCreative(campaign: Creative, surface: CampaignSurf
  */
 export function placementArtworkFields(placement: string): ("desktopMediaUrl" | "mobileMediaUrl" | "nativeAppMediaUrl")[] {
   if (placement === "HOMEPAGE_ANNOUNCEMENT") return [];
-  if (placement === "MARKETPLACE_PRIMARY") return ["desktopMediaUrl", "mobileMediaUrl", "nativeAppMediaUrl"];
+  if (placement === "MARKETPLACE_PRIMARY" || placement === "SERVICE_MARKETPLACE_PRIMARY") return ["desktopMediaUrl", "mobileMediaUrl", "nativeAppMediaUrl"];
   return ["desktopMediaUrl", "mobileMediaUrl"];
 }
 

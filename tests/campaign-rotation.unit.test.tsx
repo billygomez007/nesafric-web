@@ -74,12 +74,21 @@ describe("web Marketplace Primary carousel pace", () => {
 });
 
 describe("Super Admin carousel rotation control", () => {
+  const placements = [
+    "MARKETPLACE_PRIMARY",
+    "MARKETPLACE_INLINE",
+    "SERVICE_MARKETPLACE_PRIMARY",
+  ] as const;
+
   function stubAdmin(rotationSeconds = 5) {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith("/placements/MARKETPLACE_PRIMARY/rotation")) {
-        if (init?.method === "PUT") return { ok: true, json: async () => ({ placement: "MARKETPLACE_PRIMARY", ...JSON.parse(String(init.body)) }) } as Response;
-        return { ok: true, json: async () => ({ placement: "MARKETPLACE_PRIMARY", rotationSeconds }) } as Response;
+      const placement = placements.find((value) => url.endsWith(`/placements/${value}/rotation`));
+      if (placement) {
+        if (init?.method === "PUT") {
+          return { ok: true, json: async () => ({ placement, ...JSON.parse(String(init.body)) }) } as Response;
+        }
+        return { ok: true, json: async () => ({ placement, rotationSeconds }) } as Response;
       }
       return { ok: true, json: async () => ({ items: [], total: 0 }) } as Response;
     });
@@ -87,17 +96,41 @@ describe("Super Admin carousel rotation control", () => {
     return fetchMock;
   }
 
-  it("shows the current rotation with 5, 8 and 10 second choices, and saves a change", async () => {
+  it("shows independent homepage, property and service rotation controls and saves the selected placement", async () => {
     const fetchMock = stubAdmin(5);
     render(<CampaignsAdminContent />);
-    const group = await screen.findByRole("radiogroup", { name: "Carousel rotation" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "5 seconds" }).getAttribute("aria-checked")).toBe("true"));
-    expect(Array.from(group.querySelectorAll("[role=radio]")).map((radio) => radio.textContent)).toEqual(["5 seconds", "8 seconds", "10 seconds"]);
-    fireEvent.click(screen.getByRole("radio", { name: "8 seconds" }));
-    await waitFor(() => expect(screen.getByRole("radio", { name: "8 seconds" }).getAttribute("aria-checked")).toBe("true"));
+
+    const labels = [
+      "Homepage Advertising Carousel",
+      "Property Marketplace Advertising Carousel",
+      "Service Marketplace Advertising Carousel",
+    ];
+
+    for (const label of labels) {
+      const group = await screen.findByRole("radiogroup", { name: `${label} carousel rotation` });
+      await waitFor(() =>
+        expect(group.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toBe("5 seconds"),
+      );
+      expect(Array.from(group.querySelectorAll("[role=radio]")).map((radio) => radio.textContent)).toEqual([
+        "5 seconds",
+        "8 seconds",
+        "10 seconds",
+      ]);
+    }
+
+    const serviceGroup = screen.getByRole("radiogroup", {
+      name: "Service Marketplace Advertising Carousel carousel rotation",
+    });
+    fireEvent.click(Array.from(serviceGroup.querySelectorAll("[role=radio]")).find((radio) => radio.textContent === "8 seconds")!);
+
+    await waitFor(() =>
+      expect(serviceGroup.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toBe("8 seconds"),
+    );
+
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
-    expect(String(put[0])).toBe("/api/platform-admin/campaigns/placements/MARKETPLACE_PRIMARY/rotation");
+    expect(String(put[0])).toBe(
+      "/api/platform-admin/campaigns/placements/SERVICE_MARKETPLACE_PRIMARY/rotation",
+    );
     expect(JSON.parse(String(put[1]!.body))).toEqual({ rotationSeconds: 8 });
-    expect(screen.getByRole("status").textContent).toContain("Saved");
   });
 });

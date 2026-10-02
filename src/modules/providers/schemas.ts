@@ -273,3 +273,8 @@ export const rateProviderSchema = z.object({
   communicationScore: z.number().int().min(1).max(5).optional(),
   comment: z.string().trim().max(5000).optional(),
 });
+
+export const marketplaceProviderRatingSchema = z.object({
+  score: z.number().int().min(1).max(5),
+  comment: z.string().trim().max(5000).optional(),
+});

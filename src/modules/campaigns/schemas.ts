@@ -7,7 +7,7 @@ const id = z.string().uuid();
 /** Placements a marketplace professional may self-service request (item 22). The homepage
  * announcement bar and the platform-curated `MARKETPLACE_PRIMARY` slot are NesAfric-owned only. */
 export const SELF_SERVICE_PLACEMENTS = ["MARKETPLACE_INLINE", "DEVELOPMENT_FEATURED", "PROFESSIONAL_FEATURED", "SEARCH_FEATURED"] as const;
-export const ALL_PLACEMENTS = ["HOMEPAGE_ANNOUNCEMENT", "MARKETPLACE_PRIMARY", ...SELF_SERVICE_PLACEMENTS] as const;
+export const ALL_PLACEMENTS = ["HOMEPAGE_ANNOUNCEMENT", "MARKETPLACE_PRIMARY", "SERVICE_MARKETPLACE_PRIMARY", ...SELF_SERVICE_PLACEMENTS] as const;
 
 /** Only `http:`/`https:` may ever reach a public banner's `href` or `background-image` — rejects
  * `javascript:`, `data:`, `vbscript:`, and every other scheme regardless of who authored the

@@ -14,8 +14,8 @@ import { provider, serviceCategories } from "@/test-utils/fixtures";
 
 describe("provider trust formatting", () => {
   it("shows a rating only when the server reports one", () => {
-    expect(formatRating(provider())).toEqual({ score: "4.8", count: "84 verified ratings" });
-    expect(formatRating(provider({ aggregateRating: 5, ratingCount: 1 }))).toEqual({ score: "5.0", count: "1 verified rating" });
+    expect(formatRating(provider())).toEqual({ score: "4.8", count: "84 ratings" });
+    expect(formatRating(provider({ aggregateRating: 5, ratingCount: 1 }))).toEqual({ score: "5.0", count: "1 rating" });
     expect(formatRating(provider({ aggregateRating: null, ratingCount: 0 }))).toBeNull();
     // A stray average without any rating rows is not a rating.
     expect(formatRating(provider({ aggregateRating: 4, ratingCount: 0 }))).toBeNull();

@@ -182,7 +182,7 @@ describe("marketplace home", () => {
     renderRouter(APP_DIR, { initialUrl: "/" });
     await screen.findByTestId(`campaign-artwork-${campaign.id}`);
     const request = calls.find((call) => call.url.pathname === "/api/public/campaigns")!;
-    expect(request.url.searchParams.get("placement")).toBe("MARKETPLACE_PRIMARY");
+    expect(request.url.searchParams.get("placement")).toBe("MARKETPLACE_INLINE");
     expect(request.url.searchParams.get("countryCode")).toBe("GH");
   });
 
