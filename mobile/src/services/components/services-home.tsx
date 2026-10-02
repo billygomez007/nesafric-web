@@ -13,17 +13,17 @@ import {
   useProviderCollection,
   useServiceCategories,
 } from "@/api/service-queries";
-import type { ServiceCategory } from "@/api/types";
+import type { PublicProvider, ServiceCategory } from "@/api/types";
 import { AppText, Button } from "@/components/ui";
 import { FeaturedAdsCarousel } from "@/home/components/featured-ads-carousel";
 import { HOME_GUTTER } from "@/home/components/layout";
 import { SectionHeading } from "@/home/components/section-heading";
-import { orderCategories } from "@/services/format";
-import { openProviderSearch } from "@/services/navigation";
+import { formatPrimaryArea, orderCategories } from "@/services/format";
+import { openProvider, openProviderSearch } from "@/services/navigation";
+import { ProviderAvatar, RatingLine } from "./trust";
 import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { categoryIcon, CategoryTiles } from "./category-tiles";
 import { InlineState } from "./inline-state";
-import { ProviderCard } from "./provider-card";
 import { TrustedServiceCompanies } from "./trusted-service-companies";
 
 const HOME_PROVIDERS = 5;
@@ -43,6 +43,59 @@ const PRIMARY_CATEGORY_KEYS = [
   "property_services_interior_design_fitout",
   "property_services_architecture_engineering",
 ] as const;
+
+
+function HomeProviderCard({ provider }: { provider: PublicProvider }) {
+  const category = provider.categories[0];
+  const area = formatPrimaryArea(provider);
+
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={[provider.displayName, category?.name, area]
+        .filter(Boolean)
+        .join(", ")}
+      testID={`home-provider-card-${provider.id}`}
+      onPress={() => openProvider(provider.id)}
+      style={({ pressed }) => [
+        styles.homeProviderCard,
+        pressed && styles.homeProviderCardPressed,
+      ]}
+    >
+      <ProviderAvatar
+        name={provider.displayName}
+        logoUrl={provider.logo?.url}
+      />
+
+      <View style={styles.homeProviderBody}>
+        <AppText style={styles.homeProviderName} numberOfLines={2}>
+          {provider.displayName}
+        </AppText>
+
+        {category ? (
+          <AppText style={styles.homeProviderCategory} numberOfLines={1}>
+            {category.name}
+          </AppText>
+        ) : null}
+
+        {area ? (
+          <View style={styles.homeProviderLocation}>
+            <MaterialCommunityIcons
+              name="map-marker-outline"
+              size={13}
+              color={colors.muted}
+            />
+            <AppText style={styles.homeProviderMeta} numberOfLines={1}>
+              {area}
+            </AppText>
+          </View>
+        ) : null}
+
+        <RatingLine provider={provider} />
+      </View>
+    </Pressable>
+  );
+}
 
 export function ServicesHome() {
   const categoriesQuery = useServiceCategories();
@@ -136,10 +189,6 @@ export function ServicesHome() {
       </View>
 
       <View style={styles.section}>
-        <SectionHeading
-          title="Property Services"
-        />
-
         <View>
           {!categoriesQuery.data ? (
             <View style={styles.gutter}>
@@ -211,7 +260,7 @@ export function ServicesHome() {
         </View>
       </View>
 
-      <FeaturedAdsCarousel />
+      <FeaturedAdsCarousel placement="SERVICE_MARKETPLACE_PRIMARY" />
 
       <TrustedServiceCompanies />
 
@@ -245,9 +294,11 @@ export function ServicesHome() {
             />
           ) : (
             <>
-              {providers.map((provider) => (
-                <ProviderCard key={provider.id} provider={provider} />
-              ))}
+              <View style={styles.homeProviderGrid}>
+                {providers.map((provider) => (
+                  <HomeProviderCard key={provider.id} provider={provider} />
+                ))}
+              </View>
 
               {total > providers.length ? (
                 <Button
@@ -422,6 +473,59 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     color: colors.forestDeep,
+  },
+
+  homeProviderGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  homeProviderCard: {
+    width: "48.5%",
+    minHeight: 174,
+    padding: 12,
+    gap: 10,
+    borderRadius: radii.shell,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.elevated,
+  },
+
+  homeProviderCardPressed: {
+    backgroundColor: colors.surface,
+  },
+
+  homeProviderBody: {
+    gap: 3,
+  },
+
+  homeProviderName: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    lineHeight: 18,
+    color: colors.forestDeep,
+  },
+
+  homeProviderCategory: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.ink,
+  },
+
+  homeProviderLocation: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+
+  homeProviderMeta: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.muted,
   },
 
   providers: {

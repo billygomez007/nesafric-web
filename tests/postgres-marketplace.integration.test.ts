@@ -21,6 +21,7 @@ import {
   getMarketplaceEnquiry,
   getPublicMarketplaceProvider,
   listMarketplaceEnquiries,
+  rateMarketplaceProvider,
   requestMarketplaceQuote,
   updateMarketplaceEnquiry,
   updateMarketplaceProfile,
@@ -40,6 +41,7 @@ async function cleanDatabase() {
   await db.providerMarketplaceServiceArea.deleteMany();
   await db.providerMarketplaceCategory.deleteMany();
   await db.providerMarketplaceProfile.deleteMany();
+  await db.marketplaceProviderRating.deleteMany();
   await db.providerRating.deleteMany();
   await db.providerAssignment.deleteMany();
   await db.providerQuotationReview.deleteMany();
@@ -663,6 +665,170 @@ describe("PostgreSQL Phase 8 provider marketplace", () => {
 
     expect((await listMarketplaceEnquiries(customerA.id, null)).items)
       .toHaveLength(1);
+  });
+
+  it("allows only customers with closed personal enquiries to rate a public provider and upserts one rating", async () => {
+    const providerUser = await registerUser({
+      displayName: "Rating Provider",
+      email: "rating-provider@example.com",
+      password: "secure-password-123",
+    });
+    const customer = await registerUser({
+      displayName: "Rating Customer",
+      email: "rating-customer@example.com",
+      password: "secure-password-123",
+    });
+    const organisationCustomer = await registerUser({
+      displayName: "Rating Organisation Customer",
+      email: "rating-org-customer@example.com",
+      password: "secure-password-123",
+    });
+
+    const organisation = await createOrganisation(organisationCustomer.id, {
+      name: "Rating Organisation",
+      type: "PROPERTY_MANAGEMENT",
+      countryCode: "GH",
+    });
+
+    const categories = await listServiceCategories();
+    const plumbing = categories.find(({ key }) => key === "plumbing")!;
+
+    const provider = await createServiceProvider(providerUser.id, {
+      type: "INDIVIDUAL",
+      displayName: "Rating Plumbing",
+      contactEmail: "rating-provider@example.com",
+      categoryIds: [plumbing.id],
+    });
+
+    await verifyProviderIdentity(
+      provider.id,
+      "rating-platform-reviewer@example.com",
+    );
+
+    await updateServiceProvider(providerUser.id, provider.id, {
+      availabilityStatus: "AVAILABLE",
+      acceptingWork: true,
+    });
+
+    await updateMarketplaceProfile(providerUser.id, provider.id, {
+      listed: true,
+      categoryIds: [plumbing.id],
+      serviceAreas: [{ countryCode: "GH", city: "Accra" }],
+    });
+
+    await expect(
+      rateMarketplaceProvider(customer.id, provider.id, {
+        score: 5,
+        comment: "Too early.",
+      }),
+    ).rejects.toMatchObject({
+      code: "CLOSED_MARKETPLACE_ENQUIRY_REQUIRED",
+      status: 409,
+    });
+
+    await expect(
+      rateMarketplaceProvider(providerUser.id, provider.id, {
+        score: 5,
+      }),
+    ).rejects.toMatchObject({
+      code: "PROVIDER_SELF_RATING_NOT_ALLOWED",
+      status: 403,
+    });
+
+    await expect(
+      rateMarketplaceProvider(customer.id, provider.id, {
+        score: 6,
+      }),
+    ).rejects.toBeTruthy();
+
+    const organisationEnquiry = await createMarketplaceEnquiry(
+      organisationCustomer.id,
+      organisation.id,
+      {
+        providerId: provider.id,
+        categoryId: plumbing.id,
+        message: "Organisation-scoped rating eligibility check.",
+      },
+    );
+
+    await db.marketplaceEnquiry.update({
+      where: { id: organisationEnquiry.id },
+      data: { status: "CLOSED" },
+    });
+
+    await expect(
+      rateMarketplaceProvider(organisationCustomer.id, provider.id, {
+        score: 4,
+      }),
+    ).rejects.toMatchObject({
+      code: "CLOSED_MARKETPLACE_ENQUIRY_REQUIRED",
+      status: 409,
+    });
+
+    const personalEnquiry = await createMarketplaceEnquiry(customer.id, null, {
+      providerId: provider.id,
+      categoryId: plumbing.id,
+      message: "Personal rating eligibility check.",
+    });
+
+    await db.marketplaceEnquiry.update({
+      where: { id: personalEnquiry.id },
+      data: { status: "CLOSED" },
+    });
+
+    const firstRating = await rateMarketplaceProvider(
+      customer.id,
+      provider.id,
+      {
+        score: 5,
+        comment: "Excellent service.",
+      },
+    );
+
+    expect(firstRating).toMatchObject({
+      providerId: provider.id,
+      score: 5,
+      comment: "Excellent service.",
+    });
+
+    const updatedRating = await rateMarketplaceProvider(
+      customer.id,
+      provider.id,
+      {
+        score: 4,
+        comment: "Updated after reflection.",
+      },
+    );
+
+    expect(updatedRating).toMatchObject({
+      id: firstRating.id,
+      providerId: provider.id,
+      score: 4,
+      comment: "Updated after reflection.",
+    });
+
+    expect(
+      await db.marketplaceProviderRating.count({
+        where: {
+          providerId: provider.id,
+          createdByUserId: customer.id,
+        },
+      }),
+    ).toBe(1);
+
+    expect(
+      await db.marketplaceProviderRating.findUniqueOrThrow({
+        where: {
+          providerId_createdByUserId: {
+            providerId: provider.id,
+            createdByUserId: customer.id,
+          },
+        },
+      }),
+    ).toMatchObject({
+      score: 4,
+      comment: "Updated after reflection.",
+    });
   });
 
   it("publicly lists an unverified provider but hides contact and blocks enquiries and work", async () => {

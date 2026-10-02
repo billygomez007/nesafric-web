@@ -64,7 +64,7 @@ export function VerificationBadges({ provider }: { provider: Pick<PublicProvider
   );
 }
 
-/** "★ 4.8 · 84 verified ratings", or "No ratings yet" — never an invented score. */
+/** "★ 4.8 · 84 ratings", or "No ratings yet" — never an invented score. */
 export function RatingLine({ provider }: { provider: Pick<PublicProvider, "aggregateRating" | "ratingCount"> }) {
   const rating = formatRating(provider);
   if (!rating) return <AppText style={styles.muted}>No ratings yet</AppText>;

@@ -24,12 +24,16 @@ export type DirectoryCompany = {
 };
 
 /**
- * Homepage advertising carousel (`MARKETPLACE_PRIMARY`) — the same placement, viewer country and
- * server-side eligibility rules as the website's homepage carousel. The app never decides which
- * campaigns are eligible; it only renders what this returns.
+ * Marketplace advertising carousels use independent placements.
+ * Property Marketplace uses `MARKETPLACE_INLINE`; Service Provider Marketplace uses
+ * `SERVICE_MARKETPLACE_PRIMARY`. Campaign eligibility remains server-controlled.
  */
-export const getFeaturedCampaigns = (api: ApiClient, limit = 6) =>
-  api.request<{ banners: CampaignBanner[]; /** Placement-wide Super Admin setting: 5, 8 or 10. Older APIs omit it. */ rotationSeconds?: number }>("/api/public/campaigns", { query: { placement: "MARKETPLACE_PRIMARY", countryCode: "GH", limit } });
+export const getFeaturedCampaigns = (
+  api: ApiClient,
+  placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "SERVICE_MARKETPLACE_PRIMARY",
+  limit = 6,
+) =>
+  api.request<{ banners: CampaignBanner[]; /** Placement-wide Super Admin setting: 5, 8 or 10. Older APIs omit it. */ rotationSeconds?: number }>("/api/public/campaigns", { query: { placement, countryCode: "GH", limit } });
 
 export const recordCampaignImpression = (api: ApiClient, campaignId: string) =>
   api.request<unknown>(`/api/public/campaigns/${encodeURIComponent(campaignId)}/impression`, { method: "POST" });

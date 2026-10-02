@@ -211,10 +211,25 @@ describe("marketplace selector", () => {
 });
 
 describe("service provider marketplace home", () => {
+  it("requests the service marketplace carousel placement for Ghana", async () => {
+    mockServer();
+    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+
+    await screen.findByText("Find your perfect professional");
+
+    await waitFor(() => {
+      expect(callsTo("/api/public/campaigns").length).toBeGreaterThan(0);
+    });
+
+    const request = callsTo("/api/public/campaigns")[0];
+    expect(request.url.searchParams.get("placement")).toBe("SERVICE_MARKETPLACE_PRIMARY");
+    expect(request.url.searchParams.get("countryCode")).toBe("GH");
+  });
+
   it("lists services from the categories API, core services first and admin-added ones kept", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    expect((await screen.findAllByText("Property Services")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Property Services")).toBeNull();
     const tiles = (await screen.findAllByTestId(/^service-category-/)).map((tile) => tile.props.testID);
     expect(tiles).toEqual([
       "service-category-plumbing",
@@ -227,30 +242,33 @@ describe("service provider marketplace home", () => {
     expect(callsTo("/api/public/marketplace/categories")).toHaveLength(1);
   });
 
-  it("renders provider cards from the API values, without inventing missing metrics", async () => {
+  it("renders compact provider cards from API values without full-card actions or invented metrics", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    const card = within(await screen.findByTestId(`provider-card-${kwame.id}`));
+
+    const card = within(await screen.findByTestId(`home-provider-card-${kwame.id}`));
     expect(card.getByText("Kwame Plumbing Services")).toBeTruthy();
-    expect(card.getByText("Plumbing · Company")).toBeTruthy();
+    expect(card.getByText("Plumbing")).toBeTruthy();
     expect(card.getByText("East Legon, Accra, Greater Accra +1 area")).toBeTruthy();
     expect(card.getByText("4.8")).toBeTruthy();
-    expect(card.getByText("(84 verified ratings)")).toBeTruthy();
-    expect(card.getByText("127 jobs completed")).toBeTruthy();
-    expect(card.getByText("Verified Identity")).toBeTruthy();
-    expect(card.getByText("Verified Business")).toBeTruthy();
-    expect(card.queryByText("Verified Professional")).toBeNull();
-    expect(card.getByText("Available for work")).toBeTruthy();
-    expect(card.getByText("From GH₵250")).toBeTruthy();
+    expect(card.getByText("(84 ratings)")).toBeTruthy();
+    expect(card.queryByText("Request service")).toBeNull();
+    expect(card.queryByText("View profile")).toBeNull();
+    expect(card.queryByText("127 jobs completed")).toBeNull();
+    expect(card.queryByText("96% completion rate")).toBeNull();
 
-    const newcomer = within(screen.getByTestId(`provider-card-${fresh.id}`));
+    const newcomer = within(
+      screen.getByTestId(`home-provider-card-${fresh.id}`),
+    );
+    expect(newcomer.getByText("Ama Cleaning")).toBeTruthy();
+    expect(newcomer.getByText("Cleaning Services")).toBeTruthy();
+    expect(newcomer.getByText("Kumasi, Ashanti")).toBeTruthy();
     expect(newcomer.getByText("No ratings yet")).toBeTruthy();
-    expect(newcomer.getByText("New on NesAfric")).toBeTruthy();
-    expect(newcomer.getByText("Request a quote")).toBeTruthy();
-    expect(newcomer.queryByTestId("verification-badge")).toBeNull();
     expect(newcomer.queryByText(/0\.0|0 jobs|★ 0/)).toBeNull();
-    // "Trusted" is never a label derived from ratings.
-    expect(screen.queryByText(/trusted provider/i)).toBeNull();
+
+    // Home discovery cards are profile links; transactional actions live on
+    // the full provider profile/search/saved experiences.
+    expect(screen.queryByTestId(`save-provider-${kwame.id}`)).toBeNull();
   });
 
   it("opens the provider list filtered by the tapped service", async () => {
@@ -344,7 +362,7 @@ describe("provider profile", () => {
     renderRouter(APP_DIR, { initialUrl: `/marketplace/services/${kwame.id}` });
     expect(await screen.findByText("NesAfric record")).toBeTruthy();
     expect(within(screen.getByTestId("stat-rating")).getByText("4.8")).toBeTruthy();
-    expect(within(screen.getByTestId("stat-rating")).getByText("84 verified ratings")).toBeTruthy();
+    expect(within(screen.getByTestId("stat-rating")).getByText("84 ratings")).toBeTruthy();
     expect(within(screen.getByTestId("stat-jobs")).getByText("127")).toBeTruthy();
     expect(within(screen.getByTestId("stat-jobs")).getByText("jobs completed")).toBeTruthy();
     expect(screen.getByText("Verified Identity")).toBeTruthy();
@@ -409,10 +427,12 @@ describe("provider profile", () => {
     expect(screen.queryByText("Get quote")).toBeNull();
   });
 
-  it("opens from a provider card", async () => {
+  it("opens from a compact home provider card", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    fireEvent.press(within(await screen.findByTestId(`provider-card-${kwame.id}`)).getByText("View profile"));
+    fireEvent.press(
+      await screen.findByTestId(`home-provider-card-${kwame.id}`),
+    );
     expect(await screen.findByText("NesAfric record")).toBeTruthy();
     expect(callsTo(`/api/public/marketplace/providers/${kwame.id}`)).toHaveLength(1);
   });
@@ -667,9 +687,13 @@ describe("server-derived reputation and logo", () => {
   it("renders the server's completion rate and never a 0% for a newcomer", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    const card = within(await screen.findByTestId(`provider-card-${kwame.id}`));
-    expect(card.getByText("96% completion rate")).toBeTruthy();
-    const newcomer = within(screen.getByTestId(`provider-card-${fresh.id}`));
+    const card = within(
+      await screen.findByTestId(`home-provider-card-${kwame.id}`),
+    );
+    expect(card.queryByText(/completion rate/)).toBeNull();
+    const newcomer = within(
+      screen.getByTestId(`home-provider-card-${fresh.id}`),
+    );
     expect(newcomer.queryByText(/completion rate/)).toBeNull();
     expect(newcomer.queryByText(/%/)).toBeNull();
   });
@@ -688,11 +712,19 @@ describe("server-derived reputation and logo", () => {
   it("uses the provider's logo when there is one, and initials otherwise", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    const card = within(await screen.findByTestId(`provider-card-${kwame.id}`));
+    const card = within(
+      await screen.findByTestId(`home-provider-card-${kwame.id}`),
+    );
     const logo = card.getByTestId("provider-logo");
-    expect([logo.props.source].flat()).toEqual([expect.objectContaining({ uri: "https://api.test/api/public/media/providers/kwame-logo.png" })]);
+    expect([logo.props.source].flat()).toEqual([
+      expect.objectContaining({
+        uri: "https://api.test/api/public/media/providers/kwame-logo.png",
+      }),
+    ]);
     expect(card.getByLabelText("Kwame Plumbing Services logo")).toBeTruthy();
-    const newcomer = within(screen.getByTestId(`provider-card-${fresh.id}`));
+    const newcomer = within(
+      screen.getByTestId(`home-provider-card-${fresh.id}`),
+    );
     expect(newcomer.queryByTestId("provider-logo")).toBeNull();
     expect(newcomer.getByText("AC", { includeHiddenElements: true })).toBeTruthy();
   });
@@ -700,8 +732,12 @@ describe("server-derived reputation and logo", () => {
   it("falls back to initials when the logo fails to load", async () => {
     mockServer();
     renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
-    const card = within(await screen.findByTestId(`provider-card-${kwame.id}`));
-    fireEvent(card.getByTestId("provider-logo"), "error", { nativeEvent: { error: "404" } });
+    const card = within(
+      await screen.findByTestId(`home-provider-card-${kwame.id}`),
+    );
+    fireEvent(card.getByTestId("provider-logo"), "error", {
+      nativeEvent: { error: "404" },
+    });
     expect(card.queryByTestId("provider-logo")).toBeNull();
     expect(card.getByText("KP", { includeHiddenElements: true })).toBeTruthy();
   });
@@ -715,7 +751,9 @@ async function heartReady(label: string) {
 describe("saving providers", () => {
   it("sends a signed-out person to sign in instead of saving", async () => {
     mockServer();
-    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    renderRouter(APP_DIR, {
+      initialUrl: "/search?marketplace=services",
+    });
     fireEvent.press(await screen.findByTestId(`save-provider-${kwame.id}`));
     expect(await screen.findByLabelText("Email")).toBeTruthy();
     expect(calls.some((call) => call.url.pathname.startsWith("/api/marketplace/saved-providers/"))).toBe(false);
@@ -725,7 +763,9 @@ describe("saving providers", () => {
     signedIn();
     const server: Server = { saved: [] };
     mockServer(server);
-    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    renderRouter(APP_DIR, {
+      initialUrl: "/search?marketplace=services",
+    });
     await heartReady("Save Kwame Plumbing Services");
     fireEvent.press(screen.getByLabelText("Save Kwame Plumbing Services"));
     expect(await screen.findByLabelText("Remove Kwame Plumbing Services from saved")).toBeTruthy();
@@ -743,7 +783,9 @@ describe("saving providers", () => {
   it("never shows a refused save as saved", async () => {
     signedIn();
     mockServer({ saved: [], saveStatus: 500 });
-    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    renderRouter(APP_DIR, {
+      initialUrl: "/search?marketplace=services",
+    });
     await heartReady("Save Kwame Plumbing Services");
     fireEvent.press(screen.getByLabelText("Save Kwame Plumbing Services"));
     expect(await screen.findByText("Couldn’t save. Try again.")).toBeTruthy();

@@ -41,7 +41,7 @@ export function availabilityLabel(provider: Pick<PublicProvider, "availability" 
 /** Null when there are no ratings — never a zero or placeholder star value. */
 export function formatRating(provider: Pick<PublicProvider, "aggregateRating" | "ratingCount">) {
   if (provider.aggregateRating === null || provider.ratingCount < 1) return null;
-  return { score: provider.aggregateRating.toFixed(1), count: `${provider.ratingCount.toLocaleString()} verified ${provider.ratingCount === 1 ? "rating" : "ratings"}` };
+  return { score: provider.aggregateRating.toFixed(1), count: `${provider.ratingCount.toLocaleString()} ${provider.ratingCount === 1 ? "rating" : "ratings"}` };
 }
 
 export function formatCompletedJobs(count: number) {

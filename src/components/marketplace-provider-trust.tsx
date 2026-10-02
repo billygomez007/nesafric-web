@@ -187,7 +187,7 @@ export function RatingLine({ provider }: { provider: Pick<PublicProvider, "aggre
   const rating = ratingSummary(provider);
   if (!rating) return <span className="text-sm text-muted">No ratings yet</span>;
   return (
-    <span aria-label={`Rated ${rating.score} out of 5 from ${rating.count} verified ${rating.count === 1 ? "rating" : "ratings"}`} className="inline-flex items-center gap-1 text-sm">
+    <span aria-label={`Rated ${rating.score} out of 5 from ${rating.count} ${rating.count === 1 ? "rating" : "ratings"}`} className="inline-flex items-center gap-1 text-sm">
       <span aria-hidden="true" className="text-gold">★</span>
       <span className="font-semibold text-ink">{rating.score}</span>
       <span className="text-muted">({rating.count.toLocaleString("en")})</span>

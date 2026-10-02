@@ -122,11 +122,11 @@ function ProviderProfile({ providerId, slug }: { providerId?: string; slug?: str
       <section aria-labelledby="nesafric-record" className={card}>
         <h2 className="text-xl font-semibold" id="nesafric-record">NesAfric record</h2>
         <dl className="mt-4 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl bg-surface p-4" data-testid="stat-rating"><dt className="text-sm text-muted">Average rating</dt><dd className="mt-1 text-xl font-semibold">{rating ? <><span aria-hidden="true" className="text-gold">★ </span>{rating.score}<span className="ml-1 text-sm font-normal text-muted">({rating.count.toLocaleString("en")} verified {rating.count === 1 ? "rating" : "ratings"})</span></> : <span className="text-base font-normal text-muted">No ratings yet</span>}</dd></div>
+          <div className="rounded-2xl bg-surface p-4" data-testid="stat-rating"><dt className="text-sm text-muted">Average rating</dt><dd className="mt-1 text-xl font-semibold">{rating ? <><span aria-hidden="true" className="text-gold">★ </span>{rating.score}<span className="ml-1 text-sm font-normal text-muted">({rating.count.toLocaleString("en")} {rating.count === 1 ? "rating" : "ratings"})</span></> : <span className="text-base font-normal text-muted">No ratings yet</span>}</dd></div>
           <div className="rounded-2xl bg-surface p-4" data-testid="stat-jobs"><dt className="text-sm text-muted">Completed jobs</dt><dd className="mt-1 text-xl font-semibold">{provider.completedJobs.toLocaleString("en")}</dd></div>
           <div className="rounded-2xl bg-surface p-4" data-testid="stat-completion"><dt className="text-sm text-muted">Completion rate</dt><dd className="mt-1 text-xl font-semibold">{completion !== null ? `${completion}%` : <span className="text-base font-normal text-muted">Not enough completed history</span>}</dd></div>
         </dl>
-        <p className="mt-3 text-sm text-muted">Counted by NesAfric from real jobs. Ratings come only from property managers after a completed NesAfric work order.{completion !== null && provider.completionRateBasis ? ` Completion rate covers the ${provider.completionRateBasis.toLocaleString("en")} jobs this provider accepted that have since finished.` : ""}</p>
+        {completion !== null && provider.completionRateBasis ? <p className="mt-3 text-sm text-muted">Completion rate covers the {provider.completionRateBasis.toLocaleString("en")} jobs this provider accepted that have since finished.</p> : null}
       </section>
 
       <section aria-labelledby="provider-about" className={card}>

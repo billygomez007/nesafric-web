@@ -19,13 +19,14 @@ type Campaign = {
 };
 type ProviderOption = { id: string; displayName: string; type: string; verificationStatus: string };
 
-// Labels name where each placement actually renders. MARKETPLACE_PRIMARY is the homepage
-// advertising carousel on the website and in the native app; MARKETPLACE_INLINE is the carousel
-// on the property search page. (These were once swapped, which sent "carousel" campaigns to the
-// search page instead of the homepage and app.)
+// Labels name where each placement actually renders.
+// MARKETPLACE_PRIMARY is the existing Homepage Advertising Carousel.
+// MARKETPLACE_INLINE is the independent Property Marketplace carousel.
+// SERVICE_MARKETPLACE_PRIMARY is the independent Service Marketplace carousel.
 const PLACEMENT_LABELS: Record<string, string> = {
-  MARKETPLACE_PRIMARY: "Homepage Advertising Carousel (web + app)",
-  MARKETPLACE_INLINE: "Property Search Carousel",
+  MARKETPLACE_PRIMARY: "Homepage Advertising Carousel",
+  MARKETPLACE_INLINE: "Property Marketplace Advertising Carousel",
+  SERVICE_MARKETPLACE_PRIMARY: "Service Marketplace Advertising Carousel",
   HOMEPAGE_ANNOUNCEMENT: "Homepage Announcement Bar",
   PROFESSIONAL_FEATURED: "Professional Directory",
   DEVELOPMENT_FEATURED: "Development Feature (not yet public)",
@@ -35,8 +36,9 @@ const PLACEMENTS = Object.keys(PLACEMENT_LABELS);
 
 const PLACEMENT_DESCRIPTIONS: Record<string, string> = {
   HOMEPAGE_ANNOUNCEMENT: "Thin NesAfric-owned announcement bar on the corporate homepage. Text only — no promotional image is used.",
-  MARKETPLACE_PRIMARY: "The advertising carousel below the search on the nesafric.com homepage and on the NesAfric app home screen.",
-  MARKETPLACE_INLINE: "Carousel at the top of the property search page on nesafric.com.",
+  MARKETPLACE_PRIMARY: "Advertising carousel on the NesAfric homepage.",
+  MARKETPLACE_INLINE: "Advertising carousel for the Property Marketplace on web and in the native app.",
+  SERVICE_MARKETPLACE_PRIMARY: "Advertising carousel for the Property Services Marketplace on web and in the native app.",
   PROFESSIONAL_FEATURED: "Banner on the professional directory for real estate professionals and companies.",
   DEVELOPMENT_FEATURED: "Reserved for property developments. Not shown publicly yet.",
   SEARCH_FEATURED: "Reserved for promoted search results. Not shown publicly yet.",
@@ -225,28 +227,32 @@ type PendingConfirm = { title: string; description: string; confirmLabel: string
 
 const ROTATION_OPTIONS = [5, 8, 10] as const;
 
-/** Placement-wide pace of the Homepage Advertising Carousel (`MARKETPLACE_PRIMARY`), shared by the
- * website and the app. Saved immediately; the next carousel load uses it. */
-function CarouselRotationSetting() {
+/** Placement-wide advertising-carousel pace. Each marketplace placement keeps its own setting.
+ * Saved immediately; clients use the placement-specific value on their next load. */
+function CarouselRotationSetting({
+  placement,
+}: {
+  placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "SERVICE_MARKETPLACE_PRIMARY";
+}) {
   const [seconds, setSeconds] = useState<number | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
   const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/platform-admin/campaigns/placements/MARKETPLACE_PRIMARY/rotation").then(async (response) => {
+    fetch(`/api/platform-admin/campaigns/placements/${placement}/rotation`).then(async (response) => {
       if (cancelled) return;
       if (!response.ok) { setStatus({ tone: "error", text: "Couldn’t load the rotation setting." }); return; }
       setSeconds((await response.json()).rotationSeconds);
     }).catch(() => { if (!cancelled) setStatus({ tone: "error", text: "Couldn’t load the rotation setting." }); });
     return () => { cancelled = true; };
-  }, []);
+  }, [placement]);
 
   async function choose(value: number) {
     if (value === seconds || saving) return;
     setSaving(value);
     setStatus(null);
-    const response = await fetch("/api/platform-admin/campaigns/placements/MARKETPLACE_PRIMARY/rotation", {
+    const response = await fetch(`/api/platform-admin/campaigns/placements/${placement}/rotation`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rotationSeconds: value }),
@@ -261,11 +267,11 @@ function CarouselRotationSetting() {
     <section className="rounded-2xl border border-hairline bg-white p-5 shadow-card" data-testid="carousel-rotation">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">{PLACEMENT_LABELS.MARKETPLACE_PRIMARY}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal">{PLACEMENT_LABELS[placement]}</p>
           <h2 className="mt-1 font-semibold text-forest">Carousel rotation</h2>
           <p className="mt-1 text-xs text-muted">How long each campaign shows before the next one slides in. Applies to every campaign in this carousel.</p>
         </div>
-        <div aria-label="Carousel rotation" className="inline-flex rounded-lg border border-hairline bg-warm-white p-1" role="radiogroup">
+        <div aria-label={`${PLACEMENT_LABELS[placement]} carousel rotation`} className="inline-flex rounded-lg border border-hairline bg-warm-white p-1" role="radiogroup">
           {ROTATION_OPTIONS.map((value) => (
             <button
               aria-checked={seconds === value}
@@ -658,7 +664,11 @@ export function CampaignsAdminContent() {
         )}
       </section>
 
-      <CarouselRotationSetting />
+      <div className="grid gap-4 xl:grid-cols-3">
+        <CarouselRotationSetting placement="MARKETPLACE_PRIMARY" />
+        <CarouselRotationSetting placement="MARKETPLACE_INLINE" />
+        <CarouselRotationSetting placement="SERVICE_MARKETPLACE_PRIMARY" />
+      </div>
 
       <div className="rounded-2xl border border-hairline bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3">

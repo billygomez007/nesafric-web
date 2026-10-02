@@ -9,6 +9,7 @@ import { PERMISSIONS, requirePermission } from "@/platform/authorization/permiss
 import { AppError, forbidden, notFound } from "@/platform/errors";
 import { providerLogoView } from "@/modules/providers/logo";
 import { completionRate, reputationSql } from "@/modules/providers/reputation";
+import { marketplaceProviderRatingSchema } from "@/modules/providers/schemas";
 import {
   createMarketplaceEnquirySchema,
   marketplaceEnquiryListSchema,
@@ -171,6 +172,78 @@ export async function listMarketplaceProfileHistory(userId: string, providerId: 
     orderBy: { createdAt: "desc" },
     take: 100,
   });
+}
+
+
+export async function rateMarketplaceProvider(
+  userId: string,
+  providerId: string,
+  input: unknown,
+) {
+  providerId = marketplaceProviderIdSchema.parse(providerId);
+  const data = marketplaceProviderRatingSchema.parse(input);
+
+  const listed = await publicMarketplaceProvidersById([providerId]);
+  if (!listed.has(providerId)) throw notFound();
+
+  if (await ownsProvider(userId, providerId)) {
+    throw new AppError(
+      "PROVIDER_SELF_RATING_NOT_ALLOWED",
+      403,
+      "You cannot rate your own service provider profile.",
+    );
+  }
+
+  const eligibleInteraction = await db.marketplaceEnquiry.findFirst({
+    where: {
+      providerId,
+      requestedByUserId: userId,
+      requestingOrganisationId: null,
+      status: "CLOSED",
+    },
+    select: { id: true },
+  });
+
+  if (!eligibleInteraction) {
+    throw new AppError(
+      "CLOSED_MARKETPLACE_ENQUIRY_REQUIRED",
+      409,
+      "Complete a service request with this provider before rating them.",
+    );
+  }
+
+  const rating = await db.marketplaceProviderRating.upsert({
+    where: {
+      providerId_createdByUserId: {
+        providerId,
+        createdByUserId: userId,
+      },
+    },
+    create: {
+      providerId,
+      createdByUserId: userId,
+      score: data.score,
+      comment: data.comment,
+    },
+    update: {
+      score: data.score,
+      comment: data.comment,
+    },
+    select: {
+      id: true,
+      providerId: true,
+      score: true,
+      comment: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  return {
+    ...rating,
+    createdAt: rating.createdAt.toISOString(),
+    updatedAt: rating.updatedAt.toISOString(),
+  };
 }
 
 export async function updateMarketplaceProfile(userId: string, providerId: string, input: unknown) {
@@ -482,7 +555,18 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
   for (const patterns of providerSearchTerms(filters.q)) conditions.push(searchCondition(patterns));
   if (scope.providerIds) conditions.push(Prisma.sql`p."id" = ANY(${scope.providerIds}::uuid[])`);
   if (filters.minimumRating !== undefined) {
-    conditions.push(Prisma.sql`COALESCE((SELECT avg(r."score") FROM "ProviderRating" r WHERE r."providerId" = p."id"), 0) >= ${filters.minimumRating}`);
+    conditions.push(Prisma.sql`COALESCE((
+  SELECT avg(rating."score")
+  FROM (
+    SELECT r."score"
+    FROM "ProviderRating" r
+    WHERE r."providerId" = p."id"
+    UNION ALL
+    SELECT mr."score"
+    FROM "MarketplaceProviderRating" mr
+    WHERE mr."providerId" = p."id"
+  ) rating
+), 0) >= ${filters.minimumRating}`);
   }
   const offset = (filters.page - 1) * filters.pageSize;
   return Prisma.sql`
@@ -502,7 +586,18 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
         ), 0)` : 0}::int AS area_score,
         CASE p."verificationStatus" WHEN 'VERIFIED' THEN 15 WHEN 'PENDING' THEN 5 ELSE 0 END::int AS verification_score,
         CASE p."availabilityStatus" WHEN 'AVAILABLE' THEN 10 WHEN 'LIMITED' THEN 5 ELSE 0 END::int AS availability_score,
-        round(COALESCE((SELECT avg(r."score") FROM "ProviderRating" r WHERE r."providerId" = p."id"), 0) * 4)::int AS rating_score,
+        round(COALESCE((
+  SELECT avg(rating."score")
+  FROM (
+    SELECT r."score"
+    FROM "ProviderRating" r
+    WHERE r."providerId" = p."id"
+    UNION ALL
+    SELECT mr."score"
+    FROM "MarketplaceProviderRating" mr
+    WHERE mr."providerId" = p."id"
+  ) rating
+), 0) * 4)::int AS rating_score,
         LEAST(${reputationSql.completedJobs}, 10)::int AS completed_score,
         (
           CASE WHEN p."acceptingWork" THEN 3 ELSE 0 END
@@ -510,8 +605,30 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
           + CASE WHEN mp."startingRateMinor" IS NOT NULL THEN 2 ELSE 0 END
           + CASE WHEN mp."responseTimeHours" IS NOT NULL THEN 3 ELSE 0 END
         )::int AS readiness_score,
-        (SELECT avg(r."score")::float FROM "ProviderRating" r WHERE r."providerId" = p."id") AS average_rating,
-        (SELECT count(*) FROM "ProviderRating" r WHERE r."providerId" = p."id") AS rating_count,
+        (
+  SELECT avg(rating."score")::float
+  FROM (
+    SELECT r."score"
+    FROM "ProviderRating" r
+    WHERE r."providerId" = p."id"
+    UNION ALL
+    SELECT mr."score"
+    FROM "MarketplaceProviderRating" mr
+    WHERE mr."providerId" = p."id"
+  ) rating
+) AS average_rating,
+        (
+  SELECT count(*)
+  FROM (
+    SELECT r."id"
+    FROM "ProviderRating" r
+    WHERE r."providerId" = p."id"
+    UNION ALL
+    SELECT mr."id"
+    FROM "MarketplaceProviderRating" mr
+    WHERE mr."providerId" = p."id"
+  ) rating
+) AS rating_count,
         ${reputationSql.completedJobs} AS completed_jobs,
         ${reputationSql.concludedJobs} AS completion_basis
       FROM "ServiceProvider" p

@@ -73,7 +73,7 @@ export default function HomeScreen() {
                 {top}
                 <HeroSearch />
                 <CategoryChips />
-                <FeaturedAdsCarousel />
+                <FeaturedAdsCarousel placement="MARKETPLACE_INLINE" />
                 <TrustedCompanies />
               </View>
             }

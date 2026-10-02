@@ -6,8 +6,8 @@ import { PLATFORM_PERMISSIONS, platformRoleHasPermission } from "@/platform/plat
 import { recordPlatformAudit } from "@/modules/platform-admin/service";
 import { ALL_PLACEMENTS } from "./schemas";
 
-/** How long each campaign stays on screen before a carousel advances. Placement-wide, shared by the
- * website and the native app, so both rotate the same `MARKETPLACE_PRIMARY` campaigns at one pace. */
+/** How long each campaign stays on screen before a carousel advances.
+ * Each campaign placement keeps an independent rotation setting. */
 export const ROTATION_SECONDS_OPTIONS = [5, 8, 10] as const;
 export type RotationSeconds = (typeof ROTATION_SECONDS_OPTIONS)[number];
 export const DEFAULT_ROTATION_SECONDS: RotationSeconds = 5;
