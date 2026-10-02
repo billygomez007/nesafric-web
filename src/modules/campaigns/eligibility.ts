@@ -15,7 +15,7 @@ export const LIVE_CAMPAIGN_STATUSES = ["APPROVED", "SCHEDULED", "ACTIVE"] as con
 /** What each public placement is on the site and in the app. */
 export const PLACEMENT_SURFACES: Record<string, string> = {
   HOMEPAGE_ANNOUNCEMENT: "Homepage announcement bar (web)",
-  MARKETPLACE_PRIMARY: "Homepage advertising carousel (web and app)",
+  MARKETPLACE_PRIMARY: "Homepage advertising carousel",
   MARKETPLACE_INLINE: "Property Marketplace advertising carousel (web and app)",
   SERVICE_MARKETPLACE_PRIMARY: "Service Marketplace advertising carousel (web and app)",
   PROFESSIONAL_FEATURED: "Professional directory banner (web)",

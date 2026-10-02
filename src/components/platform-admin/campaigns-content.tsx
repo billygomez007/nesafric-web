@@ -20,8 +20,8 @@ type Campaign = {
 type ProviderOption = { id: string; displayName: string; type: string; verificationStatus: string };
 
 // Labels name where each placement actually renders.
-// MARKETPLACE_PRIMARY preserves the existing homepage advertising carousel.
-// MARKETPLACE_INLINE is the Property Marketplace carousel.
+// MARKETPLACE_PRIMARY is the existing Homepage Advertising Carousel.
+// MARKETPLACE_INLINE is the independent Property Marketplace carousel.
 // SERVICE_MARKETPLACE_PRIMARY is the independent Service Marketplace carousel.
 const PLACEMENT_LABELS: Record<string, string> = {
   MARKETPLACE_PRIMARY: "Homepage Advertising Carousel",
@@ -36,7 +36,7 @@ const PLACEMENTS = Object.keys(PLACEMENT_LABELS);
 
 const PLACEMENT_DESCRIPTIONS: Record<string, string> = {
   HOMEPAGE_ANNOUNCEMENT: "Thin NesAfric-owned announcement bar on the corporate homepage. Text only — no promotional image is used.",
-  MARKETPLACE_PRIMARY: "Existing advertising carousel on the NesAfric homepage.",
+  MARKETPLACE_PRIMARY: "Advertising carousel on the NesAfric homepage.",
   MARKETPLACE_INLINE: "Advertising carousel for the Property Marketplace on web and in the native app.",
   SERVICE_MARKETPLACE_PRIMARY: "Advertising carousel for the Property Services Marketplace on web and in the native app.",
   PROFESSIONAL_FEATURED: "Banner on the professional directory for real estate professionals and companies.",
