@@ -50,17 +50,21 @@ describe("CampaignCreative", () => {
     expect(source.getAttribute("srcset")).toBe("https://cdn.example.com/b-desktop.jpg");
     const image = container.querySelector("img")!;
     expect(image.getAttribute("src")).toBe("https://cdn.example.com/b-mobile.jpg");
-    expect(image.className).toContain("object-contain");
-    expect(image.className).not.toContain("object-cover");
-    // Box proportions match the upload canvases: 800 × 320 (5:2) and 1600 × 220 (80:11).
-    expect(screen.getByTestId("campaign-creative").className).toContain("aspect-[5/2]");
-    expect(screen.getByTestId("campaign-creative").className).toContain("sm:aspect-[80/11]");
+    expect(image.className).toContain("object-cover");
+    expect(image.className).not.toContain("object-contain");
+    // Web campaigns use the compact responsive frame and fill it edge-to-edge.
+    const box = screen.getByTestId("campaign-creative");
+    expect(box.className).toContain("h-36");
+    expect(box.className).toContain("sm:h-40");
+    expect(box.className).toContain("lg:h-44");
   });
 
   it("falls back to the other artwork at that artwork's own proportions", () => {
     render(<CampaignCreative campaign={campaign("c", { mobileMediaUrl: null })} />);
     const box = screen.getByTestId("campaign-creative");
-    expect(box.className).toContain("aspect-[80/11]");
+    expect(box.className).toContain("h-36");
+    expect(box.className).toContain("sm:h-40");
+    expect(box.className).toContain("lg:h-44");
     expect(box.querySelector("img")!.getAttribute("src")).toBe("https://cdn.example.com/c-desktop.jpg");
     expect(box.querySelector("source")).toBeNull();
   });

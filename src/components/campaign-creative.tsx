@@ -11,19 +11,18 @@ export type CampaignCreativeData = {
 /** A campaign can only be shown when artwork was uploaded: the image is the whole ad. */
 export const hasCampaignArtwork = (campaign: Pick<CampaignCreativeData, "desktopMediaUrl" | "mobileMediaUrl">) => Boolean(campaign.desktopMediaUrl || campaign.mobileMediaUrl);
 
-// Upload canvases (see `modules/campaigns/creative-spec.ts`): desktop 1600 × 220, mobile web 800 × 320.
-const DESKTOP_ASPECT = "sm:aspect-[80/11]";
-const DESKTOP_ASPECT_FROM_MOBILE_ART = "sm:aspect-[5/2]";
-const MOBILE_ASPECT = "aspect-[5/2]";
-const MOBILE_ASPECT_FROM_DESKTOP_ART = "aspect-[80/11]";
+// Web campaign creatives use a compact responsive frame rather than forcing the
+// upload canvas aspect ratio onto the page. Artwork fills the frame with cover;
+// important campaign content should remain inside the upload safe area.
+const WEB_FRAME = "h-36 sm:h-40 lg:h-44";
 
 /**
- * A campaign's uploaded artwork, shown exactly as uploaded: the creative is the complete ad.
+ * A campaign's uploaded artwork is the complete ad.
  * Nothing is drawn over it: no overlay, gradient, tint, label, headline or button. The mobile
- * artwork (800 × 320) is used on small screens and the desktop artwork (1600 × 220) from `sm` up,
- * each in a box of its own aspect ratio with `object-contain`, so the whole image is visible,
- * undistorted and uncropped, and the layout doesn't jump while it loads. If one size wasn't
- * uploaded, the other is shown at its own proportions.
+ * artwork is used on small screens and the desktop artwork from `sm` up. Web placements use
+ * the canonical compact responsive frame from `creative-spec.ts` and `object-cover` so the
+ * advertising surface is filled edge-to-edge without letterboxing. Upload creatives should
+ * keep important text, logos and subjects inside the safe central area.
  *
  * With a destination the whole banner is the link. The headline is the accessible name (link
  * label and image alt text) and is never drawn; no "Promoted"/"Sponsored" label is added.
@@ -33,16 +32,12 @@ export function CampaignCreative({ campaign, onClick, priority = false }: { camp
   const mobileArt = selectCampaignCreative(campaign, "mobileWeb");
   if (!desktopArt && !mobileArt) return null;
 
-  const mobileIsDesktopArt = !campaign.mobileMediaUrl;
-  const desktopIsMobileArt = !campaign.desktopMediaUrl;
-  const aspect = `${mobileIsDesktopArt ? MOBILE_ASPECT_FROM_DESKTOP_ART : MOBILE_ASPECT} ${desktopIsMobileArt ? DESKTOP_ASPECT_FROM_MOBILE_ART : DESKTOP_ASPECT}`;
-
   const picture = (
     <picture className="block h-full w-full">
       {desktopArt && desktopArt !== mobileArt ? <source media="(min-width: 640px)" srcSet={desktopArt} /> : null}
       <img
         alt={campaign.headline}
-        className="block h-full w-full object-contain"
+        className="block h-full w-full object-cover"
         decoding="async"
         draggable={false}
         fetchPriority={priority ? "high" : undefined}
@@ -54,7 +49,7 @@ export function CampaignCreative({ campaign, onClick, priority = false }: { camp
 
   if (!campaign.destinationUrl) {
     return (
-      <div aria-roledescription="slide" className={`relative block w-full ${aspect}`} data-testid="campaign-creative" role="group">
+      <div aria-roledescription="slide" className={`relative block w-full overflow-hidden ${WEB_FRAME}`} data-testid="campaign-creative" role="group">
         {picture}
       </div>
     );
@@ -64,7 +59,7 @@ export function CampaignCreative({ campaign, onClick, priority = false }: { camp
     <a
       aria-label={campaign.headline}
       aria-roledescription="slide"
-      className={`relative block w-full cursor-pointer ${aspect} focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-soft`}
+      className={`relative block w-full cursor-pointer overflow-hidden ${WEB_FRAME} focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold-soft`}
       data-testid="campaign-creative"
       href={campaign.destinationUrl}
       onClick={onClick}

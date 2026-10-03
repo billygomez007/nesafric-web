@@ -68,12 +68,11 @@ describe("Property Services hierarchy", () => {
     );
   });
 
-  it("uses the approved Property Services customer-facing copy", () => {
-    expect(servicesPage).toContain("Property Services");
+  it("uses the approved service marketplace customer-facing copy", () => {
+    expect(servicesPage).toContain("Find your perfect professional");
     expect(servicesPage).toContain(
-      "Find trusted professionals and companies for every stage of your",
+      "Search trusted professionals and companies for your property.",
     );
-    expect(servicesPage).toContain("property.");
   });
 
   it("has a dedicated category route and breadcrumb", () => {

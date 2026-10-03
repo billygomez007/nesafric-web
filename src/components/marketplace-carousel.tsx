@@ -22,7 +22,7 @@ const ROTATION_OPTIONS = [5, 8, 10];
  * wraps the carousel only when it renders, so an empty slot leaves no empty frame behind.
  * Eligibility is decided by the server (`GET /api/public/campaigns`), the same API the app uses.
  */
-export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, frameClassName }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; frameClassName?: string }) {
+export function MarketplaceCarousel({ placement, countryCode = "GH", limit = 6, frameClassName }: { placement: "MARKETPLACE_PRIMARY" | "MARKETPLACE_INLINE" | "SERVICE_MARKETPLACE_PRIMARY" | "DEVELOPMENT_FEATURED" | "SEARCH_FEATURED"; countryCode?: string; limit?: number; frameClassName?: string }) {
   const [banners, setBanners] = useState<Banner[] | null>(null);
   const [index, setIndex] = useState(0);
   const [rotationSeconds, setRotationSeconds] = useState(DEFAULT_ROTATION_SECONDS);

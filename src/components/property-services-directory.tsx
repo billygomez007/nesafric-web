@@ -21,6 +21,8 @@ export type PropertyServiceCategory = {
 type Props = {
   mode?: "parents" | "children";
   parentKey?: string;
+  variant?: "grid" | "rail";
+  limit?: number;
 };
 
 function ordered(categories: PropertyServiceCategory[]) {
@@ -34,6 +36,8 @@ function ordered(categories: PropertyServiceCategory[]) {
 export function PropertyServicesDirectory({
   mode = "parents",
   parentKey,
+  variant = "grid",
+  limit,
 }: Props) {
   const [categories, setCategories] = useState<PropertyServiceCategory[] | null>(
     null,
@@ -69,9 +73,21 @@ export function PropertyServicesDirectory({
     if (!categories) return [];
 
     if (mode === "parents") {
-      return ordered(
-        categories.filter((category) => category.parentId === null),
+      const excludedParentNames = new Set([
+        "Surveying, Valuation & Planning",
+        "Moving, Relocation & Storage",
+        "Legal Documentation",
+      ]);
+
+      const parents = ordered(
+        categories.filter(
+          (category) =>
+            category.parentId === null &&
+            !excludedParentNames.has(category.name),
+        ),
       );
+
+      return typeof limit === "number" ? parents.slice(0, limit) : parents;
     }
 
     const parent = categories.find(
@@ -83,7 +99,7 @@ export function PropertyServicesDirectory({
     return ordered(
       categories.filter((category) => category.parentId === parent.id),
     );
-  }, [categories, mode, parentKey]);
+  }, [categories, mode, parentKey, limit]);
 
   if (error) {
     return (
@@ -112,6 +128,8 @@ export function PropertyServicesDirectory({
     );
   }
 
+  const rail = variant === "rail";
+
   return (
     <ul
       aria-label={
@@ -119,31 +137,50 @@ export function PropertyServicesDirectory({
           ? "Property service categories"
           : "Property service subcategories"
       }
-      className="grid gap-px overflow-hidden rounded-2xl border border-hairline bg-hairline sm:grid-cols-2 lg:grid-cols-3"
+      className={
+        rail
+          ? "grid grid-flow-col grid-rows-2 auto-cols-[minmax(220px,280px)] gap-3 overflow-x-auto pb-2"
+          : "grid gap-px overflow-hidden rounded-2xl border border-hairline bg-hairline sm:grid-cols-2 lg:grid-cols-3"
+      }
     >
       {visible.map((category) => (
-        <li className="bg-white" key={category.id}>
+        <li
+          className={rail ? "min-w-0" : "bg-white"}
+          key={category.id}
+        >
           <Link
-            className="group flex h-full min-h-36 flex-col justify-between gap-5 p-6 transition hover:bg-warm-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest"
+            className={
+              rail
+                ? "group flex min-h-[88px] items-center justify-between gap-4 rounded-2xl border border-hairline bg-white px-5 py-4 shadow-sm transition hover:border-forest/30 hover:bg-warm-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest"
+                : "group flex h-full min-h-36 flex-col justify-between gap-5 p-6 transition hover:bg-warm-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest"
+            }
             href={
               mode === "parents"
                 ? `/marketplace/services/category/${encodeURIComponent(category.key)}`
                 : `/marketplace/services?category=${encodeURIComponent(category.key)}`
             }
           >
-            <span>
-              <span className="block text-lg font-semibold tracking-[-0.01em] text-forest-deep group-hover:underline">
+            <span className={rail ? "text-base font-semibold leading-snug text-forest-deep" : ""}>
+              <span
+                className={
+                  rail
+                    ? "block"
+                    : "block text-lg font-semibold tracking-[-0.01em] text-forest-deep group-hover:underline"
+                }
+              >
                 {category.name}
               </span>
-              {category.description ? (
+
+              {!rail && category.description ? (
                 <span className="mt-2 block text-sm leading-6 text-muted">
                   {category.description}
                 </span>
               ) : null}
             </span>
+
             <span
               aria-hidden="true"
-              className="text-sm font-semibold text-forest transition group-hover:translate-x-1"
+              className="shrink-0 text-sm font-semibold text-forest transition group-hover:translate-x-1"
             >
               →
             </span>
