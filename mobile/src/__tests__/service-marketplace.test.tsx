@@ -312,6 +312,70 @@ describe("service provider marketplace home", () => {
   }, 20_000);
 });
 
+describe("service provider home discovery feed", () => {
+  const esi = provider({
+    id: "5c9e0a11-0000-4000-8000-000000000003",
+    slug: "esi-electricals",
+    displayName: "Esi Electricals",
+    categories: [
+      { id: serviceCategories[1].id, key: "plumbing", name: "Plumbing" },
+      { id: serviceCategories[2].id, key: "electrical", name: "Electrical" },
+    ],
+    aggregateRating: 4.5,
+    ratingCount: 12,
+    logo: null,
+  });
+
+  it("shows a Top rated shelf with only providers the server rated 4 and above", async () => {
+    mockServer({ providers: [kwame, fresh, esi] });
+    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    const shelf = within(await screen.findByTestId("services-collection-top-rated"));
+    expect(shelf.getByText("Top rated")).toBeTruthy();
+    expect(shelf.getByTestId(`services-card-top-rated-${kwame.id}`)).toBeTruthy();
+    expect(shelf.getByTestId(`services-card-top-rated-${esi.id}`)).toBeTruthy();
+    // An unrated newcomer never appears under "Top rated".
+    expect(shelf.queryByTestId(`services-card-top-rated-${fresh.id}`)).toBeNull();
+    expect(providerSearches().some((params) => params.get("minimumRating") === "4")).toBe(true);
+  });
+
+  it("gives a service its own shelf when several providers offer it", async () => {
+    mockServer({ providers: [kwame, fresh, esi] });
+    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    const shelf = within(await screen.findByTestId("services-collection-service:plumbing"));
+    expect(shelf.getByRole("header", { name: "Plumbing" })).toBeTruthy();
+    expect(shelf.getByTestId(`services-card-service:plumbing-${kwame.id}`)).toBeTruthy();
+    expect(shelf.getByTestId(`services-card-service:plumbing-${esi.id}`)).toBeTruthy();
+    expect(providerSearches().some((params) => params.get("category") === "plumbing")).toBe(true);
+  });
+
+  it("leaves out a shelf that would have fewer than two providers", async () => {
+    mockServer();
+    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    await screen.findByTestId(`home-provider-card-${kwame.id}`);
+    await waitFor(() => expect(providerSearches().some((params) => params.get("minimumRating") === "4")).toBe(true));
+    await waitFor(() => expect(screen.queryByLabelText("Loading Top rated")).toBeNull());
+    expect(screen.queryByTestId("services-collection-top-rated")).toBeNull();
+    expect(screen.queryByTestId("services-collection-service:plumbing")).toBeNull();
+  });
+
+  it("opens the provider profile from a discovery card", async () => {
+    mockServer({ providers: [kwame, fresh, esi] });
+    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    fireEvent.press(await screen.findByTestId(`services-card-top-rated-${esi.id}`));
+    expect(await screen.findByText("NesAfric record")).toBeTruthy();
+    expect(callsTo(`/api/public/marketplace/providers/${esi.id}`)).toHaveLength(1);
+  });
+
+  it("opens Search filtered to the shelf from See all", async () => {
+    mockServer({ providers: [kwame, fresh, esi] });
+    renderRouter(APP_DIR, { initialUrl: "/marketplace/services" });
+    const shelf = within(await screen.findByTestId("services-collection-service:plumbing"));
+    fireEvent.press(shelf.getByLabelText("See all"));
+    expect(await screen.findByText("2 verified providers for Plumbing")).toBeTruthy();
+    expect(selected("marketplace-mode-services")).toBe(true);
+  });
+});
+
 describe("search follows the selected marketplace", () => {
   it("searches properties by default and providers once Service Providers is selected", async () => {
     mockServer();
