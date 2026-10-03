@@ -9,11 +9,10 @@ import {
   View,
 } from "react-native";
 
-import {
-  useProviderCollection,
-  useServiceCategories,
-} from "@/api/service-queries";
-import type { PublicProvider, ServiceCategory } from "@/api/types";
+import type { UseQueryResult } from "@tanstack/react-query";
+
+import { useServiceCategories } from "@/api/service-queries";
+import type { ProviderSearchResult, PublicProvider, ServiceCategory } from "@/api/types";
 import { AppText, Button } from "@/components/ui";
 import { FeaturedAdsCarousel } from "@/home/components/featured-ads-carousel";
 import { HOME_GUTTER } from "@/home/components/layout";
@@ -25,8 +24,6 @@ import { colors, fonts, radii, spacing } from "@/theme/tokens";
 import { categoryIcon, CategoryTiles } from "./category-tiles";
 import { InlineState } from "./inline-state";
 import { TrustedServiceCompanies } from "./trusted-service-companies";
-
-const HOME_PROVIDERS = 5;
 
 /**
  * The eight primary categories approved for the Service Marketplace landing page.
@@ -97,9 +94,13 @@ function HomeProviderCard({ provider }: { provider: PublicProvider }) {
   );
 }
 
-export function ServicesHome() {
+/**
+ * The top of Service Providers Home: heading and service finder, the major services, the
+ * advertising carousel and trusted companies. The discovery feed (`ServicesDiscoveryFeed`) renders
+ * this as its header and the provider shelves below it.
+ */
+export function ServicesHomeHeader() {
   const categoriesQuery = useServiceCategories();
-  const providersQuery = useProviderCollection({}, HOME_PROVIDERS);
   const [text, setText] = useState("");
   const [selectedParent, setSelectedParent] =
     useState<ServiceCategory | null>(null);
@@ -158,9 +159,6 @@ export function ServicesHome() {
     const q = text.trim();
     if (q) openProviderSearch({ q });
   }
-
-  const providers = providersQuery.data?.items ?? [];
-  const total = providersQuery.data?.pagination.total ?? 0;
 
   return (
     <>
@@ -264,54 +262,6 @@ export function ServicesHome() {
 
       <TrustedServiceCompanies />
 
-      <View style={styles.section}>
-        <SectionHeading
-          title="Service providers"
-          subtitle="Discover professionals and companies available on NesAfric."
-          action={
-            providers.length
-              ? {
-                  label: "See all",
-                  onPress: () => openProviderSearch(),
-                }
-              : undefined
-          }
-        />
-
-        <View style={[styles.gutter, styles.providers]}>
-          {!providersQuery.data ? (
-            <InlineState
-              loading={providersQuery.isPending}
-              error={providersQuery.error}
-              onRetry={() => providersQuery.refetch()}
-              testID="service-providers-state"
-            />
-          ) : !providers.length ? (
-            <InlineState
-              testID="service-providers-empty"
-              emptyTitle="No service providers listed yet"
-              emptyMessage="Service providers will appear here once they publish a marketplace profile."
-            />
-          ) : (
-            <>
-              <View style={styles.homeProviderGrid}>
-                {providers.map((provider) => (
-                  <HomeProviderCard key={provider.id} provider={provider} />
-                ))}
-              </View>
-
-              {total > providers.length ? (
-                <Button
-                  label={`See all ${total.toLocaleString()} providers`}
-                  variant="dark"
-                  onPress={() => openProviderSearch()}
-                />
-              ) : null}
-            </>
-          )}
-        </View>
-      </View>
-
       <Modal
         visible={Boolean(selectedParent)}
         transparent
@@ -372,6 +322,71 @@ export function ServicesHome() {
         </View>
       </Modal>
     </>
+  );
+}
+
+/**
+ * "Service providers": the always-on shelf. Unlike the other shelves it keeps its place when empty
+ * or failing, and says why nothing is there. `query` is the feed's first page of providers.
+ */
+export function ServiceProvidersSection({
+  query: providersQuery,
+  shown,
+}: {
+  query: UseQueryResult<ProviderSearchResult>;
+  shown: number;
+}) {
+  const providers = (providersQuery.data?.items ?? []).slice(0, shown);
+  const total = providersQuery.data?.pagination.total ?? 0;
+
+  return (
+    <View style={[styles.section, styles.providersSection]} testID="services-collection-all">
+        <SectionHeading
+          title="Service providers"
+          subtitle="Discover professionals and companies available on NesAfric."
+          action={
+            providers.length
+              ? {
+                  label: "See all",
+                  onPress: () => openProviderSearch(),
+                }
+              : undefined
+          }
+        />
+
+        <View style={[styles.gutter, styles.providers]}>
+          {!providersQuery.data ? (
+            <InlineState
+              loading={providersQuery.isPending}
+              error={providersQuery.error}
+              onRetry={() => providersQuery.refetch()}
+              testID="service-providers-state"
+            />
+          ) : !providers.length ? (
+            <InlineState
+              testID="service-providers-empty"
+              emptyTitle="No service providers listed yet"
+              emptyMessage="Service providers will appear here once they publish a marketplace profile."
+            />
+          ) : (
+            <>
+              <View style={styles.homeProviderGrid}>
+                {providers.map((provider) => (
+                  <HomeProviderCard key={provider.id} provider={provider} />
+                ))}
+              </View>
+
+              {total > providers.length ? (
+                <Button
+                  label={`See all ${total.toLocaleString()} providers`}
+                  variant="dark"
+                  onPress={() => openProviderSearch()}
+                />
+              ) : null}
+            </>
+          )}
+        </View>
+    </View>
   );
 }
 
@@ -530,6 +545,10 @@ const styles = StyleSheet.create({
 
   providers: {
     gap: 12,
+  },
+
+  providersSection: {
+    marginBottom: 28,
   },
 
   modalRoot: {
