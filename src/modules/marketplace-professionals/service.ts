@@ -1,4 +1,4 @@
-import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx } from "@/modules/whatsapp-assistant/notification-outbox";
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx, type WhatsAppNotificationJob } from "@/modules/whatsapp-assistant/notification-outbox";
 import { randomBytes } from "crypto";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
@@ -295,7 +295,8 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
   if (verificationReasonRequired(data.status) && !data.reason) {
     throw new AppError("REASON_REQUIRED", 422, data.status === "REJECTED" ? "Enter a reason for rejecting this verification." : "Enter a reason for suspending this verification.");
   }
-  const { reviewed, notification } = await db.$transaction(async (tx) => {
+  let notification: WhatsAppNotificationJob | undefined;
+  const reviewed = await db.$transaction(async (tx) => {
     const changed = await tx.marketplaceProfessional.updateMany({ where: { id: marketplaceProfessionalId, verificationStatus: from }, data: { verificationStatus: data.status } });
     if (changed.count !== 1) throw verificationChanged();
     const event = await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: from, toStatus: data.status, actorUserId: principal.userId, reason: data.reason } });
@@ -306,10 +307,10 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
         metadata: { fromStatus: from, toStatus: data.status, reason: data.reason ?? null, actorUserId: principal.userId },
       },
     });
-    const notification = await enqueueWhatsAppNotificationInTx(tx, { kind: "professional_verification", professionalId: marketplaceProfessionalId, status: data.status, reason: data.reason ?? null, decisionKey: event.id });
-    return { reviewed: await tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } }), notification };
+    notification = await enqueueWhatsAppNotificationInTx(tx, { kind: "professional_verification", professionalId: marketplaceProfessionalId, status: data.status, reason: data.reason ?? null, decisionKey: event.id });
+    return tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
   });
-  await deliverWhatsAppNotificationNow(notification);
+  if (notification) await deliverWhatsAppNotificationNow(notification);
   return reviewed;
 }
 
