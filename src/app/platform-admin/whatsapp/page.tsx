@@ -101,8 +101,8 @@ function SupportRow({ request, canManage, onChanged }: { request: SupportRequest
             value={reply}
           />
           <div className="flex flex-wrap gap-2">
-            <button className="rounded-lg bg-forest px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !reply.trim()} onClick={() => update({ reply, status: "IN_PROGRESS" })} type="button">Send reply</button>
-            <button className="rounded-lg border border-hairline px-4 py-2 text-sm font-semibold text-forest disabled:opacity-50" disabled={busy} onClick={() => update({ status: "RESOLVED", ...(reply.trim() ? { reply } : {}) })} type="button">Mark resolved</button>
+            <button className="rounded-lg bg-forest px-4 py-2 text-sm font-semibold text-white disabled:pointer-events-none disabled:border-hairline disabled:bg-surface disabled:text-slate-500" disabled={busy || !reply.trim()} onClick={() => update({ reply, status: "IN_PROGRESS" })} type="button">Send reply</button>
+            <button className="rounded-lg border border-hairline px-4 py-2 text-sm font-semibold text-forest disabled:pointer-events-none disabled:border-hairline disabled:bg-surface disabled:text-slate-500" disabled={busy} onClick={() => update({ status: "RESOLVED", ...(reply.trim() ? { reply } : {}) })} type="button">Mark resolved</button>
           </div>
         </div>
       ) : null}
