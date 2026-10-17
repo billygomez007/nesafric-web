@@ -6172,6 +6172,8 @@ model WhatsAppAssistantSession {
   data               Json            @default("{}")
   version            Int             @default(0)
   lockedUntil        DateTime?
+  /// Fencing token of the current lease holder; every state write is conditional on it.
+  leaseToken         String?
   lastActivityAt     DateTime        @default(now())
   completedWorkflows Int             @default(0)
   createdAt          DateTime        @default(now())

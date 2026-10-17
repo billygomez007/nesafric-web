@@ -10,6 +10,8 @@ import { syncCalendarEventJob } from "@/modules/calendar/service";
 import { sendAccountEmail, type AccountEmailPayload } from "@/modules/account-emails/service";
 import { processContact } from "@/modules/whatsapp-assistant/processor";
 import { flushOutbound, INBOUND_JOB, OUTBOUND_JOB } from "@/modules/whatsapp-assistant/store";
+import { NOTIFY_JOB, type WhatsAppNotificationJob } from "@/modules/whatsapp-assistant/notification-outbox";
+import { runWhatsAppNotification } from "@/modules/whatsapp-assistant/notifications";
 
 export function createJobHandlers(notificationProviders: NotificationProviders = defaultNotificationProviders, channelAdapters: ChannelAdapters = defaultChannelAdapters) {
   return {
@@ -42,6 +44,9 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   },
   [OUTBOUND_JOB]: async (payload: Record<string, unknown>) => {
     await flushOutbound(String(payload.contactId));
+  },
+  [NOTIFY_JOB]: async (payload: Record<string, unknown>) => {
+    await runWhatsAppNotification(payload as unknown as WhatsAppNotificationJob);
   },
   };
 }

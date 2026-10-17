@@ -11,12 +11,12 @@ import { listUserMarketplaceProfessionals } from "@/modules/marketplace-professi
 import { isBookableCategory } from "@/lib/listing-categories";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { runOnce } from "../actions";
+import { runOnce, sinceStart } from "../actions";
 import { aiPolishListingCopy } from "../ai";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { askField, askNextField, beginEdit, editOptions, handleFieldAnswer, SKIP_HINT, summaryLines, type FieldSpec, type FormData } from "../form";
 import { moneyText, propertyUrl } from "../format";
-import { findUserForContact } from "../identity";
+import { accountExistsForContact, linkedUser } from "../identity";
 import { fetchInboundMedia, uploadFailureMessage } from "../media";
 import {
   categoryLabel, detectCommand, isResidentialCategory, parseAreaSqm, parseAvailableFrom, parseDecimal, parseFurnishing,
@@ -444,15 +444,19 @@ async function draftFromListing(userId: string, professionalId: string, listingI
 
 async function createDraft(ctx: Ctx) {
   const draft = ctx.data<Draft>();
+  const userId = ctx.contact.userId!;
   const outcome = await runOnce(ctx.actionKey("listing_draft"), ctx.contact.id, "listing_draft", async () => {
-    const listing = await createMarketplaceNativeListing(ctx.contact.userId!, draft.professionalId!, nativePayload(draft));
+    const listing = await createMarketplaceNativeListing(userId, draft.professionalId!, nativePayload(draft));
     await db.listing.update({ where: { id: listing.id }, data: { sourceChannel: "WHATSAPP" } });
     return { id: listing.id };
+  }, async (startedAt) => {
+    const found = await db.listing.findFirst({
+      where: { createdByUserId: userId, marketplaceProfessionalId: draft.professionalId, title: draft.title, createdAt: { gte: sinceStart(startedAt) } },
+      select: { id: true },
+    });
+    if (found) await db.listing.update({ where: { id: found.id }, data: { sourceChannel: "WHATSAPP" } });
+    return found?.id ?? null;
   });
-  if (outcome.status === "in_doubt") {
-    ctx.say("I'm still saving your earlier draft — please wait a minute, then reply *resume*.");
-    return false;
-  }
   draft.listingId = outcome.resultId;
   draft.listingStatus = "DRAFT";
   draft.photos ??= 0;
@@ -555,7 +559,10 @@ async function submit(ctx: Ctx) {
         evidence: { type: authority.evidence, reference: draft.evidenceReference! },
       });
       return { id: draft.listingId! };
-    });
+    }, async (startedAt) => (await db.listing.findFirst({
+      where: { id: draft.listingId!, status: "PENDING_REVIEW", submittedAt: { gte: sinceStart(startedAt) } },
+      select: { id: true },
+    }))?.id ?? null);
   } catch (error) {
     if (error instanceof AppError && error.status < 500) {
       ctx.say(`It couldn't be submitted yet: ${error.message}`);
@@ -599,10 +606,12 @@ async function proceed(ctx: Ctx) {
 
 async function chooseProfessional(ctx: Ctx, preset?: string) {
   if (preset === "edit") ctx.data<Draft>().mode = "edit";
-  const user = await findUserForContact(ctx.contact);
+  const user = await linkedUser(ctx.contact);
   const memberships = user ? (await listUserMarketplaceProfessionals(user.id)).filter(({ status }) => status === "ACTIVE") : [];
   if (!memberships.length) {
+    const unlinkedAccount = !user && (await accountExistsForContact(ctx.contact));
     ctx.finish();
+    if (unlinkedAccount) ctx.say("This number belongs to a NesAfric account that isn't linked to WhatsApp yet. Reply *link account* to verify it with an SMS code — then you can list for your business here.");
     ctx.say("To list a property you first need a NesAfric business profile — as an agent, agency, developer or landlord. It only takes a couple of minutes.");
     ctx.ask("Shall we set it up?", [
       { id: "menu:register_agent", title: "I'm an agent" },
@@ -709,7 +718,7 @@ export const listing: Workflow = {
     if (step === "professional") {
       const id = choice?.startsWith("ls:prof:") ? choice.slice(8) : undefined;
       if (!id) return listing.reprompt(ctx);
-      const user = await findUserForContact(ctx.contact);
+      const user = await linkedUser(ctx.contact);
       const membership = user ? (await listUserMarketplaceProfessionals(user.id)).find((item) => item.id === id) : undefined;
       if (!membership) return listing.reprompt(ctx);
       return selectProfessional(ctx, membership.id, membership.displayName);

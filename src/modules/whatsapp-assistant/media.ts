@@ -1,6 +1,7 @@
 import { AppError } from "@/platform/errors";
 import { downloadCloudApiMedia, MediaDownloadError, type InboundMedia } from "./cloud-api";
 import { recordEvent } from "./store";
+import { errorLabel } from "./log";
 
 const EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic",
@@ -42,6 +43,6 @@ export async function uploadFailureMessage(contactId: string, purpose: string, e
     if (error.code === "LISTING_MEDIA_LIMIT_REACHED") return error.message;
     if (error.status < 500) return error.message;
   }
-  console.error("[whatsapp-assistant] media upload failed", { purpose, error: error instanceof Error ? error.message : "unknown" });
+  console.error("[whatsapp-assistant] media upload failed", { purpose, error: errorLabel(error) });
   return "Something went wrong saving that file on our side. Please send it again in a moment.";
 }

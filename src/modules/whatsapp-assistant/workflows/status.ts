@@ -4,7 +4,7 @@ import { db } from "@/platform/database/client";
 import { completedActions } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { dateTimeText, propertyUrl } from "../format";
-import { findUserForContact } from "../identity";
+import { accountExistsForContact, linkedUser } from "../identity";
 import type { ReplyOption } from "../messages";
 import { matchesReference, parseReference, referenceFor, type ReferenceKind } from "../references";
 import { WORKFLOW_TITLES } from "../state";
@@ -27,7 +27,10 @@ type Item = { kind: ReferenceKind; id: string; line: string; option?: ReplyOptio
 /** Everything this person can see: only records they own, created, or requested from this number. */
 async function collectItems(ctx: Ctx): Promise<Item[]> {
   const items: Item[] = [];
-  const user = await findUserForContact(ctx.contact);
+  const user = await linkedUser(ctx.contact);
+  if (!user && (await accountExistsForContact(ctx.contact))) {
+    items.push({ kind: "SP", id: "link", line: "🔗 This number has a NesAfric account that isn't linked to WhatsApp. Reply *link account* to see its listings and applications here." });
+  }
   if (user) {
     const professionals = await listUserMarketplaceProfessionals(user.id);
     for (const professional of professionals) {

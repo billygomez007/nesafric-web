@@ -1,5 +1,7 @@
 import { db } from "@/platform/database/client";
+import { AppError } from "@/platform/errors";
 import { aiClassifyIntent } from "./ai";
+import { AccountVerificationRequired, completeAccountVerification, startAccountVerification } from "./identity";
 import { Ctx, type StartSeed, type Workflow } from "./context";
 import { detectCommand, detectIntents, matchOption, type Intent } from "./nlu";
 import { parseReference } from "./references";
@@ -137,6 +139,17 @@ export async function handleMessage(ctx: Ctx) {
   const isNewContact = (await db.whatsAppInboundMessage.count({ where: { contactId: ctx.contact.id } })) <= 1;
   const command = ctx.input.media || ctx.input.choiceId ? null : detectCommand(ctx.text);
 
+  if (ctx.state.verification && command !== "menu" && command !== "cancel" && command !== "stop" && command !== "help") {
+    return handleVerificationAnswer(ctx);
+  }
+  if (!ctx.input.media && !ctx.input.choiceId && /^(link|connect)( my)?( nesafric)? account$/i.test(ctx.text)) {
+    if (ctx.contact.userId) {
+      ctx.say("This WhatsApp number is already linked to your NesAfric account. ✅");
+      return;
+    }
+    return beginVerification(ctx, new AccountVerificationRequired(ctx.contact.profileName ?? ""), null);
+  }
+
   switch (command) {
     case "stop":
       await db.whatsAppContact.update({ where: { id: ctx.contact.id }, data: { optedOutAt: ctx.now } });
@@ -153,6 +166,7 @@ export async function handleMessage(ctx: Ctx) {
       ctx.say(HELP);
       return;
     case "menu": {
+      ctx.state.verification = null;
       if (ctx.state.workflow && BUSINESS_WORKFLOWS.includes(ctx.state.workflow) && ctx.state.step) {
         ctx.state.paused = { workflow: ctx.state.workflow, step: ctx.state.step, data: ctx.state.data, pausedAt: ctx.now.toISOString() };
         ctx.finish();
@@ -162,6 +176,7 @@ export async function handleMessage(ctx: Ctx) {
       return showMenu(ctx);
     }
     case "cancel": {
+      ctx.state.verification = null;
       const current = ctx.state.workflow;
       const draftListingId = current === "listing" ? (ctx.state.data.listingId as string | undefined) : undefined;
       ctx.finish();
@@ -226,15 +241,69 @@ export async function handleMessage(ctx: Ctx) {
 }
 
 /**
+ * Sends the website's SMS sign-in code to this WhatsApp number. The step that needed an account is
+ * remembered and re-run once the code is confirmed; nothing is submitted before that.
+ */
+async function beginVerification(ctx: Ctx, required: AccountVerificationRequired, replay: { text?: string; choiceId?: string } | null) {
+  try {
+    const challenge = await startAccountVerification(ctx.contact);
+    ctx.state.verification = { challengeId: challenge.challengeId, destination: challenge.destination, displayName: required.displayName, replay };
+    await recordEvent("account_verification_sent", ctx.contact.id, {});
+    ctx.say(`To keep your account safe, we've sent a 6-digit code by SMS to ${challenge.destination}. Please reply with the code.\n\n(Reply *resend* for a new code, or *cancel* to stop.)`);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    await recordEvent("account_verification_unavailable", ctx.contact.id, { code: error.code });
+    ctx.say(`I couldn't send a verification code just now: ${error.message} Your answers so far are saved — reply *resume* to try again.`);
+  }
+}
+
+async function handleVerificationAnswer(ctx: Ctx) {
+  const verification = ctx.state.verification!;
+  if (/^(resend|new code|send again)$/i.test(ctx.text)) {
+    return beginVerification(ctx, new AccountVerificationRequired(verification.displayName), verification.replay);
+  }
+  const code = ctx.text.replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(code)) {
+    ctx.say(`Please reply with the 6-digit code we sent by SMS to ${verification.destination}, *resend* for a new code, or *cancel*.`);
+    return;
+  }
+  try {
+    const { user, created } = await completeAccountVerification(ctx.contact, { challengeId: verification.challengeId, code, displayName: verification.displayName });
+    ctx.state.verification = null;
+    await recordEvent("account_linked", ctx.contact.id, { created });
+    ctx.say(created ? "✅ Number verified — your NesAfric account is ready." : `✅ Verified — this WhatsApp number is now linked to your NesAfric account (${user.displayName}).`);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    if (error.code === "WHATSAPP_STAFF_ACCOUNT") ctx.state.verification = null;
+    ctx.say(error.message);
+    return;
+  }
+  // Re-run the answer that needed the account, as a fresh step of this message.
+  if (verification.replay && ctx.state.workflow) {
+    ctx.input.text = verification.replay.text;
+    ctx.input.choiceId = verification.replay.choiceId;
+    await WORKFLOWS[ctx.state.workflow].handle(ctx);
+  }
+}
+
+/**
  * Runs `handleMessage`, then any workflow-to-workflow handoffs it requested (e.g. a search result
  * "Request a viewing" starting the inquiry workflow). Bounded so a bug can never loop forever.
  */
 export async function runEngine(ctx: Ctx) {
-  await handleMessage(ctx);
-  for (let hops = 0; ctx.handoff && hops < 3; hops += 1) {
-    const { workflow, seed } = ctx.handoff;
+  try {
+    await handleMessage(ctx);
+    for (let hops = 0; ctx.handoff && hops < 3; hops += 1) {
+      const { workflow, seed } = ctx.handoff;
+      ctx.handoff = null;
+      await startWorkflow(ctx, workflow, seed);
+    }
+  } catch (error) {
+    if (!(error instanceof AccountVerificationRequired)) throw error;
     ctx.handoff = null;
-    await startWorkflow(ctx, workflow, seed);
+    // The answer as resolved (a typed "1" already mapped to its option id), replayed once verified.
+    await beginVerification(ctx, error, ctx.state.workflow ? { text: ctx.input.text, choiceId: ctx.input.choiceId } : null);
+    return;
   }
   // A finished task with another one waiting from the same message: offer it.
   if (!ctx.state.workflow && ctx.state.pendingIntents?.length && !ctx.replies.some((reply) => reply.kind === "buttons" || reply.kind === "list")) {

@@ -13,6 +13,7 @@ import "dotenv/config";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
+import { recoverStalledWhatsAppWork } from "@/modules/whatsapp-assistant/recovery";
 
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 15_000);
 let stopping = false;
@@ -25,6 +26,7 @@ async function tick() {
   } catch (error) {
     console.error("Background job poll failed:", error instanceof Error ? error.message : error);
   }
+  await recoverStalledWhatsAppWork().catch(() => console.error("WhatsApp assistant recovery sweep failed."));
   // Same expired guest-write row cleanup as /api/jobs/run, at most every 5 minutes.
   if (Date.now() - lastSweepAt >= SWEEP_INTERVAL_MS) {
     lastSweepAt = Date.now();

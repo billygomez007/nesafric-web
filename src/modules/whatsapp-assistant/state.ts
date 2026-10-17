@@ -32,6 +32,11 @@ export type SessionState = {
   paused?: PausedWorkflow | null;
   /** Further tasks from a multi-intent message ("an apartment and a plumber"). */
   pendingIntents?: Array<{ intent: Intent; text: string }>;
+  /**
+   * An SMS code is outstanding to link this contact to an account. `replay` is the answer that
+   * needed the account; it is re-run (never the action's old idempotency key) once verified.
+   */
+  verification?: { challengeId: string; destination: string; displayName: string; replay: { text?: string; choiceId?: string } | null } | null;
 };
 
 export function emptyState(): SessionState {
@@ -50,6 +55,7 @@ export function stateFromSession(session: { workflow: string | null; step: strin
     options: Array.isArray(stored.options) ? stored.options as ReplyOption[] : undefined,
     paused: (stored.paused as PausedWorkflow | null | undefined) ?? null,
     pendingIntents: Array.isArray(stored.pendingIntents) ? stored.pendingIntents as SessionState["pendingIntents"] : undefined,
+    verification: (stored.verification as SessionState["verification"]) ?? null,
   };
 }
 
@@ -63,6 +69,7 @@ export function stateToSession(state: SessionState) {
       options: state.options ?? null,
       paused: state.paused ?? null,
       pendingIntents: state.pendingIntents ?? null,
+      verification: state.verification ?? null,
     })),
   };
 }

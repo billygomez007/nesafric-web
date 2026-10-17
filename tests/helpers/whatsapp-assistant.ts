@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { setWhatsAppTransport } from "@/modules/whatsapp-assistant/cloud-api";
 import { ingestWebhook } from "@/modules/whatsapp-assistant/ingest";
 import { processContact } from "@/modules/whatsapp-assistant/processor";
+import { fakeSms } from "./fake-sms-otp";
 
 /**
  * Test harness for the WhatsApp assistant: builds signed Cloud API webhooks, runs ingestion and
@@ -20,6 +21,9 @@ export function configureAssistantEnv() {
   process.env.WHATSAPP_ACCESS_TOKEN = "test-access-token";
   process.env.WHATSAPP_PHONE_NUMBER_ID = TEST_PHONE_NUMBER_ID;
   process.env.WHATSAPP_ASSISTANT_AI = "off";
+  process.env.WHATSAPP_MEDIA_HOSTS = "lookaside.example";
+  delete process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  delete process.env.WHATSAPP_STATUS_TEMPLATE_NAME;
 }
 
 export type SentMessage = Record<string, unknown> & { to: string; type: string };
@@ -124,3 +128,13 @@ export async function converse(api: FakeGraphApi, from: string, incoming: Incomi
 }
 
 export const allText = (messages: SentMessage[]) => messages.map(textOf).join("\n---\n");
+
+/**
+ * Answers the SMS-code prompt with the code the fake SMS gateway "sent" to this number. Requires the
+ * test file to `vi.mock("@/modules/messaging/otp-provider", ...)` with `fakeSmsOtpModule`.
+ */
+export async function answerSmsCode(api: FakeGraphApi, from: string) {
+  const code = fakeSms.codes.get(`+${from}`);
+  if (!code) throw new Error(`No SMS code was sent to +${from}`);
+  return converse(api, from, { text: code });
+}

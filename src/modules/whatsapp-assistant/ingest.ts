@@ -1,7 +1,7 @@
 import { db } from "@/platform/database/client";
 import { parseWebhook, verifySignature } from "./cloud-api";
 import { whatsAppAssistantConfig } from "./config";
-import { applyStatusUpdate, recordEvent, recordInbound, scheduleInboundProcessing, upsertContact } from "./store";
+import { applyStatusUpdate, recordEvent, recordInbound, upsertContact } from "./store";
 
 /**
  * More than this many messages from one contact in a minute are stored but not processed. Generous
@@ -21,35 +21,45 @@ export type IngestResult =
  * response must go back to Meta quickly, so conversation processing happens afterwards
  * (`processContact`, via `after()` and a durable safety-net job).
  */
-export async function ingestWebhook(rawBody: string, signatureHeader: string | null): Promise<IngestResult> {
+export async function ingestWebhook(rawBody: Buffer | string, signatureHeader: string | null): Promise<IngestResult> {
   const config = whatsAppAssistantConfig();
   if (!config.enabled) return { ok: false, status: 404, reason: "The WhatsApp assistant is not enabled." };
-  // Fail closed: without the app secret no request can be authenticated, so none is accepted.
+  // Fail closed: without the app secret no request can be authenticated, and without the phone
+  // number id no message can be attributed to NesAfric's number — so none is accepted.
   if (!config.appSecret) return { ok: false, status: 503, reason: "WHATSAPP_APP_SECRET is not configured." };
+  if (!config.phoneNumberId) return { ok: false, status: 503, reason: "WHATSAPP_PHONE_NUMBER_ID is not configured." };
   if (!verifySignature(rawBody, signatureHeader, config.appSecret)) return { ok: false, status: 401, reason: "Invalid signature." };
   let payload: unknown;
   try {
-    payload = JSON.parse(rawBody);
+    payload = JSON.parse(typeof rawBody === "string" ? rawBody : rawBody.toString("utf8"));
   } catch {
     return { ok: false, status: 400, reason: "Invalid JSON." };
   }
   const { messages, statuses } = parseWebhook(payload);
-  for (const update of statuses) await applyStatusUpdate(update);
+  // Only events for NesAfric's own number (and business account, when configured). A signed
+  // delivery for another number of the same Meta app is acknowledged but never acted on.
+  const ours = (event: { phoneNumberId?: string; wabaId?: string }) =>
+    event.phoneNumberId === config.phoneNumberId && (!config.businessAccountId || event.wabaId === config.businessAccountId);
+  let ignored = 0;
+  for (const update of statuses) {
+    if (ours(update)) await applyStatusUpdate(update);
+    else ignored += 1;
+  }
 
   const contactIds = new Set<string>();
   let stored = 0;
   let duplicates = 0;
-  let ignored = 0;
   for (const message of messages) {
-    // Only messages sent to NesAfric's own configured number.
-    if (config.phoneNumberId && message.phoneNumberId && message.phoneNumberId !== config.phoneNumberId) {
+    if (!ours(message)) {
       ignored += 1;
       continue;
     }
     const contact = await upsertContact(message);
     const inbound = await recordInbound(contact.id, message);
     if (!inbound) {
+      // Meta redelivers when our acknowledgement was lost; the job was re-armed if still pending.
       duplicates += 1;
+      contactIds.add(contact.id);
       continue;
     }
     stored += 1;
@@ -61,7 +71,6 @@ export async function ingestWebhook(rawBody: string, signatureHeader: string | n
       ignored += 1;
       continue;
     }
-    await scheduleInboundProcessing(contact.id, message.waMessageId);
     contactIds.add(contact.id);
   }
   return { ok: true, contactIds: [...contactIds], stored, duplicates, statuses: statuses.length, ignored };

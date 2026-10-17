@@ -1,64 +1,94 @@
 import { db } from "@/platform/database/client";
+import { AppError } from "@/platform/errors";
+import { ActionInDoubtError } from "./actions";
 import type { InboundLocation, InboundMedia } from "./cloud-api";
 import { Ctx } from "./context";
-import { runEngine, showMenu } from "./engine";
+import { runEngine, showMenu, WORKFLOWS } from "./engine";
 import { stateFromSession, stateToSession } from "./state";
 import {
-  acquireSession, extendSessionLease, flushOutbound, hasPendingInbound, MAX_INBOUND_ATTEMPTS, nextPendingInbound,
-  queueOutboundInTransaction, recordEvent, releaseSession,
+  acquireSession, extendSessionLease, flushOutbound, LeaseLostError, MAX_INBOUND_ATTEMPTS, nextPendingInbound,
+  queueOutboundInTransaction, recordEvent, releaseDeferredNotifications, releaseSession, scheduleInboundProcessing, type Lease,
 } from "./store";
 import { createSupportRequest } from "./workflows/status";
+import { errorLabel } from "./log";
 
 type StoredContent = { choiceId?: string | null; media?: InboundMedia | null; location?: InboundLocation | null };
 
+/** How long to wait before retrying a message whose business action may still be in flight. */
+const IN_DOUBT_RETRY_MS = 2 * 60_000;
+
 /**
- * Processes every pending message for one contact, oldest first, under the contact's lease so two
- * workers (the immediate `after()` run and the safety-net job) never interleave. For each message
- * the new session state, the replies and the PROCESSED mark are committed in one transaction:
- * either all of it happened or none of it did, so a crash leads to a clean re-run, and business
- * actions inside the step are guarded separately by `runOnce`.
+ * Processes every pending message for one contact, oldest first, under the contact's lease, so the
+ * immediate `after()` run, the safety-net job and the recovery sweep never interleave. For each
+ * message the new session state, the replies and the PROCESSED mark commit in one transaction
+ * that is fenced by the lease token: a worker that stalled past its lease (and was replaced)
+ * cannot commit anything, and a crash anywhere leads to a clean re-run. Business actions inside a
+ * step are guarded separately by `runOnce`.
+ *
+ * `throwIfBusy` (used by the safety-net job) turns "another worker holds the lease" into an error so
+ * the job is retried rather than recorded as done: if the holder died, its lease expires.
  */
 export async function processContact(contactId: string, options: { throwIfBusy?: boolean } = {}) {
   for (let round = 0; round < 3; round += 1) {
-    const session = await acquireSession(contactId);
-    if (!session) {
-      // Another worker holds the lease. The safety-net job must not count that as done: if the
-      // holder died, its lease expires and the job's retry processes the messages.
-      if (options.throwIfBusy && (await hasPendingInbound(contactId))) throw new Error("Contact is being processed by another worker; retrying later.");
+    const lease = await acquireSession(contactId);
+    if (!lease) {
+      if (options.throwIfBusy && (await nextPendingInbound(contactId))) throw new Error("Contact is being processed by another worker; retrying later.");
       return;
     }
+    let deferred = false;
     try {
+      await failExhaustedMessages(lease);
       for (let processed = 0; processed < 25; processed += 1) {
         const inbound = await nextPendingInbound(contactId);
         if (!inbound) break;
-        await processOne(session.id, inbound.id);
-        await extendSessionLease(session.id);
+        if ((await processOne(lease, inbound.id)) === "deferred") {
+          deferred = true;
+          break;
+        }
       }
+    } catch (error) {
+      if (error instanceof LeaseLostError) {
+        await recordEvent("lease_lost", contactId, {});
+        return; // The newer lease holder owns these messages now.
+      }
+      throw error;
     } finally {
-      await releaseSession(session.id);
+      await releaseSession(lease);
     }
     await flushOutbound(contactId);
-    // A message that arrived while we held the lease, after our last check: go round again.
-    if (!(await hasPendingInbound(contactId))) return;
+    // Stop when the queue is empty, or when it is waiting on an in-flight action (retried later).
+    if (deferred || !(await nextPendingInbound(contactId))) return;
   }
 }
 
-async function processOne(sessionId: string, inboundId: string) {
-  const inbound = await db.whatsAppInboundMessage.update({
-    where: { id: inboundId },
-    data: { status: "PROCESSING", attempts: { increment: 1 } },
-    include: { contact: true },
+/**
+ * Claims one message under the lease. The claim and the lease extension happen together, so a
+ * worker whose lease has expired cannot even start on a message.
+ */
+async function claim(lease: Lease, inboundId: string) {
+  return db.$transaction(async (tx) => {
+    await extendSessionLease(lease, tx);
+    return tx.whatsAppInboundMessage.update({
+      where: { id: inboundId },
+      data: { status: "PROCESSING", attempts: { increment: 1 } },
+      include: { contact: true },
+    });
   });
-  const session = await db.whatsAppAssistantSession.findUniqueOrThrow({ where: { id: sessionId } });
-  const state = stateFromSession(session);
+}
+
+async function processOne(lease: Lease, inboundId: string): Promise<"done" | "deferred"> {
+  const inbound = await claim(lease, inboundId);
+  if (inbound.attempts === 1) await releaseDeferredNotifications(inbound.contactId);
+  const session = await db.whatsAppAssistantSession.findUniqueOrThrow({ where: { id: lease.sessionId } });
   const content = (inbound.content ?? {}) as StoredContent;
-  const ctx = new Ctx(inbound.contact, state, {
+  const input = {
     inboundId: inbound.id,
     text: inbound.text ?? undefined,
     choiceId: content.choiceId ?? undefined,
     media: content.media ?? undefined,
     location: content.location ?? undefined,
-  }, new Date());
+  };
+  const ctx = new Ctx(inbound.contact, stateFromSession(session), input, new Date());
 
   try {
     if (content.location && !inbound.text) {
@@ -71,41 +101,95 @@ async function processOne(sessionId: string, inboundId: string) {
       await runEngine(ctx);
     }
   } catch (error) {
-    console.error("[whatsapp-assistant] message processing failed", { inboundId, attempt: inbound.attempts, error: error instanceof Error ? error.message : "unknown" });
-    await recordEvent("processing_error", inbound.contactId, { workflow: state.workflow, step: state.step, attempt: inbound.attempts });
+    if (error instanceof LeaseLostError) throw error;
+    if (error instanceof ActionInDoubtError) {
+      // An earlier attempt at this action may still be running. Put the message back without
+      // spending an attempt, and look again once that attempt has either finished or gone stale.
+      await db.$transaction(async (tx) => {
+        await extendSessionLease(lease, tx);
+        await tx.whatsAppInboundMessage.update({ where: { id: inboundId }, data: { status: "RECEIVED", attempts: { decrement: 1 }, lastError: "Waiting for an earlier attempt to finish." } });
+      });
+      await scheduleInboundProcessing(inbound.contactId, `${inbound.waMessageId}:doubt:${Date.now()}`, IN_DOUBT_RETRY_MS);
+      await recordEvent("action_in_doubt", inbound.contactId, {});
+      return "deferred";
+    }
+    if (error instanceof AppError && error.status >= 400 && error.status < 500) {
+      // A business rule refused the step (permission revoked, record gone, invalid state). Not
+      // worth retrying: answer from the state as it was before this message.
+      const fallback = new Ctx(inbound.contact, stateFromSession(session), input, new Date());
+      await recordEvent("step_refused", inbound.contactId, { code: error.code, status: error.status, workflow: fallback.state.workflow });
+      if (error.status === 403 || error.status === 404) {
+        fallback.finish();
+        fallback.say("Sorry — that's not available to you any more. Your access may have changed, or the record was removed.");
+        showMenu(fallback);
+      } else {
+        fallback.say(error.message);
+        if (fallback.state.workflow) await WORKFLOWS[fallback.state.workflow].reprompt(fallback).catch(() => showMenu(fallback));
+      }
+      await commit(lease, inbound.id, inbound.contactId, fallback, "PROCESSED", error.code);
+      return "done";
+    }
+    // Identifiers and error class only: messages may contain personal data.
+    console.error("[whatsapp-assistant] message processing failed", { inboundId, attempt: inbound.attempts, error: errorLabel(error) });
+    await recordEvent("processing_error", inbound.contactId, { workflow: ctx.state.workflow, step: ctx.state.step, attempt: inbound.attempts });
     if (inbound.attempts < MAX_INBOUND_ATTEMPTS) {
       // Leave it for a retry (the safety-net job runs again shortly); nothing was committed.
-      await db.whatsAppInboundMessage.update({ where: { id: inboundId }, data: { status: "RECEIVED", lastError: error instanceof Error ? error.message.slice(0, 500) : "Processing failed." } });
+      await db.$transaction(async (tx) => {
+        await extendSessionLease(lease, tx);
+        await tx.whatsAppInboundMessage.update({ where: { id: inboundId }, data: { status: "RECEIVED", lastError: error instanceof Error ? error.name.slice(0, 100) : "Processing failed." } });
+      });
       throw error;
     }
-    // Out of retries: tell the person honestly, keep their progress, and hand it to a human.
-    const request = await createSupportRequest({
-      contactId: inbound.contactId,
-      userId: inbound.contact.userId,
-      topic: "processing_failure",
-      summary: `Automatic processing failed ${inbound.attempts} times for a message in ${state.workflow ?? "no workflow"} (step ${state.step ?? "-"}). Inbound message ${inbound.id}.`,
-      workflow: state.workflow,
-    });
-    const fallback = new Ctx(inbound.contact, stateFromSession(session), ctx.input, new Date());
-    fallback.say(`Sorry — something went wrong on our side and I couldn't complete that step. Your progress is saved, and our team has been alerted (reference ${request.reference}).`);
-    showMenu(fallback, "You can try again with *resume*, or choose another option.");
-    await commit(sessionId, inbound.id, inbound.contactId, fallback, "FAILED", error instanceof Error ? error.message : "Processing failed.");
-    return;
+    await escalate(lease, inbound.id, inbound.contactId, inbound.contact.userId, session, input, error instanceof Error ? error.name : "Processing failed.");
+    return "done";
   }
-  await commit(sessionId, inbound.id, inbound.contactId, ctx, "PROCESSED");
+  await commit(lease, inbound.id, inbound.contactId, ctx, "PROCESSED");
+  return "done";
 }
 
-async function commit(sessionId: string, inboundId: string, contactId: string, ctx: Ctx, status: "PROCESSED" | "FAILED", lastError?: string) {
+/**
+ * Out of retries: tell the person honestly, keep their progress, and hand it to a human. Also used
+ * for messages whose attempts were all spent by crashed workers (no attempt reached this code).
+ */
+async function escalate(lease: Lease, inboundId: string, contactId: string, userId: string | null, session: { workflow: string | null; step: string | null; data: unknown }, input: Ctx["input"], reason: string) {
+  const state = stateFromSession(session);
+  const contact = await db.whatsAppContact.findUniqueOrThrow({ where: { id: contactId } });
+  const request = await createSupportRequest({
+    contactId,
+    userId,
+    topic: "processing_failure",
+    summary: `Automatic processing failed ${MAX_INBOUND_ATTEMPTS} times for a message in ${state.workflow ?? "no workflow"} (step ${state.step ?? "-"}). Inbound message ${inboundId}.`,
+    workflow: state.workflow,
+  });
+  const fallback = new Ctx(contact, state, input, new Date());
+  fallback.say(`Sorry — something went wrong on our side and I couldn't complete that step. Your progress is saved, and our team has been alerted (reference ${request.reference}).`);
+  showMenu(fallback, "You can try again with *resume*, or choose another option.");
+  await commit(lease, inboundId, contactId, fallback, "FAILED", reason);
+}
+
+async function failExhaustedMessages(lease: Lease) {
+  const exhausted = await db.whatsAppInboundMessage.findMany({
+    where: { contactId: lease.contactId, status: { in: ["RECEIVED", "PROCESSING"] }, attempts: { gte: MAX_INBOUND_ATTEMPTS } },
+    orderBy: { sentAt: "asc" },
+    take: 5,
+    include: { contact: true },
+  });
+  for (const inbound of exhausted) {
+    const session = await db.whatsAppAssistantSession.findUniqueOrThrow({ where: { id: lease.sessionId } });
+    const content = (inbound.content ?? {}) as StoredContent;
+    await escalate(lease, inbound.id, inbound.contactId, inbound.contact.userId, session, { inboundId: inbound.id, text: inbound.text ?? undefined, choiceId: content.choiceId ?? undefined }, "Attempts exhausted by interrupted workers.");
+  }
+}
+
+async function commit(lease: Lease, inboundId: string, contactId: string, ctx: Ctx, status: "PROCESSED" | "FAILED", lastError?: string) {
   const persisted = stateToSession(ctx.state);
   await db.$transaction(async (tx) => {
-    await tx.whatsAppAssistantSession.update({
-      where: { id: sessionId },
-      data: {
-        ...persisted,
-        version: { increment: 1 },
-        lastActivityAt: ctx.now,
-      },
+    // Fencing: only the current lease holder may write. Otherwise everything here rolls back.
+    const written = await tx.whatsAppAssistantSession.updateMany({
+      where: { id: lease.sessionId, leaseToken: lease.token, lockedUntil: { gt: new Date() } },
+      data: { ...persisted, version: { increment: 1 }, lastActivityAt: ctx.now },
     });
+    if (written.count !== 1) throw new LeaseLostError();
     await queueOutboundInTransaction(tx, contactId, ctx.replies.map((reply, index) => ({ idempotencyKey: `reply:${inboundId}:${String(index).padStart(2, "0")}`, reply })));
     await tx.whatsAppInboundMessage.update({ where: { id: inboundId }, data: { status, processedAt: new Date(), lastError: lastError?.slice(0, 500) ?? null } });
   });

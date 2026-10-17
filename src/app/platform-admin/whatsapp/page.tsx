@@ -146,7 +146,7 @@ function WhatsAppAssistantContent() {
     !config.enabled && "The assistant is disabled (WHATSAPP_ASSISTANT_ENABLED).",
     !config.webhookSecretConfigured && "WHATSAPP_APP_SECRET is missing — every webhook is rejected.",
     !config.sendingConfigured && "Sending is not configured (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID).",
-    !config.statusTemplateConfigured && "No approved status template: notifications outside the 24-hour window are skipped.",
+    !config.statusTemplateConfigured && "No approved status template: notifications outside the 24-hour window are held and only sent if the person writes again within 7 days.",
   ].filter(Boolean) as string[] : [];
 
   return (

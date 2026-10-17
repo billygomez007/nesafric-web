@@ -4,6 +4,8 @@ import { db } from "@/platform/database/client";
 import { dateTimeText, propertyUrl, providerUrl } from "./format";
 import { referenceFor } from "./references";
 import { queueNotification, recordEvent } from "./store";
+import type { WhatsAppNotificationJob } from "./notification-outbox";
+import { errorLabel } from "./log";
 
 /**
  * WhatsApp status notifications for decisions made elsewhere (the platform admin review queues, an
@@ -15,11 +17,17 @@ import { queueNotification, recordEvent } from "./store";
  * callers use `safely()`.
  */
 
-export async function safely(name: string, run: () => Promise<unknown>) {
-  try {
-    await run();
-  } catch (error) {
-    console.error(`[whatsapp-assistant] notification "${name}" failed`, { error: error instanceof Error ? error.message : "unknown" });
+/** Runs one queued notification (from the outbox job or right after commit). Throws to be retried. */
+export async function runWhatsAppNotification(job: WhatsAppNotificationJob) {
+  switch (job.kind) {
+    case "listing_decision":
+      return notifyListingDecision(job.listingId, job.decision, job.note, job.decisionKey);
+    case "professional_verification":
+      return notifyProfessionalVerification(job.professionalId, job.status, job.reason, job.decisionKey);
+    case "provider_identity":
+      return notifyProviderIdentityDecision(job.providerId, job.status, job.reason, job.decisionKey);
+    case "viewing_update":
+      return notifyViewingUpdate(job.viewingRequestId, job.decisionKey);
   }
 }
 
@@ -33,14 +41,14 @@ async function notifyUsers(userIds: Array<string | null | undefined>, key: strin
 
 export type ListingDecision = "published" | "changes_requested" | "rejected";
 
-export async function notifyListingDecision(listingId: string, decision: ListingDecision, note?: string | null) {
+export async function notifyListingDecision(listingId: string, decision: ListingDecision, note: string | null | undefined, decisionKey: string) {
   const listing = await db.listing.findUnique({
     where: { id: listingId },
     select: { id: true, title: true, status: true, updatedAt: true, createdByUserId: true, listingRepresentativeUserId: true, sourceChannel: true },
   });
   if (!listing) return;
   const reference = referenceFor("PR", listing.id);
-  const key = `listing-decision:${listing.id}:${decision}:${listing.updatedAt.getTime()}`;
+  const key = `listing-decision:${decisionKey}`;
   let body: string;
   if (decision === "published") {
     const visible = listing.status === "PUBLISHED" && (await publiclyEligibleListingIds([listing.id])).has(listing.id);
@@ -59,7 +67,7 @@ export async function notifyListingDecision(listingId: string, decision: Listing
   await notifyUsers([listing.createdByUserId, listing.listingRepresentativeUserId], key, body);
 }
 
-export async function notifyProfessionalVerification(professionalId: string, status: string, reason?: string | null) {
+export async function notifyProfessionalVerification(professionalId: string, status: string, reason: string | null | undefined, decisionKey: string) {
   const professional = await db.marketplaceProfessional.findUnique({
     where: { id: professionalId },
     select: { id: true, displayName: true, createdByUserId: true, members: { where: { status: "ACTIVE", role: { in: ["OWNER", "ADMIN"] } }, select: { userId: true } } },
@@ -74,8 +82,7 @@ export async function notifyProfessionalVerification(professionalId: string, sta
         ? `*${professional.displayName}* has been suspended on NesAfric.\nReference: ${reference}\nReason: "${reason ?? "Not provided"}"\nReply *support* for help.`
         : null;
   if (!body) return;
-  const decision = await db.marketplaceProfessionalVerificationEvent.findFirst({ where: { marketplaceProfessionalId: professional.id, toStatus: status as "VERIFIED" | "REJECTED" | "SUSPENDED" }, orderBy: { createdAt: "desc" }, select: { id: true } });
-  await notifyUsers([professional.createdByUserId, ...professional.members.map(({ userId }) => userId)], `professional-verification:${decision?.id ?? `${professional.id}:${status}`}`, body);
+  await notifyUsers([professional.createdByUserId, ...professional.members.map(({ userId }) => userId)], `professional-verification:${decisionKey}`, body);
 }
 
 /**
@@ -83,7 +90,7 @@ export async function notifyProfessionalVerification(professionalId: string, sta
  * approval its public profile is listed on the owner's behalf (they asked to be listed when they
  * registered), and the message includes the real public URL only if listing succeeded.
  */
-export async function notifyProviderIdentityDecision(providerId: string, status: string, reason?: string | null) {
+export async function notifyProviderIdentityDecision(providerId: string, status: string, reason: string | null | undefined, decisionKey: string) {
   const provider = await db.serviceProvider.findUnique({
     where: { id: providerId },
     select: { id: true, slug: true, displayName: true, administratorUserId: true, verificationStatus: true, sourceChannel: true, marketplaceProfile: { select: { listed: true } } },
@@ -98,7 +105,7 @@ export async function notifyProviderIdentityDecision(providerId: string, status:
         await updateMarketplaceProfile(provider.administratorUserId, provider.id, { listed: true });
         listed = true;
       } catch (error) {
-        console.error("[whatsapp-assistant] could not list approved provider", { providerId, error: error instanceof Error ? error.message : "unknown" });
+        console.error("[whatsapp-assistant] could not list approved provider", { providerId, error: errorLabel(error) });
       }
     }
     body = listed
@@ -109,12 +116,11 @@ export async function notifyProviderIdentityDecision(providerId: string, status:
   } else if (status === "REJECTED") {
     body = `Your service profile *${provider.displayName}* was not approved.\nReference: ${reference}\nReason: "${reason ?? "Not provided"}"\nReply *support* if you'd like help.`;
   } else return;
-  const decision = await db.providerVerificationHistory.findFirst({ where: { providerId: provider.id }, orderBy: { createdAt: "desc" }, select: { id: true } });
-  await notifyUsers([provider.administratorUserId], `provider-identity:${decision?.id ?? `${provider.id}:${status}`}`, body);
+  await notifyUsers([provider.administratorUserId], `provider-identity:${decisionKey}`, body);
 }
 
 /** Tells a WhatsApp customer when the agent confirms, reschedules or cancels their viewing. */
-export async function notifyViewingUpdate(viewingRequestId: string) {
+export async function notifyViewingUpdate(viewingRequestId: string, decisionKey: string) {
   const viewing = await db.viewingRequest.findUnique({
     where: { id: viewingRequestId },
     select: { id: true, status: true, confirmedStartsAt: true, updatedAt: true, listing: { select: { id: true, title: true } }, lead: { select: { source: true, phone: true } } },
@@ -129,5 +135,5 @@ export async function notifyViewingUpdate(viewingRequestId: string) {
         : null;
   if (!body) return;
   const contacts = await db.whatsAppContact.findMany({ where: { phoneE164: viewing.lead.phone } });
-  for (const contact of contacts) await queueNotification(contact.id, `viewing:${viewing.id}:${viewing.status}:${viewing.updatedAt.getTime()}`, body);
+  for (const contact of contacts) await queueNotification(contact.id, `viewing:${decisionKey}:${contact.id}`, body);
 }

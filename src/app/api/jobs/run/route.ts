@@ -4,6 +4,7 @@ import { errorResponse, AppError } from "@/platform/errors";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
+import { recoverStalledWhatsAppWork } from "@/modules/whatsapp-assistant/recovery";
 
 /**
  * Drains due jobs and prunes expired guest-write rate-limit / idempotency rows. The sweep runs even
@@ -14,6 +15,8 @@ async function runScheduledWork() {
     await runDueJobs(jobHandlers);
   } finally {
     await sweepExpiredPublicWriteRecords().catch(() => console.error("Public write record sweep failed."));
+    // Independent of job health: WhatsApp messages stored but never answered are recovered here.
+    await recoverStalledWhatsAppWork().catch(() => console.error("WhatsApp assistant recovery sweep failed."));
   }
 }
 

@@ -1,14 +1,15 @@
 import { createMarketplaceProfessional, listUserMarketplaceProfessionals, submitMarketplaceVerification } from "@/modules/marketplace-professionals/service";
 import { db } from "@/platform/database/client";
 import { formatPhoneForDisplay, normalizePhone } from "@/platform/identity/phone";
-import { runOnce } from "../actions";
+import { runOnce, sinceStart } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { askField, askNextField, beginEdit, editOptions, handleFieldAnswer, SKIP_HINT, summaryLines, type FieldSpec, type FormData } from "../form";
-import { ensureUserForContact, findUserForContact } from "../identity";
+import { ensureUserForContact, linkedUser } from "../identity";
 import { normalize, parseEmail, parseList, parseYesNo } from "../nlu";
 import { referenceFor } from "../references";
 import { queueNotification, recordEvent } from "../store";
 import { createSupportRequest } from "./status";
+import { errorLabel } from "../log";
 
 /**
  * Real-estate business onboarding through WhatsApp. Every kind becomes a `MarketplaceProfessional`
@@ -246,7 +247,7 @@ async function startKind(ctx: Ctx, kind: string) {
   if (!(kind in BUSINESS_KINDS)) return chooseKind(ctx);
   const data = ctx.data<Data>();
   data.kind = kind as BusinessKind;
-  const user = await findUserForContact(ctx.contact);
+  const user = await linkedUser(ctx.contact);
   if (user) {
     const existing = await listUserMarketplaceProfessionals(user.id);
     if (existing.length) {
@@ -286,14 +287,22 @@ async function submit(ctx: Ctx) {
       await submitMarketplaceVerification(user.id, professional.id, { evidenceReferences: evidence });
     } catch (error) {
       // The profile exists; never re-create it. Reviewers can still decide on an UNVERIFIED profile.
-      console.error("[whatsapp-assistant] verification submission failed", { professionalId: professional.id, error: error instanceof Error ? error.message : "unknown" });
+      console.error("[whatsapp-assistant] verification submission failed", { professionalId: professional.id, error: errorLabel(error) });
     }
     return { id: professional.id };
+  }, async (startedAt) => {
+    // The person's own new profile with this name, created after the attempt started.
+    const found = await db.marketplaceProfessional.findFirst({
+      where: { createdByUserId: user.id, displayName: data.brandName ?? data.legalName!, createdAt: { gte: sinceStart(startedAt) } },
+      select: { id: true, verificationStatus: true },
+    });
+    if (!found) return null;
+    await db.marketplaceProfessional.update({ where: { id: found.id }, data: { sourceChannel: "WHATSAPP" } });
+    if (found.verificationStatus === "UNVERIFIED") {
+      await submitMarketplaceVerification(user.id, found.id, { evidenceReferences: [`Registered via NesAfric WhatsApp by ${personName} as: ${kind.title}`] }).catch(() => undefined);
+    }
+    return found.id;
   });
-  if (outcome.status === "in_doubt") {
-    ctx.say("I'm still confirming your earlier submission — please don't submit again. Reply *status* in a minute to check.");
-    return ctx.finish();
-  }
   if (!outcome.repeated) {
     await recordEvent("business_registered", ctx.contact.id, { kind: data.kind, professionalId: outcome.resultId });
     if (data.affiliationProfessionalId) await notifyAgencyOfAffiliationClaim(data.affiliationProfessionalId, personName, ctx.contact.id, outcome.resultId);

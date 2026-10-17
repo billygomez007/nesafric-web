@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+vi.mock("@/modules/messaging/otp-provider", async () => (await import("./helpers/fake-sms-otp")).fakeSmsOtpModule);
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/platform/database/client";
 import { registerUser } from "@/modules/identity/service";
@@ -10,7 +12,7 @@ import { jobHandlers } from "@/platform/jobs/handlers";
 import { getWhatsAppAssistantOverview, updateWhatsAppSupportRequest } from "@/modules/whatsapp-assistant/admin";
 import { createMarketplaceProfessional } from "@/modules/marketplace-professionals/service";
 import { createMarketplaceNativeListing } from "@/modules/listings/service";
-import { allText, configureAssistantEnv, converse, FakeGraphApi, optionIds, PNG, sign, webhookBody } from "./helpers/whatsapp-assistant";
+import { allText, answerSmsCode, configureAssistantEnv, converse, FakeGraphApi, optionIds, PNG, sign, webhookBody } from "./helpers/whatsapp-assistant";
 
 const PROVIDER = "233244444444";
 const CUSTOMER = "233245555555";
@@ -62,7 +64,8 @@ describe("WhatsApp assistant — service providers, reliability and security", (
     const confirm = await converse(api, CUSTOMER, { choice: `ss:quote:${provider.id}` });
     expect(allText(confirm)).toContain("My bathroom pipe is leaking");
     await converse(api, CUSTOMER, { choice: "sq:send" });
-    const sent = await converse(api, CUSTOMER, { text: "Efua Asante" });
+    expect(allText(await converse(api, CUSTOMER, { text: "Efua Asante" }))).toContain("6-digit code");
+    const sent = await answerSmsCode(api, CUSTOMER);
     expect(allText(sent)).toMatch(/NES-QT-[0-9A-F]{8}/);
     expect(allText(sent)).toMatch(/doesn't set their prices/);
     const enquiry = await db.marketplaceEnquiry.findFirstOrThrow({ include: { requestedBy: true } });
@@ -82,7 +85,8 @@ describe("WhatsApp assistant — service providers, reliability and security", (
     await converse(api, PROVIDER, { choice: "pr:phone:yes" });
     const review = await converse(api, PROVIDER, { text: "skip" });
     expect(allText(review)).toContain("Services: Plumbing Repairs, Water Tanks");
-    const saved = await converse(api, PROVIDER, { choice: "pr:submit" });
+    await converse(api, PROVIDER, { choice: "pr:submit" });
+    const saved = await answerSmsCode(api, PROVIDER);
     expect(allText(saved)).toMatch(/NES-SV-[0-9A-F]{8}/);
     expect(allText(saved)).toContain("Ghana Card");
 
@@ -182,7 +186,7 @@ describe("WhatsApp assistant — service providers, reliability and security", (
       listingAuthority: "OWNER_SELF",
     });
     api.take();
-    await notifyListingDecision(listing.id, "published");
+    await notifyListingDecision(listing.id, "published", null, "test-decision");
     expect(api.take()).toHaveLength(0);
     expect(await db.whatsAppAssistantEvent.count({ where: { name: "publication_not_visible" } })).toBe(1);
   });

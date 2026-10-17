@@ -5,7 +5,7 @@ import { createServiceProvider, submitProviderVerification } from "@/modules/pro
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
 import { formatPhoneForDisplay, normalizePhone } from "@/platform/identity/phone";
-import { runOnce } from "../actions";
+import { runOnce, sinceStart } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { askField, askNextField, beginEdit, editOptions, handleFieldAnswer, SKIP_HINT, summaryLines, type FieldSpec, type FormData } from "../form";
 import { ensureUserForContact } from "../identity";
@@ -14,6 +14,7 @@ import { detectCommand, parseEmail, parseList, parseLocation, parseYesNo, type P
 import { referenceFor } from "../references";
 import { matchServiceCategory, publicServiceCategories } from "../service-categories";
 import { recordEvent } from "../store";
+import { errorLabel } from "../log";
 
 /**
  * Service-provider onboarding through WhatsApp, using the same provider, marketplace-profile,
@@ -243,14 +244,17 @@ async function submit(ctx: Ctx) {
         serviceAreas: dedupeAreas(data.areas!).map((area) => ({ countryCode: "GH", region: area.region, city: area.city, district: area.area, label: area.label })),
       });
     } catch (error) {
-      console.error("[whatsapp-assistant] marketplace profile setup failed", { providerId: provider.id, error: error instanceof Error ? error.message : "unknown" });
+      console.error("[whatsapp-assistant] marketplace profile setup failed", { providerId: provider.id, error: errorLabel(error) });
     }
     return { id: provider.id };
+  }, async (startedAt) => {
+    const found = await db.serviceProvider.findFirst({
+      where: { administratorUserId: user.id, displayName: data.displayName!, createdAt: { gte: sinceStart(startedAt) } },
+      select: { id: true },
+    });
+    if (found) await db.serviceProvider.update({ where: { id: found.id }, data: { sourceChannel: "WHATSAPP" } });
+    return found?.id ?? null;
   });
-  if (outcome.status === "in_doubt") {
-    ctx.say("I'm still confirming your earlier submission — please don't submit again. Reply *status* in a minute to check.");
-    return ctx.finish();
-  }
   if (!outcome.repeated) await recordEvent("provider_registered", ctx.contact.id, { providerId: outcome.resultId, type: data.providerType });
   data.providerId = outcome.resultId;
   data.evidence = [];

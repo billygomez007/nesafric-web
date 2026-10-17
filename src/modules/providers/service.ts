@@ -1,3 +1,4 @@
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx } from "@/modules/whatsapp-assistant/notification-outbox";
 import { randomBytes } from "crypto";
 import {
   Prisma,
@@ -1255,6 +1256,7 @@ export async function reviewProviderIdentity(
       }
     }
 
+    await enqueueWhatsAppNotificationInTx(tx, { kind: "provider_identity", providerId, status: data.status, reason: data.reason ?? null, decisionKey: history.id });
     return {
       updated,
       historyId: history.id,
@@ -1282,8 +1284,7 @@ export async function reviewProviderIdentity(
       data.reason,
     );
   }
-  await import("@/modules/whatsapp-assistant/notifications").then(({ safely, notifyProviderIdentityDecision }) =>
-    safely("notifyProviderIdentityDecision", () => notifyProviderIdentityDecision(providerId, data.status, data.reason)));
+  await deliverWhatsAppNotificationNow({ kind: "provider_identity", providerId, status: data.status, reason: data.reason ?? null, decisionKey: result.historyId });
   return result.updated;
 }
 

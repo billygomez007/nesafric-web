@@ -82,6 +82,7 @@ CREATE TABLE "WhatsAppAssistantSession" (
     "data" JSONB NOT NULL DEFAULT '{}',
     "version" INTEGER NOT NULL DEFAULT 0,
     "lockedUntil" TIMESTAMP(3),
+    "leaseToken" TEXT,
     "lastActivityAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "completedWorkflows" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

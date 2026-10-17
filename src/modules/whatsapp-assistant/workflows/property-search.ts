@@ -4,6 +4,7 @@ import type { Ctx, StartSeed, Workflow } from "../context";
 import { coverImageUrl, listingCard, moneyText, type PublicListingCard } from "../format";
 import { categoryLabel, detectCommand, extractPropertyCriteria, isResidentialCategory, parseBudget, parseListingType, parseLocation, type PropertyCriteria } from "../nlu";
 import { recordEvent } from "../store";
+import { errorLabel } from "../log";
 
 const PAGE_SIZE = 3;
 
@@ -87,7 +88,7 @@ async function runSearch(ctx: Ctx, page = 1) {
     result = await searchPublicListings(searchQuery(data.criteria, page));
   } catch (error) {
     // A technical failure is never presented as "no properties".
-    console.error("[whatsapp-assistant] property search failed", { error: error instanceof Error ? error.message : "unknown" });
+    console.error("[whatsapp-assistant] property search failed", { error: errorLabel(error) });
     await recordEvent("property_search_error", ctx.contact.id, {});
     ctx.step("results");
     ctx.ask("Sorry — I couldn't reach our listings just now. That's a problem on our side, not a lack of properties. Please try again in a moment.", [

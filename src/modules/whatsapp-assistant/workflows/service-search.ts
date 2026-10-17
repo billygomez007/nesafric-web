@@ -1,7 +1,8 @@
 import { createMarketplaceEnquiry, discoverMarketplaceProviders, getPublicMarketplaceProvider } from "@/modules/marketplace/service";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { runOnce } from "../actions";
+import { runOnce, sinceStart } from "../actions";
+import { createHash } from "node:crypto";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { providerCard, providerUrl, type PublicProviderCard } from "../format";
 import { ensureUserForContact } from "../identity";
@@ -9,6 +10,7 @@ import { detectCommand, parseLocation, parseYesNo, type ParsedLocation } from ".
 import { referenceFor } from "../references";
 import { matchServiceCategory, POPULAR_CATEGORY_KEYS, publicServiceCategories, type ServiceCategoryOption } from "../service-categories";
 import { queueNotification, recordEvent } from "../store";
+import { errorLabel } from "../log";
 
 const PAGE_SIZE = 3;
 
@@ -54,7 +56,7 @@ async function runSearch(ctx: Ctx, page = 1) {
   try {
     result = await discoverMarketplaceProviders(searchQuery(data, page));
   } catch (error) {
-    console.error("[whatsapp-assistant] provider search failed", { error: error instanceof Error ? error.message : "unknown" });
+    console.error("[whatsapp-assistant] provider search failed", { error: errorLabel(error) });
     await recordEvent("service_search_error", ctx.contact.id, {});
     ctx.ask("Sorry — I couldn't reach our service directory just now. That's a problem on our side. Please try again shortly.", [{ id: "ss:retry", title: "Try again" }, { id: "menu", title: "Main menu" }]);
     return;
@@ -202,18 +204,19 @@ async function confirmQuote(ctx: Ctx) {
 async function sendQuote(ctx: Ctx) {
   const data = ctx.data<QuoteData>();
   const { user } = await ensureUserForContact(ctx.contact, data.name ?? ctx.contact.profileName ?? "");
+  // A short correlation tag in the request lets an interrupted attempt be reconciled exactly.
+  const tag = createHash("sha256").update(ctx.actionKey("service_enquiry")).digest("hex").slice(0, 10);
   const outcome = await runOnce(ctx.actionKey("service_enquiry"), ctx.contact.id, "service_enquiry", async () => {
     const enquiry = await createMarketplaceEnquiry(user.id, null, {
       providerId: data.providerId,
       categoryId: data.categoryId,
-      message: `${data.details}\n\n(Sent via NesAfric WhatsApp)`,
+      message: `${data.details}\n\n(Sent via NesAfric WhatsApp · ref ${tag})`,
     });
     return { id: enquiry.id };
-  });
-  if (outcome.status === "in_doubt") {
-    ctx.say("I'm still confirming your earlier request — please don't resend it. Reply *status* shortly to check.");
-    return ctx.finish();
-  }
+  }, async (startedAt) => (await db.marketplaceEnquiry.findFirst({
+    where: { requestedByUserId: user.id, providerId: data.providerId, message: { contains: `ref ${tag}` }, createdAt: { gte: sinceStart(startedAt) } },
+    select: { id: true },
+  }))?.id ?? null);
   await recordEvent("service_quote_requested", ctx.contact.id, { providerId: data.providerId });
   if (!outcome.repeated) await notifyProvider(data.providerId, outcome.resultId, data.details ?? "");
   ctx.say(`✅ Your request has been sent to *${data.providerName}*.\nReference: ${referenceFor("QT", outcome.resultId)}\n\nNesAfric doesn't set their prices — they'll reply with availability and a quote. Reply *status* anytime to check.`);

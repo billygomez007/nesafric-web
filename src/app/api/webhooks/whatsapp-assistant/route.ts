@@ -3,7 +3,7 @@ import { verifySubscription } from "@/modules/whatsapp-assistant/cloud-api";
 import { whatsAppAssistantConfig } from "@/modules/whatsapp-assistant/config";
 import { ingestWebhook } from "@/modules/whatsapp-assistant/ingest";
 import { processContact } from "@/modules/whatsapp-assistant/processor";
-import { errorResponse } from "@/platform/errors";
+import { errorLabel } from "@/modules/whatsapp-assistant/log";
 
 /**
  * NesAfric's platform WhatsApp number (WhatsApp Cloud API). Distinct from the per-organisation
@@ -22,18 +22,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const result = await ingestWebhook(await request.text(), request.headers.get("x-hub-signature-256"));
+    // The signature covers the exact bytes Meta sent, so verify those, not re-encoded text.
+    const result = await ingestWebhook(Buffer.from(await request.arrayBuffer()), request.headers.get("x-hub-signature-256"));
     if (!result.ok) return NextResponse.json({ error: result.reason }, { status: result.status });
-    // Acknowledge now; reply after the response. A durable job retries anything this misses.
+    // Acknowledge only after the messages and their processing jobs are committed (above). Replying
+    // after the response is an acceleration: if it never runs, the job and the recovery sweep in
+    // /api/jobs/run (and `npm run worker`) process the stored messages.
     after(async () => {
       for (const contactId of result.contactIds) {
         await processContact(contactId).catch((error) => {
-          console.error("[whatsapp-assistant] immediate processing failed; the retry job will pick it up", { error: error instanceof Error ? error.message : "unknown" });
+          console.error("[whatsapp-assistant] immediate processing failed; the retry job will pick it up", { error: errorLabel(error) });
         });
       }
     });
     return NextResponse.json({ received: true, stored: result.stored, duplicates: result.duplicates });
   } catch (error) {
-    return errorResponse(error);
+    // Not `errorResponse`: it logs the raw error, which could include message content. A 500 makes
+    // Meta redeliver, and the duplicate is handled idempotently.
+    console.error("[whatsapp-assistant] webhook ingestion failed", { error: errorLabel(error) });
+    return NextResponse.json({ error: "Internal error." }, { status: 500 });
   }
 }

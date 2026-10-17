@@ -1,10 +1,12 @@
+import { vi } from "vitest";
+vi.mock("@/modules/messaging/otp-provider", async () => (await import("./helpers/fake-sms-otp")).fakeSmsOtpModule);
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/platform/database/client";
 import { registerUser } from "@/modules/identity/service";
 import { createMarketplaceProfessional, reviewMarketplaceVerification } from "@/modules/marketplace-professionals/service";
 import { requestListingChangesForPlatform, verifyAndPublishListingForPlatform } from "@/modules/platform-admin/service";
 import { getPublicListing } from "@/modules/listings/service";
-import { allText, configureAssistantEnv, converse, FakeGraphApi, optionIds, PNG, textOf } from "./helpers/whatsapp-assistant";
+import { allText, answerSmsCode, configureAssistantEnv, converse, FakeGraphApi, optionIds, PNG, textOf } from "./helpers/whatsapp-assistant";
 
 /**
  * Business journeys on the NesAfric WhatsApp assistant: registration, conversational listing
@@ -35,7 +37,9 @@ async function registerAgent(api: FakeGraphApi, from: string, name = "Kwame Mens
   await converse(api, from, { text: "residential rentals, land" });
   await converse(api, from, { text: "skip" });
   const review = await converse(api, from, { text: "skip" });
-  return { review, submitted: await converse(api, from, { choice: "br:submit" }) };
+  const prompt = await converse(api, from, { choice: "br:submit" });
+  if (!allText(prompt).includes("6-digit code")) throw new Error(`expected an SMS code prompt, got: ${allText(prompt)}`);
+  return { review, submitted: await answerSmsCode(api, from) };
 }
 
 /** Walks the listing conversation up to the photo step. */
@@ -94,7 +98,9 @@ describe("WhatsApp assistant — business journeys", () => {
     await converse(api, AGENT, { text: "We help families and businesses find property across Greater Accra." });
     const review = await converse(api, AGENT, { text: "goldenkey.example" });
     expect(allText(review)).toContain("Registered name: Golden Key Realty Limited");
-    const submitted = await converse(api, AGENT, { choice: "br:submit" });
+    expect(allText(await converse(api, AGENT, { choice: "br:submit" }))).toContain("6-digit code");
+    expect(await db.marketplaceProfessional.count()).toBe(0); // nothing is created before the code
+    const submitted = await answerSmsCode(api, AGENT);
     expect(allText(submitted)).toMatch(/NES-AG-/);
     const agency = await db.marketplaceProfessional.findFirstOrThrow();
     expect(agency).toMatchObject({ type: "BROKERAGE", displayName: "Golden Key", legalName: "Golden Key Realty Limited", verificationStatus: "PENDING", contactEmail: "hello@goldenkey.example" });
@@ -222,10 +228,21 @@ describe("WhatsApp assistant — business journeys", () => {
     await converse(api, AGENT, { text: "skip" });
     const review = await converse(api, AGENT, { text: "prime homes" });
     expect(allText(review)).toContain("Agency: prime homes (on NesAfric — they must confirm you)");
-    const submitted = await converse(api, AGENT, { choice: "br:submit" });
+    await converse(api, AGENT, { choice: "br:submit" });
+    const submitted = await answerSmsCode(api, AGENT);
     expect(allText(submitted)).toContain("only after their administrators add you to their team");
     const agent = await db.user.findUniqueOrThrow({ where: { phoneE164: "+233242222222" } });
     expect(await db.marketplaceProfessionalMember.count({ where: { marketplaceProfessionalId: agency.id, userId: agent.id } })).toBe(0);
     expect(await db.whatsAppSupportRequest.count({ where: { topic: "agent_affiliation" } })).toBe(1);
+  });
+
+  it("replays a typed choice (\"1\" = Submit) after the SMS code, exactly once", async () => {
+    await converse(api, AGENT, { text: "register as an agent" });
+    for (const step of [{ text: "Esi Agent" }, { text: "yes" }, { text: "skip" }, { text: "Osu" }, { text: "rentals" }, { text: "skip" }, { text: "skip" }] as const) await converse(api, AGENT, step as never);
+    expect(allText(await converse(api, AGENT, { text: "1" }))).toContain("6-digit code");
+    const done = await answerSmsCode(api, AGENT);
+    expect(allText(done)).toMatch(/NES-AG-/);
+    expect(await db.marketplaceProfessional.count()).toBe(1);
+    expect((await db.marketplaceProfessional.findFirstOrThrow()).displayName).toBe("Esi Agent");
   });
 });

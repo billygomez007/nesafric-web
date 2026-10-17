@@ -1,3 +1,4 @@
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx } from "@/modules/whatsapp-assistant/notification-outbox";
 import type { z } from "zod";
 import { ensureListingCover, lockListingMedia } from "./cover";
 import { isBookableCategory } from "@/lib/listing-categories";
@@ -1877,6 +1878,11 @@ export async function updateViewingRequest(
         });
       }
     }
+    // Customers who asked on WhatsApp hear about confirmations/changes there (transactional outbox).
+    const whatsappLead = data.status ? await tx.marketplaceLead.findFirst({ where: { id: updated.leadId, source: "whatsapp" }, select: { id: true } }) : null;
+    if (whatsappLead && data.status) {
+      await enqueueWhatsAppNotificationInTx(tx, { kind: "viewing_update", viewingRequestId: updated.id, decisionKey: `${updated.id}:${updated.status}:${updated.updatedAt.getTime()}` });
+    }
     return updated;
   }).then(async (updated) => {
     // Best-effort calendar sync (item 6): never let a calendar problem block viewing scheduling itself.
@@ -1900,8 +1906,7 @@ export async function updateViewingRequest(
       }
     }
     if (data.status) {
-      await import("@/modules/whatsapp-assistant/notifications").then(({ safely, notifyViewingUpdate }) =>
-        safely("notifyViewingUpdate", () => notifyViewingUpdate(updated.id)));
+      await deliverWhatsAppNotificationNow({ kind: "viewing_update", viewingRequestId: updated.id, decisionKey: `${updated.id}:${updated.status}:${updated.updatedAt.getTime()}` });
     }
     return updated;
   });

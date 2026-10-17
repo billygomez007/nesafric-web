@@ -1,53 +1,77 @@
-import { Prisma } from "@/platform/database/generated/client";
+import { requestOtp, verifyOtp } from "@/modules/identity/otp";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
 import { normalizePhone } from "@/platform/identity/phone";
 import type { ContactRow } from "./store";
 
 /**
- * Links a WhatsApp contact to a NesAfric `User`, only when a workflow genuinely needs an account
- * (registering a business, listing a property, requesting a service quote).
+ * Links a WhatsApp contact to a NesAfric `User` only after the person proves control of the
+ * number with the same SMS one-time code the website's sign-in uses (`requestOtp`/`verifyOtp`,
+ * with its rate limits and attempt limits). Neither the sender's WhatsApp id nor any number typed
+ * in a message is ever enough on its own:
+ * - an existing account whose verified phone is this number is linked only after the code;
+ * - otherwise a new account is created by `verifyOtp` with the number verified by that code,
+ *   preserving the invariant that `User.phoneE164` is set only once verified by SMS.
  *
- * A message that arrives on Meta's signature-verified webhook from `wa_id` proves the sender
- * controls that phone number — the same proof the website's SMS one-time code gives. So:
- * - an existing account whose verified phone is this number is linked to the contact;
- * - otherwise a new account is created with this number as its verified phone.
- *
- * The link never grants anything by itself: organisation, marketplace-team and provider
- * permissions are still checked by every domain service, and platform-administration access exists
- * only through `PlatformPrincipal`, which nothing here reads or writes.
+ * Accounts with platform-administration access are never linked: staff use the website. A link
+ * grants nothing else by itself — every marketplace, provider and organisation action still goes
+ * through the domain services' own permission checks.
  */
+
+/** Thrown by a workflow step that needs an account the contact hasn't verified yet. */
+export class AccountVerificationRequired extends Error {
+  constructor(readonly displayName: string) {
+    super("Account verification is required.");
+    this.name = "AccountVerificationRequired";
+  }
+}
+
+export function contactPhone(contact: Pick<ContactRow, "phoneE164" | "waId">) {
+  return contact.phoneE164 ?? normalizePhone(`+${contact.waId}`);
+}
+
+/** The account this contact has verified, if any. Never inferred from a phone-number match. */
 export async function linkedUser(contact: ContactRow) {
   if (!contact.userId) return null;
   return db.user.findUnique({ where: { id: contact.userId } });
 }
 
-export async function findUserForContact(contact: ContactRow) {
-  const linked = await linkedUser(contact);
-  if (linked) return linked;
-  const phone = contact.phoneE164 ?? normalizePhone(`+${contact.waId}`);
-  if (!phone) return null;
-  const existing = await db.user.findUnique({ where: { phoneE164: phone } });
-  if (!existing) return null;
-  await db.whatsAppContact.update({ where: { id: contact.id }, data: { userId: existing.id } });
-  contact.userId = existing.id;
-  return existing;
+/** The verified account for this contact, or `AccountVerificationRequired` so the engine can ask for the code. */
+export async function ensureUserForContact(contact: ContactRow, displayName: string) {
+  const user = await linkedUser(contact);
+  if (user) return { user };
+  throw new AccountVerificationRequired(displayName.trim() || contact.profileName?.trim() || "NesAfric user");
 }
 
-export async function ensureUserForContact(contact: ContactRow, displayName: string) {
-  const found = await findUserForContact(contact);
-  if (found) return { user: found, created: false };
-  const phone = contact.phoneE164 ?? normalizePhone(`+${contact.waId}`);
-  if (!phone) throw new AppError("WHATSAPP_PHONE_UNSUPPORTED", 422, "This WhatsApp number cannot be used to create a NesAfric account.");
-  const name = displayName.trim().slice(0, 160) || contact.profileName?.trim() || "NesAfric user";
-  let user;
-  try {
-    user = await db.user.create({ data: { phoneE164: phone, phoneVerifiedAt: new Date(), displayName: name } });
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
-    user = await db.user.findUniqueOrThrow({ where: { phoneE164: phone } });
+/** Sends the SMS code to the WhatsApp number. Rate limits and provider availability are the website's. */
+export async function startAccountVerification(contact: ContactRow) {
+  const phone = contactPhone(contact);
+  if (!phone) throw new AppError("WHATSAPP_PHONE_UNSUPPORTED", 422, "This WhatsApp number can't be used for a NesAfric account.");
+  return requestOtp({ mode: "register", channel: "sms", identifier: phone });
+}
+
+/** Checks the code and links the contact to the (existing or newly created) account it proves. */
+export async function completeAccountVerification(contact: ContactRow, input: { challengeId: string; code: string; displayName: string }) {
+  const phone = contactPhone(contact);
+  if (!phone) throw new AppError("WHATSAPP_PHONE_UNSUPPORTED", 422, "This WhatsApp number can't be used for a NesAfric account.");
+  const { user, created } = await verifyOtp({
+    challengeId: input.challengeId,
+    channel: "sms",
+    identifier: phone,
+    code: input.code,
+    displayName: input.displayName.slice(0, 100).padEnd(2, "."),
+  });
+  const principal = await db.platformPrincipal.findUnique({ where: { userId: user.id }, select: { status: true } });
+  if (principal) {
+    throw new AppError("WHATSAPP_STAFF_ACCOUNT", 403, "This number belongs to a NesAfric staff account, which can't be used on WhatsApp. Please use the website.");
   }
   await db.whatsAppContact.update({ where: { id: contact.id }, data: { userId: user.id } });
   contact.userId = user.id;
-  return { user, created: true };
+  return { user, created };
+}
+
+/** Whether a NesAfric account already uses this number (used only to word an invitation to link it). */
+export async function accountExistsForContact(contact: ContactRow) {
+  const phone = contactPhone(contact);
+  return phone ? Boolean(await db.user.findUnique({ where: { phoneE164: phone }, select: { id: true } })) : false;
 }
