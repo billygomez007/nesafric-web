@@ -1282,6 +1282,8 @@ export async function reviewProviderIdentity(
       data.reason,
     );
   }
+  await import("@/modules/whatsapp-assistant/notifications").then(({ safely, notifyProviderIdentityDecision }) =>
+    safely("notifyProviderIdentityDecision", () => notifyProviderIdentityDecision(providerId, data.status, data.reason)));
   return result.updated;
 }
 

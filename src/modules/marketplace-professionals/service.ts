@@ -294,7 +294,7 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
   if (verificationReasonRequired(data.status) && !data.reason) {
     throw new AppError("REASON_REQUIRED", 422, data.status === "REJECTED" ? "Enter a reason for rejecting this verification." : "Enter a reason for suspending this verification.");
   }
-  return db.$transaction(async (tx) => {
+  const reviewed = await db.$transaction(async (tx) => {
     const changed = await tx.marketplaceProfessional.updateMany({ where: { id: marketplaceProfessionalId, verificationStatus: from }, data: { verificationStatus: data.status } });
     if (changed.count !== 1) throw verificationChanged();
     await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: from, toStatus: data.status, actorUserId: principal.userId, reason: data.reason } });
@@ -307,6 +307,9 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
     });
     return tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
   });
+  await import("@/modules/whatsapp-assistant/notifications").then(({ safely, notifyProfessionalVerification }) =>
+    safely("notifyProfessionalVerification", () => notifyProfessionalVerification(marketplaceProfessionalId, data.status, data.reason)));
+  return reviewed;
 }
 
 const verificationChanged = () =>

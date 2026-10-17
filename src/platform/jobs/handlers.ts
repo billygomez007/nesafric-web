@@ -8,6 +8,8 @@ import { deliverConversationMessage } from "@/modules/conversations/service";
 import { defaultChannelAdapters, ChannelAdapters } from "@/modules/conversations/channels/registry";
 import { syncCalendarEventJob } from "@/modules/calendar/service";
 import { sendAccountEmail, type AccountEmailPayload } from "@/modules/account-emails/service";
+import { processContact } from "@/modules/whatsapp-assistant/processor";
+import { flushOutbound, INBOUND_JOB, OUTBOUND_JOB } from "@/modules/whatsapp-assistant/store";
 
 export function createJobHandlers(notificationProviders: NotificationProviders = defaultNotificationProviders, channelAdapters: ChannelAdapters = defaultChannelAdapters) {
   return {
@@ -34,6 +36,12 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   },
   "account-email": async (payload: Record<string, unknown>) => {
     await sendAccountEmail(payload as unknown as AccountEmailPayload);
+  },
+  [INBOUND_JOB]: async (payload: Record<string, unknown>) => {
+    await processContact(String(payload.contactId), { throwIfBusy: true });
+  },
+  [OUTBOUND_JOB]: async (payload: Record<string, unknown>) => {
+    await flushOutbound(String(payload.contactId));
   },
   };
 }

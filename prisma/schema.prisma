@@ -909,6 +909,7 @@ model User {
   authOtpChallenges                  AuthOtpChallenge[]
   marketplaceTopAdsCreated           MarketplaceTopAd[]                         @relation("MarketplaceTopAdCreator")
   marketplaceTopAdsUpdated           MarketplaceTopAd[]                         @relation("MarketplaceTopAdUpdater")
+  whatsAppContacts                   WhatsAppContact[]                          @relation("WhatsAppContactUser")
 }
 
 model Session {
@@ -2697,6 +2698,8 @@ model ServiceProvider {
   /// `SERVICE_PROVIDER_LOGO` upload target by the provider's owner; never a free-form URL. Public
   /// payloads render it only while the object is PUBLIC and not archived.
   logoStorageObjectId        String?                       @db.Uuid
+  /// Entry point that created the provider: null for the website/app, "WHATSAPP" for the assistant.
+  sourceChannel              String?
   createdAt                  DateTime                      @default(now())
   updatedAt                  DateTime                      @updatedAt
   archivedAt                 DateTime?
@@ -3243,6 +3246,8 @@ model Listing {
   /// `Property`/`Unit` above.
   developmentId               String?                       @db.Uuid
   developmentUnitId           String?                       @db.Uuid
+  /// Entry point that created the listing: null for the website/app, "WHATSAPP" for the assistant.
+  sourceChannel               String?
   submittedAt                 DateTime?
   publishedAt                 DateTime?
   pausedAt                    DateTime?
@@ -5067,6 +5072,8 @@ model MarketplaceProfessional {
   /// Evidence *references* only (item 1's "verification evidence readiness") — no file storage
   /// integration in this foundation phase, matching how Phase 8 provider evidence started.
   verificationEvidenceReferences String[]
+  /// Entry point that created the profile: null for the website/app, "WHATSAPP" for the assistant.
+  sourceChannel                  String?
   createdByUserId                String                        @db.Uuid
   createdAt                      DateTime                      @default(now())
   updatedAt                      DateTime                      @updatedAt
@@ -6045,4 +6052,181 @@ model AccommodationBooking {
   @@index([organisationId, status, createdAt])
   @@index([listingId, createdAt])
   @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------------------------
+// NesAfric WhatsApp assistant (platform-level). One NesAfric WhatsApp Business number serves the
+// public: customers, agents, agencies, landlords and service providers. These tables hold only the
+// conversation transport and workflow state; every business record (listings, professionals,
+// providers, leads, viewings, enquiries) is created through the existing domain services and lives
+// in the existing tables. See docs/whatsapp-assistant.md.
+// ---------------------------------------------------------------------------------------------
+
+enum WhatsAppInboundStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum WhatsAppOutboundStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
+enum WhatsAppActionStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+enum WhatsAppSupportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+/// One WhatsApp identity (Meta `wa_id`). `userId` links it to a NesAfric `User` only once a
+/// workflow needs an account; the link is by the WhatsApp-proven phone number and never grants
+/// platform-administration access (that remains `PlatformPrincipal`-only).
+model WhatsAppContact {
+  id              String                    @id @default(uuid()) @db.Uuid
+  waId            String                    @unique
+  phoneE164       String?
+  profileName     String?
+  userId          String?                   @db.Uuid
+  /// Last inbound message: WhatsApp allows free-form replies for 24 hours after it.
+  lastInboundAt   DateTime?
+  /// The person replied STOP: only replies to their own messages are sent, never notifications.
+  optedOutAt      DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  user            User?                     @relation("WhatsAppContactUser", fields: [userId], references: [id], onDelete: SetNull)
+  session         WhatsAppAssistantSession?
+  inbound         WhatsAppInboundMessage[]
+  outbound        WhatsAppOutboundMessage[]
+  supportRequests WhatsAppSupportRequest[]
+
+  @@index([userId])
+  @@index([phoneE164])
+}
+
+/// Every inbound webhook message, deduplicated by Meta's message id. Processing is driven from
+/// these rows, so a server restart or a failed reply never loses a customer's message.
+model WhatsAppInboundMessage {
+  id          String                @id @default(uuid()) @db.Uuid
+  waMessageId String                @unique
+  contactId   String                @db.Uuid
+  type        String
+  text        String?
+  /// Normalised, non-secret message content (interactive reply ids, media id/mime, location).
+  content     Json
+  status      WhatsAppInboundStatus @default(RECEIVED)
+  attempts    Int                   @default(0)
+  lastError   String?
+  sentAt      DateTime
+  receivedAt  DateTime              @default(now())
+  processedAt DateTime?
+  contact     WhatsAppContact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, status, sentAt])
+  @@index([status, receivedAt])
+}
+
+/// Every reply and notification. `idempotencyKey` guarantees a retried step never sends twice;
+/// re-sending a FAILED row never re-runs the business step that produced it.
+model WhatsAppOutboundMessage {
+  id                String                 @id @default(uuid()) @db.Uuid
+  contactId         String                 @db.Uuid
+  idempotencyKey    String                 @unique
+  kind              String
+  payload           Json
+  status            WhatsAppOutboundStatus @default(QUEUED)
+  providerMessageId String?                @unique
+  attempts          Int                    @default(0)
+  lastError         String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  contact           WhatsAppContact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt])
+  @@index([status, createdAt])
+}
+
+/// Durable, resumable workflow state: one per contact. `lockedUntil` is a short processing lease
+/// so messages from one person are handled strictly in order, one at a time.
+model WhatsAppAssistantSession {
+  id                 String          @id @default(uuid()) @db.Uuid
+  contactId          String          @unique @db.Uuid
+  workflow           String?
+  step               String?
+  data               Json            @default("{}")
+  version            Int             @default(0)
+  lockedUntil        DateTime?
+  lastActivityAt     DateTime        @default(now())
+  completedWorkflows Int             @default(0)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  contact            WhatsAppContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([workflow, lastActivityAt])
+}
+
+/// At-most-once guard for irreversible business actions (create a listing, submit a
+/// registration). A STARTED row that never completed is surfaced to support instead of retried.
+model WhatsAppAction {
+  id          String               @id @default(uuid()) @db.Uuid
+  actionKey   String               @unique
+  contactId   String               @db.Uuid
+  kind        String
+  status      WhatsAppActionStatus @default(STARTED)
+  resultId    String?
+  error       String?
+  createdAt   DateTime             @default(now())
+  completedAt DateTime?
+
+  @@index([contactId, createdAt])
+  @@index([status, createdAt])
+}
+
+/// "Talk to support" requests and workflow items that need a person.
+model WhatsAppSupportRequest {
+  id               String                @id @default(uuid()) @db.Uuid
+  reference        String                @unique
+  contactId        String                @db.Uuid
+  userId           String?               @db.Uuid
+  topic            String
+  summary          String
+  workflow         String?
+  status           WhatsAppSupportStatus @default(OPEN)
+  resolutionNote   String?
+  resolvedByUserId String?               @db.Uuid
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  resolvedAt       DateTime?
+  contact          WhatsAppContact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+/// Append-only analytics events for the assistant (search run, zero results, workflow started /
+/// completed, media failed…). Dashboard metrics are counts over these real events only.
+model WhatsAppAssistantEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  contactId  String?  @db.Uuid
+  name       String
+  properties Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@index([createdAt])
 }

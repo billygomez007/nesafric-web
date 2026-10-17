@@ -48,6 +48,13 @@ audit log. The script only ever creates records — it never deletes or modifies
 and is safe to rerun: if the demo organisation already exists, it exits as a no-op instead of
 creating duplicates.
 
+## WhatsApp assistant
+
+NesAfric's own WhatsApp number lets customers search properties and service providers, and lets
+agents, agencies, landlords and service providers register and submit listings, all through the
+existing services. It is off unless `WHATSAPP_ASSISTANT_ENABLED="true"`. Setup, architecture and
+limitations: `docs/whatsapp-assistant.md`.
+
 ## Database and security
 
 Migrations are committed under `prisma/migrations`; production uses `npm run db:deploy`, never `db push`. Monetary values must use integer minor units plus an ISO-4217 currency code when financial domains are added. Timestamps are stored in UTC.

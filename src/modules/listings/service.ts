@@ -1213,6 +1213,14 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   if (region) conditions.push(Prisma.sql`lower(l."region") = lower(${region})`);
   if (filters.city) conditions.push(Prisma.sql`lower(l."city") = lower(${filters.city})`);
   if (filters.district) conditions.push(Prisma.sql`lower(l."district") = lower(${filters.district})`);
+  if (filters.area) {
+    const pattern = `%${filters.area.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+    conditions.push(Prisma.sql`(
+      l."locality" ILIKE ${pattern} OR l."district" ILIKE ${pattern} OR l."city" ILIKE ${pattern}
+      OR l."publicLocationLabel" ILIKE ${pattern}
+    )`);
+  }
+  if (filters.furnishing) conditions.push(Prisma.sql`l."furnishing" = ${filters.furnishing}`);
   for (const amenity of [...new Set(filters.amenities ?? [])]) {
     conditions.push(Prisma.sql`EXISTS (
       SELECT 1 FROM "ListingAmenity" amenity
@@ -1890,6 +1898,10 @@ export async function updateViewingRequest(
       } catch (error) {
         console.error("Calendar sync failed for viewing confirmation", error);
       }
+    }
+    if (data.status) {
+      await import("@/modules/whatsapp-assistant/notifications").then(({ safely, notifyViewingUpdate }) =>
+        safely("notifyViewingUpdate", () => notifyViewingUpdate(updated.id)));
     }
     return updated;
   });
