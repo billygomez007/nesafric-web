@@ -69,59 +69,80 @@ Customers who only search, ask about a listing or request a viewing never need a
 | Duplicates | Unique Meta message id; a redelivery of a still-pending message re-arms its job | concurrent duplicates, redelivery after lost ack |
 | Ordering & concurrency | Per-contact lease; messages processed oldest-first | 5-message burst under 5 concurrent workers |
 | Stale workers | Lease **fencing token**: claim, extend, release and commit are all conditional on it; a worker that stalled past its lease commits nothing | stalled-worker test (replacement's result stands, one reply set) |
-| Irreversible actions | `runOnce` keyed by the triggering message. In-flight attempt (< 5 min) → message deferred 2 min without spending an attempt. Older `STARTED` attempt → reconciled against real records: found → completed (no duplicate); provably absent → re-run (no permanent suppression) | guard unit tests + in-doubt e2e |
+| Irreversible actions | Exact action binding: `WhatsAppAction.actionKey` (UNIQUE, `<kind>:<inbound message id>`) inserted **inside the business record's own transaction**, with the step's follow-up writes. After any exception the binding is read back: present → the record committed and is returned; absent → nothing committed, retried under the same key. Competing/stale attempts fail on the unique key and roll back entirely | `postgres-whatsapp-action-idempotency` (fault injection) |
 | Repeated failures | 3 attempts → honest apology, progress kept, support request opened; attempts exhausted by crashes are escalated the same way | existing tests |
 | Business-rule refusals | A 4xx from a domain service (permission revoked, record gone, invalid state) answers from the pre-step state; not retried | revoked-membership test |
 
-**Reconciliation keys.** Leads and viewings: exact (`Idempotency` binding stored with the row).
-Service requests: exact (a `ref` tag in the message). Registrations, provider profiles and listing
-drafts: the same actor + the same name/title, created after the attempt started (30 s clock margin);
-listing submission: the listing reached `PENDING_REVIEW` after the attempt started. The 5-minute
-staleness threshold assumes no worker runs longer than the 2-minute lease plus the 60-second
-request limit; a self-hosted `npm run worker` with a stuck DB call longer than that could in
-principle complete after reconciliation — bounded by Prisma's 30 s transaction timeouts.
+### Business actions: exact bindings
 
-### Outbound sends and ambiguous outcomes
+An exception is never taken to mean "nothing happened". Every creation started from WhatsApp runs
+through `runOnce(key, contact, kind, perform)` (`actions.ts`):
 
-Replies and notifications are idempotent rows sent strictly in order per contact.
+1. If a binding for `key` exists, its `resultId` is returned and nothing runs.
+2. Otherwise the existing domain service runs with its normal permission checks and an
+   `inTransaction` hook. The hook inserts the binding and the workflow's follow-up writes in the
+   **same transaction** as the record, so the record, its follow-ups and its binding commit or roll
+   back together. Email and WhatsApp notifications are queued in that transaction too (outbox).
+3. On any exception the binding is read back. Present → committed (e.g. the acknowledgement was
+   lost) → the original record is returned. Absent → the transaction rolled back → the original
+   error is rethrown; a 4xx refusal is answered, anything else is retried under the same key.
+4. Bindings are insert-only. A competing or stale attempt that also created a record fails on the
+   unique key; its whole transaction (record included) rolls back and it returns the winner's
+   record. No result is ever overwritten. Nothing depends on names, titles or timestamps.
 
-- **Success** → `SENT` (then `DELIVERED`/`READ` from status webhooks, which never move backwards).
-- **Permanent failure** (4xx, non-retryable Meta codes, e.g. 131047 outside window) → `FAILED`, recorded, never retried.
-- **Retryable failure** (429, 5xx, network, timeout) → stays `QUEUED`, retried with backoff (30 s × 2ⁿ, up to 5 attempts); later messages wait so nothing overtakes.
-- **Ambiguous** (timeout, dropped connection, 5xx — Meta may already have accepted it) → labelled `AMBIGUOUS…` in `lastError` and **retried anyway**. Policy: a possible duplicate informational message is preferable to a lost confirmation or reference number. Retrying a send never re-runs the business step that produced it.
+A re-processed SMS-code message whose earlier attempt already linked the account does not ask for
+the spent code again; its replay runs under the same message id, hence the same action keys.
 
-### Notifications and the 24-hour window
+**Call-site audit** (every `runOnce` and every write a step makes around it):
 
-Review decisions (listing published / changes requested / rejected; business verified / rejected /
-suspended; provider identity decided) and viewing confirmations write a notification job **in the
-same transaction** as the decision. It can't roll the decision back (duplicates are skipped) and
-can't vanish after commit: it is delivered immediately after commit, and the job runner retries it
-if that fails or never happens. "Your listing is live" is only sent after the public-eligibility
-check confirms visibility.
+| Step | Key | Record + same-transaction follow-ups | Writes outside the binding |
+| --- | --- | --- | --- |
+| Business registration | `business_registration:<msg>` | Professional + backing organisation + membership (one transaction), `sourceChannel`, verification submission (`PENDING` + evidence), onboarding email, `business_registered` event, affiliation support request + `affiliation_claim` outbox job | Immediate delivery of the queued job (retried by the job runner) |
+| Provider organisation (company) | `provider_registration:<msg>:organisation` | Organisation, owner membership, trial subscription, onboarding email | — |
+| Provider registration | `provider_registration:<msg>` | Provider, `sourceChannel`, unlisted marketplace profile (categories/areas), onboarding email, `provider_registered` event | — |
+| Provider document / logo | `provider_evidence:<msg>`, `provider_logo:<msg>` | Storage object + evidence/logo row | Object-store write precedes the transaction; bytes are deleted only if no row references them |
+| Listing draft | `listing_draft:<msg>` | Asset + listing + history + audit, `sourceChannel`, `listing_draft_created` event | — |
+| Listing photo | `listing_photo:<msg>` | Storage object + media + cover, `listing_photo_saved` event | As for documents |
+| Listing submission | `listing_submit:<msg>` | Verification evidence + `PENDING_REVIEW` transition, `listing_submitted` event | Saving pending edits beforehand is an idempotent overwrite of the same listing |
+| Property inquiry | `lead:<msg>` | Lead + history + activity + audit + domain event, owner email, `property_inquiry_created` event | — |
+| Viewing request | `viewing:<msg>` | Viewing + lead status change + audit, assignee email, `viewing_requested` event | — |
+| Service request | `service_enquiry:<msg>` | Enquiry + history, `service_quote_requested` event, `provider_enquiry` outbox job | Immediate delivery of the queued job |
+| Support request / escalation | `support_request:<msg>`, `support_escalation:<msg>` | Support request (+ `support_requested` event) | — |
 
-Outside the 24-hour customer-service window:
+Not bound (state changes that are naturally idempotent or guarded by state): editing a listing
+(overwrite), pausing/closing a listing (state-machine transition), submitting provider verification
+(`INVALID_VERIFICATION_STATE` on a repeat is treated as done), linking the account (a re-processed
+code message finds the link and continues).
 
-- with `WHATSAPP_STATUS_TEMPLATE_NAME` set → sent as that approved template (one body variable);
-- without it → recorded as `SKIPPED` with reason `OUTSIDE_WINDOW: …` and **automatically released** (sent first) the next time the person messages, if within 7 days; visible in the admin outbound counts;
-- opted-out contacts (`stop`) → `SKIPPED` with `OPTED_OUT: …`, never released — this applies to staff support replies too. Replies to the person's own messages are always sent.
+## Data retention
 
-## Security model (summary)
+`retention.ts`, run by `/api/jobs/run` and `npm run worker` after the recovery sweep. **Off unless
+`WHATSAPP_RETENTION_ENABLED="true"`.** Proposed defaults (all configurable; an invalid combination
+disables the run and logs why, it never purges with an unsafe policy):
 
-- Account linking needs the SMS code (above); staff accounts can't be linked.
-- Every action goes through the domain services' own permission checks at execution time, including resumed workflows (a revoked membership is refused and the workflow ends).
-- Another agency's listings are never shown or editable, even with forged option ids.
-- No WhatsApp step can publish; only platform reviewers can (the service also refuses).
-- AI output is limited to a closed intent enum and listing copy that is schema-validated and fact-checked; it can't select a user, organisation, record or action.
-- Media: the access token is only sent to `https` Meta media hosts (`WHATSAPP_MEDIA_HOSTS`), redirects are refused, downloads are time-limited and streamed with a hard byte cap; then the existing upload pipeline sniffs content, applies type/size rules, scans for malware and stores privately or publicly by target. Identity documents are `PRIVATE`, have no URL, and the storage route requires a valid signed token.
-- Logs carry only error class/code and ids (`log.ts`, guarded by a test); the webhook route does not use the generic error logger.
-- Admin views mask phone numbers and never list message bodies; support replies need `whatsapp_support.manage` and are audited.
+| Setting | Default | Scope |
+| --- | --- | --- |
+| `WHATSAPP_RETENTION_CONTENT_DAYS` | 30 (min 8) | Redact processed/failed/ignored inbound `text` and `content`, and finished outbound `payload`. `waMessageId` / `idempotencyKey` are kept, so webhook redeliveries and replies stay deduplicated |
+| `WHATSAPP_RETENTION_DELETE_DAYS` | 180 (≥ content) | Delete those rows. Never `RECEIVED`/`PROCESSING` inbound or `QUEUED` outbound |
+| `WHATSAPP_RETENTION_ABANDONED_WORKFLOW_DAYS` | 60 | Clear workflow state (answers in progress, pending verification) of sessions inactive that long, unleased and with no pending message. Business records already created are untouched |
+| `WHATSAPP_RETENTION_EVENT_DAYS` | 400 | Delete analytics events (dashboard covers 30 days) |
+| `WHATSAPP_RETENTION_SUPPORT_DAYS` | 365 | Delete `RESOLVED` support requests after resolution; open ones are kept |
+| `WHATSAPP_RETENTION_ACTION_DAYS` | 400 (≥ delete) | Delete action bindings, and only once the inbound message that could repeat the action is gone |
+| `WHATSAPP_RETENTION_BATCH_SIZE` / `_MAX_BATCHES` | 500 / 10 | Rows per batch / batches per category per run; a backlog drains over successive runs |
+
+Content minimum: Meta redelivers unacknowledged webhooks for up to 7 days. Out of scope: contacts
+(identity and account link; erasure on request remains a manual/support action), the business
+records created through the platform's services (listings, registrations, leads, viewings, service
+requests, uploaded documents — platform retention applies), background-job rows. Effects to note:
+"status" on WhatsApp lists inquiries, viewings and service requests through their bindings, so items
+older than `ACTION_DAYS` drop off that list (they remain on the website).
 
 ## Migrations and their impact
 
 | Migration | What it does | Impact on an existing database |
 | --- | --- | --- |
 | `20261017115000_business_whatsapp_fk_name` | Renames one foreign key on `BusinessWhatsAppVerificationChallenge` to Prisma's default name | Catalog-only rename, no rewrite or data change; brief lock on that table |
-| `20261017120000_whatsapp_assistant` | 7 new tables + 4 enums; nullable `sourceChannel` on `Listing`, `MarketplaceProfessional`, `ServiceProvider` | New tables; adding nullable columns without defaults is metadata-only in Postgres |
+| `20261017120000_whatsapp_assistant` | 7 new tables + 3 enums (incl. the insert-only `WhatsAppAction` binding table and `redactedAt` retention columns); nullable `sourceChannel` on `Listing`, `MarketplaceProfessional`, `ServiceProvider` | New tables; adding nullable columns without defaults is metadata-only in Postgres |
 
 **Pre-existing drift fixed (schema-side).** On `main`, `prisma/schema.prisma` declares
 `BusinessWhatsAppConfig.id/organisationId/serviceProviderId` as `TEXT`, but its migration created
@@ -180,7 +201,9 @@ Unit and Postgres integration tests (Meta Graph API faked, SMS faked, no real me
 - `postgres-whatsapp-assistant.integration.test.ts` — customer discovery, inquiry, viewing, duplicates.
 - `postgres-whatsapp-business.integration.test.ts` — registration (with SMS code), listing with photos, corrections, resubmission, publication, isolation, pause/resume, affiliation claims.
 - `postgres-whatsapp-services-security.integration.test.ts` — services, provider registration, webhook forgery, retries, prompt injection, window/opt-out, support & admin permissions.
-- `postgres-whatsapp-durability.integration.test.ts` — atomic ack, after() never runs, stranded jobs, redelivery, concurrent duplicates, bursts, lease fencing, stalled worker, action guard.
+- `postgres-whatsapp-durability.integration.test.ts` — atomic ack, after() never runs, stranded jobs, redelivery, concurrent duplicates, bursts, lease fencing, stalled worker.
+- `postgres-whatsapp-action-idempotency.integration.test.ts` — injected failures after the record, after follow-ups and after commit; worker death after commit (registration, provider, lead, photo); company organisation reuse; competing and stale attempts; identical listing titles and identical service requests.
+- `postgres-whatsapp-retention.integration.test.ts` — policy validation, redaction keeping dedupe, deletion sparing pending work, bounded batches, abandoned-only workflow clearing, binding deletion only after its message.
 - `postgres-whatsapp-security-boundaries.integration.test.ts` — SMS-verified linking, staff accounts, revoked membership on resume, cross-agency, publication, private documents, AI limits, media hardening, opt-out, logging.
 - `postgres-whatsapp-notifications-webhook.integration.test.ts` — transactional outbox, recovery delivery, rollback, deferred-window release, scoping, raw-byte signatures, search eligibility.
 - `postgres-whatsapp-load.integration.test.ts` — bounded concurrency (40 contacts by default; `WA_LOAD_CONTACTS` to change).
@@ -201,4 +224,6 @@ deliveries) with two overlapping workers per contact: all processed exactly once
 - Amenity answers in inquiries are keyword-based; anything not on the listing is passed to the agent.
 - Ambiguous outbound sends may produce a duplicate informational message (policy above).
 - The generic job runner never re-claims jobs left `RUNNING` by a crashed process; the assistant's own sweep covers its work, other job types are unaffected by this change.
-- Data retention/deletion for WhatsApp messages is not automated yet (inbound/outbound rows are kept); define a retention period before launch.
+- Retention is implemented but off by default; the proposed periods need product/legal sign-off before `WHATSAPP_RETENTION_ENABLED` is set. Contact erasure on request is manual.
+- The `20261017120000_whatsapp_assistant` migration was amended in place while unmerged (binding table, `redactedAt`). Any sandbox database that applied an earlier version must be recreated; no shared or production database has applied it.
+- Upload bytes are written to object storage before the database transaction; if the process dies between the two, an unreferenced object can remain (no record, no binding — the retry stores a new one).

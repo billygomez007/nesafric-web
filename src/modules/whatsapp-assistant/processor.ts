@@ -8,7 +8,7 @@ import {
   acquireSession, extendSessionLease, flushOutbound, LeaseLostError, MAX_INBOUND_ATTEMPTS, nextPendingInbound,
   queueOutboundInTransaction, recordEvent, releaseDeferredNotifications, releaseSession, type Lease,
 } from "./store";
-import { createSupportRequest } from "./workflows/status";
+import { createSupportRequestOnce } from "./workflows/status";
 import { errorLabel } from "./log";
 
 type StoredContent = { choiceId?: string | null; media?: InboundMedia | null; location?: InboundLocation | null };
@@ -134,7 +134,7 @@ async function processOne(lease: Lease, inboundId: string): Promise<"done"> {
 async function escalate(lease: Lease, inboundId: string, contactId: string, userId: string | null, session: { workflow: string | null; step: string | null; data: unknown }, input: Ctx["input"], reason: string) {
   const state = stateFromSession(session);
   const contact = await db.whatsAppContact.findUniqueOrThrow({ where: { id: contactId } });
-  const request = await createSupportRequest({
+  const request = await createSupportRequestOnce(`support_escalation:${inboundId}`, {
     contactId,
     userId,
     topic: "processing_failure",

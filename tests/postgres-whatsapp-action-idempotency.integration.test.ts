@@ -266,6 +266,15 @@ describe("WhatsApp assistant — exactly-once business actions under failure", (
     expect(await db.whatsAppAssistantEvent.count({ where: { name: "property_inquiry_created" } })).toBe(1);
   });
 
+  it("opens one support request per message even when the worker died after creating it", async () => {
+    await converse(api, CUSTOMER, { text: "support" });
+    const { contactId } = await processThenLoseAck(api, CUSTOMER, { text: "I can't log in to my account" });
+    const request = await db.whatsAppSupportRequest.findFirstOrThrow();
+    expect(allText(await retry(api, contactId))).toContain(request.reference);
+    expect(await db.whatsAppSupportRequest.count()).toBe(1);
+    expect(await db.whatsAppAssistantEvent.count({ where: { name: "support_requested" } })).toBe(1);
+  });
+
   it("lets only one of two competing attempts create the record; the other returns it", async () => {
     const { listing } = await publishedListing();
     const { contactId } = await ingest(CUSTOMER, { text: "Hi" });

@@ -14,6 +14,7 @@ import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
 import { recoverStalledWhatsAppWork } from "@/modules/whatsapp-assistant/recovery";
+import { runWhatsAppRetention } from "@/modules/whatsapp-assistant/retention";
 
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 15_000);
 let stopping = false;
@@ -31,6 +32,7 @@ async function tick() {
   if (Date.now() - lastSweepAt >= SWEEP_INTERVAL_MS) {
     lastSweepAt = Date.now();
     await sweepExpiredPublicWriteRecords().catch(() => console.error("Public write record sweep failed."));
+    await runWhatsAppRetention();
   }
 }
 

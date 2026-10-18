@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { listUserMarketplaceProfessionals } from "@/modules/marketplace-professionals/service";
 import type { Prisma } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
-import { boundActions } from "../actions";
+import { boundActions, runOnce, type FollowUps } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { dateTimeText, propertyUrl } from "../format";
 import { accountExistsForContact, linkedUser } from "../identity";
 import type { ReplyOption } from "../messages";
 import { matchesReference, parseReference, referenceFor, type ReferenceKind } from "../references";
 import { WORKFLOW_TITLES } from "../state";
-import { recordEvent } from "../store";
+import { recordEvent, recordEventInTx } from "../store";
 
 const LISTING_STATUS: Record<string, string> = {
   DRAFT: "Draft (not submitted)", PENDING_REVIEW: "Pending NesAfric review", PUBLISHED: "Published ✅", PAUSED: "Paused",
@@ -150,6 +150,18 @@ export async function createSupportRequest(
   });
 }
 
+type SupportInput = Parameters<typeof createSupportRequest>[0];
+
+/** A support request created exactly once per message (bound like any other action). */
+export async function createSupportRequestOnce(actionKey: string, input: SupportInput, followUps?: FollowUps) {
+  const outcome = await runOnce(actionKey, input.contactId, "support_request", (bind) => db.$transaction(async (tx) => {
+    const request = await createSupportRequest(input, tx);
+    await bind(followUps)(tx, request);
+    return request;
+  }));
+  return db.whatsAppSupportRequest.findUniqueOrThrow({ where: { id: outcome.resultId } });
+}
+
 export const support: Workflow = {
   key: "support",
 
@@ -164,14 +176,13 @@ export const support: Workflow = {
     const text = ctx.text;
     if (text.length < 3) return support.reprompt(ctx);
     const context = ctx.data<{ context?: string | null }>().context ?? null;
-    const request = await createSupportRequest({
+    const request = await createSupportRequestOnce(ctx.actionKey("support_request"), {
       contactId: ctx.contact.id,
       userId: ctx.contact.userId,
       topic: "customer_request",
       summary: text,
       workflow: context,
-    });
-    await recordEvent("support_requested", ctx.contact.id, { workflow: context });
+    }, (tx) => recordEventInTx(tx, "support_requested", ctx.contact.id, { workflow: context }));
     ctx.say(`🙋 Thanks — a member of the NesAfric team will reply here as soon as possible.\nReference: ${request.reference}${context ? `\n(We've noted you were in the middle of a ${WORKFLOW_TITLES[context as keyof typeof WORKFLOW_TITLES] ?? "request"}.)` : ""}`);
     ctx.finish();
   },
