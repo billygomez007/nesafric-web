@@ -58,3 +58,27 @@ export async function queueOfficialTemplate(tx: Tx, message: OfficialTemplateMes
   return { messageId: created.id };
 }
 
+
+/**
+ * Queues a message to a person on the official number: free text when they wrote to us in the
+ * last 24 hours, otherwise the approved NOTIFICATION template carrying the same text. Returns
+ * null with a reason when neither is possible (nothing is sent then).
+ */
+export async function queueOfficialText(tx: Tx, input: { phoneE164: string; displayName: string; text: string; externalMessageId: string; metadata?: Record<string, unknown> }): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+  const readiness = await officialTemplateReadiness("NOTIFICATION");
+  const officialId = readiness.ready ? readiness.officialId : officialWhatsAppOrganisationId();
+  if (!officialId) return { messageId: null, reason: "The official NesAfric WhatsApp number is not configured." };
+  const existing = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId: officialId, channel: "WHATSAPP", externalMessageId: input.externalMessageId } } });
+  if (existing) return { messageId: existing.id };
+  const waId = input.phoneE164.replace(/^\+/, "");
+  const conversation = await tx.conversation.findFirst({ where: { organisationId: officialId, channel: "WHATSAPP", channelAddress: waId, whatsappSessionKey: { not: null } } });
+  const windowOpen = Boolean(conversation?.lastInboundAt && Date.now() - conversation.lastInboundAt.getTime() < 23 * 60 * 60_000);
+  if (!windowOpen || !conversation) {
+    return queueOfficialTemplate(tx, { phoneE164: input.phoneE164, displayName: input.displayName, template: "NOTIFICATION", bodyParameters: [input.text.slice(0, 1000)], body: input.text, externalMessageId: input.externalMessageId, metadata: input.metadata });
+  }
+  const created = await tx.message.create({ data: { organisationId: officialId, conversationId: conversation.id, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body: input.text.slice(0, 4096), externalMessageId: input.externalMessageId, metadata: JSON.parse(JSON.stringify(input.metadata ?? {})) } });
+  const delivery = await tx.messageDelivery.create({ data: { organisationId: officialId, messageId: created.id, channel: "WHATSAPP", recipientAddress: waId, idempotencyKey: `message-delivery:${created.id}` } });
+  await tx.backgroundJob.create({ data: { organisationId: officialId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${delivery.id}`, payload: { organisationId: officialId, deliveryId: delivery.id }, maxAttempts: 5 } });
+  await tx.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date(), lastOutboundAt: new Date() } });
+  return { messageId: created.id };
+}

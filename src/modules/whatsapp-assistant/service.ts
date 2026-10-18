@@ -76,7 +76,7 @@ const ENDED_STATUSES = ["CLOSED", "RESOLVED"];
  * may call the AI provider and the OTP provider; every write it makes on its own (leads, viewings,
  * OTP challenges, identity links) is idempotent or safe to repeat.
  */
-async function decide(organisationId: string, conversation: { id: string; status: string; assignedMemberId: string | null; assistantState: unknown; channelAddress: string }, message: { id: string; body: string; metadata: unknown }, config: ChannelConfig): Promise<Outcome> {
+async function decide(organisationId: string, conversation: { id: string; status: string; assignedMemberId: string | null; assistantState: unknown; channelAddress: string }, message: { id: string; body: string; metadata: unknown; externalReferenceId: string | null }, config: ChannelConfig): Promise<Outcome> {
   const command = message.body.trim().toLowerCase();
   const metadata = (message.metadata ?? {}) as Record<string, unknown>;
   const kind = String(metadata.kind ?? "text");
@@ -104,7 +104,7 @@ async function decide(organisationId: string, conversation: { id: string; status
   const rawMedia = metadata.media as { id?: unknown; mime_type?: unknown } | undefined;
   const media = typeof rawMedia?.id === "string" ? { id: rawMedia.id, mimeType: typeof rawMedia.mime_type === "string" ? rawMedia.mime_type : undefined } : undefined;
   const result = isOfficialWhatsAppOrganisation(organisationId)
-    ? await advanceOfficialConversation({ ...input, organisationId, media })
+    ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined })
     : await advanceConversation(input);
   if (result.reply.length > 4096) throw new Error("Assistant reply exceeds WhatsApp text limit.");
   return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step };

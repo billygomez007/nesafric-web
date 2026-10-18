@@ -1,6 +1,6 @@
 # Autonomous property operations: architecture map and phased plan
 
-Status (2026-10-18): phases 0-5 are implemented on `feat/autonomous-property-ops`; phases 6-8 are not started. See section 5.
+Status (2026-10-18): phases 0-6 are implemented on `feat/autonomous-property-ops`; phases 7-8 are not started. See section 5.
 
 ## 1. What already exists (reuse, do not duplicate)
 
@@ -134,6 +134,15 @@ Real WhatsApp delivery will not be claimed working until the Meta app, the numbe
 - One provider at a time. After a decline (`recordDispatchDecline`, wired to WhatsApp replies in phase 6) or a timeout, the next untried eligible provider in the rule's order is sent the job until the attempt limit, then the landlord is alerted. An unconfirmed or failed send is never resent, and a retried job never creates a second work order or attempt.
 - WhatsApp commands for landlords: `rules`, `add rule` (category, property, primary, backups, what they may do, cap, timeout, summary, confirm), `pause rule N`, `resume rule N`, `pause plumbing dispatch` (by work type), `set limit rule N 500`. Every change is read back and needs `confirm`.
 - Tests: `tests/maintenance-routing-evaluate.unit.test.ts`, `tests/postgres-maintenance-routing.integration.test.ts`.
+
+### Phase 6: provider acceptance, quotes and completion (done)
+
+- Providers answer on WhatsApp. Tapping Accept/Decline on the work-order template is matched to the exact job through the message it replies to; typed commands take the ticket reference (`accept NM-1001`, `decline NM-1001 reason`). With one open job the reference can be left out. A provider can act only on assignments of provider profiles they own; a late answer after the job moved on is refused.
+- Commands: `info NM-1001 question` (an escalation the landlord sees), `visit NM-1001 2026-12-20 14:00` (tenant told), `quote NM-1001 450 what it covers`, `start NM-1001`, `photos NM-1001` (one-hour signed links, accepted jobs only), `done NM-1001`.
+- Quotes (`provider-actions.ts`): a quote within the work order's pre-authorised amount is accepted under the rule. Anything above it, or any quote under inspection-only or quote-first rules, creates a pending `MaintenanceApproval` and a `QUOTE_OVER_LIMIT` escalation, and the provider is told not to start paid work. Landlords with `maintenance.approve` reply `approve NM-1001` or `reject NM-1001`, confirm, and the authorised spend becomes exactly the approved amount. Providers cannot approve.
+- Completion: `done` asks for the work performed, total cost, photos (stored as private attachments through the document pipeline; the upload target now also admits the provider of an accepted assignment on that request) and anything left to fix, then a confirm. The work order is COMPLETED with the actual cost. The ticket is CLOSED, or COMPLETED awaiting verification when the rule requires it (`verify NM-1001` by the landlord closes it). Cost above what was authorised (`COST_OVER_AUTHORISED`) and remaining work (`FURTHER_WORK_REQUESTED`) are escalated.
+- The tenant is told when the job is accepted, a visit is planned and the work is recorded (free text inside the 24-hour window, otherwise the NOTIFICATION template), and can reply `ok NM-1001` or `problem NM-1001`. A problem reopens the ticket and raises `TENANT_DISPUTE`.
+- Tests: `tests/postgres-provider-jobs.integration.test.ts`.
 
 ### Before going live (not done)
 

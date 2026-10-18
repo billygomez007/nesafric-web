@@ -25,7 +25,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -78,6 +78,17 @@ export const assistantStateSchema = z.object({
       timeoutMinutes: z.number().int().optional(),
     }).default({ backups: [] }),
     action: z.object({ kind: z.enum(["pause", "resume", "set_cap"]), ids: z.array(z.object({ id: z.string().uuid(), organisationId: z.string().uuid() })).min(1).max(30), capMinor: z.string().regex(/^\d+$/).optional() }).optional(),
+  }).optional(),
+  /** A provider recording completion, or a landlord decision awaiting confirm. */
+  job: z.object({
+    step: z.enum(["work", "cost", "photos", "remaining", "confirm", "confirm_decision"]),
+    assignmentId: z.string().uuid().optional(),
+    reference: z.string().max(40),
+    workPerformed: z.string().max(2000).optional(),
+    costMinor: z.string().regex(/^\d+$/).optional(),
+    photos: z.number().int().min(0).max(5).default(0),
+    remaining: z.string().max(1000).optional(),
+    decision: z.object({ kind: z.enum(["approve", "reject", "verify"]), organisationId: z.string().uuid(), requestId: z.string().uuid(), reason: z.string().max(500).optional() }).optional(),
   }).optional(),
   /** A tenant's maintenance report being put together. */
   report: z.object({

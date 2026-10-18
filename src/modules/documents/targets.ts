@@ -139,7 +139,12 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
         const tenant = request.tenantOrganisationId
           ? await tx.tenantOrganisation.findFirst({ where: { id: request.tenantOrganisationId, organisationId, userId, archivedAt: null } })
           : null;
-        if (!tenant) throw forbidden();
+        // A provider who accepted a job on this request may add evidence to it, and nothing else.
+        const assignedProvider = tenant ? null : await tx.providerAssignment.findFirst({
+          where: { landlordOrganisationId: organisationId, status: { in: ["ACCEPTED", "COMPLETED"] }, workOrder: { maintenanceRequestId: request.id }, provider: { archivedAt: null, OR: [{ individualUserId: userId }, { administratorUserId: userId }] } },
+          select: { id: true },
+        });
+        if (!tenant && !assignedProvider) throw forbidden();
       }
       return { organisationId };
     },
