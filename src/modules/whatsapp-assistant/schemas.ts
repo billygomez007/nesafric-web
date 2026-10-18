@@ -25,7 +25,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -59,6 +59,25 @@ export const assistantStateSchema = z.object({
       organisationId: z.string().uuid(),
       toId: z.string().uuid().optional(),
     }).optional(),
+  }).optional(),
+  /** Routing-rule management: what was last listed, a draft rule, or a change awaiting confirm. */
+  rules: z.object({
+    step: z.enum(["organisation", "category", "property", "primary", "backups", "mode", "cap", "timeout", "confirm_add", "confirm_action"]).optional(),
+    organisationId: z.string().uuid().optional(),
+    organisationChoices: z.array(z.string().uuid()).max(9).default([]),
+    listed: z.array(z.object({ id: z.string().uuid(), organisationId: z.string().uuid(), name: z.string().max(200) })).max(30).default([]),
+    propertyChoices: z.array(z.object({ id: z.string().uuid(), name: z.string().max(200) })).max(30).default([]),
+    providerChoices: z.array(z.object({ id: z.string().uuid(), name: z.string().max(200) })).max(30).default([]),
+    draft: z.object({
+      category: z.string().max(40).optional(),
+      propertyId: z.string().uuid().nullable().optional(),
+      primary: z.string().uuid().optional(),
+      backups: z.array(z.string().uuid()).max(5).default([]),
+      mode: z.enum(["PRE_AUTHORIZED", "INSPECTION_ONLY", "QUOTE_REQUIRED", "APPROVAL_REQUIRED", "ESCALATE"]).optional(),
+      capMinor: z.string().regex(/^\d+$/).optional(),
+      timeoutMinutes: z.number().int().optional(),
+    }).default({ backups: [] }),
+    action: z.object({ kind: z.enum(["pause", "resume", "set_cap"]), ids: z.array(z.object({ id: z.string().uuid(), organisationId: z.string().uuid() })).min(1).max(30), capMinor: z.string().regex(/^\d+$/).optional() }).optional(),
   }).optional(),
   /** A tenant's maintenance report being put together. */
   report: z.object({

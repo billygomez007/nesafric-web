@@ -817,6 +817,7 @@ model User {
   onboardingDrafts                   OnboardingDraft[]
   portfolioVerificationClaims        PortfolioVerification[]
   providerInvitationsSent            ProviderNetworkInvitation[]
+  routingRulesCreated                MaintenanceRoutingRule[]
   memberships                        OrganisationMember[]
   invitations                        OrganisationInvitation[]                   @relation("InvitationSender")
   audits                             AuditEvent[]                               @relation("AuditActor")
@@ -1015,6 +1016,7 @@ model Organisation {
   portfolioVerifications      PortfolioVerification[]
   providerNetworkInvitations  ProviderNetworkInvitation[]
   counters                    OrganisationCounter[]
+  routingRules                MaintenanceRoutingRule[]
   properties                  Property[]                        @relation("ManagingOrganisation")
   auditEvents                 AuditEvent[]
   domainEvents                DomainEvent[]
@@ -1247,6 +1249,7 @@ model Property {
   units                      Unit[]
   portfolioVerifications     PortfolioVerification[]
   providerPropertyScopes     ProviderPropertyScope[]
+  routingRules               MaintenanceRoutingRule[]
   leases                     Lease[]
   rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
@@ -1303,6 +1306,7 @@ model Unit {
   archivedAt                 DateTime?
   property                   Property                    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   building                   Building?                   @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  routingRules               MaintenanceRoutingRule[]
   leases                     Lease[]
   rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
@@ -2134,6 +2138,103 @@ model OrganisationCounter {
   @@id([organisationId, key])
 }
 
+enum RoutingAuthorizationMode {
+  /// Go ahead with the repair, up to the spending cap.
+  PRE_AUTHORIZED
+  /// Inspect and diagnose only; no paid work is authorised.
+  INSPECTION_ONLY
+  /// Send a quote before starting any work.
+  QUOTE_REQUIRED
+  /// Do not dispatch automatically: the landlord decides.
+  APPROVAL_REQUIRED
+  /// Do not dispatch: alert the responsible person (for example structural damage).
+  ESCALATE
+}
+
+/// Landlord-defined rule mapping a kind of maintenance issue to who handles it and what they may
+/// do. Evaluated by deterministic code only; the AI classification is an input, never the decision.
+model MaintenanceRoutingRule {
+  id                            String                       @id @default(uuid()) @db.Uuid
+  organisationId                String                       @db.Uuid
+  name                          String
+  /// Null = every property. With `unitId`, only that unit.
+  propertyId                    String?                      @db.Uuid
+  unitId                        String?                      @db.Uuid
+  /// Provider-network category key (plumbing, electrical, locksmith, ...).
+  category                      String
+  /// Optional words that must appear in the report (any of them) for the rule to apply.
+  keywords                      String[]                     @default([])
+  /// Empty = any priority.
+  priorities                    MaintenancePriority[]        @default([])
+  primaryProviderOrganisationId String?                      @db.Uuid
+  /// Tried in order after the primary declines or does not answer.
+  backupProviderOrganisationIds String[]                     @default([]) @db.Uuid
+  autoDispatch                  Boolean                      @default(true)
+  authorizationMode             RoutingAuthorizationMode     @default(QUOTE_REQUIRED)
+  spendingCapMinor              BigInt?
+  responseTimeoutMinutes        Int                          @default(60)
+  /// Providers tried in total before escalating.
+  maxAttempts                   Int                          @default(3)
+  /// Who is alerted when this rule cannot be satisfied. Null = the organisation's owners.
+  escalationMemberId            String?                      @db.Uuid
+  notifyTenant                  Boolean                      @default(true)
+  requireCompletionVerification Boolean                      @default(false)
+  pausedAt                      DateTime?
+  createdByUserId               String                       @db.Uuid
+  archivedAt                    DateTime?
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+  organisation                  Organisation                 @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property                      Property?                    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                          Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  createdBy                     User                         @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  decisions                     MaintenanceRoutingDecision[]
+
+  @@index([organisationId, category, archivedAt])
+}
+
+/// Why a maintenance request was (or was not) dispatched: one row per evaluation, never edited.
+model MaintenanceRoutingDecision {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  organisationId       String                  @db.Uuid
+  maintenanceRequestId String                  @db.Uuid
+  routingRuleId        String?                 @db.Uuid
+  /// DISPATCHED, NO_RULE, AMBIGUOUS_RULES, RULE_PAUSED, APPROVAL_REQUIRED, ESCALATE, NO_PROVIDER, ...
+  outcome              String
+  reason               String
+  details              Json?
+  createdAt            DateTime                @default(now())
+  maintenanceRequest   MaintenanceRequest      @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
+  routingRule          MaintenanceRoutingRule? @relation(fields: [routingRuleId], references: [id], onDelete: SetNull)
+
+  @@index([maintenanceRequestId, createdAt])
+}
+
+enum EscalationLevel {
+  ATTENTION
+  CRITICAL
+}
+
+/// Something a landlord or manager must look at. Delivery (immediate alert or daily digest) is
+/// decided by the notification policy; this row is the durable record.
+model MaintenanceEscalation {
+  id                   String             @id @default(uuid()) @db.Uuid
+  organisationId       String             @db.Uuid
+  maintenanceRequestId String             @db.Uuid
+  level                EscalationLevel
+  reason               String
+  detail               String
+  recipientMemberId    String?            @db.Uuid
+  /// One escalation per cause, so retries never alert twice.
+  dedupeKey            String             @unique
+  notifiedAt           DateTime?
+  resolvedAt           DateTime?
+  createdAt            DateTime           @default(now())
+  maintenanceRequest   MaintenanceRequest @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId, resolvedAt, createdAt])
+}
+
 model BackgroundJob {
   id             String              @id @default(uuid()) @db.Uuid
   organisationId String?             @db.Uuid
@@ -2730,6 +2831,8 @@ model MaintenanceRequest {
   depositDeductions    DepositDeduction[]
   turnoverTasks        VacancyTurnoverTask[]
   conversations        Conversation[]
+  routingDecisions     MaintenanceRoutingDecision[]
+  escalations          MaintenanceEscalation[]
   dispatchAttempts     MaintenanceDispatchAttempt[]
 
   @@unique([organisationId, referenceNumber])
@@ -2824,6 +2927,11 @@ model WorkOrder {
   assigneeMember           OrganisationMember?          @relation("WorkOrderAssigneeMember", fields: [assigneeMemberId], references: [id], onDelete: Restrict)
   assigneeUser             User?                        @relation("WorkOrderAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
   history                  WorkOrderHistory[]
+  /// Set when a routing rule sent this work order: what the provider may do without approval.
+  authorizationMode        RoutingAuthorizationMode?
+  /// Pre-authorised spend in minor units (null = none). Quotes above it need approval.
+  authorizedSpendMinor     BigInt?
+  routingRuleId            String?                      @db.Uuid
   providerAssignments      ProviderAssignment[]
   providerRating           ProviderRating?
   conversations            Conversation[]
@@ -5505,6 +5613,8 @@ enum DispatchAttemptStatus {
   NO_RESPONSE
   BACKUP_REQUIRED
   ASSIGNED
+  /// The work order could not be sent (for example no approved template). Never retried as a send.
+  CONTACT_FAILED
 }
 
 /// One attempt to dispatch a work order to a provider, in hierarchy order (item 17: private/
@@ -5524,6 +5634,16 @@ model MaintenanceDispatchAttempt {
   respondedAt             DateTime?
   initiatedByAIEmployeeId String?               @db.Uuid
   createdByUserId         String?               @db.Uuid
+  /// Rule-driven dispatch only (null for voice/manual proposals).
+  routingRuleId           String?               @db.Uuid
+  providerOrganisationId  String?               @db.Uuid
+  providerAssignmentId    String?               @db.Uuid
+  /// 1 for the first provider tried, 2 for the next... Unique per work order, so a retried
+  /// worker can never send the same attempt twice.
+  attemptNumber           Int?
+  /// The provider must answer before this; afterwards the attempt becomes NO_RESPONSE.
+  expiresAt               DateTime?
+  messageId               String?               @db.Uuid
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
 
@@ -5535,6 +5655,7 @@ model MaintenanceDispatchAttempt {
   createdBy             User?              @relation("MaintenanceDispatchAttemptCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   voiceCalls            VoiceCall[]
 
+  @@unique([workOrderId, attemptNumber])
   @@index([organisationId, status, createdAt])
   @@index([workOrderId, createdAt])
   @@index([serviceProviderId, status])

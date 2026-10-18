@@ -19,6 +19,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     providerMessage: vi.fn(async () => null),
     network: vi.fn(async () => null),
     report: vi.fn(async () => null),
+    rules: vi.fn(async () => null),
     ...overrides,
   } as never;
 }

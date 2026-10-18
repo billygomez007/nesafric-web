@@ -1,6 +1,6 @@
 # Autonomous property operations: architecture map and phased plan
 
-Status (2026-10-18): phases 0-4 are implemented on `feat/autonomous-property-ops`; phases 5-8 are not started. See section 5.
+Status (2026-10-18): phases 0-5 are implemented on `feat/autonomous-property-ops`; phases 6-8 are not started. See section 5.
 
 ## 1. What already exists (reuse, do not duplicate)
 
@@ -125,9 +125,19 @@ Real WhatsApp delivery will not be claimed working until the Meta app, the numbe
 - Not done yet, for phase 5 onwards: dispatch to a provider, and notifying the landlord.
 - Tests: `tests/whatsapp-maintenance-classify.unit.test.ts`, `tests/postgres-whatsapp-maintenance.integration.test.ts`.
 
+### Phase 5: routing rules and controlled dispatch (done)
+
+- `MaintenanceRoutingRule`: scope (organisation, property or unit), network category, optional keywords and priorities, primary and ordered backup providers, `autoDispatch`, authorisation mode (`PRE_AUTHORIZED` with a required cap, `INSPECTION_ONLY`, `QUOTE_REQUIRED`, `APPROVAL_REQUIRED`, `ESCALATE`), response timeout, attempt limit, escalation member, tenant-notification and completion-verification flags, and pause. Service in `src/modules/maintenance-routing/rules.ts`; every change is audited with before/after values.
+- Selection (`evaluate.ts`) is deterministic: the most specific applicable rule wins; equally specific rules fail closed; a paused rule blocks dispatch rather than falling through to a broader rule. The AI classification only supplied the ticket's category and urgency.
+- Every ticket created over WhatsApp (or in an organisation that has rules) queues a `maintenance-route` job. Each evaluation is stored as a `MaintenanceRoutingDecision`. Anything not dispatched automatically (no rule, ambiguous rules, paused, approval required, escalate, rule owner no longer authorised, no eligible provider, work order not sendable) creates a `MaintenanceEscalation`. Emergencies and safety hazards always create a CRITICAL escalation as well.
+- Dispatch runs as the person who created the rule, and their `maintenance.assign` permission is checked each time. It triages the request, creates a work order with the authorisation mode and the authorised spend (the lower of the rule cap and the provider's own limit), a PENDING provider assignment, the attempt (unique per work order and attempt number), the `WORK_ORDER` template message (property, unit, issue, urgency, what is authorised, reply deadline; no tenant details), and a timeout job at the deadline.
+- One provider at a time. After a decline (`recordDispatchDecline`, wired to WhatsApp replies in phase 6) or a timeout, the next untried eligible provider in the rule's order is sent the job until the attempt limit, then the landlord is alerted. An unconfirmed or failed send is never resent, and a retried job never creates a second work order or attempt.
+- WhatsApp commands for landlords: `rules`, `add rule` (category, property, primary, backups, what they may do, cap, timeout, summary, confirm), `pause rule N`, `resume rule N`, `pause plumbing dispatch` (by work type), `set limit rule N 500`. Every change is read back and needs `confirm`.
+- Tests: `tests/maintenance-routing-evaluate.unit.test.ts`, `tests/postgres-maintenance-routing.integration.test.ts`.
+
 ### Before going live (not done)
 
 1. In Meta: create the app and WhatsApp Business Account, register the official number, create a system-user token, and subscribe the webhook to `messages` at `https://<host>/api/webhooks/whatsapp` with the verify token stored on the official organisation's channel config.
-2. Submit and get approval for the notification template (one body variable) and the provider invitation template (two body variables, Accept/Decline quick replies), then set `WHATSAPP_TEMPLATE_NOTIFICATION` and `WHATSAPP_TEMPLATE_PROVIDER_INVITE`.
+2. Submit and get approval for the notification template (one body variable) and the provider invitation template (two body variables, Accept/Decline quick replies), and the work-order template (seven body variables, Accept/Decline quick replies), then set `WHATSAPP_TEMPLATE_NOTIFICATION`, `WHATSAPP_TEMPLATE_PROVIDER_INVITE` and `WHATSAPP_TEMPLATE_WORK_ORDER`.
 3. Set `WHATSAPP_PROVIDER_ACCESS_TOKEN`, `WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_APP_SECRET`, `WHATSAPP_OFFICIAL_ORGANISATION_ID`, and the Arkesel variables for SMS codes.
 4. Run an end-to-end test from a real phone. Until then, real WhatsApp delivery is unverified.

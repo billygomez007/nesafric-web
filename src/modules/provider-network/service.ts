@@ -4,10 +4,8 @@ import { Prisma } from "@/platform/database/generated/client";
 import { AppError, notFound } from "@/platform/errors";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { normalizePhone } from "@/platform/identity/phone";
-import { resolveWhatsAppSendConfig, whatsappTemplate } from "@/modules/conversations/channels/whatsapp-sender";
 import { listOwnedProviders, uniqueProviderSlug } from "@/modules/providers/service";
-import { officialWhatsAppOrganisationId, whatsappSessionKey } from "@/modules/whatsapp-assistant/identity";
-import { assistantChannelConfigSchema } from "@/modules/whatsapp-assistant/schemas";
+import { queueOfficialTemplate } from "@/modules/whatsapp-assistant/outbound";
 import { categoryLabels, NETWORK_CATEGORIES, NETWORK_CATEGORY_KEYS, type NetworkCategory } from "./categories";
 
 type Tx = Prisma.TransactionClient;
@@ -112,28 +110,14 @@ export async function inviteNetworkProvider(userId: string, organisationId: stri
  */
 async function sendInvitation(invitationId: string) {
   const invitation = await db.providerNetworkInvitation.findUniqueOrThrow({ where: { id: invitationId }, include: { landlordOrganisation: { select: { name: true } } } });
-  const officialId = officialWhatsAppOrganisationId();
-  const sender = officialId ? await resolveWhatsAppSendConfig(officialId) : null;
-  const channel = assistantChannelConfigSchema.safeParse(sender?.config);
-  const template = whatsappTemplate("PROVIDER_INVITE");
-  const failure = !officialId || !sender || !channel.success ? "The official NesAfric WhatsApp number is not configured." : !template ? "No approved WhatsApp invitation template is configured (WHATSAPP_TEMPLATE_PROVIDER_INVITE)." : null;
-  if (failure || !officialId || !channel.success || !template) {
-    await db.providerNetworkInvitation.update({ where: { id: invitationId }, data: { deliveryFailureReason: failure } });
-    return;
-  }
-  const waId = invitation.phoneE164.slice(1);
   const work = categoryLabels(invitation.scopeCategories);
   await db.$transaction(async (tx) => {
-    const sessionKey = whatsappSessionKey(officialId, channel.data.phoneNumberId, waId);
-    const conversation = await tx.conversation.upsert({
-      where: { whatsappSessionKey: sessionKey }, update: {},
-      create: { organisationId: officialId, channel: "WHATSAPP", channelAddress: waId, whatsappSessionKey: sessionKey, subject: "NesAfric WhatsApp assistant", identityLevel: "NONE", participants: { create: { organisationId: officialId, type: "ANONYMOUS", phone: waId, displayName: invitation.displayName } } },
+    const queued = await queueOfficialTemplate(tx, {
+      phoneE164: invitation.phoneE164, displayName: invitation.displayName, template: "PROVIDER_INVITE", bodyParameters: [invitation.landlordOrganisation.name, work],
+      body: `${invitation.landlordOrganisation.name} invites you to receive ${work} work orders through NesAfric. Reply ACCEPT to join or DECLINE to refuse.`,
+      externalMessageId: `provider-invite:${invitation.id}`, metadata: { providerInvitationId: invitation.id },
     });
-    const body = `${invitation.landlordOrganisation.name} invites you to receive ${work} work orders through NesAfric. Reply ACCEPT to join or DECLINE to refuse.`;
-    const message = await tx.message.create({ data: { organisationId: officialId, conversationId: conversation.id, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body, externalMessageId: `provider-invite:${invitation.id}`, metadata: { whatsappTemplate: { ...template, bodyParameters: [invitation.landlordOrganisation.name, work] }, providerInvitationId: invitation.id } } });
-    const delivery = await tx.messageDelivery.create({ data: { organisationId: officialId, messageId: message.id, channel: "WHATSAPP", recipientAddress: waId, idempotencyKey: `message-delivery:${message.id}` } });
-    await tx.backgroundJob.create({ data: { organisationId: officialId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${delivery.id}`, payload: { organisationId: officialId, deliveryId: delivery.id }, maxAttempts: 5 } });
-    await tx.providerNetworkInvitation.update({ where: { id: invitation.id }, data: { messageId: message.id, deliveryFailureReason: null } });
+    await tx.providerNetworkInvitation.update({ where: { id: invitation.id }, data: "reason" in queued ? { deliveryFailureReason: queued.reason } : { messageId: queued.messageId, deliveryFailureReason: null } });
   });
 }
 

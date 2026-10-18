@@ -11,6 +11,7 @@ import { sendAccountEmail, type AccountEmailPayload } from "@/modules/account-em
 import { processAssistantMessage, processLegacyWhatsAppMessage, recordWhatsAppDeliveryStatus } from "@/modules/whatsapp-assistant/service";
 import type { WhatsAppStatusEvent } from "@/modules/conversations/channels/whatsapp-payload";
 import { NonRetryableJobError } from "./errors";
+import { handleDispatchTimeout, routeMaintenanceRequest } from "@/modules/maintenance-routing/dispatch";
 
 export function createJobHandlers(notificationProviders: NotificationProviders = defaultNotificationProviders, channelAdapters: ChannelAdapters = defaultChannelAdapters) {
   return {
@@ -43,6 +44,12 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   "whatsapp-legacy-inbound": processLegacyWhatsAppMessage,
   "whatsapp-delivery-status": async (payload: Record<string, unknown>) => {
     await recordWhatsAppDeliveryStatus(String(payload.organisationId), payload.status as WhatsAppStatusEvent);
+  },
+  "maintenance-route": async (payload: Record<string, unknown>) => {
+    await routeMaintenanceRequest(String(payload.organisationId), String(payload.maintenanceRequestId));
+  },
+  "maintenance-dispatch-timeout": async (payload: Record<string, unknown>) => {
+    await handleDispatchTimeout(String(payload.organisationId), String(payload.attemptId));
   },
   "calendar-sync": async (payload: Record<string, unknown>) => {
     await syncCalendarEventJob(String(payload.organisationId), String(payload.calendarEventId));

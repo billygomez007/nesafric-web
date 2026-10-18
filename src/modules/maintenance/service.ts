@@ -414,6 +414,11 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
         payload: { propertyId: request.propertyId, unitId: request.unitId, tenantOrganisationId: request.tenantOrganisationId, priority: request.priority, referenceNumber, intakeChannel: data.intakeChannel ?? null },
       },
     });
+    // Routing rules decide what happens next, in the background. Organisations without rules only
+    // get this for WhatsApp reports, so the landlord is alerted that a person must act.
+    if (data.intakeChannel === "WHATSAPP" || await tx.maintenanceRoutingRule.count({ where: { organisationId, archivedAt: null } })) {
+      await tx.backgroundJob.create({ data: { organisationId, type: "maintenance-route", idempotencyKey: `maintenance-route:${request.id}`, payload: { organisationId, maintenanceRequestId: request.id }, maxAttempts: 5 } });
+    }
     const created = await tx.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id }, include: requestInclude() });
     return internal ? created : toTenantMaintenanceView(created);
   });

@@ -10,6 +10,7 @@ import { advanceOnboarding } from "./onboarding/flow";
 import { findOpenDraft } from "./onboarding/draft";
 import { advanceNetwork, handleProviderMessage } from "./network";
 import { advanceReport } from "./maintenance/report";
+import { advanceRules, isRuleCommand } from "./rules";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string } };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean };
@@ -32,8 +33,9 @@ type Dependencies = {
   providerMessage: typeof handleProviderMessage;
   network: typeof advanceNetwork;
   report: typeof advanceReport;
+  rules: typeof advanceRules;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -60,7 +62,7 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   // Tenant repair reports (text or photos), access codes and request status.
   if (state.workflow === "idle" || state.workflow === "report" || input.kind === "text") {
     const linked = await dependencies.linkedUser(input.phone);
-    if (state.workflow !== "network") {
+    if (state.workflow !== "network" && state.workflow !== "rules" && !(input.kind === "text" && isRuleCommand(command))) {
       const report = await dependencies.report({ body: input.body, kind: input.kind, messageId: input.messageId, media: input.media }, linked, state, reset);
       if (report) return report;
     }
@@ -69,13 +71,20 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   if (input.kind === "text") {
     const linked = await dependencies.linkedUser(input.phone);
     // Maintenance professionals answering invitations and checking their own jobs.
-    if (state.workflow !== "network") {
+    if (state.workflow !== "network" && state.workflow !== "rules") {
       const provider = await dependencies.providerMessage(input.phone, command, linked, state);
       if (provider) return provider;
     }
+    // Landlords managing routing rules. Every change is confirmed first.
+    if (state.workflow !== "network") {
+      const rules = await dependencies.rules(command, input.body.trim(), linked, state, reset);
+      if (rules) return rules;
+    }
     // Landlords managing their network. Material changes need an explicit confirm.
-    const network = await dependencies.network(command, input.body.trim(), linked, state, reset);
-    if (network) return network;
+    if (state.workflow !== "rules") {
+      const network = await dependencies.network(command, input.body.trim(), linked, state, reset);
+      if (network) return network;
+    }
   }
 
   if (input.kind === "text" && /^(link|link account|connect|connect account)$/.test(command)) {
