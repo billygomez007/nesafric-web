@@ -1,11 +1,11 @@
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/platform/database/generated/client";
+import { PrismaPgWithTransactionRelease } from "../src/platform/database/pg-adapter";
 import { GHANA, GHS } from "../src/modules/geography/config";
 import { ENTITLEMENTS } from "../src/modules/entitlements/catalog";
 import { MARKETPLACE_ENTITLEMENTS } from "../src/modules/marketplace-professionals/catalog";
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+const prisma = new PrismaClient({ adapter: new PrismaPgWithTransactionRelease({ connectionString: process.env.DATABASE_URL }) });
 
 const permissions = [
   ["organisation.manage_members", "Invite and manage organisation members"],

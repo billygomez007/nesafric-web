@@ -42,8 +42,14 @@ function releaseOnFailedClose(tx: Transaction): Transaction {
     } catch (error) {
       // Postgres ends the transaction when COMMIT fails, and a client that can no longer run
       // ROLLBACK is dead; either way the pool must get it back. A dead client is discarded by
-      // the pool on release because it is no longer queryable.
-      if (query.sql === "COMMIT" || query.sql === "ROLLBACK") await rollback();
+      // the pool on release because it is no longer queryable; a live one is idle again.
+      if (query.sql === "COMMIT" || query.sql === "ROLLBACK") {
+        try {
+          await rollback();
+        } catch {
+          // The statement's own error is the one to report.
+        }
+      }
       throw error;
     }
   };
