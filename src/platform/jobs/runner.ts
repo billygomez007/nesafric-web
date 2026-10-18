@@ -29,7 +29,10 @@ export async function enqueueJob(input: { organisationId?: string; type: string;
 export async function runDueJobs(
   handlers: Record<string, (payload: Record<string, unknown>) => Promise<void>>,
   now = new Date(),
+  /** Restrict this pass to some job types (e.g. the WhatsApp reply path right after a webhook). */
+  options: { types?: string[]; limit?: number } = {},
 ) {
+  const limit = Math.max(1, Math.min(options.limit ?? 50, 50));
   // These handlers persist idempotency keys at their domain boundaries. Recover only
   // their expired claims; other job types need their own replay-safety assessment.
   await db.backgroundJob.updateMany({
@@ -40,15 +43,26 @@ export async function runDueJobs(
     where: { status: "FAILED", attempts: { gte: db.backgroundJob.fields.maxAttempts } },
     data: { status: "DEAD_LETTER" },
   });
-  const eligible = await db.$queryRaw<Array<{ id: string }>>`
-    SELECT "id"
-    FROM "BackgroundJob"
-    WHERE "status" IN ('PENDING', 'FAILED')
-      AND "runAt" <= ${now}
-      AND "attempts" < "maxAttempts"
-    ORDER BY "runAt" ASC
-    LIMIT 50
-  `;
+  const eligible = options.types?.length
+    ? await db.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "BackgroundJob"
+      WHERE "status" IN ('PENDING', 'FAILED')
+        AND "runAt" <= ${now}
+        AND "attempts" < "maxAttempts"
+        AND "type" = ANY(${options.types})
+      ORDER BY "runAt" ASC
+      LIMIT ${limit}
+    `
+    : await db.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "BackgroundJob"
+      WHERE "status" IN ('PENDING', 'FAILED')
+        AND "runAt" <= ${now}
+        AND "attempts" < "maxAttempts"
+      ORDER BY "runAt" ASC
+      LIMIT ${limit}
+    `;
 
   const jobsById = new Map(
     (

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { officialWhatsAppOrganisationId } from "@/modules/whatsapp-assistant/identity";
 import { receiveWhatsAppWebhook, verifyWhatsAppWebhook } from "@/modules/whatsapp-assistant/webhook";
+import { drainReplyPathAfterResponse } from "@/platform/jobs/fast-path";
+
+/** Room for the reply path that runs after the response; matches the processing deadline. */
+export const maxDuration = 120;
 
 /**
  * The official NesAfric WhatsApp number. Its channel settings (receiving number, verify token)
@@ -15,5 +19,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const organisationId = officialWhatsAppOrganisationId();
   if (!organisationId) return new NextResponse("WhatsApp webhook is not configured", { status: 503 });
-  return receiveWhatsAppWebhook(request, organisationId);
+  const response = await receiveWhatsAppWebhook(request, organisationId);
+  // Only an accepted delivery has anything new to process.
+  if (response.status === 200) drainReplyPathAfterResponse();
+  return response;
 }

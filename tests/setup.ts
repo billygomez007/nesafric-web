@@ -4,3 +4,6 @@ import "dotenv/config";
 // adapter avoids disk I/O and cross-run cleanup, and every other Phase 19 provider-neutral
 // adapter already falls back to its deterministic/internal mode when its env vars are unset.
 process.env.STORAGE_PROVIDER = "memory";
+
+// Webhook tests drive the job queue themselves; the post-response fast path needs a Next.js request.
+process.env.WHATSAPP_INLINE_PROCESSING = "false";

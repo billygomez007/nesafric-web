@@ -6378,9 +6378,10 @@ model AuthOtpChallenge {
 }
 
 model BusinessWhatsAppConfig {
-  id                           String    @id @default(uuid())
-  organisationId               String?   @unique
-  serviceProviderId            String?   @unique
+  // The migration created these as UUID columns; the schema now says so (no column change).
+  id                           String    @id @default(uuid()) @db.Uuid
+  organisationId               String?   @unique @db.Uuid
+  serviceProviderId            String?   @unique @db.Uuid
   whatsappNumber               String
   whatsappVerified             Boolean   @default(false)
   whatsappVerifiedAt           DateTime?
