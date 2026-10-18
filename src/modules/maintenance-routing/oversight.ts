@@ -86,6 +86,8 @@ const manualDispatchSchema = z.object({
 export async function manualDispatch(userId: string, organisationId: string, requestId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceAssign);
   const data = manualDispatchSchema.parse(input);
+  // Pre-authorising spend is a financial approval, whoever sends the job.
+  if (data.authorizationMode === "PRE_AUTHORIZED") await requirePermission(userId, organisationId, PERMISSIONS.maintenanceApprove);
   const member = await db.providerOrganisation.findFirst({ where: { id: data.providerOrganisationId, landlordOrganisationId: organisationId, status: "ACTIVE", consentedAt: { not: null }, provider: { archivedAt: null, suspendedAt: null } }, include: { provider: { select: { id: true, displayName: true, contactPhone: true } } } });
   if (!member) throw new AppError("PROVIDER_NOT_AVAILABLE", 422, "Choose an active provider from your network who has agreed to receive work.");
   const { request, location } = await context(db, requestId);

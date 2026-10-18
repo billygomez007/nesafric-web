@@ -358,6 +358,17 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
     : null;
   if (!internal && !tenantIdentity) throw forbidden();
 
+  const existingForIntake = async () => {
+    if (!data.intakeReference) return null;
+    const existing = await db.maintenanceRequest.findUnique({ where: { organisationId_intakeReference: { organisationId, intakeReference: data.intakeReference } }, include: requestInclude() });
+    if (!existing) return null;
+    // The same source can only ever be the same reporter's request.
+    if (existing.reportedByUserId !== userId) throw forbidden();
+    return internal ? existing : toTenantMaintenanceView(existing);
+  };
+  const earlier = await existingForIntake();
+  if (earlier) return earlier;
+
   return db.$transaction(async (tx) => {
     await validatePropertyUnit(tx, organisationId, data.propertyId, data.unitId);
     let leaseId: string | undefined;
@@ -384,6 +395,7 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
       data: {
         organisationId,
         referenceNumber,
+        intakeReference: data.intakeReference,
         intakeChannel: data.intakeChannel,
         originalReport: data.originalReport,
         classification: data.classification as Prisma.InputJsonValue | undefined,
@@ -421,6 +433,13 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
     }
     const created = await tx.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id }, include: requestInclude() });
     return internal ? created : toTenantMaintenanceView(created);
+  }).catch(async (error) => {
+    // Lost the race for this intake reference: the other attempt's request is the request.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && data.intakeReference) {
+      const winner = await existingForIntake();
+      if (winner) return winner;
+    }
+    throw error;
   });
 }
 
@@ -763,6 +782,8 @@ export async function addTenantMaintenanceDetails(userId: string, organisationId
   return db.$transaction(async (tx) => {
     const request = await tx.maintenanceRequest.findFirst({ where: { id: requestId, organisationId } });
     if (!request?.tenantOrganisationId || !await isTenantUser(userId, organisationId, request.tenantOrganisationId)) throw notFound();
+    // Serialise passes for the same source message so the check and the insert are atomic.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`maintenance-details:${request.id}:${input.sourceMessageId}`}, 0))`;
     const existing = await tx.maintenanceHistory.findFirst({ where: { maintenanceRequestId: request.id, type: "NOTE", metadata: { path: ["sourceMessageId"], equals: input.sourceMessageId } } });
     if (existing) return existing;
     const history = await tx.maintenanceHistory.create({ data: { maintenanceRequestId: request.id, actorUserId: userId, type: "NOTE", note, metadata: { sourceMessageId: input.sourceMessageId, by: "tenant" } } });

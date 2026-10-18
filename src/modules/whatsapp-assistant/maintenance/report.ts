@@ -117,9 +117,10 @@ async function submit(userId: string, report: ReportState, messageId: string, st
     const photos = await attachMedia(userId, choice.organisationId, report.duplicate.id, report.media);
     return { state: reset(), reply: `Added to ${report.duplicate.referenceNumber}.${report.media.length ? ` Photos saved: ${photos} of ${report.media.length}.` : ""} Reply status ${report.duplicate.referenceNumber} for updates.` };
   }
-  // A retried job finds the request this same confirmation already created.
-  const existing = await db.maintenanceRequest.findFirst({ where: { organisationId: choice.organisationId, reportedByUserId: userId, classification: { path: ["sourceMessageId"], equals: messageId } }, select: { id: true, referenceNumber: true } });
-  const created = existing ?? await createMaintenanceRequest(userId, choice.organisationId, {
+  // One ticket per confirming message, enforced by a unique intake reference: a retried or
+  // concurrent pass for the same message gets the ticket the first one created.
+  const created = await createMaintenanceRequest(userId, choice.organisationId, {
+    intakeReference: `whatsapp:${messageId}`,
     propertyId: choice.propertyId, unitId: choice.unitId, tenantOrganisationId: choice.tenantOrganisationId,
     title: classification.title, description: report.description, category: classification.category, priority: classification.priority,
     intakeChannel: "WHATSAPP", originalReport: report.description,

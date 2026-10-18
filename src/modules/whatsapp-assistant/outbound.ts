@@ -1,3 +1,4 @@
+import { normalizePhone } from "@/platform/identity/phone";
 import type { Prisma } from "@/platform/database/generated/client";
 import { lockWhatsAppChannelShared } from "@/modules/conversations/channels/whatsapp-numbers";
 import { resolveWhatsAppSendConfig, whatsappTemplate, type WhatsAppTemplateKey } from "@/modules/conversations/channels/whatsapp-sender";
@@ -56,7 +57,11 @@ export function safeTemplateText(value: string, max = 80) {
   return value.replace(/https?:\/\/\S+|www\.\S+|\b\S+\.(com|net|org|io|me|ly|gh|co)\b\S*/gi, "").replace(/\+?\d[\d\s-]{6,}\d/g, "").replace(/\s+/g, " ").trim().slice(0, max) || "A NesAfric customer";
 }
 
-export async function queueOfficialTemplate(tx: Tx, message: OfficialTemplateMessage): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+export async function queueOfficialTemplate(tx: Tx, original: OfficialTemplateMessage): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+  // Stored numbers may be local ("024…"): send to, and check opt-out for, the E.164 form only.
+  const phoneE164 = normalizePhone(original.phoneE164);
+  if (!phoneE164) return { messageId: null, reason: "The recipient's phone number is not a valid mobile number." };
+  const message = { ...original, phoneE164 };
   if (await optedOut(tx, message.phoneE164)) return { messageId: null, reason: "The recipient opted out of WhatsApp messages (STOP)." };
   const readiness = await officialTemplateReadiness(message.template, tx);
   if (!readiness.ready) return { messageId: null, reason: readiness.reason };
@@ -87,7 +92,10 @@ export async function queueOfficialTemplate(tx: Tx, message: OfficialTemplateMes
  * last 24 hours, otherwise the approved NOTIFICATION template carrying the same text. Returns
  * null with a reason when neither is possible (nothing is sent then).
  */
-export async function queueOfficialText(tx: Tx, input: { phoneE164: string; displayName: string; text: string; externalMessageId: string; metadata?: Record<string, unknown> }): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+export async function queueOfficialText(tx: Tx, original: { phoneE164: string; displayName: string; text: string; externalMessageId: string; metadata?: Record<string, unknown> }): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+  const phoneE164 = normalizePhone(original.phoneE164);
+  if (!phoneE164) return { messageId: null, reason: "The recipient's phone number is not a valid mobile number." };
+  const input = { ...original, phoneE164 };
   if (await optedOut(tx, input.phoneE164)) return { messageId: null, reason: "The recipient opted out of WhatsApp messages (STOP)." };
   // Free text needs the number assignment just as a template does; only the template approval is optional here.
   const readiness = await officialTemplateReadiness("NOTIFICATION", tx);
