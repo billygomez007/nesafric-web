@@ -8,6 +8,7 @@ import { NonRetryableJobError } from "@/platform/jobs/errors";
 import { assistantChannelConfigSchema, assistantStateSchema, initialState } from "./schemas";
 import { advanceConversation } from "./engine";
 import { advanceOfficialConversation } from "./router";
+import { activeWhatsAppAssignment, lockWhatsAppChannelShared, trustedWhatsAppConfig } from "@/modules/conversations/channels/whatsapp-numbers";
 import { isOfficialWhatsAppOrganisation, isWhatsAppOptedOut, recordInboundIdentity, setWhatsAppOptOut, whatsappSessionKey } from "./identity";
 
 type ChannelConfig = z.infer<typeof assistantChannelConfigSchema>;
@@ -15,19 +16,38 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 
-/** Persist receipt and the worker job together. No AI or outbound network calls in the webhook. */
-export async function acceptWhatsAppEvents(organisationId: string, config: ChannelConfig, payload: unknown) {
+/** Work that met a different number assignment from the one it arrived under: kept, never acted on. */
+function logQuarantine(organisationId: string, reason: string, detail: Record<string, unknown> = {}) {
+  console.warn(JSON.stringify({ event: "whatsapp.inbound_quarantined", organisationId, reason, ...detail }));
+}
+
+const stampOf = (metadata: unknown) => {
+  const value = (metadata as { whatsappAssignmentId?: unknown } | null)?.whatsappAssignmentId;
+  return typeof value === "string" ? value : null;
+};
+
+/**
+ * Persist receipt and the worker job together. No AI or outbound network calls in the webhook.
+ * `assignmentId` is the number assignment the webhook checked; each receipt re-checks it under a
+ * shared channel lock and records it, so later work can tell if the number has moved since.
+ */
+export async function acceptWhatsAppEvents(organisationId: string, config: ChannelConfig, payload: unknown, assignmentId: string) {
   const events = parseWhatsAppEvents(payload, config.phoneNumberId, config.businessAccountId);
   // Unrecognised items are acknowledged, not rejected: a non-2xx makes Meta redeliver the batch.
   if (events.skipped) console.warn(JSON.stringify({ event: "whatsapp.webhook.items_skipped", organisationId, skipped: events.skipped }));
   for (const inbound of events.messages) {
     if (!config.marketplaceAssistantEnabled) {
-      await db.backgroundJob.upsert({ where: { idempotencyKey: `whatsapp-legacy:${organisationId}:${inbound.externalMessageId}` }, update: {}, create: { organisationId, type: "whatsapp-legacy-inbound", idempotencyKey: `whatsapp-legacy:${organisationId}:${inbound.externalMessageId}`, payload: json({ organisationId, inbound }), maxAttempts: 5 } });
+      await db.backgroundJob.upsert({ where: { idempotencyKey: `whatsapp-legacy:${organisationId}:${inbound.externalMessageId}` }, update: {}, create: { organisationId, type: "whatsapp-legacy-inbound", idempotencyKey: `whatsapp-legacy:${organisationId}:${inbound.externalMessageId}`, payload: json({ organisationId, inbound, whatsappAssignmentId: assignmentId }), maxAttempts: 5 } });
       continue;
     }
     const sessionKey = whatsappSessionKey(organisationId, config.phoneNumberId, inbound.channelAddress);
     await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${sessionKey + ":intake"}, 0))`;
+      await lockWhatsAppChannelShared(tx, organisationId);
+      if ((await activeWhatsAppAssignment(tx, organisationId))?.id !== assignmentId) {
+        logQuarantine(organisationId, "number_reassigned_during_receipt");
+        return;
+      }
       const duplicate = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId, channel: "WHATSAPP", externalMessageId: inbound.externalMessageId } } });
       if (duplicate) return;
       const conversation = await tx.conversation.upsert({
@@ -37,7 +57,7 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
       // Receipt order is stable even when two events arrive in the same millisecond.
       const receivedAt = new Date(Math.max(Date.now(), (conversation.lastMessageAt?.getTime() ?? 0) + 1));
       const limited = await tx.message.count({ where: { conversationId: conversation.id, direction: "INBOUND", createdAt: { gte: new Date(Date.now() - 60_000) } } }) >= 20;
-      const message = await tx.message.create({ data: { organisationId, conversationId: conversation.id, channel: "WHATSAPP", direction: "INBOUND", senderType: "PROSPECT", externalMessageId: inbound.externalMessageId, externalReferenceId: inbound.externalReferenceId, body: inbound.body, metadata: json({ ...inbound.providerPayload, providerReceivedAt: inbound.receivedAt?.toISOString(), rateLimited: limited }), processedAt: limited ? receivedAt : null, createdAt: receivedAt } });
+      const message = await tx.message.create({ data: { organisationId, conversationId: conversation.id, channel: "WHATSAPP", direction: "INBOUND", senderType: "PROSPECT", externalMessageId: inbound.externalMessageId, externalReferenceId: inbound.externalReferenceId, body: inbound.body, metadata: json({ ...inbound.providerPayload, providerReceivedAt: inbound.receivedAt?.toISOString(), rateLimited: limited, whatsappAssignmentId: assignmentId }), processedAt: limited ? receivedAt : null, createdAt: receivedAt } });
       const providerAt = inbound.receivedAt && inbound.receivedAt.getTime() <= Date.now() ? inbound.receivedAt : new Date();
       const lastInboundAt = new Date(Math.max(conversation.lastInboundAt?.getTime() ?? 0, providerAt.getTime()));
       await tx.conversation.update({ where: { id: conversation.id }, data: { lastInboundAt, lastMessageAt: receivedAt } });
@@ -53,14 +73,27 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
 }
 
 type Tx = Prisma.TransactionClient;
-async function queueReply(tx: Tx, organisationId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply", metadata?: Record<string, unknown>) {
+/** `assignmentId`: the assignment the inbound arrived under, already re-checked by the caller under a shared channel lock. */
+async function queueReply(tx: Tx, organisationId: string, assignmentId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply", metadata?: Record<string, unknown>) {
   const externalMessageId = `assistant:${inboundId}:${suffix}`;
   const existing = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId, channel: "WHATSAPP", externalMessageId } } });
   if (existing) return;
   const message = await tx.message.create({ data: { organisationId, conversationId, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body, externalMessageId, ...(metadata ? { metadata: json(metadata), containsSensitiveData: Boolean(metadata.redactAfterSend) } : {}) } });
-  const delivery = await tx.messageDelivery.create({ data: { organisationId, messageId: message.id, channel: "WHATSAPP", recipientAddress: phone, idempotencyKey: `message-delivery:${message.id}` } });
+  const delivery = await tx.messageDelivery.create({ data: { organisationId, messageId: message.id, channel: "WHATSAPP", recipientAddress: phone, idempotencyKey: `message-delivery:${message.id}`, whatsappAssignmentId: assignmentId } });
   await tx.backgroundJob.create({ data: { organisationId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${delivery.id}`, payload: { organisationId, deliveryId: delivery.id }, maxAttempts: 5 } });
   await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(), lastOutboundAt: new Date() } });
+}
+
+/** True when the inbound's assignment is still the organisation's active one (caller holds the shared channel lock). */
+async function stillAssigned(tx: Tx, organisationId: string, metadata: unknown) {
+  const stamp = stampOf(metadata);
+  return Boolean(stamp && (await activeWhatsAppAssignment(tx, organisationId))?.id === stamp);
+}
+
+/** Marks an inbound handled without acting on it: it arrived under an assignment that has since changed. */
+async function quarantineInbound(tx: Tx, organisationId: string, message: { id: string; conversationId: string; metadata: unknown }) {
+  await tx.message.update({ where: { id: message.id }, data: { processedAt: new Date(), metadata: json({ ...((message.metadata ?? {}) as Record<string, unknown>), quarantined: "number_reassigned" }) } });
+  await tx.domainEvent.create({ data: { organisationId, name: "whatsapp.inbound_quarantined", aggregateType: "conversation", aggregateId: message.conversationId, payload: { messageId: message.id, whatsappAssignmentId: stampOf(message.metadata) } } });
 }
 
 const jobSchema = z.object({ organisationId: z.string().uuid(), conversationId: z.string().uuid(), messageId: z.string().uuid() });
@@ -115,9 +148,25 @@ const sameSnapshot = (a: { status: string; assignedMemberId: string | null; assi
 
 export async function processAssistantMessage(payload: Record<string, unknown>) {
   const job = jobSchema.parse(payload);
-  const channel = await db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId: job.organisationId, channel: "WHATSAPP" } } });
-  const config = assistantChannelConfigSchema.safeParse(channel?.config);
-  if (!channel?.enabled || !config.success || !config.data.marketplaceAssistantEnabled) throw new NonRetryableJobError("WhatsApp marketplace assistant is disabled or misconfigured.");
+  const [channel, assignment] = await Promise.all([
+    db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId: job.organisationId, channel: "WHATSAPP" } } }),
+    activeWhatsAppAssignment(db, job.organisationId),
+  ]);
+  const config = assistantChannelConfigSchema.safeParse(assignment ? trustedWhatsAppConfig(channel?.config, assignment) : channel?.config);
+  if (!channel?.enabled || !config.success || !config.data.marketplaceAssistantEnabled) {
+    if (channel?.enabled && !assignment) {
+      // The number moved away (or was never approved): the pending receipts are not this
+      // organisation's to answer any more.
+      await db.$transaction(async (tx) => {
+        await lockWhatsAppChannelShared(tx, job.organisationId);
+        for (const pending of await tx.message.findMany({ where: { conversationId: job.conversationId, organisationId: job.organisationId, direction: "INBOUND", processedAt: null } })) {
+          if (!await stillAssigned(tx, job.organisationId, pending.metadata)) await quarantineInbound(tx, job.organisationId, pending);
+        }
+      });
+      return;
+    }
+    throw new NonRetryableJobError("WhatsApp marketplace assistant is disabled or misconfigured.");
+  }
   // Every pending inbound has a durable job. Drain preceding receipts before this job's target
   // so parallel workers cannot apply later answers to an earlier workflow step. Each pass decides
   // outside a transaction, then commits only if nothing changed meanwhile (optimistic check).
@@ -128,21 +177,41 @@ export async function processAssistantMessage(payload: Record<string, unknown>) 
       const target = await db.message.findFirst({ where: { id: job.messageId, conversationId: conversation.id, direction: "INBOUND" } });
       if (!target || target.processedAt) return;
       const message = await db.message.findFirstOrThrow({ where: { conversationId: conversation.id, direction: "INBOUND", processedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+      // Received under an earlier assignment: never decided, so no data of this organisation is
+      // used to answer someone who wrote to a number it may no longer hold.
+      if (stampOf(message.metadata) !== assignment?.id) {
+        const quarantined = await db.$transaction(async (tx) => {
+          await lockWhatsAppChannelShared(tx, job.organisationId);
+          const still = await tx.message.findUniqueOrThrow({ where: { id: message.id } });
+          if (still.processedAt) return false;
+          await quarantineInbound(tx, job.organisationId, still);
+          return true;
+        });
+        if (quarantined) logQuarantine(job.organisationId, "number_reassigned_before_processing", { messageId: message.id });
+        if (message.id === job.messageId) return;
+        continue;
+      }
       const outcome = await decide(job.organisationId, { ...conversation, channelAddress: conversation.channelAddress }, message, config.data);
 
       const committed = await db.$transaction(async (tx) => {
         const [lock] = await tx.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtextextended(${conversation.whatsappSessionKey!}, 0)) AS acquired`;
         if (!lock?.acquired) throw new Error("WhatsApp conversation is already being processed.");
+        await lockWhatsAppChannelShared(tx, job.organisationId);
         const current = await tx.conversation.findUniqueOrThrow({ where: { id: conversation.id } });
         const still = await tx.message.findUniqueOrThrow({ where: { id: message.id } });
         if (still.processedAt || !sameSnapshot(current, conversation)) return "stale" as const;
+        // The number moved while the reply was being decided: drop the decision.
+        if (!await stillAssigned(tx, job.organisationId, still.metadata)) {
+          await quarantineInbound(tx, job.organisationId, still);
+          return message.id === job.messageId ? "done" as const : "next" as const;
+        }
         if (outcome.kind === "skip") {
           await tx.message.update({ where: { id: message.id }, data: { processedAt: new Date() } });
           return message.id === job.messageId ? "done" as const : "next" as const;
         }
         if (outcome.redactInbound) await tx.message.update({ where: { id: message.id }, data: { body: "[verification code removed]", containsSensitiveData: true } });
         if (outcome.optOut !== undefined) await setWhatsAppOptOut(tx, conversation.channelAddress!, outcome.optOut);
-        await queueReply(tx, job.organisationId, conversation.id, conversation.channelAddress!, message.id, outcome.reply, "reply", outcome.replyMetadata);
+        await queueReply(tx, job.organisationId, stampOf(still.metadata)!, conversation.id, conversation.channelAddress!, message.id, outcome.reply, "reply", outcome.replyMetadata);
         await tx.conversation.update({ where: { id: conversation.id }, data: { assistantState: json(outcome.state), status: outcome.status } });
         if (outcome.handoff) await tx.conversationAssignment.create({ data: { organisationId: job.organisationId, conversationId: conversation.id, assigneeType: "UNASSIGNED", reason: "WhatsApp customer requested human support." } });
         await tx.message.update({ where: { id: message.id }, data: { processedAt: new Date() } });
@@ -158,14 +227,25 @@ export async function processAssistantMessage(payload: Record<string, unknown>) 
       const message = await tx.message.findFirst({ where: { id: job.messageId, organisationId: job.organisationId, conversationId: job.conversationId, processedAt: null }, include: { conversation: true } });
       if (!message?.conversation.channelAddress) return;
       if (error instanceof Error && error.message.includes("already being processed")) return;
-      await queueReply(tx, job.organisationId, job.conversationId, message.conversation.channelAddress, message.id, "I could not finish processing your request. Your progress is saved and the system will retry. Please avoid resending confirmations; the team can see failed items in the jobs queue.", "failure");
+      await lockWhatsAppChannelShared(tx, job.organisationId);
+      if (!await stillAssigned(tx, job.organisationId, message.metadata)) return;
+      await queueReply(tx, job.organisationId, stampOf(message.metadata)!, job.conversationId, message.conversation.channelAddress, message.id, "I could not finish processing your request. Your progress is saved and the system will retry. Please avoid resending confirmations; the team can see failed items in the jobs queue.", "failure");
     }).catch(() => undefined);
     throw error;
   }
 }
 
 export async function processLegacyWhatsAppMessage(payload: Record<string, unknown>) {
-  await receiveInboundChannelMessage(z.string().uuid().parse(payload.organisationId), "WHATSAPP", payload.inbound);
+  const organisationId = z.string().uuid().parse(payload.organisationId);
+  const assignment = await activeWhatsAppAssignment(db, organisationId);
+  // Received before the number moved (or before receipts recorded their assignment): not
+  // delivered into this organisation's inbox.
+  if (!assignment || payload.whatsappAssignmentId !== assignment.id) {
+    logQuarantine(organisationId, "number_reassigned_before_processing", { legacy: true });
+    await db.domainEvent.create({ data: { organisationId, name: "whatsapp.inbound_quarantined", aggregateType: "communication_channel", aggregateId: organisationId, payload: { legacy: true, whatsappAssignmentId: typeof payload.whatsappAssignmentId === "string" ? payload.whatsappAssignmentId : null } } });
+    return;
+  }
+  await receiveInboundChannelMessage(organisationId, "WHATSAPP", payload.inbound);
 }
 
 /** Statuses can arrive before the send response is stored; after this they are not ours. */

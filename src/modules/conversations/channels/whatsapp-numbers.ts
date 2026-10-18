@@ -1,0 +1,58 @@
+import type { Prisma } from "@/platform/database/generated/client";
+import { db } from "@/platform/database/client";
+
+type Client = Prisma.TransactionClient | typeof db;
+
+/**
+ * WhatsApp channel config keys that name a number. Every number sends with one Meta system-user
+ * token, so a value here never grants anything: only an active `WhatsAppNumberAssignment`, which
+ * NesAfric platform admins create, lets an organisation send or receive as a number. Values an
+ * organisation saved before assignment became platform-only stay in its config as an unreviewed
+ * claim for the platform's review list.
+ */
+export const PLATFORM_ASSIGNED_WHATSAPP_KEYS = ["phoneNumberId", "businessAccountId"] as const;
+
+/*
+ * Lock order (advisory, transaction-scoped):
+ *   1. `whatsapp-number-assignments` — every platform assignment, move and release, one at a time;
+ *   2. `whatsapp-channel:<organisationId>` — exclusive for anything that changes a channel or its
+ *      assignment (in sorted organisation order), shared for work that reads the assignment and
+ *      must not overlap a change: inbound receipt, queueing and sending.
+ * A transaction outside the platform path takes at most one channel lock, so the shared holders
+ * can never wait in a cycle with an assignment.
+ */
+const channelKey = (organisationId: string) => `whatsapp-channel:${organisationId}`;
+
+export async function lockWhatsAppAssignments(tx: Prisma.TransactionClient) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"whatsapp-number-assignments"}, 0))`;
+}
+
+export async function lockWhatsAppChannel(tx: Prisma.TransactionClient, organisationId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${channelKey(organisationId)}, 0))`;
+}
+
+export async function lockWhatsAppChannelShared(tx: Prisma.TransactionClient, organisationId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended(${channelKey(organisationId)}, 0))`;
+}
+
+/** The number NesAfric approved for this organisation, or null. */
+export function activeWhatsAppAssignment(client: Client, organisationId: string) {
+  return client.whatsAppNumberAssignment.findUnique({ where: { activeOrganisationId: organisationId } });
+}
+
+export const channelSettings = (config: unknown) => (config && typeof config === "object" && !Array.isArray(config) ? config : {}) as Record<string, unknown>;
+
+/** Channel settings without any number the organisation stored itself. */
+export function withoutWhatsAppNumber(config: unknown) {
+  const settings = { ...channelSettings(config) };
+  for (const key of PLATFORM_ASSIGNED_WHATSAPP_KEYS) delete settings[key];
+  return settings;
+}
+
+/** Channel settings with the number taken from the assignment, never from the stored config. */
+export function trustedWhatsAppConfig(config: unknown, assignment: { phoneNumberId: string; businessAccountId: string | null }) {
+  return { ...withoutWhatsAppNumber(config), phoneNumberId: assignment.phoneNumberId, ...(assignment.businessAccountId ? { businessAccountId: assignment.businessAccountId } : {}) };
+}
+
+/** Reason recorded when work queued under one assignment meets a different one. */
+export const WHATSAPP_REASSIGNED_REASON = "The WhatsApp number assignment changed after this was queued, so it was not sent.";

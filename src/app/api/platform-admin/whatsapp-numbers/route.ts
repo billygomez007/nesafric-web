@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/platform/auth/session";
-import { errorResponse } from "@/platform/errors";
+import { errorResponse, readJsonBody } from "@/platform/errors";
 import { requirePlatformPrincipal } from "@/platform/platform-admin/auth";
 import { assignWhatsAppNumberForPlatform, listWhatsAppNumbersForPlatform } from "@/modules/platform-admin/service";
 
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const principal = await requirePlatformPrincipal(await requireUser());
-    return NextResponse.json(await assignWhatsAppNumberForPlatform(principal, await request.json()));
+    return NextResponse.json(await assignWhatsAppNumberForPlatform(principal, await readJsonBody(request)));
   } catch (error) {
     return errorResponse(error);
   }

@@ -1,4 +1,5 @@
-import { isWhatsAppOptedOut } from "@/modules/whatsapp-assistant/identity";
+import { isWhatsAppOptedOut, whatsappSessionKey } from "@/modules/whatsapp-assistant/identity";
+import { activeWhatsAppAssignment, lockWhatsAppChannel, lockWhatsAppChannelShared, PLATFORM_ASSIGNED_WHATSAPP_KEYS, trustedWhatsAppConfig, WHATSAPP_REASSIGNED_REASON } from "./channels/whatsapp-numbers";
 import { randomBytes } from "node:crypto";
 import { Prisma, type ConversationChannel, type ConversationStatus } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
@@ -482,15 +483,29 @@ async function recordOutboundMessage(organisationId: string, conversationId: str
 
   const channelConfig = await db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel: conversation.channel } } });
   const recipientAddress = conversation.channelAddress;
+  const whatsapp = conversation.channel === "WHATSAPP" ? await whatsappReplyAssignment(organisationId, conversation) : undefined;
   const delivery = await db.messageDelivery.create({
-    data: { organisationId, messageId: message.id, channel: conversation.channel, status: "QUEUED", recipientAddress, idempotencyKey: `message-delivery:${message.id}` },
+    data: { organisationId, messageId: message.id, channel: conversation.channel, status: "QUEUED", recipientAddress, idempotencyKey: `message-delivery:${message.id}`, whatsappAssignmentId: whatsapp?.assignmentId },
   });
-  if (!channelConfig?.enabled) {
-    await db.messageDelivery.update({ where: { id: delivery.id }, data: { status: "SKIPPED", failureReason: `${conversation.channel} channel is disabled for this organisation.` } });
+  if (!channelConfig?.enabled || whatsapp?.skipReason) {
+    await db.messageDelivery.update({ where: { id: delivery.id }, data: { status: "SKIPPED", failureReason: whatsapp?.skipReason ?? `${conversation.channel} channel is disabled for this organisation.` } });
     return message;
   }
   await enqueueJob({ organisationId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${delivery.id}`, payload: { organisationId, deliveryId: delivery.id } });
   return message;
+}
+
+/**
+ * The assignment a WhatsApp reply is queued under: the organisation's active number, and only
+ * when the conversation arrived on that same number (its session key names the number).
+ */
+async function whatsappReplyAssignment(organisationId: string, conversation: { whatsappSessionKey: string | null; channelAddress: string | null }) {
+  const assignment = await activeWhatsAppAssignment(db, organisationId);
+  if (!assignment) return { assignmentId: undefined, skipReason: "No WhatsApp number is assigned to this organisation." };
+  if (conversation.whatsappSessionKey && conversation.channelAddress && conversation.whatsappSessionKey !== whatsappSessionKey(organisationId, assignment.phoneNumberId, conversation.channelAddress)) {
+    return { assignmentId: undefined, skipReason: "This conversation arrived on a WhatsApp number the organisation no longer has." };
+  }
+  return { assignmentId: assignment.id, skipReason: undefined };
 }
 
 function storedWhatsAppTemplate(metadata: unknown) {
@@ -520,7 +535,7 @@ export async function deliverConversationMessage(organisationId: string, deliver
     return db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "SKIPPED", failureReason: "The recipient opted out of WhatsApp messages (STOP)." } });
   }
   try {
-    const result = await adapter.send({
+    const request = {
       organisationId,
       conversationId: conversation.id,
       messageId: delivery.message.id,
@@ -533,8 +548,24 @@ export async function deliverConversationMessage(organisationId: string, deliver
       whatsappTemplate: template,
       externalReferenceId: delivery.message.externalReferenceId,
       providerKey: channelConfig?.providerKey,
-      config: (channelConfig?.config as Record<string, unknown>) ?? {},
-    });
+    };
+    // WhatsApp: send only under the assignment the message was queued under, and hold it (shared
+    // lock) until the send finishes so a move waits instead of overlapping it.
+    const result = delivery.channel === "WHATSAPP"
+      ? await db.$transaction(async (tx) => {
+        await lockWhatsAppChannelShared(tx, organisationId);
+        const assignment = await activeWhatsAppAssignment(tx, organisationId);
+        if (!assignment || assignment.id !== delivery.whatsappAssignmentId) return null;
+        return adapter.send({ ...request, config: trustedWhatsAppConfig(channelConfig.config, assignment) });
+      }, { timeout: 30_000, maxWait: 10_000 })
+      : await adapter.send({ ...request, config: (channelConfig.config as Record<string, unknown>) ?? {} });
+    if (!result) {
+      return db.$transaction(async (tx) => {
+        const quarantined = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status: "SKIPPED", failureReason: WHATSAPP_REASSIGNED_REASON } });
+        await record(organisationId, undefined, "message.delivery_quarantined", "conversation", conversation.id, { channel: delivery.channel, whatsappAssignmentId: delivery.whatsappAssignmentId });
+        return quarantined;
+      });
+    }
     if (result.status === "FAILED") {
       const status = result.unconfirmed ? "UNCONFIRMED" as const : "FAILED" as const;
       const failed = await db.$transaction(async (tx) => {
@@ -721,38 +752,32 @@ export async function getWebhookChannelConfig(organisationId: string, channel: C
   return db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel } } });
 }
 
-/**
- * WhatsApp channel config keys only NesAfric can set (`assignWhatsAppNumberForPlatform`). Every
- * number sends with one Meta system-user token, so the number an organisation sends from must be
- * the one the platform assigned to it.
- */
-export const PLATFORM_ASSIGNED_WHATSAPP_KEYS = ["phoneNumberId", "businessAccountId"] as const;
-
-/** Serialises writes to one organisation's WhatsApp channel between the org and platform paths. */
-export async function lockWhatsAppChannel(tx: Prisma.TransactionClient, organisationId: string) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp-channel:${organisationId}`}, 0))`;
-}
-
 export async function upsertChannelConfig(userId: string, organisationId: string, channel: ConversationChannel, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.communicationChannelManage);
   const data = channelConfigSchema.parse(input);
   return db.$transaction(async (tx) => {
     let channelConfig = data.config;
     if (channel === "WHATSAPP") {
-      // The organisation may resend the values it already has (settings screens round-trip the
-      // config) but never set or change them; whatever the platform assigned is always kept.
+      // Numbers come only from NesAfric (`WhatsAppNumberAssignment`). The organisation may resend
+      // the value it already has (its assigned number, or an unreviewed claim it saved before
+      // assignment became platform-only) but never set or change one; a stored claim is kept for
+      // the platform's review list. Read under the channel lock that assignments also take.
       await lockWhatsAppChannel(tx, organisationId);
-      const current = await tx.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel } }, select: { config: true } });
-      const assigned = (current?.config ?? {}) as Record<string, unknown>;
+      const [current, assignment] = await Promise.all([
+        tx.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel } }, select: { config: true } }),
+        activeWhatsAppAssignment(tx, organisationId),
+      ]);
+      const claimed = (current?.config ?? {}) as Record<string, unknown>;
+      const assigned: Record<string, unknown> = assignment ? { phoneNumberId: assignment.phoneNumberId, businessAccountId: assignment.businessAccountId ?? undefined } : {};
       for (const key of PLATFORM_ASSIGNED_WHATSAPP_KEYS) {
-        if (key in data.config && data.config[key] !== assigned[key]) {
+        if (key in data.config && data.config[key] !== (key in claimed ? claimed[key] : assigned[key])) {
           throw new AppError("WHATSAPP_NUMBER_PLATFORM_ASSIGNED", 403, "WhatsApp numbers are connected by NesAfric. Contact NesAfric support to connect or move a number.");
         }
       }
       channelConfig = { ...data.config };
       for (const key of PLATFORM_ASSIGNED_WHATSAPP_KEYS) {
         delete channelConfig[key];
-        if (key in assigned) channelConfig[key] = assigned[key];
+        if (key in claimed) channelConfig[key] = claimed[key];
       }
     }
     const config = await tx.communicationChannelConfig.upsert({

@@ -62,8 +62,8 @@ async function say(body: string, id = `wamid.${++counter}`) {
 async function official() {
   const staff = await registerUser({ displayName: "NesAfric Support", email: "support@example.com", password: "secure-password-123" });
   const organisation = await createOrganisation(staff.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
-  await connectWhatsAppChannel(staff.id, organisation.id, { enabled: true, config: { phoneNumberId: PHONE_NUMBER_ID, businessAccountId: "555", marketplaceAssistantEnabled: true } });
   vi.stubEnv("WHATSAPP_OFFICIAL_ORGANISATION_ID", organisation.id);
+  await connectWhatsAppChannel(staff.id, organisation.id, { enabled: true, config: { phoneNumberId: PHONE_NUMBER_ID, businessAccountId: "555", marketplaceAssistantEnabled: true } });
   return organisation;
 }
 
