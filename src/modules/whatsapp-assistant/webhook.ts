@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getWebhookChannelConfig } from "@/modules/conversations/service";
 import { WhatsAppChannelAdapter } from "@/modules/conversations/channels/whatsapp";
+import { activeWhatsAppAssignment, trustedWhatsAppConfig } from "@/modules/conversations/channels/whatsapp-numbers";
+import { db } from "@/platform/database/client";
 import { AppError, errorResponse } from "@/platform/errors";
 import { assistantChannelConfigSchema } from "./schemas";
 import { acceptWhatsAppEvents } from "./service";
@@ -27,7 +29,11 @@ export async function receiveWhatsAppWebhook(request: Request, organisationId: s
   try {
     const config = await getWebhookChannelConfig(organisationId, "WHATSAPP");
     if (!config?.enabled || !process.env.WHATSAPP_APP_SECRET) return new NextResponse("WhatsApp webhook is not configured", { status: 503 });
-    const channel = assistantChannelConfigSchema.safeParse(config.config);
+    // Only a number NesAfric assigned to this organisation is received; a number the organisation
+    // saved itself is an unreviewed claim. 503 lets Meta redeliver once the platform approves it.
+    const assignment = await activeWhatsAppAssignment(db, organisationId);
+    if (!assignment) return new NextResponse("No WhatsApp number is assigned to this organisation", { status: 503 });
+    const channel = assistantChannelConfigSchema.safeParse(trustedWhatsAppConfig(config.config, assignment));
     if (!channel.success) return new NextResponse("WhatsApp receiving number is not configured", { status: 503 });
     const rawBody = await readWebhookBody(request);
     const verification = adapter.verifyWebhookSignature(rawBody, { "x-hub-signature-256": request.headers.get("x-hub-signature-256") }, process.env.WHATSAPP_APP_SECRET);
@@ -36,7 +42,7 @@ export async function receiveWhatsAppWebhook(request: Request, organisationId: s
     }
     let payload: unknown;
     try { payload = JSON.parse(rawBody); } catch { throw new AppError("INVALID_JSON", 400, "Invalid webhook JSON."); }
-    return NextResponse.json(await acceptWhatsAppEvents(organisationId, channel.data, payload));
+    return NextResponse.json(await acceptWhatsAppEvents(organisationId, channel.data, payload, assignment.id));
   } catch (error) {
     return errorResponse(error);
   }

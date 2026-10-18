@@ -1,20 +1,47 @@
+import type { Prisma } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
+import { activeWhatsAppAssignment, lockWhatsAppChannelShared, trustedWhatsAppConfig } from "./whatsapp-numbers";
+
+type Client = Prisma.TransactionClient | typeof db;
+export type WhatsAppSender = { senderOrganisationId: string; assignmentId: string; official: boolean; providerKey: string | null; config: Record<string, unknown> };
 
 /**
- * The WhatsApp number that sends a business-initiated message for an organisation: its own
- * enabled channel when it has a receiving number, otherwise the official NesAfric number
- * (`WHATSAPP_OFFICIAL_ORGANISATION_ID`). Returns null when neither is configured.
+ * The WhatsApp number that sends a business-initiated message for an organisation:
+ * - its own number, when its channel is enabled and NesAfric assigned it a number;
+ * - otherwise the official NesAfric number, when the official organisation
+ *   (`WHATSAPP_OFFICIAL_ORGANISATION_ID`) has an enabled channel and an official assignment.
+ * A number the organisation saved itself is never used. Returns null when neither applies.
  */
-export async function resolveWhatsAppSendConfig(organisationId: string, env: Record<string, string | undefined> = process.env) {
+export async function resolveWhatsAppSendConfig(organisationId: string, env: Record<string, string | undefined> = process.env, client: Client = db): Promise<WhatsAppSender | null> {
   const official = env.WHATSAPP_OFFICIAL_ORGANISATION_ID?.trim();
   for (const candidate of official && official !== organisationId ? [organisationId, official] : [organisationId]) {
-    const channel = await db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId: candidate, channel: "WHATSAPP" } } });
-    const config = (channel?.config ?? {}) as Record<string, unknown>;
-    if (channel?.enabled && typeof config.phoneNumberId === "string" && /^\d+$/.test(config.phoneNumberId)) {
-      return { senderOrganisationId: candidate, providerKey: channel.providerKey, config };
-    }
+    const [channel, assignment] = await Promise.all([
+      client.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId: candidate, channel: "WHATSAPP" } } }),
+      activeWhatsAppAssignment(client, candidate),
+    ]);
+    if (!channel?.enabled || !assignment) continue;
+    // The fallback is only ever the official number itself, never whatever the official
+    // organisation happens to hold.
+    if (candidate !== organisationId && !assignment.official) continue;
+    return { senderOrganisationId: candidate, assignmentId: assignment.id, official: assignment.official, providerKey: channel.providerKey, config: trustedWhatsAppConfig(channel.config, assignment) };
   }
   return null;
+}
+
+/**
+ * Sends while holding a shared lock on the sending organisation's channel, so an assignment or
+ * move waits until the send finishes and a send never goes out from a number that has already
+ * moved. Throws (retryable) when the assignment changed between choosing and locking.
+ */
+export async function withWhatsAppSender<T>(organisationId: string, send: (sender: WhatsAppSender) => Promise<T>, env: Record<string, string | undefined> = process.env): Promise<T | null> {
+  const chosen = await resolveWhatsAppSendConfig(organisationId, env);
+  if (!chosen) return null;
+  return db.$transaction(async (tx) => {
+    await lockWhatsAppChannelShared(tx, chosen.senderOrganisationId);
+    const current = await resolveWhatsAppSendConfig(organisationId, env, tx);
+    if (current?.assignmentId !== chosen.assignmentId) throw new Error("The WhatsApp sending number changed; retrying.");
+    return send(current);
+  }, { timeout: 30_000, maxWait: 10_000 });
 }
 
 /**

@@ -17,6 +17,15 @@ export const forbidden = () => new AppError("FORBIDDEN", 403, "You do not have p
 export const unauthenticated = () => new AppError("UNAUTHENTICATED", 401, "Authentication is required.");
 export const notFound = () => new AppError("NOT_FOUND", 404, "The requested resource was not found.");
 
+/** A request body that is not JSON is the client's mistake (400), not an internal error. */
+export async function readJsonBody(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    throw new AppError("INVALID_JSON", 400, "The request body must be valid JSON.");
+  }
+}
+
 export function errorResponse(error: unknown) {
   if (error instanceof AppError) {
     return NextResponse.json({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } }, { status: error.status });

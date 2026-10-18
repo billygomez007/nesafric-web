@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PlatformPrincipal } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
+import { assertGuardedWorkActive } from "@/platform/database/guarded";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { membershipHasPermission } from "@/platform/authorization/policy";
 import { AppError, forbidden, notFound } from "@/platform/errors";
@@ -177,6 +178,8 @@ async function performUpload(params: {
   const storageKey = `${classification === "PUBLIC" ? "public" : "private"}/${UPLOAD_TARGET_NAMESPACES[targetType] ?? targetType.toLowerCase()}/${params.organisationId ?? "unowned"}/${input.targetId}/${randomUUID()}-${finalName}`;
 
   try {
+    // Guarded work whose guard has ended must not store files (see platform/database/guarded.ts).
+    await assertGuardedWorkActive();
     await adapter.putObject({ key: storageKey, body: bytes, contentType: sniffed.mimeType, classification });
   } catch (error) {
     if (params.organisationId) await recordIntegrationOutcome(params.organisationId, "STORAGE", adapter.providerKey, "FAILURE", error instanceof Error ? error.message : "Storage write failed.");

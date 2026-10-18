@@ -19,13 +19,83 @@ Real WhatsApp delivery has **not** been verified end to end. Every test uses a r
 
 ### Official organisation
 
-Create an organisation for NesAfric itself. As its owner, save its WhatsApp channel through `PUT /api/organisations/<id>/communication-channels/WHATSAPP` (or the existing channel settings screen) with:
+Create an organisation for NesAfric itself and set `WHATSAPP_OFFICIAL_ORGANISATION_ID` to its ID **before** you assign its number. A number assigned to that organisation is recorded as official at the moment of assignment. Then:
 
-```json
-{ "enabled": true, "webhookVerifyToken": "<verify token>", "config": { "phoneNumberId": "<phone number id>", "businessAccountId": "<WABA id>", "marketplaceAssistantEnabled": true, "defaultCountry": "GH", "defaultCurrency": "GHS" } }
-```
+1. A platform admin with `whatsapp_numbers.manage` (SUPER_ADMIN only) assigns the number:
 
-A phone number ID can belong to one organisation only. Saving one that another organisation already uses is refused with `WHATSAPP_NUMBER_IN_USE`.
+   ```
+   POST /api/platform-admin/whatsapp-numbers
+   { "organisationId": "<official org id>", "phoneNumberId": "<phone number id>", "businessAccountId": "<WABA id>", "reason": "Official NesAfric number" }
+   ```
+
+2. As the organisation's owner, save the rest of the channel through `PUT /api/organisations/<id>/communication-channels/WHATSAPP` (or the channel settings screen):
+
+   ```json
+   { "enabled": true, "webhookVerifyToken": "<verify token>", "config": { "marketplaceAssistantEnabled": true, "defaultCountry": "GH", "defaultCurrency": "GHS" } }
+   ```
+
+### Assignment trust
+
+Every number sends with the same system-user token, so the phone number ID decides who sends as which number. A number in an organisation's channel settings grants nothing. Only an active **assignment** (`WhatsAppNumberAssignment`) does, and only a platform admin creates one.
+
+- **Sending.** Replies, staff messages, notifications and templates use the assigned number. They never use a `phoneNumberId` stored in the channel settings.
+- **Receiving.** `/api/webhooks/whatsapp/<orgId>` (and the official `/api/webhooks/whatsapp`) returns `503` when the organisation has no assignment, and accepts only events for the assigned number.
+- **Official fallback.** A business-initiated message (reminder, invitation, work order) for an organisation without its own assignment goes from the official number. This needs the official organisation's channel to be enabled with an assignment marked official. Conversation replies never fall back: a reply on a number the organisation does not hold is not sent.
+- **Organisations.** The channel update refuses any `phoneNumberId` or `businessAccountId` that differs from what the organisation already has (`403 WHATSAPP_NUMBER_PLATFORM_ASSIGNED`). Leaving them out keeps everything as it is.
+- **Database.** Unique indexes allow one active holder per number and one active number per organisation. A check constraint keeps the active columns consistent.
+
+Platform endpoints (all audited; changes need `whatsapp_numbers.manage`, the list needs `communications.read`):
+
+| Endpoint | Body | Effect |
+|---|---|---|
+| `GET /api/platform-admin/whatsapp-numbers` | | `assignments` in force, `protectedNumbers` (old official numbers), `unreviewedClaims` (legacy numbers, below). |
+| `POST /api/platform-admin/whatsapp-numbers` | `organisationId`, `phoneNumberId`, `businessAccountId?`, `move?`, `reason` | Assign, replace or move. Sending the assignment already in force returns `changed: false` and records nothing. |
+| `POST /api/platform-admin/whatsapp-numbers/release` | `phoneNumberId`, `confirmPhoneNumberId` (same value), `reason` | End an ordinary assignment, or lift an old official number's protection. |
+| `POST /api/platform-admin/whatsapp-numbers/claims/dismiss` | `organisationId`, `phoneNumberId`, `reason` | Reject a legacy claim; the number is removed from that organisation's settings. |
+
+Audit actions: `platform_admin.whatsapp_number_assigned`, `_moved`, `_released`, `platform_admin.whatsapp_claim_dismissed` (platform trail, with the reason). Each organisation affected gets `communication_channel.whatsapp_number_assigned`, `_removed` or `communication_channel.whatsapp_claim_dismissed` in its own log.
+
+### Legacy numbers: review before they work again
+
+Numbers that organisations saved in their channel settings before this change are **unreviewed claims**. From deployment until a platform admin reviews them, they neither send nor receive. Business-initiated messages for those organisations use the official number (if available). Meta keeps retrying the `503` webhook deliveries for a while, so messages sent to those numbers are received once the number is approved, if it is approved soon enough.
+
+1. `GET /api/platform-admin/whatsapp-numbers` and read `unreviewedClaims`. Each claim shows `heldByOrganisationId` (another organisation already has it), `officialProtected` and `claimedByOrganisations` (more than 1 means a conflict).
+2. Check the claim against WhatsApp Manager: does the number belong to that business?
+3. Approve it with `POST /api/platform-admin/whatsapp-numbers` (the audit records `approvedLegacyClaim: true`), or reject it with `POST …/claims/dismiss`.
+4. Work queued under the claim before approval is not sent (see below).
+
+### Moves and replacements
+
+- **Move.** Taking a number from the organisation that holds it is refused (`409 WHATSAPP_NUMBER_IN_USE`) unless the request has `"move": true`. That organisation keeps its channel settings but has no number until it is assigned another.
+- **Replace.** Assigning a new number to an organisation ends its old assignment. The audit records the previous number.
+- **Queued and in-flight work.** Every WhatsApp delivery and inbound receipt records the assignment it was created under. If that assignment is no longer the organisation's active one when the work runs, the work is **quarantined**:
+  - a delivery is marked `SKIPPED` ("The WhatsApp number assignment changed…") and logged as `message.delivery_quarantined`;
+  - an inbound message is marked processed with `metadata.quarantined`, gets no reply, and is logged as `whatsapp.inbound_quarantined` (domain event and log line).
+  Quarantined work is never retried or resent. A new holder starts its own conversations; it never sees the old holder's transcript.
+- **Sends in progress** hold the assignment (shared lock), so a move waits for them to finish (up to about 15 seconds) and nothing goes out from a number after its move commits.
+- **Inbound messages being processed** hold it too, from the assignment check through deciding, its side effects (maintenance requests, job replies, rule changes) and queueing the reply. A move waits for that to finish, so no side effect happens for a number that has already moved.
+  - All database work of one processing pass runs on the single transaction that holds the lock. Its writes commit together with the lock, or not at all.
+  - If the pass runs past `WHATSAPP_PROCESSING_TIMEOUT_MS` (default 120000), or its database connection is lost, the lock is released and every write of the pass is rolled back. Anything the pass still tries afterwards fails.
+  - SMS sends (Arkesel) and file uploads first check that the pass's transaction is still alive. The job is then retried and its message quarantined if the number has moved.
+- **Conversation provenance.** Every WhatsApp conversation records the assignment it was received under (`Conversation.whatsappAssignmentId`). Staff replies and automatic AI replies go out only while that is still the organisation's active assignment. Otherwise the delivery is `SKIPPED` with a reason saying the conversation came from an assignment the organisation no longer has.
+- **Legacy inbox (assistant off).** A message received under a different assignment starts a new conversation; it never continues the old thread.
+- **Assistant conversations** are tied to their number. An inbound message on the same number re-verifies the conversation under the current assignment.
+- **Missing provenance.** Conversations created before this change have no provenance and get no replies, from staff or AI. The reason is "cannot be verified". They work again only after the customer writes to the current number, which re-verifies an assistant conversation or starts a new legacy one. Provenance is never inferred from the current assignment.
+- Re-assigning the official number to promote it creates a new assignment. Official conversations then accept staff replies again once each customer writes in.
+
+### Official number
+
+- An official number never goes to another organisation, even with `"move": true` and even after it has been replaced (`409 OFFICIAL_WHATSAPP_NUMBER`). The official number in use cannot be released (`409 OFFICIAL_WHATSAPP_NUMBER_ACTIVE`).
+- **Replacing it:** assign the new number to the official organisation. The old number moves to `protectedNumbers`. Messages queued under the old number are quarantined, and new ones go from the new number.
+- **Reusing an old official number elsewhere** (for example after Meta reissues it): `POST …/release` with the number typed twice and a reason. This lifts the protection and is audited. Then assign it normally.
+- Changing `WHATSAPP_OFFICIAL_ORGANISATION_ID` does not move anything. Assign the official number to the new official organisation. If that organisation already holds the number, assigning it again promotes the assignment to official. Until then there is no official fallback.
+
+### Recovery
+
+- **Wrong organisation got a number:** move it back with `"move": true` and a reason. Work queued for either organisation in between is quarantined. Tell both organisations to resend anything important.
+- **Organisation lost its number by mistake:** assign it again. Quarantined messages stay quarantined; the customer has to write again or staff must start a new message.
+- **Official number compromised or lost:** assign a replacement to the official organisation first. Then decide whether the old number should ever be released.
+- **Find what was quarantined:** `MessageDelivery` rows with that `failureReason`, audit `message.delivery_quarantined`, domain events `whatsapp.inbound_quarantined`.
 
 ### Environment variables
 
@@ -41,6 +111,7 @@ A phone number ID can belong to one organisation only. Saving one that another o
 | `ARKESEL_API_KEY`, `ARKESEL_SENDER_ID` | SMS verification codes for account linking and onboarding. |
 | `OTP_HASH_SECRET` | At least 32 characters (falls back to `SESSION_SECRET`). |
 | `AI_PROVIDER`, `AI_PROVIDER_API_KEY` | Optional. Without them, deterministic rules classify reports and questions. |
+| `WHATSAPP_PROCESSING_TIMEOUT_MS` | Optional. Longest one inbound processing pass may hold the number assignment (default 120000). |
 | `CRON_SECRET` or `JOBS_RUN_SECRET` | Needed if `/api/jobs/run` is used instead of the worker. |
 
 ### Worker
@@ -92,20 +163,28 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 
 ## 6. Go-live checklist
 
-1. Templates approved and their env vars set; the health check shows `whatsapp: CONFIGURED`.
-2. From a real phone, send `hi` and get the menu.
-3. Run `link` with a real SMS code.
-4. Run `register` end to end, then `confirm`. Check that the organisation, properties and pending ownership claim exist.
-5. Run `add provider` to a second real phone, then reply ACCEPT from it.
-6. Add a rule with `add rule`.
-7. From a tenant phone: send the access code, `report`, a photo, `confirm`. The provider phone receives the work order.
-8. On the provider phone: tap Accept, `quote` over the limit, landlord `approve`, `done` with a photo, then the tenant replies `ok`.
-9. The digest arrives at the configured hour, and a CRITICAL alert for an emergency report arrives at once.
-10. Reply STOP from the provider phone, and confirm the next job does not reach it.
+1. Migrations `20261018230000_whatsapp_number_assignments` and `20261019090000_whatsapp_conversation_provenance` applied. The official number assigned through the platform endpoint, and every legacy claim reviewed (section 2).
+2. Templates approved and their env vars set; the health check shows `whatsapp: CONFIGURED`.
+3. From a real phone, send `hi` and get the menu.
+4. Run `link` with a real SMS code.
+5. Run `register` end to end, then `confirm`. Check that the organisation, properties and pending ownership claim exist.
+6. Run `add provider` to a second real phone, then reply ACCEPT from it.
+7. Add a rule with `add rule`.
+8. From a tenant phone: send the access code, `report`, a photo, `confirm`. The provider phone receives the work order.
+9. On the provider phone: tap Accept, `quote` over the limit, landlord `approve`, `done` with a photo, then the tenant replies `ok`.
+10. The digest arrives at the configured hour, and a CRITICAL alert for an emergency report arrives at once.
+11. Reply STOP from the provider phone, and confirm the next job does not reach it.
 
 ## 7. Known limits
 
-- WhatsApp numbers are tied to organisations by ownership check only. Moving a number between organisations needs support. Platform-assigned numbers (embedded signup) are a follow-up.
+- WhatsApp numbers are assigned by NesAfric support (section 2). There is no embedded signup yet, so a landlord cannot connect their own number without support, and there is no admin screen: the platform endpoints are API-only.
+- Legacy numbers stop working at deployment until they are reviewed (section 2). Meta's redelivery of `503` webhooks is time-limited, so review them promptly.
+- All numbers share one system-user token; a per-number or per-business token is not supported. Meta itself does not stop a token holder sending as any number on the WABA; the assignment check is in this application only.
+- Quarantined messages are not resent automatically.
+- A send or upload already started when a processing pass's transaction ends is not recalled. The liveness check runs just before it starts.
+- If the database kills the connection of a processing pass, the Prisma pg adapter (6.19) never returns that pooled connection. The pool has one fewer connection until the process restarts. The database side is cleaned up.
+- After deployment, staff cannot reply to existing WhatsApp conversations until the customer writes again (no provenance).
+- A notification send that has already picked the official number as its sender is retried (not quarantined) if the official assignment changes before it sends.
 - Rent-due reminders are not configured by onboarding; only lease-expiry policies exist.
 - Provider photo access uses short-lived signed links; links are removed from the stored transcript after sending.
 - Times are Ghana time (UTC); there is no per-organisation time zone.

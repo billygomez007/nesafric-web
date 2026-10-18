@@ -49,6 +49,9 @@ export const PLATFORM_PERMISSIONS = {
   /// Reviewing a landlord's claim to own or manage a property registered without evidence
   /// (for example over WhatsApp).
   portfolioVerify: "portfolio.verify",
+  /// Assigning or moving a WhatsApp phone number ID to an organisation. Every number sends with one
+  /// Meta system-user token, so this decides who can send as which number: SUPER_ADMIN only.
+  whatsappNumbersManage: "whatsapp_numbers.manage",
 } as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];

@@ -1071,6 +1071,7 @@ model Organisation {
   rentalApplications          RentalApplication[]
   conversations               Conversation[]
   communicationChannels       CommunicationChannelConfig[]
+  whatsappNumberAssignments   WhatsAppNumberAssignment[]
   conversationParticipants    ConversationParticipant[]
   messages                    Message[]
   messageDeliveries           MessageDelivery[]
@@ -4511,6 +4512,9 @@ model Conversation {
   aiSummary            String?
   webChatTokenHash     String?                   @unique
   whatsappSessionKey   String?                   @unique
+  /// WhatsApp only: the number assignment the conversation was received (or last re-verified by an
+  /// inbound message) under. Replies are sent only while it is the organisation's active one.
+  whatsappAssignmentId String?                   @db.Uuid
   assistantState       Json?
   lastMessageAt        DateTime?
   lastInboundAt        DateTime?
@@ -4520,6 +4524,7 @@ model Conversation {
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
   organisation         Organisation              @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  whatsappAssignment   WhatsAppNumberAssignment? @relation(fields: [whatsappAssignmentId], references: [id], onDelete: Restrict)
   property             Property?                 @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   unit                 Unit?                     @relation(fields: [unitId], references: [id], onDelete: Restrict)
   lease                Lease?                    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
@@ -4545,6 +4550,7 @@ model Conversation {
   @@index([organisationId, assignedAIEmployeeId, status])
   @@index([organisationId, assignedMemberId, status])
   @@index([externalThreadKey])
+  @@index([whatsappAssignmentId])
 }
 
 model ConversationParticipant {
@@ -4600,25 +4606,28 @@ model Message {
 }
 
 model MessageDelivery {
-  id                String                @id @default(uuid()) @db.Uuid
-  messageId         String                @db.Uuid
-  organisationId    String                @db.Uuid
-  channel           ConversationChannel
-  status            MessageDeliveryStatus @default(QUEUED)
-  recipientAddress  String?
-  providerReference String?
-  attempts          Int                   @default(0)
-  lastAttemptAt     DateTime?
-  sentAt            DateTime?
-  deliveredAt       DateTime?
-  readAt            DateTime?
-  failedAt          DateTime?
-  failureReason     String?
-  idempotencyKey    String                @unique
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  message           Message               @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  organisation      Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  id                   String                @id @default(uuid()) @db.Uuid
+  messageId            String                @db.Uuid
+  organisationId       String                @db.Uuid
+  channel              ConversationChannel
+  status               MessageDeliveryStatus @default(QUEUED)
+  recipientAddress     String?
+  providerReference    String?
+  attempts             Int                   @default(0)
+  lastAttemptAt        DateTime?
+  sentAt               DateTime?
+  deliveredAt          DateTime?
+  readAt               DateTime?
+  failedAt             DateTime?
+  failureReason        String?
+  idempotencyKey       String                @unique
+  /// WhatsApp only: the number assignment in force when the message was queued. Delivery is
+  /// quarantined unless that assignment is still the organisation's active one.
+  whatsappAssignmentId String?               @db.Uuid
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  message              Message               @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  organisation         Organisation          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
 
   @@index([organisationId, status])
   @@index([messageId])
@@ -4642,6 +4651,34 @@ model ConversationAssignment {
 
   @@index([conversationId, createdAt])
   @@index([organisationId, createdAt])
+}
+
+/// Which organisation may send and receive as a WhatsApp phone number ID. Only NesAfric platform
+/// admins create these; one row per assignment, kept as history when it ends. The `active*`
+/// columns are set only while the assignment is in force, so their unique indexes give a number
+/// one holder and an organisation one number.
+model WhatsAppNumberAssignment {
+  id                              String         @id @default(uuid()) @db.Uuid
+  phoneNumberId                   String
+  businessAccountId               String?
+  organisationId                  String         @db.Uuid
+  activePhoneNumberId             String?        @unique
+  activeOrganisationId            String?        @unique @db.Uuid
+  /// Assigned to the official NesAfric organisation. The number can never go to another
+  /// organisation, even after it is replaced, until a platform admin releases the protection.
+  official                        Boolean        @default(false)
+  assignedByPrincipalId           String         @db.Uuid
+  reason                          String
+  assignedAt                      DateTime       @default(now())
+  endedAt                         DateTime?
+  endedReason                     String?
+  protectionReleasedAt            DateTime?
+  protectionReleasedByPrincipalId String?        @db.Uuid
+  organisation                    Organisation   @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  conversations                   Conversation[]
+
+  @@index([phoneNumberId])
+  @@index([organisationId])
 }
 
 model CommunicationChannelConfig {

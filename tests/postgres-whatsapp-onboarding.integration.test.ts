@@ -15,7 +15,6 @@ vi.mock("@/modules/messaging/otp-provider", () => ({
 import { POST as officialPost } from "@/app/api/webhooks/whatsapp/route";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
-import { upsertChannelConfig } from "@/modules/conversations/service";
 import { defaultChannelAdapters, type ChannelAdapters } from "@/modules/conversations/channels/registry";
 import { linkWhatsAppIdentity } from "@/modules/whatsapp-assistant/identity";
 import { commitDraft } from "@/modules/whatsapp-assistant/onboarding/commit";
@@ -23,6 +22,7 @@ import { loadDraft } from "@/modules/whatsapp-assistant/onboarding/draft";
 import { createJobHandlers } from "@/platform/jobs/handlers";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { db } from "@/platform/database/client";
+import { connectWhatsAppChannel } from "./helpers/whatsapp-channel";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -62,8 +62,8 @@ async function say(body: string, id = `wamid.${++counter}`) {
 async function official() {
   const staff = await registerUser({ displayName: "NesAfric Support", email: "support@example.com", password: "secure-password-123" });
   const organisation = await createOrganisation(staff.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
-  await upsertChannelConfig(staff.id, organisation.id, "WHATSAPP", { enabled: true, config: { phoneNumberId: PHONE_NUMBER_ID, businessAccountId: "555", marketplaceAssistantEnabled: true } });
   vi.stubEnv("WHATSAPP_OFFICIAL_ORGANISATION_ID", organisation.id);
+  await connectWhatsAppChannel(staff.id, organisation.id, { enabled: true, config: { phoneNumberId: PHONE_NUMBER_ID, businessAccountId: "555", marketplaceAssistantEnabled: true } });
   return organisation;
 }
 
