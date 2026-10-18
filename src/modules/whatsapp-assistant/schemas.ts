@@ -25,7 +25,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -59,6 +59,16 @@ export const assistantStateSchema = z.object({
       organisationId: z.string().uuid(),
       toId: z.string().uuid().optional(),
     }).optional(),
+  }).optional(),
+  /** A tenant's maintenance report being put together. */
+  report: z.object({
+    step: z.enum(["tenancy", "describe", "photos", "duplicate", "confirm"]),
+    choices: z.array(z.object({ tenantOrganisationId: z.string().uuid(), organisationId: z.string().uuid(), organisationName: z.string().max(200), propertyId: z.string().uuid(), propertyName: z.string().max(200), unitId: z.string().uuid().optional(), unitName: z.string().max(80).optional() })).max(9).default([]),
+    selected: z.number().int().min(0).max(8).optional(),
+    description: z.string().max(4000).optional(),
+    media: z.array(z.object({ id: z.string().max(100), mimeType: z.string().max(100).optional() })).max(5).default([]),
+    classification: z.object({ category: z.string().max(40), priority: z.enum(["EMERGENCY", "URGENT", "NORMAL", "LOW"]), safetyHazard: z.boolean(), title: z.string().max(120), source: z.enum(["model", "rules"]) }).optional(),
+    duplicate: z.object({ id: z.string().uuid(), referenceNumber: z.string().max(40), title: z.string().max(200) }).optional(),
   }).optional(),
   /** Account linking in progress. Holds the challenge reference only, never the code. */
   link: z.object({

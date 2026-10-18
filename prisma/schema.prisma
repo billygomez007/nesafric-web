@@ -1014,6 +1014,7 @@ model Organisation {
   onboardingDrafts            OnboardingDraft[]
   portfolioVerifications      PortfolioVerification[]
   providerNetworkInvitations  ProviderNetworkInvitation[]
+  counters                    OrganisationCounter[]
   properties                  Property[]                        @relation("ManagingOrganisation")
   auditEvents                 AuditEvent[]
   domainEvents                DomainEvent[]
@@ -2121,6 +2122,18 @@ model ProviderNetworkInvitation {
   @@index([landlordOrganisationId, status])
 }
 
+/// Per-organisation sequences (for example maintenance ticket numbers). Incremented with a single
+/// upsert inside the transaction that uses the value, so numbers never repeat.
+model OrganisationCounter {
+  organisationId String       @db.Uuid
+  key            String
+  value          Int
+  updatedAt      DateTime     @updatedAt
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@id([organisationId, key])
+}
+
 model BackgroundJob {
   id             String              @id @default(uuid()) @db.Uuid
   organisationId String?             @db.Uuid
@@ -2683,6 +2696,15 @@ model MaintenanceRequest {
   unitId               String?                      @db.Uuid
   tenantOrganisationId String?                      @db.Uuid
   reportedByUserId     String                       @db.Uuid
+  /// Per-organisation ticket reference shown to tenants, landlords and providers (NM-1001, ...).
+  referenceNumber      String?
+  /// How the report arrived (WEB, WHATSAPP, VOICE, ...). Null for older requests.
+  intakeChannel        String?
+  /// The reporter's own words, kept unchanged next to the normalised title/description.
+  originalReport       String?
+  /// Structured interpretation of the report (category, urgency, safety flags) and its source
+  /// (model or deterministic rules). Informational: routing rules decide what happens.
+  classification       Json?
   title                String
   description          String
   category             String
@@ -2710,6 +2732,7 @@ model MaintenanceRequest {
   conversations        Conversation[]
   dispatchAttempts     MaintenanceDispatchAttempt[]
 
+  @@unique([organisationId, referenceNumber])
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
   @@index([tenantOrganisationId, createdAt])

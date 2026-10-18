@@ -1,6 +1,6 @@
 # Autonomous property operations: architecture map and phased plan
 
-Status (2026-10-18): phases 0-3 are implemented on `feat/autonomous-property-ops`; phases 4-8 are not started. See section 5.
+Status (2026-10-18): phases 0-4 are implemented on `feat/autonomous-property-ops`; phases 5-8 are not started. See section 5.
 
 ## 1. What already exists (reuse, do not duplicate)
 
@@ -112,6 +112,18 @@ Real WhatsApp delivery will not be claimed working until the Meta app, the numbe
 - Provider job view (`jobs`): only assignments for providers the user owns, with work order, property and unit. No tenant, lease or cost data. Joining a network gives no access to the landlord's records.
 - Onboarding now invites the professionals listed during onboarding when the draft is committed.
 - Tests: `tests/postgres-provider-network.integration.test.ts`.
+
+### Phase 4: tenant identity and ticket intake (done)
+
+- A tenant can report only when their WhatsApp number is linked to an account (`link`, phase 1) and that account has a tenancy the landlord connected (`TenantOrganisation.userId`) with an ACTIVE or EXPIRING lease. A phone number on the landlord's tenant record is never treated as proof, and nothing about a tenancy is shown before both checks pass.
+- Tenants connect a tenancy by sending the landlord's existing access code (`NT-…`) on WhatsApp. It is redeemed through `redeemTenantAccessCode` and removed from the transcript.
+- `report`, a free-text description of a problem, or a photo starts a report. The flow picks the home (asks when there are several), takes the description and up to 5 photos, classifies it, checks for an open ticket on the same unit and category from the last 30 days (`same` adds details to it, `new` creates another), and asks for `confirm`.
+- Classification (`maintenance/classify.ts`): the AI provider only labels category, urgency, safety hazard and a title, through a schema-checked tool call. Keyword rules run first and set a floor: the model can never lower the urgency or clear a safety hazard they found. Without a model the rules are used alone. Emergencies get safety advice in the reply.
+- Tickets are created with the existing `createMaintenanceRequest` (tenant authorisation, audit, domain event). New fields: `referenceNumber` (`NM-1001`, …, per organisation, from `OrganisationCounter`; existing requests were numbered by the migration), `intakeChannel`, `originalReport` and `classification`. Web-created requests get references too. A retried confirmation finds the ticket it already created.
+- Photos are downloaded from Meta in the worker (images and PDFs within the upload limit only) and stored as private `MAINTENANCE_ATTACHMENT` uploads through the existing document pipeline.
+- `status NM-1001` and `my requests` show the tenant their own tickets.
+- Not done yet, for phase 5 onwards: dispatch to a provider, and notifying the landlord.
+- Tests: `tests/whatsapp-maintenance-classify.unit.test.ts`, `tests/postgres-whatsapp-maintenance.integration.test.ts`.
 
 ### Before going live (not done)
 

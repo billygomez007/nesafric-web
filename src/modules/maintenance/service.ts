@@ -340,6 +340,16 @@ async function transitionInTransaction(
   return updated;
 }
 
+/** NM-1001, NM-1002, ... per organisation. One upsert inside the creating transaction. */
+async function nextMaintenanceReference(tx: Tx, organisationId: string) {
+  const [row] = await tx.$queryRaw<Array<{ value: number }>>`
+    INSERT INTO "OrganisationCounter" ("organisationId", "key", "value", "updatedAt")
+    VALUES (${organisationId}::uuid, 'maintenance_request', 1001, NOW())
+    ON CONFLICT ("organisationId", "key") DO UPDATE SET "value" = "OrganisationCounter"."value" + 1, "updatedAt" = NOW()
+    RETURNING "value"`;
+  return `NM-${row.value}`;
+}
+
 export async function createMaintenanceRequest(userId: string, organisationId: string, input: unknown) {
   const data = createMaintenanceRequestSchema.parse(input);
   const internal = await hasPermission(userId, organisationId, PERMISSIONS.maintenanceCreate);
@@ -369,9 +379,14 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
     } else if (!internal) {
       throw new AppError("TENANT_REPORTER_REQUIRED", 422, "A tenant reporter relationship is required.");
     }
+    const referenceNumber = await nextMaintenanceReference(tx, organisationId);
     const request = await tx.maintenanceRequest.create({
       data: {
         organisationId,
+        referenceNumber,
+        intakeChannel: data.intakeChannel,
+        originalReport: data.originalReport,
+        classification: data.classification as Prisma.InputJsonValue | undefined,
         propertyId: data.propertyId,
         unitId: data.unitId,
         tenantOrganisationId: data.tenantOrganisationId,
@@ -396,7 +411,7 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
         name: "maintenance.requested",
         aggregateType: "maintenance_request",
         aggregateId: request.id,
-        payload: { propertyId: request.propertyId, unitId: request.unitId, tenantOrganisationId: request.tenantOrganisationId, priority: request.priority },
+        payload: { propertyId: request.propertyId, unitId: request.unitId, tenantOrganisationId: request.tenantOrganisationId, priority: request.priority, referenceNumber, intakeChannel: data.intakeChannel ?? null },
       },
     });
     const created = await tx.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id }, include: requestInclude() });
@@ -731,6 +746,23 @@ export async function listMaintenanceAssignees(userId: string, organisationId: s
     where: { organisationId, status: "ACTIVE", archivedAt: null },
     select: { id: true, user: { select: { id: true, displayName: true, email: true } } },
     orderBy: { createdAt: "asc" },
+  });
+}
+
+/**
+ * The reporting tenant adds details to their own open request (for example the same problem
+ * reported again on WhatsApp). Idempotent per source message.
+ */
+export async function addTenantMaintenanceDetails(userId: string, organisationId: string, requestId: string, input: { note: string; sourceMessageId: string }) {
+  const note = maintenanceNoteSchema.shape.note.parse(input.note);
+  return db.$transaction(async (tx) => {
+    const request = await tx.maintenanceRequest.findFirst({ where: { id: requestId, organisationId } });
+    if (!request?.tenantOrganisationId || !await isTenantUser(userId, organisationId, request.tenantOrganisationId)) throw notFound();
+    const existing = await tx.maintenanceHistory.findFirst({ where: { maintenanceRequestId: request.id, type: "NOTE", metadata: { path: ["sourceMessageId"], equals: input.sourceMessageId } } });
+    if (existing) return existing;
+    const history = await tx.maintenanceHistory.create({ data: { maintenanceRequestId: request.id, actorUserId: userId, type: "NOTE", note, metadata: { sourceMessageId: input.sourceMessageId, by: "tenant" } } });
+    await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "maintenance.tenant_details_added", entityType: "maintenance_request", entityId: request.id } });
+    return history;
   });
 }
 
