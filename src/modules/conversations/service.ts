@@ -492,6 +492,13 @@ async function recordOutboundMessage(organisationId: string, conversationId: str
   return message;
 }
 
+function storedWhatsAppTemplate(metadata: unknown) {
+  const template = (metadata as { whatsappTemplate?: { name?: unknown; language?: unknown; bodyParameters?: unknown } } | null)?.whatsappTemplate;
+  if (!template || typeof template.name !== "string" || typeof template.language !== "string") return undefined;
+  const bodyParameters = Array.isArray(template.bodyParameters) ? template.bodyParameters.filter((value): value is string => typeof value === "string") : undefined;
+  return { name: template.name, language: template.language, bodyParameters };
+}
+
 export async function deliverConversationMessage(organisationId: string, deliveryId: string, adapters: ChannelAdapters | undefined = undefined) {
   const delivery = await db.messageDelivery.findFirst({ where: { id: deliveryId, organisationId }, include: { message: true } });
   if (!delivery) throw notFound();
@@ -515,6 +522,8 @@ export async function deliverConversationMessage(organisationId: string, deliver
       fromAddress: channelConfig?.fromAddress ?? null,
       body: delivery.message.body,
       lastInboundAt: conversation.lastInboundAt,
+      // Business-initiated messages (invitations, work orders) carry their approved template.
+      whatsappTemplate: delivery.channel === "WHATSAPP" ? storedWhatsAppTemplate(delivery.message.metadata) : undefined,
       externalReferenceId: delivery.message.externalReferenceId,
       providerKey: channelConfig?.providerKey,
       config: (channelConfig?.config as Record<string, unknown>) ?? {},

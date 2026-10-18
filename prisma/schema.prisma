@@ -816,6 +816,7 @@ model User {
   channelIdentities                  ChannelIdentity[]
   onboardingDrafts                   OnboardingDraft[]
   portfolioVerificationClaims        PortfolioVerification[]
+  providerInvitationsSent            ProviderNetworkInvitation[]
   memberships                        OrganisationMember[]
   invitations                        OrganisationInvitation[]                   @relation("InvitationSender")
   audits                             AuditEvent[]                               @relation("AuditActor")
@@ -1012,6 +1013,7 @@ model Organisation {
   portfolios                  Portfolio[]
   onboardingDrafts            OnboardingDraft[]
   portfolioVerifications      PortfolioVerification[]
+  providerNetworkInvitations  ProviderNetworkInvitation[]
   properties                  Property[]                        @relation("ManagingOrganisation")
   auditEvents                 AuditEvent[]
   domainEvents                DomainEvent[]
@@ -1243,6 +1245,7 @@ model Property {
   buildings                  Building[]
   units                      Unit[]
   portfolioVerifications     PortfolioVerification[]
+  providerPropertyScopes     ProviderPropertyScope[]
   leases                     Lease[]
   rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
@@ -1960,6 +1963,9 @@ enum ChannelIdentityVerification {
   SMS_OTP
   EMAIL_OTP
   ADMIN
+  /// The person replied from this number to a message NesAfric sent to it (WhatsApp sender ids
+  /// are attested by Meta).
+  WHATSAPP_REPLY
 }
 
 /// A messaging address (today: a WhatsApp number) as seen on an inbound channel, and the NesAfric
@@ -2052,6 +2058,67 @@ model PortfolioVerification {
 
   @@unique([organisationId, propertyId])
   @@index([status, createdAt])
+}
+
+/// A property the provider serves for this organisation, when `allPropertiesScope` is false.
+model ProviderPropertyScope {
+  id                     String               @id @default(uuid()) @db.Uuid
+  providerOrganisationId String               @db.Uuid
+  propertyId             String               @db.Uuid
+  createdAt              DateTime             @default(now())
+  providerOrganisation   ProviderOrganisation @relation(fields: [providerOrganisationId], references: [id], onDelete: Cascade)
+  property               Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([providerOrganisationId, propertyId])
+  @@index([propertyId])
+}
+
+enum ProviderInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+  EXPIRED
+}
+
+/// An organisation asking a maintenance professional to join its private network. Nothing about
+/// the provider exists as a provider profile or directory entry until they accept from the
+/// invited number; until then no operational message is ever sent to them.
+model ProviderNetworkInvitation {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                   @db.Uuid
+  invitedByUserId        String                   @db.Uuid
+  /// Set when inviting a provider that already has a NesAfric profile.
+  existingProviderId     String?                  @db.Uuid
+  displayName            String
+  /// E.164 with a leading "+". The only number allowed to answer.
+  phoneE164              String
+  scopeCategories        String[]                 @default([])
+  /// Empty = all of the organisation's properties.
+  propertyIds            String[]                 @default([]) @db.Uuid
+  autoDispatchAllowed    Boolean                  @default(false)
+  spendingLimitMinor     BigInt?
+  emergencyCallouts      Boolean                  @default(false)
+  workingHours           String?
+  paymentTerms           String?
+  status                 ProviderInvitationStatus @default(PENDING)
+  source                 String
+  /// Idempotency key for invitations created by another workflow (e.g. onboarding draft + index).
+  sourceReference        String?                  @unique
+  messageId              String?                  @db.Uuid
+  deliveryFailureReason  String?
+  expiresAt              DateTime
+  respondedAt            DateTime?
+  providerOrganisationId String?                  @db.Uuid
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  landlordOrganisation   Organisation             @relation(fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  invitedBy              User                     @relation(fields: [invitedByUserId], references: [id], onDelete: Restrict)
+  existingProvider       ServiceProvider?         @relation(fields: [existingProviderId], references: [id], onDelete: Restrict)
+  providerOrganisation   ProviderOrganisation?    @relation(fields: [providerOrganisationId], references: [id], onDelete: SetNull)
+
+  @@index([phoneE164, status])
+  @@index([landlordOrganisationId, status])
 }
 
 model BackgroundJob {
@@ -2833,6 +2900,7 @@ model ServiceProvider {
   campaigns                  Campaign[]
   savedBy                    SavedServiceProvider[]
   businessWhatsAppConfig     BusinessWhatsAppConfig?
+  networkInvitations         ProviderNetworkInvitation[]
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
   @@index([identityVerifiedAt])
@@ -3010,10 +3078,10 @@ model ProviderVerificationHistory {
 }
 
 model ProviderOrganisation {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  landlordOrganisationId String                  @db.Uuid
-  providerId             String                  @db.Uuid
-  status                 ProviderDirectoryStatus @default(ACTIVE)
+  id                     String                      @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                      @db.Uuid
+  providerId             String                      @db.Uuid
+  status                 ProviderDirectoryStatus     @default(ACTIVE)
   internalNotes          String?
   /// Phase 21 items 16-17 — the AI maintenance-dispatch provider hierarchy. Lower `priority`
   /// values are contacted first among an organisation's own directory; `isBackup` providers are
@@ -3021,14 +3089,33 @@ model ProviderOrganisation {
   /// marketplace fallback (outside this organisation's own directory entirely) is the last resort,
   /// resolved separately in `maintenance-dispatch/service.ts` and never automatic unless policy
   /// / entitlement explicitly permits it.
-  priority               Int                     @default(100)
-  isBackup               Boolean                 @default(false)
-  createdByUserId        String                  @db.Uuid
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  landlordOrganisation   Organisation            @relation("LandlordProviderDirectory", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
-  provider               ServiceProvider         @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  createdBy              User                    @relation("ProviderDirectoryCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  priority               Int                         @default(100)
+  isBackup               Boolean                     @default(false)
+  /// Set when the provider themself agreed to receive this organisation's work orders (for
+  /// example by replying ACCEPT to a WhatsApp invitation). Entries added on the web before
+  /// invitations existed have none and are never used for automatic dispatch.
+  consentedAt            DateTime?
+  consentMethod          String?
+  /// Work this organisation uses the provider for (provider-network category keys, e.g. plumbing).
+  scopeCategories        String[]                    @default([])
+  /// When false, only the properties in `propertyScopes` are served.
+  allPropertiesScope     Boolean                     @default(true)
+  /// Jobs may be sent without a person choosing the provider each time. Spending is separate.
+  autoDispatchAllowed    Boolean                     @default(false)
+  /// The most a job sent to this provider may cost without the landlord's approval. Null = no
+  /// pre-authorised spend.
+  spendingLimitMinor     BigInt?
+  emergencyCallouts      Boolean                     @default(false)
+  workingHours           String?
+  paymentTerms           String?
+  createdByUserId        String                      @db.Uuid
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  landlordOrganisation   Organisation                @relation("LandlordProviderDirectory", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  provider               ServiceProvider             @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  createdBy              User                        @relation("ProviderDirectoryCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  propertyScopes         ProviderPropertyScope[]
+  invitations            ProviderNetworkInvitation[]
 
   @@unique([landlordOrganisationId, providerId])
   @@index([landlordOrganisationId, status, isBackup, priority])

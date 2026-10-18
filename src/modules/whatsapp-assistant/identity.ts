@@ -1,7 +1,11 @@
+import { createHash } from "node:crypto";
 import { db } from "@/platform/database/client";
 import type { ChannelIdentityVerification, Prisma } from "@/platform/database/generated/client";
 
 type Client = Prisma.TransactionClient | typeof db;
+
+/** One conversation per receiving number and sender, shared by inbound messages and anything NesAfric sends first. */
+export const whatsappSessionKey = (organisationId: string, phoneNumberId: string, waId: string) => createHash("sha256").update(`${organisationId}:${phoneNumberId}:${waId.replace(/^\+/, "")}`).digest("hex");
 
 /** WhatsApp sends `wa_id` without "+". Identity rows always store E.164 with it. */
 export const whatsappAddress = (waId: string) => `+${waId.replace(/^\+/, "")}`;

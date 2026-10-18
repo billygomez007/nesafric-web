@@ -17,7 +17,8 @@ export async function resolveWhatsAppSendConfig(organisationId: string, env: Rec
   return null;
 }
 
-export type WhatsAppTemplateKey = "NOTIFICATION";
+/** NOTIFICATION: {{1}} text. PROVIDER_INVITE: {{1}} organisation, {{2}} work; quick replies Accept / Decline. */
+export type WhatsAppTemplateKey = "NOTIFICATION" | "PROVIDER_INVITE";
 
 /**
  * Approved Meta templates, configured as `name:language` (for example

@@ -6,11 +6,13 @@ import { createBuilding, createProperty } from "@/modules/assets/service";
 import { createTenant } from "@/modules/tenants/service";
 import { createLease } from "@/modules/leases/service";
 import { createReminderPolicy } from "@/modules/reminders/service";
+import { inviteNetworkProvider } from "@/modules/provider-network/service";
+import { parseNetworkCategory } from "@/modules/provider-network/categories";
 import { onboardingDataSchema, type Draft, type OnboardingData } from "./draft";
 
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 
-export type CommitSummary = { organisationId: string; organisationName: string; properties: number; units: number; tenants: number; draftLeases: number; reminders: boolean; pendingVerifications: number };
+export type CommitSummary = { organisationId: string; organisationName: string; properties: number; units: number; tenants: number; draftLeases: number; reminders: boolean; pendingVerifications: number; providersInvited: number; providerInviteProblem: string | null };
 
 /** Deterministic per-draft references, so a retried commit finds what it already created. */
 export const draftReference = (draftId: string) => `WA-${draftId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -122,6 +124,23 @@ export async function commitDraft(draft: Draft, userId: string): Promise<CommitS
       await progress();
     }
 
+    // 6. Invite the professionals the person listed. They join only by accepting.
+    let providerInviteProblem: string | null = null;
+    if (!data.committed.providersInvited) {
+      for (const [index, provider] of data.providers.entries()) {
+        const category = parseNetworkCategory(provider.category);
+        if (!category) continue;
+        try {
+          const invitation = await inviteNetworkProvider(userId, organisationId, { displayName: provider.name, phone: provider.phone, scopeCategories: [category], source: "ONBOARDING", sourceReference: `${draft.id}:P${index + 1}` });
+          providerInviteProblem ??= invitation.deliveryFailureReason;
+        } catch (error) {
+          if (!(error instanceof AppError && error.code === "ALREADY_IN_NETWORK")) throw error;
+        }
+      }
+      data.committed.providersInvited = true;
+      await progress();
+    }
+
     const organisation = await db.organisation.findUniqueOrThrow({ where: { id: organisationId }, select: { name: true } });
     await db.$transaction([
       db.onboardingDraft.update({ where: { id: draft.id }, data: { status: "COMMITTED", committedAt: new Date(), data: json(data), organisationId } }),
@@ -131,6 +150,7 @@ export async function commitDraft(draft: Draft, userId: string): Promise<CommitS
       organisationId, organisationName: organisation.name, properties: propertyIds.length,
       units: data.properties.reduce((sum, property) => sum + property.buildings.reduce((count, building) => count + building.units.length, 0), 0),
       tenants: data.tenants.length, draftLeases: data.tenants.length, reminders: data.committed.reminders, pendingVerifications: propertyIds.length,
+      providersInvited: data.providers.length, providerInviteProblem,
     };
   } catch (error) {
     // Keep what was created; the person can retry confirm after fixing the cause (for example a plan limit).

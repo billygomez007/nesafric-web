@@ -25,7 +25,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -38,6 +38,28 @@ export const assistantStateSchema = z.object({
   message: z.string().trim().max(5_000).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
   lastRequest: z.object({ listingId: z.string().uuid(), leadId: z.string().uuid(), viewingId: z.string().uuid().optional() }).optional(),
+  /** Provider-network management: what was last listed, and an action awaiting confirmation. */
+  network: z.object({
+    step: z.enum(["organisation", "details", "properties", "auto", "limit", "confirm_add", "confirm_action"]).optional(),
+    organisationId: z.string().uuid().optional(),
+    organisationChoices: z.array(z.string().uuid()).max(9).default([]),
+    listed: z.array(z.object({ id: z.string().uuid(), organisationId: z.string().uuid(), name: z.string().max(200) })).max(30).default([]),
+    propertyChoices: z.array(z.object({ id: z.string().uuid(), name: z.string().max(200) })).max(30).default([]),
+    draft: z.object({
+      displayName: z.string().max(160).optional(),
+      phone: z.string().max(20).optional(),
+      categories: z.array(z.string().max(40)).max(10).default([]),
+      propertyIds: z.array(z.string().uuid()).max(30).default([]),
+      autoDispatch: z.boolean().optional(),
+      limitMinor: z.string().regex(/^\d+$/).optional(),
+    }).default({ categories: [], propertyIds: [] }),
+    action: z.object({
+      kind: z.enum(["suspend", "resume", "remove", "reassign", "auto_on", "auto_off"]),
+      id: z.string().uuid(),
+      organisationId: z.string().uuid(),
+      toId: z.string().uuid().optional(),
+    }).optional(),
+  }).optional(),
   /** Account linking in progress. Holds the challenge reference only, never the code. */
   link: z.object({
     channel: z.enum(["sms", "email"]),

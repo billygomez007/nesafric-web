@@ -8,6 +8,7 @@ import { linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whats
 import { formatAccountSummary, resolveAccountRoles } from "./account";
 import { advanceOnboarding } from "./onboarding/flow";
 import { findOpenDraft } from "./onboarding/draft";
+import { advanceNetwork, handleProviderMessage } from "./network";
 
 export type OfficialInput = EngineInput & { organisationId: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean };
@@ -27,8 +28,10 @@ type Dependencies = {
   roles: typeof resolveAccountRoles;
   onboarding: typeof advanceOnboarding;
   openDraft: typeof findOpenDraft;
+  providerMessage: typeof handleProviderMessage;
+  network: typeof advanceNetwork;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -50,6 +53,18 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   if (state.workflow === "onboarding" || startsOnboarding) {
     const result = await dependencies.onboarding({ phone: input.phone, messageId: input.messageId, body: input.body, kind: input.kind, organisationId: input.organisationId, defaultCountry: input.defaultCountry, defaultCurrency: input.defaultCurrency });
     return { state: result.exit ? reset() : { ...reset(), workflow: "onboarding" }, reply: result.reply, redactInbound: result.redactInbound };
+  }
+
+  if (input.kind === "text") {
+    const linked = await dependencies.linkedUser(input.phone);
+    // Maintenance professionals answering invitations and checking their own jobs.
+    if (state.workflow !== "network") {
+      const provider = await dependencies.providerMessage(input.phone, command, linked, state);
+      if (provider) return provider;
+    }
+    // Landlords managing their network. Material changes need an explicit confirm.
+    const network = await dependencies.network(command, input.body.trim(), linked, state, reset);
+    if (network) return network;
   }
 
   if (input.kind === "text" && /^(link|link account|connect|connect account)$/.test(command)) {

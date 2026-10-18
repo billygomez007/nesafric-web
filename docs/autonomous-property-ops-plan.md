@@ -1,6 +1,6 @@
 # Autonomous property operations: architecture map and phased plan
 
-Status (2026-10-18): phases 0-2 are implemented on `feat/autonomous-property-ops`; phases 3-8 are not started. See section 5.
+Status (2026-10-18): phases 0-3 are implemented on `feat/autonomous-property-ops`; phases 4-8 are not started. See section 5.
 
 ## 1. What already exists (reuse, do not duplicate)
 
@@ -102,9 +102,20 @@ Real WhatsApp delivery will not be claimed working until the Meta app, the numbe
 - Not active yet, and the confirmation says so: maintenance professionals, approval limit and alert contact are stored in the draft for phases 3 and 5. Nobody is contacted. Rent-due reminders are not configured, because only lease-expiry reminder policies exist today.
 - Tests: `tests/whatsapp-onboarding-parse.unit.test.ts`, `tests/postgres-whatsapp-onboarding.integration.test.ts` (several buildings and properties, resume after a closed conversation, plan limit, redelivered confirmation and retried commit, existing organisation, discard).
 
+### Phase 3: private provider network (done)
+
+- `ProviderNetworkInvitation`: a landlord's request for a professional to join their network, with the proposed work categories, properties (or all), automatic-dispatch flag, spending limit, emergency call-outs, hours and payment terms. No provider profile or directory entry exists until the invited number accepts. Inviting the same number again updates the pending invitation.
+- The invitation goes out on the official number with the approved `WHATSAPP_TEMPLATE_PROVIDER_INVITE` template, in the same conversation the reply will arrive in. Without the template nothing is sent and the reason is shown to the landlord.
+- The provider replies `accept` or `decline` (typed or tapped). Only the invited number can answer. Accepting creates or reuses their account and an individual provider profile, links the number, and creates the `ProviderOrganisation` entry with `consentedAt`, the scope (`scopeCategories`, `ProviderPropertyScope`) and the settings. A marketplace provider can be invited only on the number on their profile.
+- Landlord commands (linked number with `provider.read` / `provider.manage`): `providers`, `add provider` (details, properties, automatic jobs, spending limit, summary, confirm), and `suspend` / `resume` / `remove` / `auto on` / `auto off provider N`, `reassign provider N to M`. Every change needs `confirm` and is audited with before/after values. The same operations are service functions in `src/modules/provider-network/service.ts` for the web.
+- `eligibleNetworkProviders(organisationId, { category, propertyId })` is the candidate list phase 5 will use: active, consented, automatic dispatch allowed, in scope, not suspended or removed by the platform. Entries added on the web before invitations existed have no consent and are never returned. The existing voice dispatch path is unchanged.
+- Provider job view (`jobs`): only assignments for providers the user owns, with work order, property and unit. No tenant, lease or cost data. Joining a network gives no access to the landlord's records.
+- Onboarding now invites the professionals listed during onboarding when the draft is committed.
+- Tests: `tests/postgres-provider-network.integration.test.ts`.
+
 ### Before going live (not done)
 
 1. In Meta: create the app and WhatsApp Business Account, register the official number, create a system-user token, and subscribe the webhook to `messages` at `https://<host>/api/webhooks/whatsapp` with the verify token stored on the official organisation's channel config.
-2. Submit and get approval for the notification template (one body variable), then set `WHATSAPP_TEMPLATE_NOTIFICATION`.
+2. Submit and get approval for the notification template (one body variable) and the provider invitation template (two body variables, Accept/Decline quick replies), then set `WHATSAPP_TEMPLATE_NOTIFICATION` and `WHATSAPP_TEMPLATE_PROVIDER_INVITE`.
 3. Set `WHATSAPP_PROVIDER_ACCESS_TOKEN`, `WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_APP_SECRET`, `WHATSAPP_OFFICIAL_ORGANISATION_ID`, and the Arkesel variables for SMS codes.
 4. Run an end-to-end test from a real phone. Until then, real WhatsApp delivery is unverified.

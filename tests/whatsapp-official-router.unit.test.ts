@@ -16,6 +16,8 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     link: vi.fn(async () => ({})),
     unlink: vi.fn(async () => true),
     roles: vi.fn(async () => ({ ...emptyRoles, managed: [{ organisationId: "o", name: "Owusu Homes", properties: 2, units: 9, openMaintenance: 1 }] })),
+    providerMessage: vi.fn(async () => null),
+    network: vi.fn(async () => null),
     ...overrides,
   } as never;
 }

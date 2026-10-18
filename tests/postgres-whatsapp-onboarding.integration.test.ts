@@ -125,7 +125,10 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     const saved = await say("confirm");
     expect(saved).toContain("Owusu Homes: 2 properties, 5 units, 2 tenants");
     expect(saved).toContain("pending verification");
-    expect(saved).toContain("Nobody has been contacted");
+    // No invitation template is configured in tests, so nothing is sent.
+    expect(saved).toContain("could not be sent yet");
+    expect(await db.providerNetworkInvitation.count({ where: { status: "PENDING", source: "ONBOARDING" } })).toBe(2);
+    expect(await db.providerOrganisation.count()).toBe(0);
 
     const organisation = await db.organisation.findFirstOrThrow({ where: { name: "Owusu Homes" }, include: { members: true } });
     expect(organisation.type).toBe("INDIVIDUAL_LANDLORD");

@@ -70,7 +70,7 @@ export function promptFor(draft: Draft, phone: string): string {
     case "tenants": return `Send one tenant per line as:\nunit, full name, phone, rent, frequency, start date, end date\nFor example:\nA1, Kofi Mensah, 0241234567, 1500, monthly, 2026-01-01, 2026-12-31\nUse - if you don't know the phone. The end date is optional.${data.properties.length > 1 ? " With several properties, write the unit as Property/Unit, for example Palm Court/A1." : ""}\nTenants are not contacted or given access by this step. Reply done when finished.`;
     case "reminders": return "Should NesAfric remind tenants 60 and 30 days before their lease ends? Reply yes or no.";
     case "providers_offer": return "Do you already work with plumbers, electricians or other maintenance professionals? Reply yes to add them, or no.";
-    case "providers": return `Send one per line as: name, phone, category. For example:\nKwame Plumbing, 0201234567, plumber\nCategories: ${PROVIDER_CATEGORIES.join(", ")}.\nThey are not contacted by this step. Reply done when finished.`;
+    case "providers": return `Send one per line as: name, phone, category. For example:\nKwame Plumbing, 0201234567, plumber\nCategories: ${PROVIDER_CATEGORIES.join(", ")}.\nEach one is asked on WhatsApp to accept before any job is sent. Reply done when finished.`;
     case "approval_limit": return `Up to what amount may a routine repair go ahead without asking you first? Send an amount in ${data.currencyCode} (for example 500), or 0 to approve every repair yourself.`;
     case "emergency_contact": return "Who should get urgent maintenance alerts, such as a burst pipe or an electrical fault? Reply me, or send another phone number.";
     case "review": return reviewSummary(draft);
@@ -103,7 +103,9 @@ function successReply(summary: CommitSummary, draft: Draft) {
     summary.draftLeases ? `• ${plural(summary.draftLeases, "lease")} saved as drafts with the rent terms you sent. A lease becomes active once its execution is completed in your account: ${absoluteUrl("/leases")}` : null,
     `• ${data.role === "MANAGER" ? "Your authority to manage" : "Your ownership of"} ${summary.properties === 1 ? "this property is" : "these properties is"} pending verification by NesAfric. Upload proof (title deed, tenancy agreement or management contract) at ${absoluteUrl("/properties")}. Until it is reviewed the properties are marked unverified.`,
     summary.reminders ? "• Lease-expiry reminders are on (60 and 30 days before)." : null,
-    data.providers.length ? `• ${plural(data.providers.length, "maintenance professional")} saved. Nobody has been contacted: each will be asked to confirm before receiving any work order.` : null,
+    data.providers.length ? (summary.providerInviteProblem
+      ? `• ${plural(data.providers.length, "maintenance professional")} saved as invitations, but they could not be sent yet: ${summary.providerInviteProblem} Nobody has been contacted.`
+      : `• Invitations sent to ${plural(data.providers.length, "maintenance professional")}. Each joins your network only by replying ACCEPT; no work order is sent before that. Reply providers to check.`) : null,
     "• Automatic maintenance dispatch is not switched on yet. Your approval limit and alert contact are saved for when it is.",
     "\nReply account to see your portfolio, or menu for other options.",
   ].filter(Boolean).join("\n");

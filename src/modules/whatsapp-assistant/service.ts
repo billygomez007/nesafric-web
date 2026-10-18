@@ -8,10 +8,11 @@ import { NonRetryableJobError } from "@/platform/jobs/errors";
 import { assistantChannelConfigSchema, assistantStateSchema, initialState } from "./schemas";
 import { advanceConversation } from "./engine";
 import { advanceOfficialConversation } from "./router";
-import { isOfficialWhatsAppOrganisation, isWhatsAppOptedOut, recordInboundIdentity, setWhatsAppOptOut } from "./identity";
+import { isOfficialWhatsAppOrganisation, isWhatsAppOptedOut, recordInboundIdentity, setWhatsAppOptOut, whatsappSessionKey } from "./identity";
 
 type ChannelConfig = z.infer<typeof assistantChannelConfigSchema>;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 
 /** Persist receipt and the worker job together. No AI or outbound network calls in the webhook. */
@@ -24,7 +25,7 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
       await db.backgroundJob.upsert({ where: { idempotencyKey: `whatsapp-legacy:${organisationId}:${inbound.externalMessageId}` }, update: {}, create: { organisationId, type: "whatsapp-legacy-inbound", idempotencyKey: `whatsapp-legacy:${organisationId}:${inbound.externalMessageId}`, payload: json({ organisationId, inbound }), maxAttempts: 5 } });
       continue;
     }
-    const sessionKey = hash(`${organisationId}:${config.phoneNumberId}:${inbound.channelAddress}`);
+    const sessionKey = whatsappSessionKey(organisationId, config.phoneNumberId, inbound.channelAddress);
     await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${sessionKey + ":intake"}, 0))`;
       const duplicate = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId, channel: "WHATSAPP", externalMessageId: inbound.externalMessageId } } });

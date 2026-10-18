@@ -51,7 +51,8 @@ export const onboardingDataSchema = z.object({
     tenants: z.record(z.string(), z.object({ tenantOrganisationId: z.string().uuid(), leaseId: z.string().uuid().optional() })).default({}),
     reminders: z.boolean().default(false),
     verifications: z.boolean().default(false),
-  }).default({ properties: {}, buildings: {}, tenants: {}, reminders: false, verifications: false }),
+    providersInvited: z.boolean().default(false),
+  }).default({ properties: {}, buildings: {}, tenants: {}, reminders: false, verifications: false, providersInvited: false }),
 }).strict();
 export type OnboardingData = z.infer<typeof onboardingDataSchema>;
 
