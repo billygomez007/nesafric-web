@@ -150,10 +150,7 @@ describe("PostgreSQL WhatsApp processing guard under failure", () => {
   afterEach(() => { vi.unstubAllEnvs(); });
   afterAll(async () => {
     await cleanDatabase();
-    // Known driver behaviour (@prisma/adapter-pg 6.19): a pooled client whose backend was killed
-    // inside an interactive transaction is never handed back, so `$disconnect` waits for it
-    // forever. The server side is clean (asserted in each test); bound the wait here.
-    await Promise.race([db.$disconnect(), sleep(2_000)]);
+    await db.$disconnect();
   });
 
   for (const interrupt of ["deadline", "connection"] as const) {

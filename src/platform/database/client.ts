@@ -1,12 +1,14 @@
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/platform/database/generated/client";
+import { PrismaPgWithTransactionRelease } from "@/platform/database/pg-adapter";
 import { guardedClient } from "./guarded";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 // Driver adapter (plain `pg`, no native query-engine binary) — sidesteps the native-binary
 // bundling issues that affect serverless deployments with a custom Prisma generator output path.
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+// The subclass hands back a pooled client whose backend died inside an interactive transaction,
+// which Prisma 6.19 itself does not (see pg-adapter.ts).
+const adapter = new PrismaPgWithTransactionRelease({ connectionString: process.env.DATABASE_URL });
 
 const base =
   globalForPrisma.prisma ??
