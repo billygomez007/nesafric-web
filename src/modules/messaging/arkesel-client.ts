@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { maskPhone } from "@/platform/identity/phone";
 import { ARKESEL_BASE_URL, requireArkeselConfig, type ArkeselConfig } from "./config";
 import { MessagingError, type MessagingErrorCode } from "./errors";
+import { assertGuardedWorkActive } from "@/platform/database/guarded";
 
 /**
  * Typed, server-only client for Arkesel's documented REST API (API spec v2.4.0):
@@ -113,6 +114,9 @@ export class ArkeselClient {
   }
 
   private async post(path: string, body: Record<string, unknown>, apiKey: string) {
+    // Work whose guard has ended (for example WhatsApp processing for a number that has since
+    // moved) must not send anything.
+    await assertGuardedWorkActive();
     let response: Response;
     try {
       response = await this.fetchImpl(`${ARKESEL_BASE_URL}${path}`, {

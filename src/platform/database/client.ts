@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/platform/database/generated/client";
+import { guardedClient } from "./guarded";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -7,7 +8,7 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 // bundling issues that affect serverless deployments with a custom Prisma generator output path.
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
-export const db =
+const base =
   globalForPrisma.prisma ??
   new PrismaClient({
     adapter,
@@ -22,4 +23,15 @@ export const db =
     },
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = base;
+
+/** The underlying client, never redirected (for starting guarded work). */
+export const baseClient = base;
+
+/**
+ * The application's client. Inside guarded work (`runGuarded`) its calls run on the guard's
+ * transaction; everywhere else it is the plain client.
+ */
+export const db = guardedClient(base);
+
+

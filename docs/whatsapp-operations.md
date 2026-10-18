@@ -73,7 +73,10 @@ Numbers that organisations saved in their channel settings before this change ar
   - an inbound message is marked processed with `metadata.quarantined`, gets no reply, and is logged as `whatsapp.inbound_quarantined` (domain event and log line).
   Quarantined work is never retried or resent. A new holder starts its own conversations; it never sees the old holder's transcript.
 - **Sends in progress** hold the assignment (shared lock), so a move waits for them to finish (up to about 15 seconds) and nothing goes out from a number after its move commits.
-- **Inbound messages being processed** hold it too, from the assignment check through deciding, its side effects (maintenance requests, job replies, rule changes) and queueing the reply. A move waits for that to finish (up to two minutes), so no side effect happens for a number that has already moved.
+- **Inbound messages being processed** hold it too, from the assignment check through deciding, its side effects (maintenance requests, job replies, rule changes) and queueing the reply. A move waits for that to finish, so no side effect happens for a number that has already moved.
+  - All database work of one processing pass runs on the single transaction that holds the lock. Its writes commit together with the lock, or not at all.
+  - If the pass runs past `WHATSAPP_PROCESSING_TIMEOUT_MS` (default 120000), or its database connection is lost, the lock is released and every write of the pass is rolled back. Anything the pass still tries afterwards fails.
+  - SMS sends (Arkesel) and file uploads first check that the pass's transaction is still alive. The job is then retried and its message quarantined if the number has moved.
 - **Conversation provenance.** Every WhatsApp conversation records the assignment it was received under (`Conversation.whatsappAssignmentId`). Staff replies and automatic AI replies go out only while that is still the organisation's active assignment. Otherwise the delivery is `SKIPPED` with a reason saying the conversation came from an assignment the organisation no longer has.
 - **Legacy inbox (assistant off).** A message received under a different assignment starts a new conversation; it never continues the old thread.
 - **Assistant conversations** are tied to their number. An inbound message on the same number re-verifies the conversation under the current assignment.
@@ -108,6 +111,7 @@ Numbers that organisations saved in their channel settings before this change ar
 | `ARKESEL_API_KEY`, `ARKESEL_SENDER_ID` | SMS verification codes for account linking and onboarding. |
 | `OTP_HASH_SECRET` | At least 32 characters (falls back to `SESSION_SECRET`). |
 | `AI_PROVIDER`, `AI_PROVIDER_API_KEY` | Optional. Without them, deterministic rules classify reports and questions. |
+| `WHATSAPP_PROCESSING_TIMEOUT_MS` | Optional. Longest one inbound processing pass may hold the number assignment (default 120000). |
 | `CRON_SECRET` or `JOBS_RUN_SECRET` | Needed if `/api/jobs/run` is used instead of the worker. |
 
 ### Worker
@@ -177,6 +181,8 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 - Legacy numbers stop working at deployment until they are reviewed (section 2). Meta's redelivery of `503` webhooks is time-limited, so review them promptly.
 - All numbers share one system-user token; a per-number or per-business token is not supported. Meta itself does not stop a token holder sending as any number on the WABA; the assignment check is in this application only.
 - Quarantined messages are not resent automatically.
+- A send or upload already started when a processing pass's transaction ends is not recalled. The liveness check runs just before it starts.
+- If the database kills the connection of a processing pass, the Prisma pg adapter (6.19) never returns that pooled connection. The pool has one fewer connection until the process restarts. The database side is cleaned up.
 - After deployment, staff cannot reply to existing WhatsApp conversations until the customer writes again (no provenance).
 - A notification send that has already picked the official number as its sender is retried (not quarantined) if the official assignment changes before it sends.
 - Rent-due reminders are not configured by onboarding; only lease-expiry policies exist.

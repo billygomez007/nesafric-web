@@ -1,5 +1,6 @@
 import type { Prisma } from "@/platform/database/generated/client";
-import { db } from "@/platform/database/client";
+import { baseClient, db } from "@/platform/database/client";
+import { runGuarded } from "@/platform/database/guarded";
 
 type Client = Prisma.TransactionClient | typeof db;
 
@@ -46,14 +47,22 @@ export async function lockWhatsAppChannelShared(tx: Prisma.TransactionClient, or
 
 /**
  * Runs inbound processing (deciding, its side effects, and the reply) while the organisation's
- * number assignment cannot change. The guard transaction only holds the lock; `work` uses its own
- * connections, so it may run its own transactions (and take channel locks) freely.
+ * number assignment cannot change. The work runs as guarded work (`runGuarded`): all of its
+ * database calls go through the transaction that holds the shared processing lock, so its writes
+ * commit together with the lock or not at all. If the guard's deadline passes or its connection
+ * is lost, the lock is released, the writes are rolled back, and anything the work still tries
+ * afterwards fails; external sends check `assertGuardedWorkActive()` first.
  */
 export function withWhatsAppProcessingGuard<T>(organisationId: string, work: () => Promise<T>) {
-  return db.$transaction(async (guard) => {
+  return runGuarded(baseClient, async (guard) => {
     await guard.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended(${processingKey(organisationId)}, 0))`;
-    return work();
-  }, { timeout: 120_000, maxWait: 10_000 });
+  }, work, { timeout: whatsappProcessingTimeoutMs(), maxWait: 10_000 });
+}
+
+/** How long one processing pass may hold the guard (`WHATSAPP_PROCESSING_TIMEOUT_MS`, default 120s). */
+export function whatsappProcessingTimeoutMs(env: Record<string, string | undefined> = process.env) {
+  const value = Number(env.WHATSAPP_PROCESSING_TIMEOUT_MS);
+  return Number.isInteger(value) && value >= 100 && value <= 600_000 ? value : 120_000;
 }
 
 /** The number NesAfric approved for this organisation, or null. */
