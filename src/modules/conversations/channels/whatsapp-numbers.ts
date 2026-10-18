@@ -15,16 +15,25 @@ export const PLATFORM_ASSIGNED_WHATSAPP_KEYS = ["phoneNumberId", "businessAccoun
 /*
  * Lock order (advisory, transaction-scoped):
  *   1. `whatsapp-number-assignments` — every platform assignment, move and release, one at a time;
- *   2. `whatsapp-channel:<organisationId>` — exclusive for anything that changes a channel or its
- *      assignment (in sorted organisation order), shared for work that reads the assignment and
+ *   2. `whatsapp-processing:<organisationId>` — exclusive for an assignment change (sorted
+ *      organisation order); shared for the whole time an inbound message is being decided and
+ *      acted on, so its side effects never straddle a move;
+ *   3. `whatsapp-channel:<organisationId>` — exclusive for anything that changes a channel or its
+ *      assignment (sorted organisation order); shared for short work that reads the assignment and
  *      must not overlap a change: inbound receipt, queueing and sending.
- * A transaction outside the platform path takes at most one channel lock, so the shared holders
- * can never wait in a cycle with an assignment.
+ * Outside the platform path a transaction takes at most one channel lock, and nothing waits for a
+ * processing lock while holding a channel lock, so shared holders never wait in a cycle with an
+ * assignment.
  */
 const channelKey = (organisationId: string) => `whatsapp-channel:${organisationId}`;
+const processingKey = (organisationId: string) => `whatsapp-processing:${organisationId}`;
 
 export async function lockWhatsAppAssignments(tx: Prisma.TransactionClient) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"whatsapp-number-assignments"}, 0))`;
+}
+
+export async function lockWhatsAppProcessing(tx: Prisma.TransactionClient, organisationId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${processingKey(organisationId)}, 0))`;
 }
 
 export async function lockWhatsAppChannel(tx: Prisma.TransactionClient, organisationId: string) {
@@ -33,6 +42,18 @@ export async function lockWhatsAppChannel(tx: Prisma.TransactionClient, organisa
 
 export async function lockWhatsAppChannelShared(tx: Prisma.TransactionClient, organisationId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended(${channelKey(organisationId)}, 0))`;
+}
+
+/**
+ * Runs inbound processing (deciding, its side effects, and the reply) while the organisation's
+ * number assignment cannot change. The guard transaction only holds the lock; `work` uses its own
+ * connections, so it may run its own transactions (and take channel locks) freely.
+ */
+export function withWhatsAppProcessingGuard<T>(organisationId: string, work: () => Promise<T>) {
+  return db.$transaction(async (guard) => {
+    await guard.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended(${processingKey(organisationId)}, 0))`;
+    return work();
+  }, { timeout: 120_000, maxWait: 10_000 });
 }
 
 /** The number NesAfric approved for this organisation, or null. */

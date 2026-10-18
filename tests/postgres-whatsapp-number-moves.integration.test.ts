@@ -1,5 +1,24 @@
 import { createHmac } from "node:crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Lets a test hold the assistant in the middle of deciding, after it has had a side effect.
+const deciding = vi.hoisted(() => ({ gate: null as Promise<void> | null, started: null as (() => void) | null }));
+vi.mock("@/modules/whatsapp-assistant/engine", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/modules/whatsapp-assistant/engine")>();
+  return {
+    ...original,
+    advanceConversation: async (...args: Parameters<typeof original.advanceConversation>) => {
+      if (deciding.gate) {
+        const { db } = await import("@/platform/database/client");
+        const organisation = await db.conversation.findUniqueOrThrow({ where: { id: args[0].conversationId }, select: { organisationId: true } });
+        await db.domainEvent.create({ data: { organisationId: organisation.organisationId, name: "test.decision_side_effect", aggregateType: "conversation", aggregateId: args[0].conversationId, payload: {} } });
+        deciding.started?.();
+        await deciding.gate;
+      }
+      return original.advanceConversation(...args);
+    },
+  };
+});
 import { POST as organisationWebhook } from "@/app/api/webhooks/whatsapp/[organisationId]/route";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
@@ -84,6 +103,8 @@ describe("PostgreSQL WhatsApp work across number moves", () => {
     sent.length = 0;
     sendGate = null;
     sendStarted = null;
+    deciding.gate = null;
+    deciding.started = null;
     await cleanDatabase();
   });
   afterEach(() => { vi.unstubAllEnvs(); });
@@ -197,5 +218,31 @@ describe("PostgreSQL WhatsApp work across number moves", () => {
     await work();
     expect(sent).toHaveLength(1);
     expect((await deliveriesOf(a.organisation.id)).at(-1)).toMatchObject({ status: "SKIPPED", failureReason: "No WhatsApp number is assigned to this organisation." });
+  });
+
+  it("does not move a number while an inbound message is being decided and acted on", async () => {
+    const { a, b, move } = await fixture();
+    expect(await inbound(a.organisation.id, NUMBER_ONE)).toBe(200);
+    let release!: () => void;
+    deciding.gate = new Promise((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { deciding.started = resolve; });
+    const processing = work();
+    await started;
+    let moved = false;
+    const moving = move(b.organisation.id, NUMBER_ONE).then(() => { moved = true; });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(moved).toBe(false);
+    expect(await db.whatsAppNumberAssignment.findUniqueOrThrow({ where: { activePhoneNumberId: NUMBER_ONE } })).toMatchObject({ organisationId: a.organisation.id });
+    release();
+    await processing;
+    await moving;
+    // The side effect and the decision both happened while A held the number; the reply it queued
+    // is not sent from the number B now holds.
+    expect(await db.domainEvent.count({ where: { organisationId: a.organisation.id, name: "test.decision_side_effect" } })).toBe(1);
+    expect(await db.message.findFirstOrThrow({ where: { organisationId: a.organisation.id, direction: "INBOUND" } })).toMatchObject({ processedAt: expect.any(Date), metadata: expect.not.objectContaining({ quarantined: expect.anything() }) });
+    deciding.gate = null;
+    await work();
+    expect(sent).toHaveLength(0);
+    expect(await deliveriesOf(a.organisation.id)).toEqual([expect.objectContaining({ status: "SKIPPED", failureReason: WHATSAPP_REASSIGNED_REASON })]);
   });
 });

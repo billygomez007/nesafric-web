@@ -73,6 +73,7 @@ Numbers that organisations saved in their channel settings before this change ar
   - an inbound message is marked processed with `metadata.quarantined`, gets no reply, and is logged as `whatsapp.inbound_quarantined` (domain event and log line).
   Quarantined work is never retried or resent. A new holder starts its own conversations; it never sees the old holder's transcript.
 - **Sends in progress** hold the assignment (shared lock), so a move waits for them to finish (up to about 15 seconds) and nothing goes out from a number after its move commits.
+- **Inbound messages being processed** hold it too, from the assignment check through deciding, its side effects (maintenance requests, job replies, rule changes) and queueing the reply. A move waits for that to finish (up to two minutes), so no side effect happens for a number that has already moved.
 - Staff replies in a conversation that arrived on a number the organisation no longer has are not sent.
 
 ### Official number
@@ -80,7 +81,7 @@ Numbers that organisations saved in their channel settings before this change ar
 - An official number never goes to another organisation, even with `"move": true` and even after it has been replaced (`409 OFFICIAL_WHATSAPP_NUMBER`). The official number in use cannot be released (`409 OFFICIAL_WHATSAPP_NUMBER_ACTIVE`).
 - **Replacing it:** assign the new number to the official organisation. The old number moves to `protectedNumbers`. Messages queued under the old number are quarantined, and new ones go from the new number.
 - **Reusing an old official number elsewhere** (for example after Meta reissues it): `POST …/release` with the number typed twice and a reason. This lifts the protection and is audited. Then assign it normally.
-- Changing `WHATSAPP_OFFICIAL_ORGANISATION_ID` does not move anything. Assign the official number to the new official organisation. Until then there is no official fallback.
+- Changing `WHATSAPP_OFFICIAL_ORGANISATION_ID` does not move anything. Assign the official number to the new official organisation. If that organisation already holds the number, assigning it again promotes the assignment to official. Until then there is no official fallback.
 
 ### Recovery
 

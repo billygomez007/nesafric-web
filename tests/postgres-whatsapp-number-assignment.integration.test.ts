@@ -232,6 +232,24 @@ describe("PostgreSQL WhatsApp number assignment", () => {
     });
   });
 
+  it("promotes an assignment when its organisation becomes the official one", async () => {
+    const official = await organisationWithOwner("NesAfric");
+    const other = await organisationWithOwner("Owusu Homes");
+    const principal = await createPlatformAdmin();
+    await assign(principal, official.organisation.id, OFFICIAL_NUMBER, { businessAccountId: "555" });
+    await upsertChannelConfig(official.owner.id, official.organisation.id, "WHATSAPP", { enabled: true, config: {} });
+    expect(await activeOf(official.organisation.id)).toMatchObject({ official: false });
+    vi.stubEnv("WHATSAPP_OFFICIAL_ORGANISATION_ID", official.organisation.id);
+    expect(await resolveWhatsAppSendConfig(other.organisation.id)).toBeNull();
+
+    const promoted = await assign(principal, official.organisation.id, OFFICIAL_NUMBER, { businessAccountId: "555", reason: "Now the official organisation" });
+    expect(promoted).toMatchObject({ changed: true, assignment: { official: true } });
+    expect(await resolveWhatsAppSendConfig(other.organisation.id)).toMatchObject({ senderOrganisationId: official.organisation.id, official: true });
+    expect(await assign(principal, official.organisation.id, OFFICIAL_NUMBER, { businessAccountId: "555" })).toMatchObject({ changed: false });
+    await expect(releaseWhatsAppNumberForPlatform(principal, { phoneNumberId: OFFICIAL_NUMBER, confirmPhoneNumberId: OFFICIAL_NUMBER, reason: "Trying" })).rejects.toMatchObject({ code: "OFFICIAL_WHATSAPP_NUMBER_ACTIVE" });
+    await expect(assign(principal, other.organisation.id, OFFICIAL_NUMBER, { move: true })).rejects.toMatchObject({ code: "OFFICIAL_WHATSAPP_NUMBER" });
+  });
+
   describe("database constraints", () => {
     it("allows one holder per number and one number per organisation", async () => {
       const first = await organisationWithOwner("Owusu Homes");

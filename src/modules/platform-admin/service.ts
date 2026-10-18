@@ -23,7 +23,7 @@ import { getEmailProviderStatus } from "@/modules/conversations/channels/email-p
 import { runDueJobs, runPendingJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { buildMaintenanceTimeline } from "@/modules/maintenance-routing/oversight";
-import { channelSettings, lockWhatsAppAssignments, lockWhatsAppChannel, withoutWhatsAppNumber } from "@/modules/conversations/channels/whatsapp-numbers";
+import { channelSettings, lockWhatsAppAssignments, lockWhatsAppChannel, lockWhatsAppProcessing, withoutWhatsAppNumber } from "@/modules/conversations/channels/whatsapp-numbers";
 import { officialWhatsAppOrganisationId } from "@/modules/whatsapp-assistant/identity";
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -2650,7 +2650,8 @@ const whatsappNumberReleaseSchema = z.object({
 const whatsappClaimDismissSchema = z.object({ organisationId: z.string().uuid(), phoneNumberId: whatsappNumberId, reason: whatsappReason }).strict();
 
 type AssignmentTx = Prisma.TransactionClient;
-const ASSIGNMENT_TRANSACTION = { timeout: 30_000, maxWait: 30_000 };
+// Long enough to wait for inbound processing already under way (see withWhatsAppProcessingGuard).
+const ASSIGNMENT_TRANSACTION = { timeout: 150_000, maxWait: 10_000 };
 
 async function stripWhatsAppClaim(tx: AssignmentTx, organisationId: string, phoneNumberId?: string) {
   const channel = await tx.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel: "WHATSAPP" } } });
@@ -2724,7 +2725,10 @@ export async function assignWhatsAppNumberForPlatform(principal: PlatformPrincip
       officialProtection(tx, data.phoneNumberId),
     ]);
     const businessAccountId = data.businessAccountId ?? null;
-    if (current && current.phoneNumberId === data.phoneNumberId && current.businessAccountId === businessAccountId) {
+    const becomesOfficial = organisation.id === official;
+    // Unchanged only if the official flag also matches: assigning its number again to a newly
+    // configured official organisation promotes it (a new, official assignment).
+    if (current && current.phoneNumberId === data.phoneNumberId && current.businessAccountId === businessAccountId && current.official === becomesOfficial) {
       return { assignment: current, changed: false };
     }
     if (protection && organisation.id !== official) {
@@ -2734,7 +2738,9 @@ export async function assignWhatsAppNumberForPlatform(principal: PlatformPrincip
     if (takenFrom && !data.move) {
       throw new AppError("WHATSAPP_NUMBER_IN_USE", 409, "This WhatsApp number is assigned to another organisation. Confirm the move to take it from that organisation.", { organisationIds: [takenFrom.organisationId] });
     }
-    for (const id of [organisation.id, ...(takenFrom ? [takenFrom.organisationId] : [])].sort()) await lockWhatsAppChannel(tx, id);
+    const affected = [organisation.id, ...(takenFrom ? [takenFrom.organisationId] : [])].sort();
+    for (const id of affected) await lockWhatsAppProcessing(tx, id);
+    for (const id of affected) await lockWhatsAppChannel(tx, id);
 
     const now = new Date();
     const end = (row: { id: string }, endedReason: string) => tx.whatsAppNumberAssignment.update({ where: { id: row.id }, data: { activePhoneNumberId: null, activeOrganisationId: null, endedAt: now, endedReason } });
@@ -2742,7 +2748,7 @@ export async function assignWhatsAppNumberForPlatform(principal: PlatformPrincip
     if (current) await end(current, "replaced");
     const claim = channelSettings((await tx.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId: organisation.id, channel: "WHATSAPP" } } }))?.config).phoneNumberId;
     const assignment = await tx.whatsAppNumberAssignment.create({
-      data: { phoneNumberId: data.phoneNumberId, businessAccountId, organisationId: organisation.id, activePhoneNumberId: data.phoneNumberId, activeOrganisationId: organisation.id, official: organisation.id === official, assignedByPrincipalId: principal.id, reason: data.reason, assignedAt: now },
+      data: { phoneNumberId: data.phoneNumberId, businessAccountId, organisationId: organisation.id, activePhoneNumberId: data.phoneNumberId, activeOrganisationId: organisation.id, official: becomesOfficial, assignedByPrincipalId: principal.id, reason: data.reason, assignedAt: now },
     }).catch(assignmentConflict);
     await stripWhatsAppClaim(tx, organisation.id);
     if (takenFrom) await stripWhatsAppClaim(tx, takenFrom.organisationId, data.phoneNumberId);
@@ -2788,6 +2794,7 @@ export async function releaseWhatsAppNumberForPlatform(principal: PlatformPrinci
     if (!active && !protection) throw new AppError("WHATSAPP_NUMBER_NOT_HELD", 404, "This WhatsApp number is not assigned or protected.");
     const now = new Date();
     if (active) {
+      await lockWhatsAppProcessing(tx, active.organisationId);
       await lockWhatsAppChannel(tx, active.organisationId);
       await tx.whatsAppNumberAssignment.update({ where: { id: active.id }, data: { activePhoneNumberId: null, activeOrganisationId: null, endedAt: now, endedReason: "released" } });
       await stripWhatsAppClaim(tx, active.organisationId, data.phoneNumberId);
