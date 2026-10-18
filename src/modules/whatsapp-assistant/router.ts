@@ -15,7 +15,7 @@ import { advanceJobs } from "./jobs";
 import { answerLandlord } from "./landlord";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
-export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean };
+export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown> };
 
 export const OFFICIAL_MENU_SUFFIX = "\n\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
 const START_ONBOARDING = /^(4|register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;

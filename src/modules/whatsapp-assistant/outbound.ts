@@ -34,7 +34,23 @@ export async function officialTemplateReadiness(template: WhatsAppTemplateKey) {
  * reason when it cannot be sent. Delivery happens in the conversation-delivery job, which never
  * resends an unconfirmed attempt.
  */
+/** Someone who replied STOP gets no business-initiated message of any kind until they reply START. */
+async function optedOut(tx: Tx, phoneE164: string) {
+  const identity = await tx.channelIdentity.findUnique({ where: { channel_address: { channel: "WHATSAPP", address: `+${phoneE164.replace(/^\+/, "")}` } }, select: { optedOutAt: true } });
+  return Boolean(identity?.optedOutAt);
+}
+
+/**
+ * Template parameters that come from customers (an organisation's name, a provider's name) must
+ * not turn an official NesAfric message into someone else's advert: links and phone numbers are
+ * removed and the length is capped.
+ */
+export function safeTemplateText(value: string, max = 80) {
+  return value.replace(/https?:\/\/\S+|www\.\S+|\b\S+\.(com|net|org|io|me|ly|gh|co)\b\S*/gi, "").replace(/\+?\d[\d\s-]{6,}\d/g, "").replace(/\s+/g, " ").trim().slice(0, max) || "A NesAfric customer";
+}
+
 export async function queueOfficialTemplate(tx: Tx, message: OfficialTemplateMessage): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+  if (await optedOut(tx, message.phoneE164)) return { messageId: null, reason: "The recipient opted out of WhatsApp messages (STOP)." };
   const readiness = await officialTemplateReadiness(message.template);
   if (!readiness.ready) return { messageId: null, reason: readiness.reason };
   const { officialId, phoneNumberId, approved } = readiness;
@@ -65,6 +81,7 @@ export async function queueOfficialTemplate(tx: Tx, message: OfficialTemplateMes
  * null with a reason when neither is possible (nothing is sent then).
  */
 export async function queueOfficialText(tx: Tx, input: { phoneE164: string; displayName: string; text: string; externalMessageId: string; metadata?: Record<string, unknown> }): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+  if (await optedOut(tx, input.phoneE164)) return { messageId: null, reason: "The recipient opted out of WhatsApp messages (STOP)." };
   const readiness = await officialTemplateReadiness("NOTIFICATION");
   const officialId = readiness.ready ? readiness.officialId : officialWhatsAppOrganisationId();
   if (!officialId) return { messageId: null, reason: "The official NesAfric WhatsApp number is not configured." };

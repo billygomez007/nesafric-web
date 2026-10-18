@@ -32,8 +32,9 @@ export const createRuleSchema = z.object(fields).strict().superRefine((value, co
   if (value.authorizationMode === "PRE_AUTHORIZED" && !value.spendingCapMinor) context.addIssue({ code: "custom", path: ["spendingCapMinor"], message: "Pre-authorised repairs need a spending cap." });
 });
 export const updateRuleSchema = z.object({
-  name: fields.name.optional(), keywords: fields.keywords.optional(), priorities: fields.priorities.optional(),
-  primaryProviderOrganisationId: fields.primaryProviderOrganisationId, backupProviderOrganisationIds: fields.backupProviderOrganisationIds.optional(),
+  // Plain optionals (no defaults): a field left out of an update is never reset.
+  name: fields.name.optional(), keywords: z.array(z.string().trim().min(2).max(40)).max(20).optional(), priorities: z.array(z.enum(["EMERGENCY", "URGENT", "NORMAL", "LOW"])).max(4).optional(),
+  primaryProviderOrganisationId: fields.primaryProviderOrganisationId, backupProviderOrganisationIds: z.array(uuid).max(5).optional(),
   autoDispatch: z.boolean().optional(), authorizationMode: z.enum(modes).optional(), spendingCapMinor: fields.spendingCapMinor,
   responseTimeoutMinutes: z.number().int().min(5).max(10_080).optional(), maxAttempts: z.number().int().min(1).max(10).optional(),
   escalationMemberId: fields.escalationMemberId, notifyTenant: z.boolean().optional(), requireCompletionVerification: z.boolean().optional(),
@@ -83,6 +84,11 @@ export async function createRoutingRule(userId: string, organisationId: string, 
 export async function updateRoutingRule(userId: string, organisationId: string, ruleId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceManage);
   const data = updateRuleSchema.parse(input);
+  // Changing who is sent work, or what they may spend, needs the same rights as authorising it.
+  if (data.authorizationMode !== undefined || data.spendingCapMinor !== undefined || data.autoDispatch !== undefined || data.primaryProviderOrganisationId !== undefined || data.backupProviderOrganisationIds !== undefined) {
+    await requirePermission(userId, organisationId, PERMISSIONS.maintenanceAssign);
+    await requirePermission(userId, organisationId, PERMISSIONS.maintenanceApprove);
+  }
   return db.$transaction(async (tx) => {
     const current = await tx.maintenanceRoutingRule.findFirst({ where: { id: ruleId, organisationId, archivedAt: null } });
     if (!current) throw notFound();
@@ -101,6 +107,8 @@ export async function updateRoutingRule(userId: string, organisationId: string, 
 /** Pausing stops new automatic assignments under the rule at once; existing jobs are untouched. */
 export async function setRoutingRulePaused(userId: string, organisationId: string, ruleId: string, paused: boolean) {
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceManage);
+  // Pausing only ever reduces automation; resuming switches it back on.
+  if (!paused) await requirePermission(userId, organisationId, PERMISSIONS.maintenanceAssign);
   return db.$transaction(async (tx) => {
     const current = await tx.maintenanceRoutingRule.findFirst({ where: { id: ruleId, organisationId, archivedAt: null } });
     if (!current) throw notFound();

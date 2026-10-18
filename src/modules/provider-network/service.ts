@@ -5,7 +5,7 @@ import { AppError, notFound } from "@/platform/errors";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { normalizePhone } from "@/platform/identity/phone";
 import { listOwnedProviders, uniqueProviderSlug } from "@/modules/providers/service";
-import { queueOfficialTemplate } from "@/modules/whatsapp-assistant/outbound";
+import { queueOfficialTemplate, safeTemplateText } from "@/modules/whatsapp-assistant/outbound";
 import { categoryLabels, NETWORK_CATEGORIES, NETWORK_CATEGORY_KEYS, type NetworkCategory } from "./categories";
 
 type Tx = Prisma.TransactionClient;
@@ -76,6 +76,15 @@ export async function inviteNetworkProvider(userId: string, organisationId: stri
     const known = [provider.contactPhone ? normalizePhone(provider.contactPhone) : null, provider.individualUser?.phoneE164 ?? null];
     if (!known.includes(phoneE164)) throw new AppError("PROVIDER_PHONE_MISMATCH", 422, "Invite a marketplace provider on the phone number shown on their profile.");
   }
+  // Invitations go out from the official NesAfric number, so they are limited: a number that
+  // declined is not asked again for 30 days, and an organisation can send 20 invitations a day.
+  if (!data.sourceReference || data.source !== "ONBOARDING") {
+    const declined = await db.providerNetworkInvitation.findFirst({ where: { landlordOrganisationId: organisationId, phoneE164, status: "DECLINED", respondedAt: { gte: new Date(Date.now() - 30 * 86_400_000) } }, select: { id: true } });
+    if (declined) throw new AppError("RECENTLY_DECLINED", 409, "This person declined your invitation recently. You can invite them again after 30 days.");
+  }
+  if (await db.providerNetworkInvitation.count({ where: { landlordOrganisationId: organisationId, createdAt: { gte: new Date(Date.now() - 86_400_000) } } }) >= 20) {
+    throw new AppError("INVITATION_LIMIT", 429, "You can send up to 20 provider invitations a day.");
+  }
   const member = await db.providerOrganisation.findFirst({
     where: { landlordOrganisationId: organisationId, status: { not: "ARCHIVED" }, consentedAt: { not: null }, provider: { OR: [{ contactPhone: phoneE164 }, { individualUser: { phoneE164 } }] } },
     select: { id: true },
@@ -113,8 +122,8 @@ async function sendInvitation(invitationId: string) {
   const work = categoryLabels(invitation.scopeCategories);
   await db.$transaction(async (tx) => {
     const queued = await queueOfficialTemplate(tx, {
-      phoneE164: invitation.phoneE164, displayName: invitation.displayName, template: "PROVIDER_INVITE", bodyParameters: [invitation.landlordOrganisation.name, work],
-      body: `${invitation.landlordOrganisation.name} invites you to receive ${work} work orders through NesAfric. Reply ACCEPT to join or DECLINE to refuse.`,
+      phoneE164: invitation.phoneE164, displayName: invitation.displayName, template: "PROVIDER_INVITE", bodyParameters: [safeTemplateText(invitation.landlordOrganisation.name), work],
+      body: `${safeTemplateText(invitation.landlordOrganisation.name)} invites you to receive ${work} work orders through NesAfric. Reply ACCEPT to join or DECLINE to refuse.`,
       externalMessageId: `provider-invite:${invitation.id}`, metadata: { providerInvitationId: invitation.id },
     });
     await tx.providerNetworkInvitation.update({ where: { id: invitation.id }, data: "reason" in queued ? { deliveryFailureReason: queued.reason } : { messageId: queued.messageId, deliveryFailureReason: null } });

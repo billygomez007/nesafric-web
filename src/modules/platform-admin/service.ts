@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Prisma, type PlatformPrincipal } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
@@ -21,6 +22,7 @@ import { listingReadinessProblems } from "@/modules/listings/readiness";
 import { getEmailProviderStatus } from "@/modules/conversations/channels/email-providers";
 import { runDueJobs, runPendingJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
+import { buildMaintenanceTimeline } from "@/modules/maintenance-routing/oversight";
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const MAX_ACTIVE_SUPPORT_SESSIONS_PER_PRINCIPAL = 3;
@@ -384,6 +386,7 @@ export async function getPlatformHealth(principal: PlatformPrincipal) {
     // Secret-free — only which transport is active and how many recent email-related job
     // failures exist, never a credential or an email body.
     email: { ...getEmailProviderStatus(), recentFailureCount: emailJobFailures.length },
+    automation: await automationHealth(),
   };
 }
 
@@ -2565,4 +2568,59 @@ export async function rejectListingForPlatform(principal: PlatformPrincipal, lis
     await recordListingDecision(tx, principal, "platform_admin.listing_rejected", listing, { note: data.note });
     return rejected;
   }, REVIEW_TRANSACTION_OPTIONS);
+}
+
+// ---------------------------------------------------------------------------
+// Autonomous property operations: monitoring, investigation, ownership review
+// ---------------------------------------------------------------------------
+
+/**
+ * Signals that need a person: dead-lettered jobs, WhatsApp sends whose outcome is unknown,
+ * critical alerts nobody could be reached for, work orders that could not be sent, and
+ * ownership claims waiting for review. Counts only; no organisation data.
+ */
+async function automationHealth(now = new Date()) {
+  const dayAgo = new Date(now.getTime() - 86_400_000);
+  const [deadLetterJobs, unconfirmedDeliveries, undeliveredCritical, workOrdersNotSent, openEscalations, pendingOwnershipClaims] = await Promise.all([
+    db.backgroundJob.count({ where: { status: "DEAD_LETTER" } }),
+    db.messageDelivery.count({ where: { channel: "WHATSAPP", status: "UNCONFIRMED" } }),
+    db.maintenanceEscalation.count({ where: { level: "CRITICAL", notifiedAt: null, resolvedAt: null, createdAt: { lt: new Date(now.getTime() - 5 * 60_000) } } }),
+    db.maintenanceDispatchAttempt.count({ where: { status: "CONTACT_FAILED", createdAt: { gte: dayAgo } } }),
+    db.maintenanceEscalation.count({ where: { resolvedAt: null } }),
+    db.portfolioVerification.count({ where: { status: "PENDING" } }),
+  ]);
+  return { deadLetterJobs, unconfirmedDeliveries, undeliveredCritical, workOrdersNotSent, openEscalations, pendingOwnershipClaims };
+}
+
+/** NesAfric support investigating one request: needs maintenance.read and an active support session. */
+export async function getMaintenanceTimelineForPlatform(principal: PlatformPrincipal, organisationId: string, requestId: string) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.maintenanceRead);
+  const session = await requireActiveSupportSession(principal.id, organisationId);
+  if (!isUuid(requestId)) throw notFound();
+  const timeline = await buildMaintenanceTimeline(organisationId, requestId);
+  await recordPlatformAudit(principal, "platform_admin.maintenance_timeline_viewed", "maintenance_request", requestId, organisationId, { supportSessionId: session.id });
+  return timeline;
+}
+
+export async function listPortfolioVerificationsForPlatform(principal: PlatformPrincipal, status: "PENDING" | "VERIFIED" | "REJECTED" = "PENDING") {
+  requirePermission(principal, PLATFORM_PERMISSIONS.portfolioVerify);
+  return db.portfolioVerification.findMany({
+    where: { status },
+    select: { id: true, status: true, claim: true, source: true, createdAt: true, reviewedAt: true, reviewNote: true, organisation: { select: { id: true, name: true } }, property: { select: { id: true, name: true, city: true } }, claimedBy: { select: { id: true, displayName: true } } },
+    orderBy: { createdAt: "asc" }, take: 100,
+  });
+}
+
+/** Only a platform reviewer can mark ownership or authority verified; the decision is audited. */
+export async function reviewPortfolioVerificationForPlatform(principal: PlatformPrincipal, verificationId: string, input: unknown) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.portfolioVerify);
+  const data = z.object({ status: z.enum(["VERIFIED", "REJECTED"]), note: z.string().trim().min(3).max(2000) }).strict().parse(input);
+  if (!isUuid(verificationId)) throw notFound();
+  const current = await db.portfolioVerification.findUnique({ where: { id: verificationId } });
+  if (!current) throw notFound();
+  if (current.status !== "PENDING") throw new AppError("ALREADY_REVIEWED", 409, "This claim has already been reviewed.");
+  const updated = await db.portfolioVerification.update({ where: { id: verificationId }, data: { status: data.status, reviewNote: data.note, reviewedAt: new Date(), reviewedByPrincipalId: principal.id } });
+  await recordPlatformAudit(principal, `platform_admin.portfolio_${data.status.toLowerCase()}`, "portfolio_verification", verificationId, current.organisationId, { propertyId: current.propertyId });
+  await db.auditEvent.create({ data: { organisationId: current.organisationId, action: `portfolio_verification.${data.status.toLowerCase()}`, entityType: "portfolio_verification", entityId: verificationId, metadata: { propertyId: current.propertyId } } });
+  return updated;
 }

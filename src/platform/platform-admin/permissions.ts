@@ -46,6 +46,9 @@ export const PLATFORM_PERMISSIONS = {
   /// `provider.verify` permission in `src/platform/authorization/permissions.ts` (a landlord's own
   /// private-directory trust check, which cannot verify a provider with no landlord at all).
   providerIdentityReview: "provider_identity.review",
+  /// Reviewing a landlord's claim to own or manage a property registered without evidence
+  /// (for example over WhatsApp).
+  portfolioVerify: "portfolio.verify",
 } as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
@@ -56,7 +59,7 @@ const ALL_PERMISSIONS = Object.values(PLATFORM_PERMISSIONS);
 const ROLE_PERMISSIONS: Record<PlatformRoleValue, readonly PlatformPermission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   BILLING_ADMIN: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.orgsManage, PLATFORM_PERMISSIONS.plansManage, PLATFORM_PERMISSIONS.entitlementsOverride, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.campaignReview],
-  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify, PLATFORM_PERMISSIONS.providerIdentityReview, PLATFORM_PERMISSIONS.maintenanceRead, PLATFORM_PERMISSIONS.communicationsRead, PLATFORM_PERMISSIONS.aiOperationsRead],
+  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify, PLATFORM_PERMISSIONS.providerIdentityReview, PLATFORM_PERMISSIONS.portfolioVerify, PLATFORM_PERMISSIONS.maintenanceRead, PLATFORM_PERMISSIONS.communicationsRead, PLATFORM_PERMISSIONS.aiOperationsRead],
   READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.maintenanceRead, PLATFORM_PERMISSIONS.communicationsRead, PLATFORM_PERMISSIONS.aiOperationsRead],
 };
 

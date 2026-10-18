@@ -3,6 +3,7 @@ import { db } from "@/platform/database/client";
 import { getObjectStorageAdapter } from "@/platform/storage/registry";
 import { uploadOrganisationDocument } from "@/modules/documents/service";
 import { recordDispatchDecline } from "@/modules/maintenance-routing/dispatch";
+import { manualDispatch, resolveEscalations, stopAutomation } from "@/modules/maintenance-routing/oversight";
 import { acceptJob, askAboutJob, completeJob, decideQuote, findProviderJobs, formatMoney, proposeAppointment, startJob, submitQuote, tenantRespondToCompletion, verifyCompletion, type ProviderJob } from "@/modules/maintenance-routing/provider-actions";
 import { downloadWhatsAppMedia } from "./maintenance/media";
 import { parseAmountMinor } from "./onboarding/parse";
@@ -11,11 +12,12 @@ import type { AssistantState } from "./schemas";
 type Linked = { user: { id: string; displayName: string } } | null;
 type JobState = NonNullable<AssistantState["job"]>;
 export type JobInput = { body: string; kind: string; messageId: string; media?: { id: string; mimeType?: string }; replyTo?: string };
-export type JobResult = { state: AssistantState; reply: string };
+export type JobResult = { state: AssistantState; reply: string; /** Stored with the outbound reply (e.g. redact after sending). */ replyMetadata?: Record<string, unknown> };
 
 const REF = "(nm-\\d{4,})";
 const PROVIDER = new RegExp(`^(accept|decline|start|done|photos|info|question|visit|appointment|quote)(?:\\s+${REF})?(?:\\s+(.+))?$`, "s");
-const LANDLORD = new RegExp(`^(approve|reject|verify)\\s+${REF}(?:\\s+(.+))?$`, "s");
+const LANDLORD = new RegExp(`^(approve|reject|verify|stop|resolve)\\s+${REF}(?:\\s+(.+))?$`, "s");
+const SEND = new RegExp(`^send\\s+${REF}\\s+to\\s+([1-9]\\d?)$`);
 const TENANT = new RegExp(`^(ok|fixed|problem|not fixed)\\s+${REF}$`);
 
 const describe = (job: ProviderJob) => {
@@ -76,15 +78,29 @@ export async function advanceJobs(input: JobInput, linked: Linked, state: Assist
     }
   }
 
+  // A person taking over: send the job to a chosen network provider (numbers from "providers").
+  const send = SEND.exec(command);
+  if (send) {
+    const request = await landlordRequest(userId, send[1], "maintenance.assign");
+    const entry = state.network?.listed[Number(send[2]) - 1];
+    if (!request) return { state, reply: `You cannot dispatch ${send[1].toUpperCase()}, or it does not exist.` };
+    if (!entry || entry.organisationId !== request.organisationId) return { state, reply: "Reply providers to see the numbered list first, then use those numbers." };
+    return { state: { ...state, workflow: "job", job: { step: "confirm_decision", reference: request.referenceNumber!, photos: 0, decision: { kind: "send", organisationId: request.organisationId, requestId: request.id, providerOrganisationId: entry.id } } }, reply: `Please confirm: send ${request.referenceNumber} (${request.title}) to ${entry.name} yourself, instead of following your rules. They will be asked to quote before any paid work.\nReply confirm, or cancel.` };
+  }
+
   const landlord = LANDLORD.exec(command);
   if (landlord) {
-    const kind = landlord[1] as "approve" | "reject" | "verify";
-    const request = await landlordRequest(userId, landlord[2], kind === "verify" ? "maintenance.manage" : "maintenance.approve");
+    const kind = landlord[1] as "approve" | "reject" | "verify" | "stop" | "resolve";
+    const permission = kind === "approve" || kind === "reject" ? "maintenance.approve" : "maintenance.manage";
+    const request = await landlordRequest(userId, landlord[2], permission);
     if (!request) return { state, reply: `You cannot ${kind} ${landlord[2].toUpperCase()}, or it does not exist.` };
-    const pending = kind === "verify" ? null : await db.maintenanceApproval.findFirst({ where: { maintenanceRequestId: request.id, status: "PENDING" }, orderBy: { requestedAt: "desc" } });
-    if (kind !== "verify" && !pending) return { state, reply: `There is no quote waiting for approval on ${request.referenceNumber}.` };
-    const what = kind === "verify" ? `close ${request.referenceNumber} (${request.title}) as verified` : `${kind} the quote of ${formatMoney(pending!.requestedAmountMinor, pending!.currencyCode)} on ${request.referenceNumber}${kind === "approve" ? `. The provider may then spend up to that amount` : ""}`;
-    return { state: { ...state, workflow: "job", job: { step: "confirm_decision", reference: request.referenceNumber!, photos: 0, decision: { kind, organisationId: request.organisationId, requestId: request.id, reason: landlord[3]?.slice(0, 500) } } }, reply: `Please confirm: ${what}.\nReply confirm, or cancel.` };
+    const pending = kind === "approve" || kind === "reject" ? await db.maintenanceApproval.findFirst({ where: { maintenanceRequestId: request.id, status: "PENDING" }, orderBy: { requestedAt: "desc" } }) : null;
+    if ((kind === "approve" || kind === "reject") && !pending) return { state, reply: `There is no quote waiting for approval on ${request.referenceNumber}.` };
+    const what = kind === "verify" ? `close ${request.referenceNumber} (${request.title}) as verified`
+      : kind === "stop" ? `stop automatic handling of ${request.referenceNumber}. Any provider still being asked is told no, and no backup is tried`
+      : kind === "resolve" ? `mark the alerts on ${request.referenceNumber} as handled`
+      : `${kind} the quote of ${formatMoney(pending!.requestedAmountMinor, pending!.currencyCode)} on ${request.referenceNumber}${kind === "approve" ? `. The provider may then spend up to that amount` : ""}`;
+    return { state: { ...state, workflow: "job", job: { step: "confirm_decision", reference: request.referenceNumber!, photos: 0, decision: { kind, organisationId: request.organisationId, requestId: request.id, reason: landlord[3]?.slice(0, 500), approvalId: pending?.id } } }, reply: `Please confirm: ${what}.\nReply confirm, or cancel.` };
   }
 
   const match = PROVIDER.exec(command);
@@ -146,8 +162,9 @@ export async function advanceJobs(input: JobInput, linked: Linked, state: Assist
         if (job.status !== "ACCEPTED") return { state, reply: `Accept ${ref} first to see its photos.` };
         if (!attachments.length) return { state, reply: `${ref} has no photos.` };
         const adapter = getObjectStorageAdapter();
-        const links = await Promise.all(attachments.map((attachment) => adapter.getSignedUrl(attachment.fileKey, "PRIVATE", { expiresInSeconds: 3600 }).catch(() => null)));
-        return { state, reply: `Photos for ${ref} (links expire in 1 hour):\n${links.filter(Boolean).join("\n")}` };
+        const links = await Promise.all(attachments.map((attachment) => adapter.getSignedUrl(attachment.fileKey, "PRIVATE", { expiresInSeconds: 900 }).catch(() => null)));
+        // The links are removed from the stored transcript as soon as the message is sent.
+        return { state, reply: `Photos for ${ref} (links expire in 15 minutes):\n${links.filter(Boolean).join("\n")}`, replyMetadata: { redactAfterSend: `Photo links for ${ref} were sent (removed from the transcript).` } };
       }
       case "done": {
         if (job.status !== "ACCEPTED") return { state, reply: `Accept ${ref} first.` };
@@ -172,12 +189,16 @@ async function continueFlow(input: JobInput, userId: string, job: JobState, stat
     const { kind, organisationId, requestId, reason } = job.decision;
     try {
       if (kind === "verify") await verifyCompletion(userId, organisationId, requestId);
-      else await decideQuote(userId, organisationId, requestId, kind === "approve", reason);
+      else if (kind === "stop") await stopAutomation(userId, organisationId, requestId, reason ?? "Stopped on WhatsApp.");
+      else if (kind === "resolve") await resolveEscalations(userId, organisationId, { requestId, note: reason });
+      else if (kind === "send") await manualDispatch(userId, organisationId, requestId, { providerOrganisationId: job.decision.providerOrganisationId });
+      else await decideQuote(userId, organisationId, requestId, kind === "approve", reason, job.decision.approvalId);
     } catch (error) {
       if (error instanceof AppError && error.status < 500) return { state: reset(), reply: `Not changed: ${error.message}` };
       throw error;
     }
-    return { state: reset(), reply: kind === "verify" ? `${job.reference} is closed.` : `Quote ${kind === "approve" ? "approved" : "rejected"} on ${job.reference}. The provider has been told.` };
+    const done = { verify: `${job.reference} is closed.`, stop: `Automatic handling of ${job.reference} is stopped.`, resolve: `Alerts on ${job.reference} are marked as handled.`, send: `${job.reference} has been sent to the provider you chose.`, approve: `Quote approved on ${job.reference}. The provider has been told.`, reject: `Quote rejected on ${job.reference}. The provider has been told.` };
+    return { state: reset(), reply: done[kind] };
   }
 
   const jobs = await findProviderJobs(userId, job.reference);

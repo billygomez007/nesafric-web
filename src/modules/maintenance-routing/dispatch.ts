@@ -5,7 +5,7 @@ import { PERMISSIONS, requirePermission } from "@/platform/authorization/permiss
 import { NonRetryableJobError } from "@/platform/jobs/errors";
 import { eligibleNetworkProviders } from "@/modules/provider-network/service";
 import { categoryLabels } from "@/modules/provider-network/categories";
-import { queueOfficialTemplate } from "@/modules/whatsapp-assistant/outbound";
+import { queueOfficialTemplate, safeTemplateText } from "@/modules/whatsapp-assistant/outbound";
 import { authorizedSpend, networkCategoryFor, selectRule } from "./evaluate";
 
 type Tx = Prisma.TransactionClient;
@@ -33,7 +33,7 @@ export async function escalate(client: Client, input: { organisationId: string; 
   }
 }
 
-async function decide(client: Client, organisationId: string, requestId: string, outcome: string, reason: string, routingRuleId: string | null, details: Record<string, unknown> = {}) {
+export async function decide(client: Client, organisationId: string, requestId: string, outcome: string, reason: string, routingRuleId: string | null, details: Record<string, unknown> = {}) {
   await client.maintenanceRoutingDecision.create({ data: { organisationId, maintenanceRequestId: requestId, routingRuleId, outcome, reason, details: json(details) } });
 }
 
@@ -44,7 +44,7 @@ function authorisationText(mode: string, spendMinor: bigint | null, currency: st
 }
 
 type RuleRow = Awaited<ReturnType<typeof db.maintenanceRoutingRule.findFirstOrThrow>>;
-type Candidate = Awaited<ReturnType<typeof eligibleNetworkProviders>>[number];
+export type Candidate = Awaited<ReturnType<typeof eligibleNetworkProviders>>[number];
 
 /** Candidates in the rule's order (primary, then backups), limited to eligible network members. */
 async function orderedCandidates(rule: RuleRow, organisationId: string, propertyId: string): Promise<Candidate[]> {
@@ -59,7 +59,10 @@ async function orderedCandidates(rule: RuleRow, organisationId: string, property
  * row (unique per work order and number), the work-order template message, and a timeout job.
  * Without an approved template nothing is sent and the attempt is CONTACT_FAILED.
  */
-async function sendAttempt(tx: Tx, input: { organisationId: string; request: { id: string; referenceNumber: string | null; title: string; priority: string }; workOrder: { id: string; authorizationMode: string | null; authorizedSpendMinor: bigint | null; currencyCode: string }; rule: RuleRow; candidate: Candidate; attemptNumber: number; actorUserId: string; location: string; organisationName: string; photos: number }) {
+/** A rule, or for a manual dispatch just the timeout and work type the person chose. */
+type AttemptPolicy = { id: string | null; responseTimeoutMinutes: number; category: string };
+
+export async function sendAttempt(tx: Tx, input: { organisationId: string; request: { id: string; referenceNumber: string | null; title: string; priority: string }; workOrder: { id: string; authorizationMode: string | null; authorizedSpendMinor: bigint | null; currencyCode: string }; rule: AttemptPolicy; candidate: Candidate; attemptNumber: number; actorUserId: string; location: string; organisationName: string; photos: number }) {
   const { organisationId, request, workOrder, rule, candidate } = input;
   const expiresAt = new Date(Date.now() + rule.responseTimeoutMinutes * 60_000);
   const assignment = await tx.providerAssignment.create({ data: { landlordOrganisationId: organisationId, workOrderId: workOrder.id, providerId: candidate.providerId, assignedByUserId: input.actorUserId } });
@@ -73,7 +76,7 @@ async function sendAttempt(tx: Tx, input: { organisationId: string; request: { i
   const queued = phone
     ? await queueOfficialTemplate(tx, {
       phoneE164: phone, displayName: candidate.provider.displayName, template: "WORK_ORDER",
-      bodyParameters: [input.organisationName, request.referenceNumber ?? "", input.location, issue, request.priority.toLowerCase(), authorisation, deadline],
+      bodyParameters: [safeTemplateText(input.organisationName), request.referenceNumber ?? "", safeTemplateText(input.location, 160), safeTemplateText(issue, 300), request.priority.toLowerCase(), authorisation, deadline],
       body: `New ${categoryLabels([rule.category])} job ${request.referenceNumber} from ${input.organisationName} at ${input.location}: ${issue}. Urgency: ${request.priority.toLowerCase()}. ${authorisation} Reply ACCEPT or DECLINE by ${deadline}.`,
       externalMessageId: `work-order:${attempt.id}`, metadata: { dispatchAttemptId: attempt.id, workOrderId: workOrder.id },
     })
@@ -90,7 +93,7 @@ async function sendAttempt(tx: Tx, input: { organisationId: string; request: { i
   return { sent: true as const, attemptId: attempt.id };
 }
 
-async function context(client: Client, requestId: string) {
+export async function context(client: Client, requestId: string) {
   const request = await client.maintenanceRequest.findUniqueOrThrow({ where: { id: requestId }, include: { property: { select: { name: true, city: true, addressLine1: true, currencyCode: true } }, unit: { select: { name: true } }, organisation: { select: { name: true } }, _count: { select: { attachments: true } } } });
   const location = [request.property.name, request.unit?.name, request.property.addressLine1, request.property.city].filter(Boolean).join(", ");
   return { request, location };
@@ -171,11 +174,14 @@ export async function routeMaintenanceRequest(organisationId: string, requestId:
  */
 export async function dispatchNextOrEscalate(organisationId: string, workOrderId: string) {
   const workOrder = await db.workOrder.findFirst({ where: { id: workOrderId, organisationId }, include: { dispatchAttempts: { orderBy: { attemptNumber: "asc" } } } });
-  if (!workOrder?.routingRuleId || ["COMPLETED", "CANCELLED"].includes(workOrder.status)) return;
+  if (!workOrder || ["COMPLETED", "CANCELLED"].includes(workOrder.status)) return;
   if (workOrder.dispatchAttempts.some((attempt) => (ACTIVE_ATTEMPT as readonly string[]).includes(attempt.status))) return;
-  const rule = await db.maintenanceRoutingRule.findUnique({ where: { id: workOrder.routingRuleId } });
+  // Attempts superseded by a person (manual dispatch, automation stopped) never trigger backups.
+  if (workOrder.dispatchAttempts.at(-1)?.status === "BACKUP_REQUIRED") return;
+  const rule = workOrder.routingRuleId ? await db.maintenanceRoutingRule.findUnique({ where: { id: workOrder.routingRuleId } }) : null;
   const { request, location } = await context(db, workOrder.maintenanceRequestId);
   const giveUp = (detail: string) => escalate(db, { organisationId, requestId: request.id, level: "ATTENTION", reason: "NO_PROVIDER_ACCEPTED", detail: `${request.referenceNumber}: ${detail}`, recipientMemberId: rule?.escalationMemberId, dedupeKey: `${request.id}:no-provider-accepted:${workOrder.id}` });
+  if (!workOrder.routingRuleId) return workOrder.dispatchAttempts.length ? giveUp("the provider chosen manually did not accept.") : undefined;
   if (!rule || rule.archivedAt || rule.pausedAt) return giveUp("no provider accepted and the routing rule is no longer active.");
   const tried = new Set(workOrder.dispatchAttempts.map((attempt) => attempt.providerOrganisationId));
   if (workOrder.dispatchAttempts.length >= rule.maxAttempts) return giveUp(`no provider accepted after ${workOrder.dispatchAttempts.length} attempt(s).`);

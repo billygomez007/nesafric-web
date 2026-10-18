@@ -53,11 +53,11 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
 }
 
 type Tx = Prisma.TransactionClient;
-async function queueReply(tx: Tx, organisationId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply") {
+async function queueReply(tx: Tx, organisationId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply", metadata?: Record<string, unknown>) {
   const externalMessageId = `assistant:${inboundId}:${suffix}`;
   const existing = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId, channel: "WHATSAPP", externalMessageId } } });
   if (existing) return;
-  const message = await tx.message.create({ data: { organisationId, conversationId, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body, externalMessageId } });
+  const message = await tx.message.create({ data: { organisationId, conversationId, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body, externalMessageId, ...(metadata ? { metadata: json(metadata), containsSensitiveData: Boolean(metadata.redactAfterSend) } : {}) } });
   const delivery = await tx.messageDelivery.create({ data: { organisationId, messageId: message.id, channel: "WHATSAPP", recipientAddress: phone, idempotencyKey: `message-delivery:${message.id}` } });
   await tx.backgroundJob.create({ data: { organisationId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${delivery.id}`, payload: { organisationId, deliveryId: delivery.id }, maxAttempts: 5 } });
   await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(), lastOutboundAt: new Date() } });
@@ -67,7 +67,7 @@ const jobSchema = z.object({ organisationId: z.string().uuid(), conversationId: 
 
 type Outcome =
   | { kind: "skip" }
-  | { kind: "reply"; state: unknown; reply: string; status: ConversationStatus; handoff: boolean; redactInbound: boolean; optOut?: boolean; workflow: string; step: string };
+  | { kind: "reply"; state: unknown; reply: string; status: ConversationStatus; handoff: boolean; redactInbound: boolean; optOut?: boolean; workflow: string; step: string; replyMetadata?: Record<string, unknown> };
 
 const ENDED_STATUSES = ["CLOSED", "RESOLVED"];
 
@@ -107,7 +107,7 @@ async function decide(organisationId: string, conversation: { id: string; status
     ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined })
     : await advanceConversation(input);
   if (result.reply.length > 4096) throw new Error("Assistant reply exceeds WhatsApp text limit.");
-  return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step };
+  return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step, replyMetadata: "replyMetadata" in result ? result.replyMetadata as Record<string, unknown> | undefined : undefined };
 }
 
 const sameSnapshot = (a: { status: string; assignedMemberId: string | null; assistantState: unknown }, b: typeof a) =>
@@ -142,7 +142,7 @@ export async function processAssistantMessage(payload: Record<string, unknown>) 
         }
         if (outcome.redactInbound) await tx.message.update({ where: { id: message.id }, data: { body: "[verification code removed]", containsSensitiveData: true } });
         if (outcome.optOut !== undefined) await setWhatsAppOptOut(tx, conversation.channelAddress!, outcome.optOut);
-        await queueReply(tx, job.organisationId, conversation.id, conversation.channelAddress!, message.id, outcome.reply);
+        await queueReply(tx, job.organisationId, conversation.id, conversation.channelAddress!, message.id, outcome.reply, "reply", outcome.replyMetadata);
         await tx.conversation.update({ where: { id: conversation.id }, data: { assistantState: json(outcome.state), status: outcome.status } });
         if (outcome.handoff) await tx.conversationAssignment.create({ data: { organisationId: job.organisationId, conversationId: conversation.id, assigneeType: "UNASSIGNED", reason: "WhatsApp customer requested human support." } });
         await tx.message.update({ where: { id: message.id }, data: { processedAt: new Date() } });

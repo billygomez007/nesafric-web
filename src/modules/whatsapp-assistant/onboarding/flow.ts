@@ -195,6 +195,12 @@ export async function advanceOnboarding(input: OnboardingInput, dependencies: De
   if (command === "help" || command === "register" || command === "resume") return save(promptFor(draft, input.phone), { redactInbound });
 
   const data = draft.data;
+  // A draft started by one account is never finished as another: the number's current verified
+  // link must be the same account, otherwise the draft restarts its account step.
+  if (draft.userId && linked && linked.user.id !== draft.userId) {
+    await dependencies.drafts.abandon(draft.id);
+    return { reply: "This onboarding was started by a different account and has been discarded. Reply register to start again.", exit: true };
+  }
   const userId = draft.userId ?? linked?.user.id ?? null;
   switch (draft.step) {
     case "role": {
@@ -371,7 +377,7 @@ export async function advanceOnboarding(input: OnboardingInput, dependencies: De
       if (command === "add property") { data.cursor = { property: data.properties.length, building: 0 }; draft.step = "property_name"; return save(promptFor(draft, input.phone)); }
       if (command === "add tenants") { draft.step = "tenants"; return save(promptFor(draft, input.phone)); }
       if (command !== "confirm") return save(promptFor(draft, input.phone));
-      if (!userId) { draft.step = data.displayName ? "account_code" : "name"; return save(`Your account is not confirmed yet.\n\n${promptFor(draft, input.phone)}`); }
+      if (!userId || (draft.userId && linked?.user.id !== draft.userId)) { draft.step = data.displayName ? "account_code" : "name"; return save(`Your account is not confirmed on this number.\n\n${promptFor(draft, input.phone)}`); }
       if (!data.properties.length || data.properties.some((property) => !property.buildings.length || property.buildings.some((building) => !building.units.length))) {
         return save("Every property needs at least one unit before saving. Reply add property, or discard.");
       }

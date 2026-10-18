@@ -1,3 +1,4 @@
+import { isWhatsAppOptedOut } from "@/modules/whatsapp-assistant/identity";
 import { randomBytes } from "node:crypto";
 import { Prisma, type ConversationChannel, type ConversationStatus } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
@@ -512,6 +513,12 @@ export async function deliverConversationMessage(organisationId: string, deliver
     return db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "SKIPPED", failureReason: "The communication channel is disabled." } });
   }
   const adapter = getChannelAdapter(delivery.channel, adapters);
+  // Business-initiated WhatsApp messages are never sent to someone who replied STOP, even if they
+  // were queued before the opt-out.
+  const template = delivery.channel === "WHATSAPP" ? storedWhatsAppTemplate(delivery.message.metadata) : undefined;
+  if (template && delivery.recipientAddress && await isWhatsAppOptedOut(delivery.recipientAddress)) {
+    return db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "SKIPPED", failureReason: "The recipient opted out of WhatsApp messages (STOP)." } });
+  }
   try {
     const result = await adapter.send({
       organisationId,
@@ -523,7 +530,7 @@ export async function deliverConversationMessage(organisationId: string, deliver
       body: delivery.message.body,
       lastInboundAt: conversation.lastInboundAt,
       // Business-initiated messages (invitations, work orders) carry their approved template.
-      whatsappTemplate: delivery.channel === "WHATSAPP" ? storedWhatsAppTemplate(delivery.message.metadata) : undefined,
+      whatsappTemplate: template,
       externalReferenceId: delivery.message.externalReferenceId,
       providerKey: channelConfig?.providerKey,
       config: (channelConfig?.config as Record<string, unknown>) ?? {},
@@ -539,6 +546,9 @@ export async function deliverConversationMessage(organisationId: string, deliver
     }
     return db.$transaction(async (tx) => {
       const sent = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status: result.status, providerReference: result.providerReference, sentAt: new Date(), deliveredAt: result.status === "DELIVERED" ? new Date() : undefined } });
+      // Short-lived secrets (e.g. signed photo links) leave the stored transcript once sent.
+      const redaction = (delivery.message.metadata as { redactAfterSend?: unknown } | null)?.redactAfterSend;
+      if (typeof redaction === "string") await tx.message.update({ where: { id: delivery.message.id }, data: { body: redaction } });
       await record(organisationId, undefined, "message.sent", "conversation", conversation.id, { channel: delivery.channel, providerReference: result.providerReference ?? null });
       return sent;
     });
@@ -715,6 +725,16 @@ export async function upsertChannelConfig(userId: string, organisationId: string
   await requirePermission(userId, organisationId, PERMISSIONS.communicationChannelManage);
   const data = channelConfigSchema.parse(input);
   return db.$transaction(async (tx) => {
+    // All WhatsApp numbers are sent through one Meta system-user token, so a receiving number may
+    // belong to one organisation only, and the official NesAfric number to none but its own.
+    if (channel === "WHATSAPP" && typeof data.config.phoneNumberId === "string") {
+      const phoneNumberId = data.config.phoneNumberId;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp-number:${phoneNumberId}`}, 0))`;
+      const others = await tx.communicationChannelConfig.findMany({ where: { channel: "WHATSAPP", organisationId: { not: organisationId } }, select: { config: true } });
+      if (others.some((other) => (other.config as Record<string, unknown> | null)?.phoneNumberId === phoneNumberId)) {
+        throw new AppError("WHATSAPP_NUMBER_IN_USE", 409, "This WhatsApp number is already connected to another organisation. Contact NesAfric support to move it.");
+      }
+    }
     const config = await tx.communicationChannelConfig.upsert({
       where: { organisationId_channel: { organisationId, channel } },
       update: { enabled: data.enabled, providerKey: data.providerKey, fromAddress: data.fromAddress, webhookVerifyToken: data.webhookVerifyToken, config: json(data.config) },

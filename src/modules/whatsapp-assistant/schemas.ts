@@ -88,7 +88,7 @@ export const assistantStateSchema = z.object({
     costMinor: z.string().regex(/^\d+$/).optional(),
     photos: z.number().int().min(0).max(5).default(0),
     remaining: z.string().max(1000).optional(),
-    decision: z.object({ kind: z.enum(["approve", "reject", "verify"]), organisationId: z.string().uuid(), requestId: z.string().uuid(), reason: z.string().max(500).optional() }).optional(),
+    decision: z.object({ kind: z.enum(["approve", "reject", "verify", "stop", "resolve", "send"]), organisationId: z.string().uuid(), requestId: z.string().uuid(), reason: z.string().max(500).optional(), providerOrganisationId: z.string().uuid().optional(), approvalId: z.string().uuid().optional() }).optional(),
   }).optional(),
   /** A tenant's maintenance report being put together. */
   report: z.object({

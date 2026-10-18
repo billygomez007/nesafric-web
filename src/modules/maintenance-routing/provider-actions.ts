@@ -158,11 +158,15 @@ export async function submitQuote(userId: string, assignmentId: string, input: {
  * The landlord (or anyone with maintenance.approve) decides a pending quote. Approval raises the
  * work order's authorised spend to exactly the approved amount. The AI never calls this.
  */
-export async function decideQuote(userId: string, organisationId: string, requestId: string, approve: boolean, reason?: string) {
+export async function decideQuote(userId: string, organisationId: string, requestId: string, approve: boolean, reason?: string, approvalId?: string) {
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceApprove);
   return db.$transaction(async (tx) => {
-    const approval = await tx.maintenanceApproval.findFirst({ where: { organisationId, maintenanceRequestId: requestId, status: "PENDING" }, orderBy: { requestedAt: "desc" } });
-    if (!approval) throw new AppError("NO_PENDING_APPROVAL", 404, "There is no quote waiting for approval on this request.");
+    // The decision applies to the exact approval the person was shown. A newer quote sent in the
+    // meantime is never approved by a confirmation given for an older one.
+    const approval = await tx.maintenanceApproval.findFirst({ where: { organisationId, maintenanceRequestId: requestId, status: "PENDING", ...(approvalId ? { id: approvalId } : {}) }, orderBy: { requestedAt: "desc" } });
+    if (!approval) throw new AppError("NO_PENDING_APPROVAL", 404, approvalId ? "That quote was replaced or already decided. Reply approvals to see what is waiting." : "There is no quote waiting for approval on this request.");
+    const claimed = await tx.maintenanceApproval.updateMany({ where: { id: approval.id, status: "PENDING" }, data: { status: approve ? "APPROVED" : "REJECTED" } });
+    if (!claimed.count) throw new AppError("NO_PENDING_APPROVAL", 409, "That quote was already decided.");
     const quotationId = approval.thresholdReference?.match(/^quotation:([0-9a-f-]{36})/)?.[1];
     await tx.maintenanceApproval.update({ where: { id: approval.id }, data: { status: approve ? "APPROVED" : "REJECTED", decidedByUserId: userId, decidedAt: new Date(), approvedAmountMinor: approve ? approval.requestedAmountMinor : null, decisionReason: reason } });
     if (quotationId) await tx.providerQuotation.updateMany({ where: { id: quotationId, landlordOrganisationId: organisationId }, data: { status: approve ? "APPROVED" : "REJECTED" } });

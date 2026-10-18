@@ -46,6 +46,7 @@ export async function linkWhatsAppIdentity(waId: string, userId: string, method:
   const address = whatsappAddress(waId);
   return db.$transaction(async (tx) => {
     const before = await tx.channelIdentity.findUnique({ where: { channel_address: { channel: "WHATSAPP", address } } });
+    if (before?.userId && before.userId !== userId) await tx.onboardingDraft.updateMany({ where: { channel: "WHATSAPP", address, status: "IN_PROGRESS", userId: before.userId }, data: { status: "ABANDONED" } });
     const identity = await tx.channelIdentity.upsert({
       where: { channel_address: { channel: "WHATSAPP", address } },
       update: { userId, verifiedAt: new Date(), verificationMethod: method },
@@ -62,6 +63,8 @@ export async function unlinkWhatsAppIdentity(waId: string, organisationId: strin
     const identity = await tx.channelIdentity.findUnique({ where: { channel_address: { channel: "WHATSAPP", address } } });
     if (!identity?.userId) return false;
     await tx.channelIdentity.update({ where: { id: identity.id }, data: { userId: null, verifiedAt: null, verificationMethod: null } });
+    // An unfinished onboarding belongs to the account that started it, not to whoever holds the number next.
+    await tx.onboardingDraft.updateMany({ where: { channel: "WHATSAPP", address, status: "IN_PROGRESS" }, data: { status: "ABANDONED" } });
     await tx.auditEvent.create({ data: { organisationId, actorUserId: identity.userId, action: "channel_identity.unlinked", entityType: "channel_identity", entityId: identity.id, metadata: { channel: "WHATSAPP" } } });
     return true;
   });

@@ -1,6 +1,6 @@
 # Autonomous property operations: architecture map and phased plan
 
-Status (2026-10-18): phases 0-7 are implemented on `feat/autonomous-property-ops`; phase 8 is not started. See section 5.
+Status (2026-10-18): phases 0-8 are implemented on `feat/autonomous-property-ops`. Real WhatsApp delivery is not verified end to end; see `docs/whatsapp-operations.md` for deployment and the go-live checklist.
 
 ## 1. What already exists (reuse, do not duplicate)
 
@@ -152,6 +152,48 @@ Real WhatsApp delivery will not be claimed working until the Meta app, the numbe
 - Daily digest (`buildDigest`): new tickets, automatic dispatches, acceptances, jobs in progress, completions, costs and approved quotes (only for members with payment or maintenance-cost rights), tickets open over 7 days, provider declines and no-answers, open alerts, pending approvals, and leases ending within 30 days. Quiet days are skipped unless asked for. `scheduleDueDigests` runs on every worker poll and `/api/jobs/run`; one digest per member per day (dedupe key), so overlapping runs never send two.
 - Landlord questions (`landlord.ts`), answered from records with the same permissions as the web: `show ticket NM-1001`, today's costs, work completed today, open requests by unit, repairs needing approval, upcoming lease expiries, units managed, alerts, and `digest` for today so far. Deterministic phrasing first; an AI provider may only pick one read-only report from a fixed list. Phrases that mean a change (“add another electrician”, “set a quote approval limit”) are routed into the confirmed command flows instead of being executed.
 - Tests: `tests/whatsapp-landlord-queries.unit.test.ts`, `tests/postgres-staff-notifications.integration.test.ts`.
+
+### Phase 8: hardening, oversight and operations (done)
+
+- Investigation timeline (`maintenance-routing/oversight.ts`): the report and classification, routing decisions with the rule, each dispatch attempt and provider choice, assignments, quotes and approvals, costs, evidence, escalations with who was told, and WhatsApp delivery outcomes, in order. Available to the landlord's team (`maintenance.read`), and to NesAfric support only under an active support session (audited).
+- Manual override without losing history: send a job to a chosen consenting network provider, stop automation for a request, resolve alerts. Earlier attempts are kept and marked superseded, and a superseded attempt never triggers a backup. Available as API routes and WhatsApp commands (`send NM-1001 to 2`, `stop NM-1001`, `resolve NM-1001`), each confirmed and audited.
+- Ownership claims: platform reviewers with the new `portfolio.verify` permission list and decide pending `PortfolioVerification` claims.
+- Monitoring: platform health reports dead-lettered jobs, unconfirmed WhatsApp sends, undeliverable critical alerts, unsendable work orders, open escalations and pending ownership claims.
+- API routes for routing rules and the provider network (web parity with the WhatsApp commands).
+- Security review fixes:
+  - A landlord's confirmation approves only the exact quote they were shown.
+  - STOP blocks every business-initiated message, checked both when queued and when sent.
+  - Provider invitations are limited (20 a day, 30-day cooldown after a decline).
+  - Customer text in official templates has links and phone numbers stripped.
+  - A WhatsApp phone number ID can belong to one organisation only.
+  - Unlinking or relinking a number discards that number's unfinished onboarding.
+  - Signed photo links are removed from the stored transcript once sent.
+  - Changing a rule's spending, providers or automation needs approve and assign rights.
+  - Fixed a bug where updating a rule reset its keywords and backups.
+- Ops runbook, templates and go-live checklist: `docs/whatsapp-operations.md`.
+- Tests: `tests/postgres-maintenance-oversight.integration.test.ts`, `tests/postgres-security-hardening.integration.test.ts`.
+
+## 6. Brief test scenarios
+
+| # | Scenario | Covered by |
+|---|---|---|
+| 1 | Landlord registers through WhatsApp | `postgres-whatsapp-onboarding` "registers a new landlord…" |
+| 2 | Multiple buildings and units | same test (two properties, two blocks) |
+| 3 | Private plumber and electrician added | `postgres-provider-network` (plumber accepts, electrician declines); onboarding invites both |
+| 4 | Tenant reports a plumbing issue | `postgres-whatsapp-maintenance` "creates a referenced ticket…" |
+| 5 | Correct plumber receives the authorised work order | `postgres-maintenance-routing` "sends a tenant's plumbing report…" |
+| 6 | Plumber accepts, completes and reports | `postgres-provider-jobs` "runs a job from the Accept button…" |
+| 7 | Event appears in the daily digest | `postgres-staff-notifications` "sends one digest per day…" |
+| 8 | Job above the spending limit escalated | `postgres-provider-jobs` "pauses a quote above the authorised amount…" |
+| 9 | Decline then backup contacted | `postgres-maintenance-routing` "tries the backup after a decline…" |
+| 10 | No response escalates | same test (both attempts lapse, NO_PROVIDER_ACCEPTED) |
+| 11 | Ambiguous tenant identity not linked | `postgres-whatsapp-maintenance` "never links a tenancy from a matching phone number alone…" |
+| 12 | Duplicate webhooks create no duplicate jobs | `postgres-whatsapp-official` "stores a redelivered message once"; routing and maintenance "once" tests |
+| 13 | Provider cannot access another landlord's records | `postgres-provider-network` "shows a provider only their own assigned jobs…"; `postgres-provider-jobs` "refuses … other providers' jobs" |
+| 14 | Critical issues escalate immediately | `postgres-maintenance-routing` "escalates emergencies…"; `postgres-staff-notifications` "sends critical alerts at once…" |
+| 15 | Failed notification causes no duplicate dispatch | `postgres-maintenance-routing` "never sends the job again when … unconfirmed" |
+| 16 | Pausing a rule stops new automatic assignments | `postgres-maintenance-routing` "does not dispatch under a paused rule…" |
+| 17 | Existing functionality intact | full suite (`npm test`) |
 
 ### Before going live (not done)
 
