@@ -25,7 +25,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),

@@ -1,6 +1,6 @@
 # Autonomous property operations: architecture map and phased plan
 
-Status (2026-10-17): phases 0 and 1 are implemented on `feat/autonomous-property-ops`; phases 2-8 are not started. See section 5.
+Status (2026-10-18): phases 0-2 are implemented on `feat/autonomous-property-ops`; phases 3-8 are not started. See section 5.
 
 ## 1. What already exists (reuse, do not duplicate)
 
@@ -90,6 +90,17 @@ Real WhatsApp delivery will not be claimed working until the Meta app, the numbe
 - Account linking on the official number (`link`): a code is sent by SMS (Arkesel) to the WhatsApp number, or by email to an address the person gives. The number is linked only after the code is verified through the existing OTP service. The code message is removed from the transcript. Linking and unlinking are audited.
 - `account` shows, for a linked number only: portfolios the user can read (`property.read`), their active tenancies, and provider jobs for provider profiles they own. `unlink` removes the link.
 - Tests: `tests/whatsapp-payload.unit.test.ts`, `tests/whatsapp-official-router.unit.test.ts`, `tests/postgres-whatsapp-official.integration.test.ts`.
+
+### Phase 2: landlord onboarding over WhatsApp (done)
+
+- `register` (or menu option 4) on the official number starts a resumable `OnboardingDraft`. Every answer is parsed by deterministic code (`src/modules/whatsapp-assistant/onboarding/parse.ts`) and saved immediately. `pause` or `menu` keeps the draft; `register` or `resume` continues at the saved step, even after the conversation is closed. `discard` abandons it.
+- Account: a new person gives their name and confirms the WhatsApp number with an SMS code. That creates the account, or signs into the existing one with that number, and links the number. A number that is already linked skips this step.
+- Steps: role (landlord or property manager), organisation (an existing one the person may add properties to, or a new one), then for each property: name, town, address, one building or named blocks, and units per building (a count to auto-number, or `name, type, bedrooms` lines). Then tenants (`unit, name, phone, rent, frequency, start, end` lines), lease-expiry reminders, maintenance professionals (`name, phone, category`), approval limit and urgent-alert contact. Finally a summary and `confirm`.
+- Commit (`onboarding/commit.ts`) goes through the existing services: `createOrganisation`, `createProperty`, the new `createBuilding`, `createTenant`, `createLease` and `createReminderPolicy`. Permissions, plan limits, audit and domain events therefore apply as on the web. Each created record is written back to the draft, and each step first looks for its record by a deterministic `WA-xxxxxxxx-…` reference, so a retry resumes without duplicates. If a plan limit blocks saving, the draft is kept and the reason is shown.
+- Leases are saved as DRAFT; the existing lease-execution rules still decide activation.
+- Each property gets a `PortfolioVerification` claim (OWNER or MANAGER) in PENDING. Nothing marks it verified; review tooling is part of phase 8.
+- Not active yet, and the confirmation says so: maintenance professionals, approval limit and alert contact are stored in the draft for phases 3 and 5. Nobody is contacted. Rent-due reminders are not configured, because only lease-expiry reminder policies exist today.
+- Tests: `tests/whatsapp-onboarding-parse.unit.test.ts`, `tests/postgres-whatsapp-onboarding.integration.test.ts` (several buildings and properties, resume after a closed conversation, plan limit, redelivered confirmation and retried commit, existing organisation, discard).
 
 ### Before going live (not done)
 

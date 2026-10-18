@@ -6,11 +6,14 @@ import { advanceConversation, MAIN_MENU, type EngineInput } from "./engine";
 import { assistantStateSchema, initialState, type AssistantState } from "./schemas";
 import { linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
 import { formatAccountSummary, resolveAccountRoles } from "./account";
+import { advanceOnboarding } from "./onboarding/flow";
+import { findOpenDraft } from "./onboarding/draft";
 
 export type OfficialInput = EngineInput & { organisationId: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean };
 
-export const OFFICIAL_MENU_SUFFIX = "\n\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
+export const OFFICIAL_MENU_SUFFIX = "\n\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
+const START_ONBOARDING = /^(4|register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
 const MAX_CODE_FAILURES = 5;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,63}$/;
 
@@ -22,8 +25,10 @@ type Dependencies = {
   link: typeof linkWhatsAppIdentity;
   unlink: typeof unlinkWhatsAppIdentity;
   roles: typeof resolveAccountRoles;
+  onboarding: typeof advanceOnboarding;
+  openDraft: typeof findOpenDraft;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -39,6 +44,13 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   const reset = (): AssistantState => ({ ...initialState(), lastRequest: state.lastRequest });
 
   if (state.workflow === "link") return continueLink(input, state, reset, dependencies);
+
+  // Onboarding keeps its progress in its own draft, so it survives conversation resets.
+  const startsOnboarding = input.kind === "text" && (START_ONBOARDING.test(command) || (command === "resume" && state.workflow === "idle" && Boolean(await dependencies.openDraft(whatsappAddress(input.phone)))));
+  if (state.workflow === "onboarding" || startsOnboarding) {
+    const result = await dependencies.onboarding({ phone: input.phone, messageId: input.messageId, body: input.body, kind: input.kind, organisationId: input.organisationId, defaultCountry: input.defaultCountry, defaultCurrency: input.defaultCurrency });
+    return { state: result.exit ? reset() : { ...reset(), workflow: "onboarding" }, reply: result.reply, redactInbound: result.redactInbound };
+  }
 
   if (input.kind === "text" && /^(link|link account|connect|connect account)$/.test(command)) {
     const linked = await dependencies.linkedUser(input.phone);

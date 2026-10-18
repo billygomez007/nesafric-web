@@ -814,6 +814,8 @@ model User {
   updatedAt                          DateTime                                   @updatedAt
   sessions                           Session[]
   channelIdentities                  ChannelIdentity[]
+  onboardingDrafts                   OnboardingDraft[]
+  portfolioVerificationClaims        PortfolioVerification[]
   memberships                        OrganisationMember[]
   invitations                        OrganisationInvitation[]                   @relation("InvitationSender")
   audits                             AuditEvent[]                               @relation("AuditActor")
@@ -1008,6 +1010,8 @@ model Organisation {
   members                     OrganisationMember[]
   invitations                 OrganisationInvitation[]
   portfolios                  Portfolio[]
+  onboardingDrafts            OnboardingDraft[]
+  portfolioVerifications      PortfolioVerification[]
   properties                  Property[]                        @relation("ManagingOrganisation")
   auditEvents                 AuditEvent[]
   domainEvents                DomainEvent[]
@@ -1238,6 +1242,7 @@ model Property {
   owner                      PropertyOwner?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   buildings                  Building[]
   units                      Unit[]
+  portfolioVerifications     PortfolioVerification[]
   leases                     Lease[]
   rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
@@ -1978,6 +1983,75 @@ model ChannelIdentity {
 
   @@unique([channel, address])
   @@index([userId])
+}
+
+enum OnboardingDraftStatus {
+  IN_PROGRESS
+  /// Saving through the domain services. Each record created is written back to `data.committed`
+  /// so a retry resumes instead of creating duplicates.
+  COMMITTING
+  COMMITTED
+  ABANDONED
+}
+
+/// A landlord or property manager setting up their portfolio over a messaging channel. The draft
+/// is the only state: it survives conversation resets and can be resumed days later. Nothing in
+/// `data` exists as a domain record until the person confirms the summary.
+model OnboardingDraft {
+  id             String                @id @default(uuid()) @db.Uuid
+  channel        ConversationChannel
+  /// E.164 with a leading "+".
+  address        String
+  userId         String?               @db.Uuid
+  status         OnboardingDraftStatus @default(IN_PROGRESS)
+  step           String
+  data           Json
+  /// The inbound message last applied. A re-run of the same message changes nothing.
+  lastMessageId  String?
+  organisationId String?               @db.Uuid
+  committedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  user           User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organisation   Organisation?         @relation(fields: [organisationId], references: [id], onDelete: SetNull)
+
+  @@index([channel, address, status])
+  @@index([userId])
+}
+
+enum PortfolioVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PortfolioAuthorityClaim {
+  OWNER
+  MANAGER
+}
+
+/// A claim that a person owns or is authorised to manage a property. Created PENDING whenever a
+/// property is registered without evidence (for example over WhatsApp). Completing a conversation
+/// never verifies it; only a NesAfric reviewer does.
+model PortfolioVerification {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  organisationId        String                      @db.Uuid
+  propertyId            String?                     @db.Uuid
+  claimedByUserId       String                      @db.Uuid
+  claim                 PortfolioAuthorityClaim
+  status                PortfolioVerificationStatus @default(PENDING)
+  source                String
+  reviewedAt            DateTime?
+  reviewedByPrincipalId String?                     @db.Uuid
+  reviewNote            String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  organisation          Organisation                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property              Property?                   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  claimedBy             User                        @relation(fields: [claimedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, propertyId])
+  @@index([status, createdAt])
 }
 
 model BackgroundJob {
