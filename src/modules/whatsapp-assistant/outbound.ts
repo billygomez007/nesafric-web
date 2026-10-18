@@ -67,7 +67,7 @@ export async function queueOfficialTemplate(tx: Tx, message: OfficialTemplateMes
   const sessionKey = whatsappSessionKey(officialId, phoneNumberId, waId);
   const conversation = await tx.conversation.upsert({
     where: { whatsappSessionKey: sessionKey }, update: {},
-    create: { organisationId: officialId, channel: "WHATSAPP", channelAddress: waId, whatsappSessionKey: sessionKey, subject: "NesAfric WhatsApp assistant", identityLevel: "NONE", participants: { create: { organisationId: officialId, type: "ANONYMOUS", phone: waId, displayName: message.displayName } } },
+    create: { organisationId: officialId, channel: "WHATSAPP", channelAddress: waId, whatsappSessionKey: sessionKey, whatsappAssignmentId: assignmentId, subject: "NesAfric WhatsApp assistant", identityLevel: "NONE", participants: { create: { organisationId: officialId, type: "ANONYMOUS", phone: waId, displayName: message.displayName } } },
   });
   const created = await tx.message.create({
     data: {

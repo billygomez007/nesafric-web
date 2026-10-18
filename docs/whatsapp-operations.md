@@ -74,7 +74,11 @@ Numbers that organisations saved in their channel settings before this change ar
   Quarantined work is never retried or resent. A new holder starts its own conversations; it never sees the old holder's transcript.
 - **Sends in progress** hold the assignment (shared lock), so a move waits for them to finish (up to about 15 seconds) and nothing goes out from a number after its move commits.
 - **Inbound messages being processed** hold it too, from the assignment check through deciding, its side effects (maintenance requests, job replies, rule changes) and queueing the reply. A move waits for that to finish (up to two minutes), so no side effect happens for a number that has already moved.
-- Staff replies in a conversation that arrived on a number the organisation no longer has are not sent.
+- **Conversation provenance.** Every WhatsApp conversation records the assignment it was received under (`Conversation.whatsappAssignmentId`). Staff replies and automatic AI replies go out only while that is still the organisation's active assignment. Otherwise the delivery is `SKIPPED` with a reason saying the conversation came from an assignment the organisation no longer has.
+- **Legacy inbox (assistant off).** A message received under a different assignment starts a new conversation; it never continues the old thread.
+- **Assistant conversations** are tied to their number. An inbound message on the same number re-verifies the conversation under the current assignment.
+- **Missing provenance.** Conversations created before this change have no provenance and get no replies, from staff or AI. The reason is "cannot be verified". They work again only after the customer writes to the current number, which re-verifies an assistant conversation or starts a new legacy one. Provenance is never inferred from the current assignment.
+- Re-assigning the official number to promote it creates a new assignment. Official conversations then accept staff replies again once each customer writes in.
 
 ### Official number
 
@@ -155,7 +159,7 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 
 ## 6. Go-live checklist
 
-1. Migration `20261018230000_whatsapp_number_assignments` applied. The official number assigned through the platform endpoint, and every legacy claim reviewed (section 2).
+1. Migrations `20261018230000_whatsapp_number_assignments` and `20261019090000_whatsapp_conversation_provenance` applied. The official number assigned through the platform endpoint, and every legacy claim reviewed (section 2).
 2. Templates approved and their env vars set; the health check shows `whatsapp: CONFIGURED`.
 3. From a real phone, send `hi` and get the menu.
 4. Run `link` with a real SMS code.
@@ -173,6 +177,7 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 - Legacy numbers stop working at deployment until they are reviewed (section 2). Meta's redelivery of `503` webhooks is time-limited, so review them promptly.
 - All numbers share one system-user token; a per-number or per-business token is not supported. Meta itself does not stop a token holder sending as any number on the WABA; the assignment check is in this application only.
 - Quarantined messages are not resent automatically.
+- After deployment, staff cannot reply to existing WhatsApp conversations until the customer writes again (no provenance).
 - A notification send that has already picked the official number as its sender is retried (not quarantined) if the official assignment changes before it sends.
 - Rent-due reminders are not configured by onboarding; only lease-expiry policies exist.
 - Provider photo access uses short-lived signed links; links are removed from the stored transcript after sending.

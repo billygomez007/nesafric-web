@@ -75,5 +75,9 @@ export function trustedWhatsAppConfig(config: unknown, assignment: { phoneNumber
   return { ...withoutWhatsAppNumber(config), phoneNumberId: assignment.phoneNumberId, ...(assignment.businessAccountId ? { businessAccountId: assignment.businessAccountId } : {}) };
 }
 
+/** Reasons recorded when a reply is refused because of where its conversation came from. */
+export const WHATSAPP_OLD_CONVERSATION_REASON = "This conversation was received under a WhatsApp number assignment the organisation no longer has.";
+export const WHATSAPP_UNVERIFIED_CONVERSATION_REASON = "The WhatsApp number this conversation was received on cannot be verified, so no reply is sent until the customer writes again.";
+
 /** Reason recorded when work queued under one assignment meets a different one. */
 export const WHATSAPP_REASSIGNED_REASON = "The WhatsApp number assignment changed after this was queued, so it was not sent.";

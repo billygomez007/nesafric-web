@@ -3,7 +3,7 @@ import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
 import { upsertChannelConfig } from "@/modules/conversations/service";
 import { resolveWhatsAppSendConfig } from "@/modules/conversations/channels/whatsapp-sender";
-import { lockWhatsAppChannelShared } from "@/modules/conversations/channels/whatsapp-numbers";
+import { lockWhatsAppChannel, lockWhatsAppChannelShared } from "@/modules/conversations/channels/whatsapp-numbers";
 import { receiveWhatsAppWebhook } from "@/modules/whatsapp-assistant/webhook";
 import { assignWhatsAppNumberForPlatform, dismissWhatsAppClaimForPlatform, listWhatsAppNumbersForPlatform, releaseWhatsAppNumberForPlatform } from "@/modules/platform-admin/service";
 import { db } from "@/platform/database/client";
@@ -303,6 +303,39 @@ describe("PostgreSQL WhatsApp number assignment", () => {
       expect(await activeOf(organisation.id)).toMatchObject({ phoneNumberId: LANDLORD_NUMBER });
       expect(await settingsOf(organisation.id)).toEqual({ marketplaceAssistantEnabled: true, defaultCountry: "NG" });
       expect(await resolveWhatsAppSendConfig(organisation.id, {})).toMatchObject({ config: { phoneNumberId: LANDLORD_NUMBER, defaultCountry: "NG" } });
+    });
+
+    it("never writes back a holder's settings read before the move held its lock", async () => {
+      const a = await organisationWithOwner("Org A");
+      const b = await organisationWithOwner("Org B");
+      const principal = await createPlatformAdmin();
+      await legacyChannel(a.organisation.id, LANDLORD_NUMBER);
+      await assign(principal, a.organisation.id, LANDLORD_NUMBER);
+      // A's settings now hold a stale claim to the number again (as a pre-lock snapshot would).
+      await db.communicationChannelConfig.update({ where: { organisationId_channel: { organisationId: a.organisation.id, channel: "WHATSAPP" } }, data: { config: { phoneNumberId: LANDLORD_NUMBER, defaultCountry: "GH" } } });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      let locked!: () => void;
+      const holding = new Promise<void>((resolve) => { locked = resolve; });
+      // A settings save holds A's channel lock while the move is waiting for it.
+      const save = db.$transaction(async (tx) => {
+        await lockWhatsAppChannel(tx, a.organisation.id);
+        locked();
+        await gate;
+        await tx.communicationChannelConfig.update({ where: { organisationId_channel: { organisationId: a.organisation.id, channel: "WHATSAPP" } }, data: { config: { phoneNumberId: LANDLORD_NUMBER, defaultCountry: "NG", marketplaceAssistantEnabled: true } } });
+      }, { timeout: 30_000 });
+      await holding;
+      let moved = false;
+      const move = assign(principal, b.organisation.id, LANDLORD_NUMBER, { move: true }).then(() => { moved = true; });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(moved).toBe(false);
+      release();
+      await save;
+      await move;
+      // The move read A's settings after the save committed: the newer settings survive, and only
+      // the number claim is removed.
+      expect(await settingsOf(a.organisation.id)).toEqual({ defaultCountry: "NG", marketplaceAssistantEnabled: true });
+      expect(await holderOf(LANDLORD_NUMBER)).toBe(b.organisation.id);
     });
 
     it("waits for work holding the channel before moving a number", async () => {

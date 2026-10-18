@@ -1,5 +1,5 @@
-import { isWhatsAppOptedOut, whatsappSessionKey } from "@/modules/whatsapp-assistant/identity";
-import { activeWhatsAppAssignment, lockWhatsAppChannel, lockWhatsAppChannelShared, PLATFORM_ASSIGNED_WHATSAPP_KEYS, trustedWhatsAppConfig, WHATSAPP_REASSIGNED_REASON } from "./channels/whatsapp-numbers";
+import { isWhatsAppOptedOut } from "@/modules/whatsapp-assistant/identity";
+import { activeWhatsAppAssignment, lockWhatsAppChannel, lockWhatsAppChannelShared, PLATFORM_ASSIGNED_WHATSAPP_KEYS, trustedWhatsAppConfig, WHATSAPP_OLD_CONVERSATION_REASON, WHATSAPP_REASSIGNED_REASON, WHATSAPP_UNVERIFIED_CONVERSATION_REASON } from "./channels/whatsapp-numbers";
 import { randomBytes } from "node:crypto";
 import { Prisma, type ConversationChannel, type ConversationStatus } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
@@ -236,14 +236,21 @@ export async function getWebChatConversation(conversationId: string, chatToken: 
 // Inbound channel messages (email / whatsapp / sms webhooks + IN_APP)
 // ---------------------------------------------------------------------------
 
-export async function receiveInboundChannelMessage(organisationId: string, channel: ConversationChannel, input: unknown) {
+/**
+ * `whatsappAssignmentId` (WhatsApp only): the number assignment the message was received under,
+ * checked by the caller under the processing guard. A WhatsApp conversation is only continued
+ * under the assignment it was received under; a message under a different (or no) assignment
+ * starts a new conversation, so a reply never reaches an old thread from a replacement number.
+ */
+export async function receiveInboundChannelMessage(organisationId: string, channel: ConversationChannel, input: unknown, options: { whatsappAssignmentId?: string } = {}) {
   const data = inboundChannelMessageSchema.parse(input);
+  const whatsappAssignmentId = channel === "WHATSAPP" ? options.whatsappAssignmentId ?? null : undefined;
   const existing = await db.message.findFirst({ where: { organisationId, channel, externalMessageId: data.externalMessageId } });
   if (existing) return { conversationId: existing.conversationId, messageId: existing.id, duplicate: true };
 
   const identity = await resolveTenantIdentity(organisationId, { email: channel === "EMAIL" ? data.channelAddress : undefined, phone: channel === "WHATSAPP" || channel === "SMS" ? data.channelAddress : undefined });
   let conversation = await db.conversation.findFirst({
-    where: { organisationId, channel, channelAddress: data.channelAddress, status: { notIn: ["RESOLVED", "CLOSED"] } },
+    where: { organisationId, channel, channelAddress: data.channelAddress, status: { notIn: ["RESOLVED", "CLOSED"] }, ...(whatsappAssignmentId !== undefined ? { whatsappAssignmentId } : {}) },
     orderBy: { createdAt: "desc" },
   });
   if (!conversation) {
@@ -256,6 +263,7 @@ export async function receiveInboundChannelMessage(organisationId: string, chann
           subject: `${channel} conversation`,
           channelAddress: data.channelAddress,
           externalThreadKey: data.externalReferenceId,
+          whatsappAssignmentId,
           identityLevel: identity.level,
           tenantOrganisationId: identity.tenantOrganisationId ?? undefined,
           participants: {
@@ -288,7 +296,7 @@ export async function receiveInboundChannelMessage(organisationId: string, chann
         body: data.body,
         externalMessageId: data.externalMessageId,
         externalReferenceId: data.externalReferenceId,
-        metadata: data.providerPayload ? json(data.providerPayload) : undefined,
+        metadata: data.providerPayload || whatsappAssignmentId ? json({ ...(data.providerPayload ?? {}), ...(whatsappAssignmentId ? { whatsappAssignmentId } : {}) }) : undefined,
       },
     });
     await tx.conversation.update({
@@ -496,15 +504,16 @@ async function recordOutboundMessage(organisationId: string, conversationId: str
 }
 
 /**
- * The assignment a WhatsApp reply is queued under: the organisation's active number, and only
- * when the conversation arrived on that same number (its session key names the number).
+ * The assignment a WhatsApp reply is queued under: the organisation's active one, and only when
+ * the conversation was received (or last re-verified by an inbound message) under that same
+ * assignment. Provenance is never inferred from the current assignment: a conversation without
+ * it gets no reply until the customer writes again.
  */
-async function whatsappReplyAssignment(organisationId: string, conversation: { whatsappSessionKey: string | null; channelAddress: string | null }) {
+async function whatsappReplyAssignment(organisationId: string, conversation: { whatsappAssignmentId: string | null }) {
   const assignment = await activeWhatsAppAssignment(db, organisationId);
   if (!assignment) return { assignmentId: undefined, skipReason: "No WhatsApp number is assigned to this organisation." };
-  if (conversation.whatsappSessionKey && conversation.channelAddress && conversation.whatsappSessionKey !== whatsappSessionKey(organisationId, assignment.phoneNumberId, conversation.channelAddress)) {
-    return { assignmentId: undefined, skipReason: "This conversation arrived on a WhatsApp number the organisation no longer has." };
-  }
+  if (!conversation.whatsappAssignmentId) return { assignmentId: undefined, skipReason: WHATSAPP_UNVERIFIED_CONVERSATION_REASON };
+  if (conversation.whatsappAssignmentId !== assignment.id) return { assignmentId: undefined, skipReason: WHATSAPP_OLD_CONVERSATION_REASON };
   return { assignmentId: assignment.id, skipReason: undefined };
 }
 

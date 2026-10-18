@@ -50,9 +50,11 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
       }
       const duplicate = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId, channel: "WHATSAPP", externalMessageId: inbound.externalMessageId } } });
       if (duplicate) return;
+      // The session key names this number, and the receipt was just checked under the shared
+      // channel lock, so the conversation is (re-)verified under this assignment.
       const conversation = await tx.conversation.upsert({
-        where: { whatsappSessionKey: sessionKey }, update: {},
-        create: { organisationId, channel: "WHATSAPP", channelAddress: inbound.channelAddress, whatsappSessionKey: sessionKey, subject: "NesAfric WhatsApp assistant", identityLevel: "NONE", participants: { create: { organisationId, type: "ANONYMOUS", phone: inbound.channelAddress, displayName: inbound.senderName } } },
+        where: { whatsappSessionKey: sessionKey }, update: { whatsappAssignmentId: assignmentId },
+        create: { organisationId, channel: "WHATSAPP", channelAddress: inbound.channelAddress, whatsappSessionKey: sessionKey, whatsappAssignmentId: assignmentId, subject: "NesAfric WhatsApp assistant", identityLevel: "NONE", participants: { create: { organisationId, type: "ANONYMOUS", phone: inbound.channelAddress, displayName: inbound.senderName } } },
       });
       // Receipt order is stable even when two events arrive in the same millisecond.
       const receivedAt = new Date(Math.max(Date.now(), (conversation.lastMessageAt?.getTime() ?? 0) + 1));
@@ -254,7 +256,7 @@ export async function processLegacyWhatsAppMessage(payload: Record<string, unkno
       await db.domainEvent.create({ data: { organisationId, name: "whatsapp.inbound_quarantined", aggregateType: "communication_channel", aggregateId: organisationId, payload: { legacy: true, whatsappAssignmentId: typeof payload.whatsappAssignmentId === "string" ? payload.whatsappAssignmentId : null } } });
       return;
     }
-    await receiveInboundChannelMessage(organisationId, "WHATSAPP", payload.inbound);
+    await receiveInboundChannelMessage(organisationId, "WHATSAPP", payload.inbound, { whatsappAssignmentId: assignment.id });
   });
 }
 
