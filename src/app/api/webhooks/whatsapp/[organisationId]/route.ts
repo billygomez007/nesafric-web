@@ -12,8 +12,9 @@ export async function GET(request: Request, { params }: Context) {
 }
 
 export async function POST(request: Request, { params }: Context) {
+  const startedAt = Date.now();
   const response = await receiveWhatsAppWebhook(request, (await params).organisationId);
   // Only an accepted delivery has anything new to process.
-  if (response.status === 200) drainReplyPathAfterResponse();
+  if (response.status === 200) drainReplyPathAfterResponse(startedAt);
   return response;
 }

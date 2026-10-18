@@ -17,10 +17,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const organisationId = officialWhatsAppOrganisationId();
   if (!organisationId) return new NextResponse("WhatsApp webhook is not configured", { status: 503 });
   const response = await receiveWhatsAppWebhook(request, organisationId);
   // Only an accepted delivery has anything new to process.
-  if (response.status === 200) drainReplyPathAfterResponse();
+  if (response.status === 200) drainReplyPathAfterResponse(startedAt);
   return response;
 }

@@ -1,4 +1,5 @@
 import type { Prisma } from "@/platform/database/generated/client";
+import { JobDeadlineExceededError, remainingJobTimeMs } from "@/platform/jobs/deadline";
 import { baseClient, db } from "@/platform/database/client";
 import { runGuarded } from "@/platform/database/guarded";
 
@@ -53,11 +54,28 @@ export async function lockWhatsAppChannelShared(tx: Prisma.TransactionClient, or
  * is lost, the lock is released, the writes are rolled back, and anything the work still tries
  * afterwards fails; external sends check `assertGuardedWorkActive()` first.
  */
-export function withWhatsAppProcessingGuard<T>(organisationId: string, work: () => Promise<T>) {
+export async function withWhatsAppProcessingGuard<T>(organisationId: string, work: () => Promise<T>): Promise<T> {
+  const timeout = guardTimeoutMs();
   return runGuarded(baseClient, async (guard) => {
     await guard.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended(${processingKey(organisationId)}, 0))`;
-  }, work, { timeout: whatsappProcessingTimeoutMs(), maxWait: 10_000 });
+  }, work, { timeout, maxWait: Math.min(10_000, timeout) });
 }
+
+/**
+ * The guard's own limit, never longer than the running job's deadline (the post-response fast
+ * path shares a serverless function's lifetime): the transaction then ends, and rolls back, by
+ * itself before the host stops. Too little time left means the job fails now and is retried.
+ */
+function guardTimeoutMs() {
+  const configured = whatsappProcessingTimeoutMs();
+  const remaining = remainingJobTimeMs();
+  if (remaining === null) return configured;
+  const available = remaining - GUARD_DEADLINE_MARGIN_MS;
+  if (available < MIN_GUARD_TIMEOUT_MS) throw new JobDeadlineExceededError(Math.max(0, remaining));
+  return Math.min(configured, available);
+}
+const GUARD_DEADLINE_MARGIN_MS = 250;
+const MIN_GUARD_TIMEOUT_MS = 100;
 
 /** How long one processing pass may hold the guard (`WHATSAPP_PROCESSING_TIMEOUT_MS`, default 120s). */
 export function whatsappProcessingTimeoutMs(env: Record<string, string | undefined> = process.env) {

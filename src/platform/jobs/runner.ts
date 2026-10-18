@@ -3,6 +3,7 @@ import { PERMISSIONS, requirePermission } from "@/platform/authorization/permiss
 import { AppError, notFound } from "@/platform/errors";
 import type { BackgroundJob } from "@/platform/database/generated/client";
 import { NonRetryableJobError } from "./errors";
+import { JobDeadlineExceededError, runWithJobDeadline } from "./deadline";
 
 /** Exponential backoff for messaging jobs, a flat minute for everything else. */
 function retryDelayMs(job: BackgroundJob) {
@@ -29,9 +30,16 @@ export async function enqueueJob(input: { organisationId?: string; type: string;
 export async function runDueJobs(
   handlers: Record<string, (payload: Record<string, unknown>) => Promise<void>>,
   now = new Date(),
-  /** Restrict this pass to some job types (e.g. the WhatsApp reply path right after a webhook). */
-  options: { types?: string[]; limit?: number } = {},
+  /**
+   * Restrict this pass to some job types (e.g. the WhatsApp reply path right after a webhook).
+   * With `deadline`, the pass shares a host's limited lifetime: a job is only claimed while at
+   * least `jobBudgetMs + reserveMs` remain, each claimed job must finish within `jobBudgetMs`,
+   * and `reserveMs` is kept for recording its success or retry before the host stops.
+   */
+  options: { types?: string[]; limit?: number; deadline?: Date; jobBudgetMs?: number; reserveMs?: number } = {},
 ) {
+  const jobBudgetMs = options.deadline ? Math.max(100, options.jobBudgetMs ?? 30_000) : null;
+  const reserveMs = Math.max(0, options.reserveMs ?? 5_000);
   const limit = Math.max(1, Math.min(options.limit ?? 50, 50));
   // These handlers persist idempotency keys at their domain boundaries. Recover only
   // their expired claims; other job types need their own replay-safety assessment.
@@ -76,8 +84,15 @@ export async function runDueJobs(
 
   let succeeded = 0;
   let failed = 0;
+  let claimedCount = 0;
+  let stoppedForDeadline = false;
 
   for (const job of jobs) {
+    // Never claim work that could not finish, and be recorded, before the host's deadline.
+    if (options.deadline && jobBudgetMs !== null && options.deadline.getTime() - Date.now() < jobBudgetMs + reserveMs) {
+      stoppedForDeadline = true;
+      break;
+    }
     const claimed = await db.backgroundJob.updateMany({
       where: {
         id: job.id,
@@ -91,6 +106,7 @@ export async function runDueJobs(
     });
 
     if (!claimed.count) continue;
+    claimedCount += 1;
 
     try {
       const handler = handlers[job.type];
@@ -107,7 +123,8 @@ export async function runDueJobs(
         );
       }
 
-      await handler(payload);
+      if (jobBudgetMs !== null) await runWithinBudget(jobBudgetMs, () => handler(payload));
+      else await handler(payload);
 
       await db.backgroundJob.update({
         where: { id: job.id },
@@ -127,10 +144,28 @@ export async function runDueJobs(
   }
 
   return {
-    claimed: jobs.length,
+    claimed: options.deadline ? claimedCount : jobs.length,
     succeeded,
     failed,
+    stoppedForDeadline,
   };
+}
+
+/**
+ * Runs a handler under a deadline it can see (`remainingJobTimeMs`), and stops waiting for it at
+ * the budget so the runner can still record the attempt. Handlers stay idempotent at their own
+ * boundaries (the WhatsApp guard rolls back by itself; deliveries claim before sending), so a
+ * handler still finishing in the background cannot cause a duplicate on retry.
+ */
+async function runWithinBudget(budgetMs: number, work: () => Promise<void>) {
+  const running = runWithJobDeadline(Date.now() + budgetMs, work);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([running, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new JobDeadlineExceededError(budgetMs)), budgetMs); })]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    running.catch(() => undefined);
+  }
 }
 
 export async function runPendingJobs(
