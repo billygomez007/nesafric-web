@@ -362,7 +362,7 @@ export async function getPlatformHealth(principal: PlatformPrincipal) {
   requirePermission(principal, PLATFORM_PERMISSIONS.orgsRead);
   const [jobsByStatus, failedJobs, notificationFailures, webhookIncidents, recentAccountEmailJobs] = await Promise.all([
     db.backgroundJob.groupBy({ by: ["status"], _count: { _all: true } }),
-    db.backgroundJob.findMany({ where: { status: "FAILED" }, select: { id: true, organisationId: true, type: true, attempts: true, maxAttempts: true, lastError: true, runAt: true }, orderBy: { runAt: "desc" }, take: 50 }),
+    db.backgroundJob.findMany({ where: { status: { in: ["FAILED", "DEAD_LETTER"] } }, select: { id: true, organisationId: true, type: true, status: true, attempts: true, maxAttempts: true, lastError: true, runAt: true }, orderBy: { runAt: "desc" }, take: 50 }),
     db.notification.count({ where: { status: "FAILED" } }),
     db.billingWebhookEvent.findMany({ where: { status: { in: ["UNMATCHED", "MISMATCHED", "FAILED"] } }, select: { id: true, providerKey: true, eventType: true, status: true, failureReason: true, receivedAt: true }, orderBy: { receivedAt: "desc" }, take: 50 }),
     // Every status, not just failures — the payload's `template`/`dedupeKey` are never secrets

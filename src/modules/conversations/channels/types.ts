@@ -18,12 +18,21 @@ export type OutboundMessageRequest = {
   html?: string;
   /** EMAIL-only. Where a reply to an automated message should land. */
   replyTo?: string;
+  /** Required for WhatsApp free-form replies; never inferred from a send attempt. */
+  lastInboundAt?: Date | null;
+  /** Explicit approved template, supplied by trusted application code. */
+  whatsappTemplate?: { name: string; language: string; bodyParameters?: string[] };
 };
 
 export type OutboundDeliveryResult = {
   status: "SENT" | "DELIVERED" | "FAILED" | "SKIPPED";
   providerReference?: string;
   failureReason?: string;
+  /** FAILED only. `false` when another attempt cannot succeed (not configured, window closed,
+   * rejected request). Omitted means a transient failure that may be retried. */
+  retryable?: boolean;
+  /** FAILED only. The provider may have accepted the message; resending could duplicate it. */
+  unconfirmed?: boolean;
 };
 
 export type NormalizedInboundMessage = {
@@ -34,6 +43,7 @@ export type NormalizedInboundMessage = {
   body: string;
   senderName?: string;
   receivedAt?: Date;
+  providerPayload?: Record<string, unknown>;
 };
 
 export interface ChannelAdapter {

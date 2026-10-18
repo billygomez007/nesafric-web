@@ -4,6 +4,9 @@ import type { ChannelAdapter } from "@/modules/conversations/channels/types";
 import { BRAND } from "@/platform/brand";
 import { renderEmail } from "@/modules/notifications/email-templates/render";
 import { buildReminderEventEmail } from "@/modules/notifications/email-templates/events";
+import { resolveWhatsAppSendConfig, whatsappTemplate } from "@/modules/conversations/channels/whatsapp-sender";
+import { NonRetryableJobError } from "@/platform/jobs/errors";
+import { normalizePhone } from "@/platform/identity/phone";
 
 export type DeliveryChannel = "IN_APP" | "EMAIL" | "SMS" | "WHATSAPP";
 
@@ -74,11 +77,17 @@ class ChannelAdapterNotificationProvider implements NotificationProvider {
   ) {}
 
   async deliver(request: DeliveryRequest): Promise<DeliveryResult> {
-    const recipientAddress = await resolveTenantAddress(request.tenantOrganisationId, this.addressField);
-    if (!recipientAddress) throw new Error(`No ${this.addressField} address is on file for this recipient.`);
+    const storedAddress = await resolveTenantAddress(request.tenantOrganisationId, this.addressField);
+    if (!storedAddress) throw new NonRetryableJobError(`No ${this.addressField} address is on file for this recipient.`);
+    // WhatsApp addresses are international digits without "+"; a number that does not parse is not guessed at.
+    const recipientAddress = this.adapter.channel === "WHATSAPP" ? normalizePhone(storedAddress)?.slice(1) : storedAddress;
+    if (!recipientAddress) throw new NonRetryableJobError("The phone number on file is not a valid WhatsApp number.");
     const isEmail = this.adapter.channel === "EMAIL";
     const email = isEmail ? buildReminderEventEmail(request.eventType) : null;
+    // A reminder is business-initiated: WhatsApp needs a sending number and an approved template.
+    const whatsapp = this.adapter.channel === "WHATSAPP" ? await whatsappSendContext(request) : null;
     const result = await this.adapter.send({
+      ...(whatsapp ?? {}),
       organisationId: request.organisationId,
       conversationId: request.notificationId,
       messageId: request.notificationId,
@@ -91,8 +100,19 @@ class ChannelAdapterNotificationProvider implements NotificationProvider {
       body: email ? renderEmail(email.content).text : renderMessageBody(request),
     });
     if (result.status === "SENT" || result.status === "DELIVERED") return { status: result.status, providerReference: result.providerReference };
-    throw new Error(result.failureReason ?? `${this.adapter.channel} delivery failed.`);
+    const reason = result.failureReason ?? `${this.adapter.channel} delivery failed.`;
+    // Permanent or possibly-sent failures must not be retried into a duplicate reminder.
+    if (result.retryable === false || result.unconfirmed) throw new NonRetryableJobError(reason);
+    throw new Error(reason);
   }
+}
+
+async function whatsappSendContext(request: DeliveryRequest) {
+  const sender = await resolveWhatsAppSendConfig(request.organisationId);
+  if (!sender) throw new NonRetryableJobError("No WhatsApp sending number is configured for this organisation or the official NesAfric number.");
+  const template = whatsappTemplate("NOTIFICATION");
+  if (!template) throw new NonRetryableJobError("No approved WhatsApp notification template is configured (WHATSAPP_TEMPLATE_NOTIFICATION).");
+  return { config: sender.config, providerKey: sender.providerKey, whatsappTemplate: { ...template, bodyParameters: [renderMessageBody(request)] } };
 }
 
 export const defaultNotificationProviders: NotificationProviders = {

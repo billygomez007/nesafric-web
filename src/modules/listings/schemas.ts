@@ -264,6 +264,7 @@ const commaSeparated = (schema: z.ZodType<string>) => z.preprocess(
 
 export const publicListingSearchSchema = z.object({
   q: z.string().trim().min(2).max(100).optional(),
+  location: z.string().trim().min(2).max(150).optional(),
   listingType: z.enum(["RENT", "SALE"]).optional(),
   category: z.string().trim().min(1).max(100).optional(),
   scope: z.enum(["PROPERTY", "UNIT"]).optional(),

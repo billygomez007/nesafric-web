@@ -495,12 +495,15 @@ async function recordOutboundMessage(organisationId: string, conversationId: str
 export async function deliverConversationMessage(organisationId: string, deliveryId: string, adapters: ChannelAdapters | undefined = undefined) {
   const delivery = await db.messageDelivery.findFirst({ where: { id: deliveryId, organisationId }, include: { message: true } });
   if (!delivery) throw notFound();
-  if (["SENT", "DELIVERED", "SKIPPED"].includes(delivery.status)) return delivery;
+  if (["SENT", "DELIVERED", "READ", "SKIPPED"].includes(delivery.status)) return delivery;
   const claimed = await db.messageDelivery.updateMany({ where: { id: deliveryId, organisationId, status: { in: ["QUEUED", "FAILED"] } }, data: { status: "SENDING", attempts: { increment: 1 }, lastAttemptAt: new Date(), failedAt: null, failureReason: null } });
   if (!claimed.count) return db.messageDelivery.findFirstOrThrow({ where: { id: deliveryId, organisationId } });
 
   const conversation = await db.conversation.findUniqueOrThrow({ where: { id: delivery.message.conversationId } });
   const channelConfig = await db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel: delivery.channel } } });
+  if (!channelConfig?.enabled) {
+    return db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "SKIPPED", failureReason: "The communication channel is disabled." } });
+  }
   const adapter = getChannelAdapter(delivery.channel, adapters);
   try {
     const result = await adapter.send({
@@ -511,16 +514,19 @@ export async function deliverConversationMessage(organisationId: string, deliver
       recipientAddress: delivery.recipientAddress ?? conversation.channelAddress,
       fromAddress: channelConfig?.fromAddress ?? null,
       body: delivery.message.body,
+      lastInboundAt: conversation.lastInboundAt,
       externalReferenceId: delivery.message.externalReferenceId,
       providerKey: channelConfig?.providerKey,
       config: (channelConfig?.config as Record<string, unknown>) ?? {},
     });
     if (result.status === "FAILED") {
-      return db.$transaction(async (tx) => {
-        const failed = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status: "FAILED", failedAt: new Date(), failureReason: result.failureReason ?? "Delivery failed." } });
-        await record(organisationId, undefined, "message.delivery_failed", "conversation", conversation.id, { channel: delivery.channel, reason: result.failureReason });
+      const status = result.unconfirmed ? "UNCONFIRMED" as const : "FAILED" as const;
+      const failed = await db.$transaction(async (tx) => {
+        const failed = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status, failedAt: new Date(), failureReason: result.failureReason ?? "Delivery failed." } });
+        await record(organisationId, undefined, status === "UNCONFIRMED" ? "message.delivery_unconfirmed" : "message.delivery_failed", "conversation", conversation.id, { channel: delivery.channel, reason: result.failureReason });
         return failed;
       });
+      return Object.assign(failed, { retryable: result.retryable !== false });
     }
     return db.$transaction(async (tx) => {
       const sent = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status: result.status, providerReference: result.providerReference, sentAt: new Date(), deliveredAt: result.status === "DELIVERED" ? new Date() : undefined } });
@@ -541,7 +547,8 @@ export async function retryConversationMessageDelivery(userId: string, organisat
   await requirePermission(userId, organisationId, PERMISSIONS.conversationManage);
   const delivery = await db.messageDelivery.findFirst({ where: { id: deliveryId, organisationId } });
   if (!delivery) throw notFound();
-  if (delivery.status !== "FAILED") throw new AppError("DELIVERY_NOT_RETRYABLE", 409, "Only failed message deliveries can be retried.");
+  // UNCONFIRMED is retried only on this explicit staff request: the recipient may get it twice.
+  if (delivery.status !== "FAILED" && delivery.status !== "UNCONFIRMED") throw new AppError("DELIVERY_NOT_RETRYABLE", 409, "Only failed or unconfirmed message deliveries can be retried.");
   await db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "QUEUED", failedAt: null, failureReason: null } });
   await enqueueJob({ organisationId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery-retry:${deliveryId}:${Date.now()}`, payload: { organisationId, deliveryId } });
   return db.messageDelivery.findUniqueOrThrow({ where: { id: deliveryId } });

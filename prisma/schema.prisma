@@ -145,6 +145,9 @@ enum MessageDeliveryStatus {
   READ
   FAILED
   SKIPPED
+  /// The provider may or may not have accepted the message (timeout, crash mid-send). Never
+  /// resent automatically, because a resend could duplicate it; staff decide.
+  UNCONFIRMED
 }
 
 enum NoticeToVacateStatus {
@@ -536,6 +539,9 @@ enum BackgroundJobStatus {
   RUNNING
   SUCCEEDED
   FAILED
+  /// Exhausted its attempts or failed permanently. Never picked up again automatically; an
+  /// operator can requeue it with `retryBackgroundJob`.
+  DEAD_LETTER
 }
 
 enum MaintenancePriority {
@@ -807,6 +813,7 @@ model User {
   createdAt                          DateTime                                   @default(now())
   updatedAt                          DateTime                                   @updatedAt
   sessions                           Session[]
+  channelIdentities                  ChannelIdentity[]
   memberships                        OrganisationMember[]
   invitations                        OrganisationInvitation[]                   @relation("InvitationSender")
   audits                             AuditEvent[]                               @relation("AuditActor")
@@ -1942,6 +1949,35 @@ model Notification {
   @@unique([leaseId, tenantOrganisationId, eventType, thresholdDays, dedupeReference, channel])
   @@index([organisationId, status, scheduledAt])
   @@index([organisationId, readAt, createdAt])
+}
+
+enum ChannelIdentityVerification {
+  SMS_OTP
+  EMAIL_OTP
+  ADMIN
+}
+
+/// A messaging address (today: a WhatsApp number) as seen on an inbound channel, and the NesAfric
+/// account it has been proven to belong to. Global, not organisation-scoped: one person can be a
+/// landlord in one organisation and a tenant in another. A row without `userId`/`verifiedAt` is
+/// only "someone messaged from this number"; it never grants access to anything.
+model ChannelIdentity {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  channel            ConversationChannel
+  /// E.164 with a leading "+".
+  address            String
+  userId             String?                      @db.Uuid
+  verifiedAt         DateTime?
+  verificationMethod ChannelIdentityVerification?
+  /// The person replied STOP. Outbound notifications are skipped until they reply START.
+  optedOutAt         DateTime?
+  lastInboundAt      DateTime?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  user               User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([channel, address])
+  @@index([userId])
 }
 
 model BackgroundJob {
@@ -4142,6 +4178,8 @@ model Conversation {
   assignedMemberId     String?                   @db.Uuid
   aiSummary            String?
   webChatTokenHash     String?                   @unique
+  whatsappSessionKey   String?                   @unique
+  assistantState       Json?
   lastMessageAt        DateTime?
   lastInboundAt        DateTime?
   lastOutboundAt       DateTime?
@@ -4216,6 +4254,7 @@ model Message {
   externalReferenceId   String?
   metadata              Json?
   containsSensitiveData Boolean             @default(false)
+  processedAt           DateTime?
   createdAt             DateTime            @default(now())
   conversation          Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   organisation          Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
@@ -4224,6 +4263,7 @@ model Message {
 
   @@unique([organisationId, channel, externalMessageId])
   @@index([conversationId, createdAt])
+  @@index([conversationId, direction, processedAt, createdAt])
   @@index([organisationId, createdAt])
 }
 
@@ -4250,6 +4290,7 @@ model MessageDelivery {
 
   @@index([organisationId, status])
   @@index([messageId])
+  @@index([organisationId, channel, providerReference])
 }
 
 model ConversationAssignment {

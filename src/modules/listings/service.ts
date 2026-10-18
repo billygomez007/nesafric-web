@@ -1210,6 +1210,7 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   if (filters.sizeMinSqm !== undefined) conditions.push(Prisma.sql`l."sizeSqm" >= ${filters.sizeMinSqm}`);
   if (filters.sizeMaxSqm !== undefined) conditions.push(Prisma.sql`l."sizeSqm" <= ${filters.sizeMaxSqm}`);
   if (filters.country) conditions.push(Prisma.sql`l."countryCode" = ${filters.country}`);
+  if (filters.location) conditions.push(Prisma.sql`position(lower(${filters.location}) in lower(concat_ws(' ', l."region", l."city", l."district", l."locality", l."publicLocationLabel"))) > 0`);
   if (region) conditions.push(Prisma.sql`lower(l."region") = lower(${region})`);
   if (filters.city) conditions.push(Prisma.sql`lower(l."city") = lower(${filters.city})`);
   if (filters.district) conditions.push(Prisma.sql`lower(l."district") = lower(${filters.district})`);
