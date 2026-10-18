@@ -1,15 +1,16 @@
-import { createMarketplaceProfessional, listUserMarketplaceProfessionals, submitMarketplaceVerification } from "@/modules/marketplace-professionals/service";
+import { createMarketplaceProfessional, listUserMarketplaceProfessionals, submitMarketplaceVerificationInTransaction } from "@/modules/marketplace-professionals/service";
+import type { Prisma } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { formatPhoneForDisplay, normalizePhone } from "@/platform/identity/phone";
-import { runOnce, sinceStart } from "../actions";
+import { runOnce } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { askField, askNextField, beginEdit, editOptions, handleFieldAnswer, SKIP_HINT, summaryLines, type FieldSpec, type FormData } from "../form";
 import { ensureUserForContact, linkedUser } from "../identity";
 import { normalize, parseEmail, parseList, parseYesNo } from "../nlu";
 import { referenceFor } from "../references";
-import { queueNotification, recordEvent } from "../store";
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx, type WhatsAppNotificationJob } from "../notification-outbox";
+import { recordEventInTx } from "../store";
 import { createSupportRequest } from "./status";
-import { errorLabel } from "../log";
 
 /**
  * Real-estate business onboarding through WhatsApp. Every kind becomes a `MarketplaceProfessional`
@@ -263,7 +264,15 @@ async function submit(ctx: Ctx) {
   const kind = BUSINESS_KINDS[data.kind!];
   const personName = data.contactName ?? data.legalName!;
   const { user } = await ensureUserForContact(ctx.contact, personName);
-  const outcome = await runOnce(ctx.actionKey("business_registration"), ctx.contact.id, "business_registration", async () => {
+  const evidence = [
+    `Registered via NesAfric WhatsApp by ${personName} (${data.phone ?? ctx.contact.phoneE164 ?? ctx.contact.waId}) as: ${kind.title}`,
+    ...(data.registrationNumber ? [`Business registration number: ${data.registrationNumber}`] : []),
+    ...(data.affiliation ? [`States they work with agency: ${data.affiliation}${data.affiliationProfessionalId ? ` (NesAfric profile ${data.affiliationProfessionalId})` : ""}`] : []),
+  ];
+  // The profile, its backing organisation, the verification submission, the affiliation claim and
+  // the action binding all commit in one transaction: a retry finds the binding and never
+  // re-creates the profile, even when an identically named one exists.
+  const outcome = await runOnce(ctx.actionKey("business_registration"), ctx.contact.id, "business_registration", async (bind) => {
     const professional = await createMarketplaceProfessional(user.id, {
       type: kind.type,
       displayName: data.brandName ?? data.legalName!,
@@ -276,36 +285,18 @@ async function submit(ctx: Ctx) {
       specialities: data.specialities ?? [],
       servicesOffered: data.kind === "LANDLORD" ? ["Property owner / landlord"] : data.kind === "PROPERTY_MANAGER" ? ["Property management"] : [],
       serviceAreas: data.areas ?? [],
+    }, {
+      inTransaction: bind(async (tx, professionalId) => {
+        await tx.marketplaceProfessional.update({ where: { id: professionalId }, data: { sourceChannel: "WHATSAPP" } });
+        await submitMarketplaceVerificationInTransaction(tx, user.id, professionalId, { evidenceReferences: evidence });
+        await recordEventInTx(tx, "business_registered", ctx.contact.id, { kind: data.kind, professionalId });
+        if (data.affiliationProfessionalId) await recordAffiliationClaim(tx, data.affiliationProfessionalId, personName, ctx.contact.id, professionalId);
+      }),
     });
-    await db.marketplaceProfessional.update({ where: { id: professional.id }, data: { sourceChannel: "WHATSAPP" } });
-    const evidence = [
-      `Registered via NesAfric WhatsApp by ${personName} (${data.phone ?? ctx.contact.phoneE164 ?? ctx.contact.waId}) as: ${kind.title}`,
-      ...(data.registrationNumber ? [`Business registration number: ${data.registrationNumber}`] : []),
-      ...(data.affiliation ? [`States they work with agency: ${data.affiliation}${data.affiliationProfessionalId ? ` (NesAfric profile ${data.affiliationProfessionalId})` : ""}`] : []),
-    ];
-    try {
-      await submitMarketplaceVerification(user.id, professional.id, { evidenceReferences: evidence });
-    } catch (error) {
-      // The profile exists; never re-create it. Reviewers can still decide on an UNVERIFIED profile.
-      console.error("[whatsapp-assistant] verification submission failed", { professionalId: professional.id, error: errorLabel(error) });
-    }
     return { id: professional.id };
-  }, async (startedAt) => {
-    // The person's own new profile with this name, created after the attempt started.
-    const found = await db.marketplaceProfessional.findFirst({
-      where: { createdByUserId: user.id, displayName: data.brandName ?? data.legalName!, createdAt: { gte: sinceStart(startedAt) } },
-      select: { id: true, verificationStatus: true },
-    });
-    if (!found) return null;
-    await db.marketplaceProfessional.update({ where: { id: found.id }, data: { sourceChannel: "WHATSAPP" } });
-    if (found.verificationStatus === "UNVERIFIED") {
-      await submitMarketplaceVerification(user.id, found.id, { evidenceReferences: [`Registered via NesAfric WhatsApp by ${personName} as: ${kind.title}`] }).catch(() => undefined);
-    }
-    return found.id;
   });
-  if (!outcome.repeated) {
-    await recordEvent("business_registered", ctx.contact.id, { kind: data.kind, professionalId: outcome.resultId });
-    if (data.affiliationProfessionalId) await notifyAgencyOfAffiliationClaim(data.affiliationProfessionalId, personName, ctx.contact.id, outcome.resultId);
+  if (!outcome.repeated && data.affiliationProfessionalId) {
+    await deliverWhatsAppNotificationNow(affiliationJob(data.affiliationProfessionalId, outcome.resultId));
   }
   ctx.say([
     `✅ Your ${kind.title.toLowerCase()} registration has been submitted.`,
@@ -323,16 +314,16 @@ async function submit(ctx: Ctx) {
   ]);
 }
 
+const affiliationJob = (agencyId: string, agentProfessionalId: string): WhatsAppNotificationJob => ({ kind: "affiliation_claim", agencyId, agentProfessionalId, decisionKey: agentProfessionalId });
+
 /**
- * An agent's claim to work with an agency is never accepted on their word: it is sent to the
- * agency's own owners/admins (who can add them through the existing team settings) and logged
- * for NesAfric support. The agent gains no access to the agency.
+ * An agent's claim to work with an agency is never accepted on their word: it is logged for
+ * NesAfric support and sent (through the outbox, in the registration's transaction) to the
+ * agency's own owners/admins, who can add them through the existing team settings. The agent
+ * gains no access to the agency.
  */
-async function notifyAgencyOfAffiliationClaim(agencyId: string, agentName: string, contactId: string, agentProfessionalId: string) {
-  const agency = await db.marketplaceProfessional.findUnique({
-    where: { id: agencyId },
-    select: { displayName: true, members: { where: { status: "ACTIVE", role: { in: ["OWNER", "ADMIN"] } }, select: { userId: true } } },
-  });
+async function recordAffiliationClaim(tx: Prisma.TransactionClient, agencyId: string, agentName: string, contactId: string, agentProfessionalId: string) {
+  const agency = await tx.marketplaceProfessional.findUnique({ where: { id: agencyId }, select: { displayName: true } });
   if (!agency) return;
   await createSupportRequest({
     contactId,
@@ -340,11 +331,8 @@ async function notifyAgencyOfAffiliationClaim(agencyId: string, agentName: strin
     topic: "agent_affiliation",
     summary: `${agentName} (agent profile ${agentProfessionalId}) says they work with ${agency.displayName} (${agencyId}). The agency must add them to its team; no access was granted.`,
     workflow: "business_registration",
-  });
-  const contacts = await db.whatsAppContact.findMany({ where: { userId: { in: agency.members.map(({ userId }) => userId) } } });
-  for (const contact of contacts) {
-    await queueNotification(contact.id, `affiliation:${agentProfessionalId}:${contact.id}`, `👤 ${agentName} registered on NesAfric and says they work with *${agency.displayName}*. If that's right, add them to your team in your NesAfric business settings. If not, you can ignore this — they have no access to your agency.`);
-  }
+  }, tx);
+  await enqueueWhatsAppNotificationInTx(tx, affiliationJob(agencyId, agentProfessionalId));
 }
 
 export const businessRegistration: Workflow = {

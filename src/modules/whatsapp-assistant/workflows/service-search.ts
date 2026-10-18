@@ -1,15 +1,14 @@
 import { createMarketplaceEnquiry, discoverMarketplaceProviders, getPublicMarketplaceProvider } from "@/modules/marketplace/service";
-import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { runOnce, sinceStart } from "../actions";
-import { createHash } from "node:crypto";
+import { runOnce } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { providerCard, providerUrl, type PublicProviderCard } from "../format";
 import { ensureUserForContact } from "../identity";
 import { detectCommand, parseLocation, parseYesNo, type ParsedLocation } from "../nlu";
 import { referenceFor } from "../references";
 import { matchServiceCategory, POPULAR_CATEGORY_KEYS, publicServiceCategories, type ServiceCategoryOption } from "../service-categories";
-import { queueNotification, recordEvent } from "../store";
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx, type WhatsAppNotificationJob } from "../notification-outbox";
+import { recordEvent, recordEventInTx } from "../store";
 import { errorLabel } from "../log";
 
 const PAGE_SIZE = 3;
@@ -204,34 +203,25 @@ async function confirmQuote(ctx: Ctx) {
 async function sendQuote(ctx: Ctx) {
   const data = ctx.data<QuoteData>();
   const { user } = await ensureUserForContact(ctx.contact, data.name ?? ctx.contact.profileName ?? "");
-  // A short correlation tag in the request lets an interrupted attempt be reconciled exactly.
-  const tag = createHash("sha256").update(ctx.actionKey("service_enquiry")).digest("hex").slice(0, 10);
-  const outcome = await runOnce(ctx.actionKey("service_enquiry"), ctx.contact.id, "service_enquiry", async () => {
-    const enquiry = await createMarketplaceEnquiry(user.id, null, {
-      providerId: data.providerId,
-      categoryId: data.categoryId,
-      message: `${data.details}\n\n(Sent via NesAfric WhatsApp · ref ${tag})`,
-    });
-    return { id: enquiry.id };
-  }, async (startedAt) => (await db.marketplaceEnquiry.findFirst({
-    where: { requestedByUserId: user.id, providerId: data.providerId, message: { contains: `ref ${tag}` }, createdAt: { gte: sinceStart(startedAt) } },
-    select: { id: true },
-  }))?.id ?? null);
-  await recordEvent("service_quote_requested", ctx.contact.id, { providerId: data.providerId });
-  if (!outcome.repeated) await notifyProvider(data.providerId, outcome.resultId, data.details ?? "");
+  // The request, its event, the provider's WhatsApp notification (outbox) and the action binding
+  // commit together; a retry returns this exact request.
+  const outcome = await runOnce(ctx.actionKey("service_enquiry"), ctx.contact.id, "service_enquiry", (bind) => createMarketplaceEnquiry(user.id, null, {
+    providerId: data.providerId,
+    categoryId: data.categoryId,
+    message: `${data.details}\n\n(Sent via NesAfric WhatsApp)`,
+  }, {
+    inTransaction: bind(async (tx, enquiryId) => {
+      await recordEventInTx(tx, "service_quote_requested", ctx.contact.id, { providerId: data.providerId });
+      await enqueueWhatsAppNotificationInTx(tx, providerEnquiryJob(enquiryId));
+    }),
+  }));
+  if (!outcome.repeated) await deliverWhatsAppNotificationNow(providerEnquiryJob(outcome.resultId));
   ctx.say(`✅ Your request has been sent to *${data.providerName}*.\nReference: ${referenceFor("QT", outcome.resultId)}\n\nNesAfric doesn't set their prices — they'll reply with availability and a quote. Reply *status* anytime to check.`);
   ctx.finish();
 }
 
 /** Tells the provider on WhatsApp too, when their account is linked to a WhatsApp contact. */
-async function notifyProvider(providerId: string, enquiryId: string, details: string) {
-  const provider = await db.serviceProvider.findUnique({ where: { id: providerId }, select: { administratorUserId: true } });
-  if (!provider) return;
-  const contacts = await db.whatsAppContact.findMany({ where: { userId: provider.administratorUserId } });
-  for (const contact of contacts) {
-    await queueNotification(contact.id, `provider-enquiry:${enquiryId}:${contact.id}`, `📩 New service request on NesAfric (${referenceFor("QT", enquiryId)}):\n"${details.slice(0, 300)}"\n\nOpen your NesAfric provider inbox to respond.`);
-  }
-}
+const providerEnquiryJob = (enquiryId: string): WhatsAppNotificationJob => ({ kind: "provider_enquiry", enquiryId, decisionKey: enquiryId });
 
 export const serviceQuote: Workflow = {
   key: "service_quote",

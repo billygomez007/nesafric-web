@@ -1,14 +1,13 @@
-import { createHash } from "node:crypto";
-import { createMarketplaceLead, createViewingRequest, findLeadForSubmission, findViewingForSubmission, getPublicListing } from "@/modules/listings/service";
+import { createMarketplaceLead, createViewingRequest, getPublicListing } from "@/modules/listings/service";
 import { isBookableCategory } from "@/lib/listing-categories";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { completedActions, runOnce } from "../actions";
+import { boundActions, runOnce } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { availabilityText, dateTimeText, listingCard, priceText, propertyUrl, type PublicListingCard } from "../format";
 import { categoryLabel, detectCommand, normalize, parseDateTime, parseYesNo } from "../nlu";
 import { referenceFor } from "../references";
-import { recordEvent } from "../store";
+import { recordEventInTx } from "../store";
 
 type Mode = "inquiry" | "viewing";
 type Data = { listingId: string; title?: string; mode: Mode; question?: string; name?: string; startsAt?: string };
@@ -45,31 +44,26 @@ export function answerFromListing(question: string, listing: PublicListing, now:
   return facts.length ? [...new Set(facts)].join("\n") : null;
 }
 
-const fingerprint = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** The lead this contact already created for this listing via WhatsApp, if still open. */
 async function existingLead(contactId: string, listingId: string) {
-  const actions = await completedActions(contactId, ["lead"], 50);
+  const actions = await boundActions(contactId, ["lead"], 50);
   if (!actions.length) return null;
   return db.marketplaceLead.findFirst({
-    where: { id: { in: actions.map(({ resultId }) => resultId!) }, listingId, status: { notIn: ["CLOSED", "LOST"] } },
+    where: { id: { in: actions.map(({ resultId }) => resultId) }, listingId, status: { notIn: ["CLOSED", "LOST"] } },
     orderBy: { createdAt: "desc" },
   });
 }
 
-/** Leads and viewings carry an exact idempotency binding, so an interrupted attempt is reconciled exactly. */
-async function createLead(ctx: Ctx, data: Data, message: string) {
-  const submission = { keyHash: fingerprint(`whatsapp:lead:${ctx.input.inboundId}`), fingerprint: fingerprint(`${data.listingId}:${message}`) };
-  return runOnce(ctx.actionKey("lead"), ctx.contact.id, "lead", async () => {
-    const lead = await createMarketplaceLead(data.listingId, ctx.contact.userId ?? undefined, {
-      name: data.name!,
-      phone: ctx.contact.phoneE164 ?? `+${ctx.contact.waId}`,
-      message: message.slice(0, 5000),
-      source: "whatsapp",
-      marketingConsent: false,
-    }, { submission });
-    return { id: lead.id };
-  }, async () => (await findLeadForSubmission(data.listingId, submission))?.id ?? null);
+/** The lead, its owner's email notification, its event and the action binding commit together. */
+async function createLead(ctx: Ctx, data: Data, message: string, event: { name: string; properties: Record<string, unknown> } | null) {
+  return runOnce(ctx.actionKey("lead"), ctx.contact.id, "lead", (bind) => createMarketplaceLead(data.listingId, ctx.contact.userId ?? undefined, {
+    name: data.name!,
+    phone: ctx.contact.phoneE164 ?? `+${ctx.contact.waId}`,
+    message: message.slice(0, 5000),
+    source: "whatsapp",
+    marketingConsent: false,
+  }, { inTransaction: bind(event ? (tx) => recordEventInTx(tx, event.name, ctx.contact.id, event.properties) : undefined) }));
 }
 
 function askName(ctx: Ctx) {
@@ -80,8 +74,7 @@ function askName(ctx: Ctx) {
 
 async function submitInquiry(ctx: Ctx) {
   const data = ctx.data<Data>();
-  const outcome = await createLead(ctx, data, data.question ?? "Inquiry sent from NesAfric WhatsApp.");
-  await recordEvent("property_inquiry_created", ctx.contact.id, { listingId: data.listingId });
+  const outcome = await createLead(ctx, data, data.question ?? "Inquiry sent from NesAfric WhatsApp.", { name: "property_inquiry_created", properties: { listingId: data.listingId } });
   ctx.say(`✅ Your question about *${data.title}* has been passed to the listing's agent.\nReference: ${referenceFor("IQ", outcome.resultId)}\n\nThey'll reply to you on this WhatsApp number. Your number is shared only with this listing's agent.`);
   ctx.ask("Would you also like to request a viewing?", [
     { id: `pi:viewing:${data.listingId}`, title: "Request a viewing" },
@@ -95,20 +88,15 @@ async function submitViewing(ctx: Ctx) {
   const data = ctx.data<Data>();
   let lead = await existingLead(ctx.contact.id, data.listingId);
   if (!lead) {
-    const outcome = await createLead(ctx, data, "Viewing request sent from NesAfric WhatsApp.");
+    const outcome = await createLead(ctx, data, "Viewing request sent from NesAfric WhatsApp.", null);
     lead = await db.marketplaceLead.findUniqueOrThrow({ where: { id: outcome.resultId } });
   }
   const startsAt = new Date(data.startsAt!);
-  const submission = { keyHash: fingerprint(`whatsapp:viewing:${ctx.input.inboundId}`), fingerprint: fingerprint(`${data.listingId}:${data.startsAt}`) };
-  const outcome = await runOnce(ctx.actionKey("viewing"), ctx.contact.id, "viewing", async () => {
-    const viewing = await createViewingRequest(data.listingId, lead!.userId ?? undefined, {
-      leadId: lead!.id,
-      preferredTimes: [{ startsAt, endsAt: new Date(startsAt.getTime() + 60 * 60_000), timezone: "Africa/Accra" }],
-      requesterNote: "Requested via NesAfric WhatsApp.",
-    }, { submission });
-    return { id: viewing.id };
-  }, async () => (await findViewingForSubmission(data.listingId, submission))?.id ?? null);
-  await recordEvent("viewing_requested", ctx.contact.id, { listingId: data.listingId });
+  const outcome = await runOnce(ctx.actionKey("viewing"), ctx.contact.id, "viewing", (bind) => createViewingRequest(data.listingId, lead!.userId ?? undefined, {
+    leadId: lead!.id,
+    preferredTimes: [{ startsAt, endsAt: new Date(startsAt.getTime() + 60 * 60_000), timezone: "Africa/Accra" }],
+    requesterNote: "Requested via NesAfric WhatsApp.",
+  }, { inTransaction: bind((tx) => recordEventInTx(tx, "viewing_requested", ctx.contact.id, { listingId: data.listingId })) }));
   ctx.say(`📅 Viewing *requested* for *${data.title}* on ${dateTimeText(startsAt)}.\nReference: ${referenceFor("VW", outcome.resultId)}\n\nThis is not confirmed yet — the agent will confirm or suggest another time, and I'll let you know here.`);
   ctx.ask("Anything else?", [{ id: "pi:back", title: "Back to results" }, { id: "menu", title: "Main menu" }]);
   ctx.step("after");

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { listUserMarketplaceProfessionals } from "@/modules/marketplace-professionals/service";
+import type { Prisma } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
-import { completedActions } from "../actions";
+import { boundActions } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { dateTimeText, propertyUrl } from "../format";
 import { accountExistsForContact, linkedUser } from "../identity";
@@ -69,8 +70,8 @@ async function collectItems(ctx: Ctx): Promise<Item[]> {
       });
     }
   }
-  const actions = await completedActions(ctx.contact.id, ["lead", "viewing", "service_enquiry"], 20);
-  const ids = (kind: string) => actions.filter((action) => action.kind === kind).map(({ resultId }) => resultId!);
+  const actions = await boundActions(ctx.contact.id, ["lead", "viewing", "service_enquiry"], 20);
+  const ids = (kind: string) => actions.filter((action) => action.kind === kind).map(({ resultId }) => resultId);
   const [leads, viewings, enquiries] = await Promise.all([
     db.marketplaceLead.findMany({ where: { id: { in: ids("lead") } }, select: { id: true, status: true, listing: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 5 }),
     db.viewingRequest.findMany({ where: { id: { in: ids("viewing") } }, select: { id: true, status: true, confirmedStartsAt: true, listing: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 5 }),
@@ -131,9 +132,12 @@ export const status: Workflow = {
 // Human support
 // ------------------------------------------------------------------------------------------------
 
-export async function createSupportRequest(input: { contactId: string; userId: string | null; topic: string; summary: string; workflow?: string | null }) {
+export async function createSupportRequest(
+  input: { contactId: string; userId: string | null; topic: string; summary: string; workflow?: string | null },
+  client: Pick<Prisma.TransactionClient, "whatsAppSupportRequest"> = db,
+) {
   const id = randomUUID();
-  return db.whatsAppSupportRequest.create({
+  return client.whatsAppSupportRequest.create({
     data: {
       id,
       reference: referenceFor("SP", id),

@@ -1,11 +1,11 @@
 import { uploadProviderEvidenceDocument, uploadServiceProviderLogo } from "@/modules/documents/service";
-import { updateMarketplaceProfile } from "@/modules/marketplace/service";
+import { updateMarketplaceProfileInTransaction } from "@/modules/marketplace/service";
 import { createOrganisation } from "@/modules/organisations/service";
 import { createServiceProvider, submitProviderVerification } from "@/modules/providers/service";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
 import { formatPhoneForDisplay, normalizePhone } from "@/platform/identity/phone";
-import { runOnce, sinceStart } from "../actions";
+import { boundResult, runOnce } from "../actions";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { askField, askNextField, beginEdit, editOptions, handleFieldAnswer, SKIP_HINT, summaryLines, type FieldSpec, type FormData } from "../form";
 import { ensureUserForContact } from "../identity";
@@ -13,8 +13,7 @@ import { fetchInboundMedia, uploadFailureMessage } from "../media";
 import { detectCommand, parseEmail, parseList, parseLocation, parseYesNo, type ParsedLocation } from "../nlu";
 import { referenceFor } from "../references";
 import { matchServiceCategory, publicServiceCategories } from "../service-categories";
-import { recordEvent } from "../store";
-import { errorLabel } from "../log";
+import { recordEvent, recordEventInTx } from "../store";
 
 /**
  * Service-provider onboarding through WhatsApp, using the same provider, marketplace-profile,
@@ -213,17 +212,25 @@ function askLogo(ctx: Ctx) {
 async function submit(ctx: Ctx) {
   const data = ctx.data<Data>();
   const { user } = await ensureUserForContact(ctx.contact, data.contactName ?? data.displayName!);
-  if (data.providerType === "INDIVIDUAL") {
+  const actionKey = ctx.actionKey("provider_registration");
+  // A retry of a registration that already committed must return it, not refuse it as a duplicate.
+  if (data.providerType === "INDIVIDUAL" && !(await boundResult(actionKey))) {
     const existing = await db.serviceProvider.findUnique({ where: { individualUserId: user.id }, select: { id: true, displayName: true } });
     if (existing) {
       ctx.say(`You already have an individual service profile: *${existing.displayName}* (${referenceFor("SV", existing.id)}). Reply *status* to check it, or register a business instead.`);
       return ctx.finish();
     }
   }
-  const outcome = await runOnce(ctx.actionKey("provider_registration"), ctx.contact.id, "provider_registration", async () => {
-    const companyOrganisationId = isCompany(data)
-      ? (await createOrganisation(user.id, { name: data.displayName!, type: "OTHER", countryCode: "GH" })).id
-      : undefined;
+  // A company provider needs its own organisation first. It is bound separately, so a retry after
+  // the organisation committed reuses it rather than creating a second one with the same name.
+  const companyOrganisationId = isCompany(data)
+    ? (await runOnce(`${actionKey}:organisation`, ctx.contact.id, "provider_organisation", async (bind) => (
+      createOrganisation(user.id, { name: data.displayName!, type: "OTHER", countryCode: "GH" }, { inTransaction: bind() })
+    ))).resultId
+    : undefined;
+  // The provider, its source channel, its (unlisted) marketplace profile, its event and the action
+  // binding commit in one transaction.
+  const outcome = await runOnce(actionKey, ctx.contact.id, "provider_registration", async (bind) => {
     const provider = await createServiceProvider(user.id, {
       type: data.providerType,
       companyOrganisationId,
@@ -233,29 +240,21 @@ async function submit(ctx: Ctx) {
       biography: [data.description, data.experience ? `Experience & qualifications: ${data.experience}` : null].filter(Boolean).join("\n\n"),
       categoryIds: data.categories!.map(({ id }) => id),
       serviceAreas: data.areas!.map((area) => ({ areaType: "SERVICE_AREA", name: [area.area, area.city, area.region, "GH"].filter(Boolean).join(", ") })),
+    }, {
+      inTransaction: bind(async (tx, providerId) => {
+        await tx.serviceProvider.update({ where: { id: providerId }, data: { sourceChannel: "WHATSAPP" } });
+        // Explicit categories and areas for the public profile, but unlisted until NesAfric approves.
+        await updateMarketplaceProfileInTransaction(tx, user.id, providerId, {
+          listed: false,
+          publicDescription: data.description,
+          categoryIds: data.categories!.map(({ id }) => id),
+          serviceAreas: dedupeAreas(data.areas!).map((area) => ({ countryCode: "GH", region: area.region, city: area.city, district: area.area, label: area.label })),
+        });
+        await recordEventInTx(tx, "provider_registered", ctx.contact.id, { providerId, type: data.providerType });
+      }),
     });
-    await db.serviceProvider.update({ where: { id: provider.id }, data: { sourceChannel: "WHATSAPP" } });
-    try {
-      // Explicit categories and areas for the public profile, but unlisted until NesAfric approves.
-      await updateMarketplaceProfile(user.id, provider.id, {
-        listed: false,
-        publicDescription: data.description,
-        categoryIds: data.categories!.map(({ id }) => id),
-        serviceAreas: dedupeAreas(data.areas!).map((area) => ({ countryCode: "GH", region: area.region, city: area.city, district: area.area, label: area.label })),
-      });
-    } catch (error) {
-      console.error("[whatsapp-assistant] marketplace profile setup failed", { providerId: provider.id, error: errorLabel(error) });
-    }
     return { id: provider.id };
-  }, async (startedAt) => {
-    const found = await db.serviceProvider.findFirst({
-      where: { administratorUserId: user.id, displayName: data.displayName!, createdAt: { gte: sinceStart(startedAt) } },
-      select: { id: true },
-    });
-    if (found) await db.serviceProvider.update({ where: { id: found.id }, data: { sourceChannel: "WHATSAPP" } });
-    return found?.id ?? null;
   });
-  if (!outcome.repeated) await recordEvent("provider_registered", ctx.contact.id, { providerId: outcome.resultId, type: data.providerType });
   data.providerId = outcome.resultId;
   data.evidence = [];
   ctx.say(`✅ Your service profile has been saved (not public yet).\nReference: ${referenceFor("SV", outcome.resultId)}`);
@@ -285,8 +284,13 @@ async function saveEvidence(ctx: Ctx, evidenceType: "GHANA_CARD_FRONT" | "BUSINE
     return false;
   }
   try {
-    const result = await uploadProviderEvidenceDocument(ctx.contact.userId!, data.providerId!, { ...fetched.payload, evidenceType }) as { storageObject: { storageKey: string } };
-    data.evidence = [...(data.evidence ?? []), { type: evidenceType, reference: result.storageObject.storageKey }];
+    // One stored document per WhatsApp message, even when the message is processed again.
+    const outcome = await runOnce(ctx.actionKey("provider_evidence"), ctx.contact.id, "provider_evidence", async (bind) => {
+      const { storageObject } = await uploadProviderEvidenceDocument(ctx.contact.userId!, data.providerId!, { ...fetched.payload, evidenceType }, { inTransaction: bind() });
+      return { id: storageObject.id };
+    });
+    const { storageKey } = await db.storageObject.findUniqueOrThrow({ where: { id: outcome.resultId }, select: { storageKey: true } });
+    data.evidence = [...(data.evidence ?? []).filter(({ reference }) => reference !== storageKey), { type: evidenceType, reference: storageKey }];
     return true;
   } catch (error) {
     ctx.say(await uploadFailureMessage(ctx.contact.id, "provider_evidence", error));
@@ -374,7 +378,10 @@ export const providerRegistration: Workflow = {
         const fetched = await fetchInboundMedia(ctx.contact.id, ctx.input.media, "provider_logo");
         if (!fetched.ok) return ctx.say(fetched.message);
         try {
-          await uploadServiceProviderLogo(ctx.contact.userId!, data.providerId!, fetched.payload);
+          await runOnce(ctx.actionKey("provider_logo"), ctx.contact.id, "provider_logo", async (bind) => {
+            await uploadServiceProviderLogo(ctx.contact.userId!, data.providerId!, fetched.payload, { inTransaction: bind() });
+            return { id: data.providerId! };
+          });
           data.logoSaved = true;
         } catch (error) {
           ctx.say(await uploadFailureMessage(ctx.contact.id, "provider_logo", error));

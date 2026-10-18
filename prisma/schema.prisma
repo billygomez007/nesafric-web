@@ -6079,12 +6079,6 @@ enum WhatsAppOutboundStatus {
   SKIPPED
 }
 
-enum WhatsAppActionStatus {
-  STARTED
-  COMPLETED
-  FAILED
-}
-
 enum WhatsAppSupportStatus {
   OPEN
   IN_PROGRESS
@@ -6132,6 +6126,8 @@ model WhatsAppInboundMessage {
   sentAt      DateTime
   receivedAt  DateTime              @default(now())
   processedAt DateTime?
+  /// Set when retention removed `text` and `content`; `waMessageId` is kept for deduplication.
+  redactedAt  DateTime?
   contact     WhatsAppContact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@index([contactId, status, sentAt])
@@ -6154,6 +6150,8 @@ model WhatsAppOutboundMessage {
   deliveredAt       DateTime?
   readAt            DateTime?
   failedAt          DateTime?
+  /// Set when retention replaced `payload`; `idempotencyKey` is kept so a retry never re-sends.
+  redactedAt        DateTime?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   contact           WhatsAppContact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -6183,21 +6181,20 @@ model WhatsAppAssistantSession {
   @@index([workflow, lastActivityAt])
 }
 
-/// At-most-once guard for irreversible business actions (create a listing, submit a
-/// registration). A STARTED row that never completed is surfaced to support instead of retried.
+/// Exact, durable binding from a WhatsApp action (e.g. "create the listing asked for by inbound
+/// message X") to the business record it created. Insert-only: the row is written inside the same
+/// transaction as the record, so it exists if and only if the record committed, and the unique
+/// `actionKey` makes a competing or stale attempt roll back instead of creating a duplicate.
 model WhatsAppAction {
-  id          String               @id @default(uuid()) @db.Uuid
-  actionKey   String               @unique
-  contactId   String               @db.Uuid
-  kind        String
-  status      WhatsAppActionStatus @default(STARTED)
-  resultId    String?
-  error       String?
-  createdAt   DateTime             @default(now())
-  completedAt DateTime?
+  id        String   @id @default(uuid()) @db.Uuid
+  actionKey String   @unique
+  contactId String   @db.Uuid
+  kind      String
+  resultId  String
+  createdAt DateTime @default(now())
 
-  @@index([contactId, createdAt])
-  @@index([status, createdAt])
+  @@index([contactId, kind, createdAt])
+  @@index([createdAt])
 }
 
 /// "Talk to support" requests and workflow items that need a person.

@@ -286,6 +286,11 @@ export async function applyStatusUpdate(update: { providerMessageId: string; sta
   return true;
 }
 
+/** An event that must commit with (and only with) the business change it describes. */
+export async function recordEventInTx(tx: Prisma.TransactionClient, name: string, contactId: string | null, properties: Record<string, unknown> = {}) {
+  await tx.whatsAppAssistantEvent.create({ data: { name, contactId, properties: JSON.parse(JSON.stringify(properties)) } });
+}
+
 export async function recordEvent(name: string, contactId: string | null, properties: Record<string, unknown> = {}) {
   await db.whatsAppAssistantEvent.create({ data: { name, contactId, properties: JSON.parse(JSON.stringify(properties)) } }).catch((error) => {
     // Analytics never break a conversation.

@@ -3,21 +3,19 @@ vi.mock("@/modules/messaging/otp-provider", async () => (await import("./helpers
 import { db } from "@/platform/database/client";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
-import { createMarketplaceLead } from "@/modules/listings/service";
-import { ACTION_STALE_MS, ActionInDoubtError, runOnce } from "@/modules/whatsapp-assistant/actions";
 import { setAssistantAIProvider } from "@/modules/whatsapp-assistant/ai";
 import { ingestWebhook } from "@/modules/whatsapp-assistant/ingest";
 import { processContact } from "@/modules/whatsapp-assistant/processor";
 import { recoverStalledWhatsAppWork } from "@/modules/whatsapp-assistant/recovery";
 import { acquireSession, extendSessionLease, LeaseLostError, releaseSession } from "@/modules/whatsapp-assistant/store";
 import type { AIProvider, AIProviderRequest } from "@/modules/ai/providers";
-import { allText, configureAssistantEnv, converse, FakeGraphApi, sign, textOf, webhookBody } from "./helpers/whatsapp-assistant";
-import { cleanWhatsAppDatabase, publishedListing } from "./helpers/whatsapp-fixtures";
+import { allText, configureAssistantEnv, FakeGraphApi, sign, textOf, webhookBody } from "./helpers/whatsapp-assistant";
+import { cleanWhatsAppDatabase } from "./helpers/whatsapp-fixtures";
 
 /**
  * Durability and recovery of the WhatsApp pipeline: what happens when `after()` never runs, the
  * process dies, a job is stranded, webhooks repeat or race, a worker stalls past its lease, or an
- * irreversible action is interrupted.
+ * irreversible action is interrupted (see postgres-whatsapp-action-idempotency for the latter).
  */
 
 const CUSTOMER = "233246666666";
@@ -147,66 +145,5 @@ describe("WhatsApp assistant — durability and recovery", () => {
     expect(await db.whatsAppInboundMessage.findFirstOrThrow()).toMatchObject({ status: "PROCESSED", attempts: 2 });
     expect(await db.whatsAppAssistantEvent.count({ where: { name: "lease_lost" } })).toBe(1);
     expect((await db.whatsAppAssistantSession.findFirstOrThrow()).workflow).toBe("support");
-  });
-
-  describe("at-most-once action guard", () => {
-    async function contactId() {
-      return (await ingestOnly(CUSTOMER, "Hi")).contactIds[0];
-    }
-
-    it("defers, without running anything, while an earlier attempt may still be in flight", async () => {
-      const id = await contactId();
-      await db.whatsAppAction.create({ data: { actionKey: "test:inflight", contactId: id, kind: "test" } });
-      const perform = vi.fn(async () => ({ id: "x" }));
-      await expect(runOnce("test:inflight", id, "test", perform, async () => null)).rejects.toBeInstanceOf(ActionInDoubtError);
-      expect(perform).not.toHaveBeenCalled();
-    });
-
-    it("completes from the real record when an interrupted attempt did commit (no duplicate)", async () => {
-      const id = await contactId();
-      const { listing } = await publishedListing();
-      const submission = { keyHash: "a".repeat(64), fingerprint: "b".repeat(64) };
-      const lead = await createMarketplaceLead(listing.id, undefined, { name: "Kofi", phone: "+233246666666", source: "whatsapp" }, { submission });
-      // The worker crashed after the lead committed but before the guard recorded completion.
-      await db.whatsAppAction.create({ data: { actionKey: "lead:crashed", contactId: id, kind: "lead", createdAt: new Date(Date.now() - ACTION_STALE_MS - 1_000) } });
-      const perform = vi.fn(async () => ({ id: "should-not-run" }));
-      const { findLeadForSubmission } = await import("@/modules/listings/service");
-      const outcome = await runOnce("lead:crashed", id, "lead", perform, async () => (await findLeadForSubmission(listing.id, submission))?.id ?? null);
-      expect(outcome).toMatchObject({ status: "completed", resultId: lead.id, repeated: true });
-      expect(perform).not.toHaveBeenCalled();
-      expect(await db.marketplaceLead.count()).toBe(1);
-    });
-
-    it("re-runs exactly once when an interrupted attempt provably never committed (no permanent suppression)", async () => {
-      const id = await contactId();
-      await db.whatsAppAction.create({ data: { actionKey: "test:lost", contactId: id, kind: "test", createdAt: new Date(Date.now() - ACTION_STALE_MS - 1_000) } });
-      const perform = vi.fn(async () => ({ id: "created-now" }));
-      expect(await runOnce("test:lost", id, "test", perform, async () => null)).toMatchObject({ status: "completed", resultId: "created-now", repeated: false });
-      expect(await runOnce("test:lost", id, "test", perform, async () => null)).toMatchObject({ status: "completed", resultId: "created-now", repeated: true });
-      expect(perform).toHaveBeenCalledTimes(1);
-    });
-
-    it("retries a step whose action is in doubt later, without spending its attempts, then completes it once", async () => {
-      const { listing } = await publishedListing();
-      await converse(api, CUSTOMER, { text: "apartment for rent in East Legon" });
-      await converse(api, CUSTOMER, { text: "skip" });
-      await converse(api, CUSTOMER, { choice: `ps:ask:${listing.id}` });
-      await converse(api, CUSTOMER, { text: "Is it available?" });
-      await converse(api, CUSTOMER, { choice: "pi:send" });
-      const { contactIds } = await ingestOnly(CUSTOMER, "Kofi Boateng");
-      const inbound = await db.whatsAppInboundMessage.findFirstOrThrow({ where: { text: "Kofi Boateng" } });
-      // Another worker started this exact action a moment ago.
-      await db.whatsAppAction.create({ data: { actionKey: `lead:${inbound.id}`, contactId: contactIds[0], kind: "lead" } });
-      await processContact(contactIds[0]);
-      expect(api.take()).toHaveLength(0);
-      expect(await db.whatsAppInboundMessage.findUniqueOrThrow({ where: { id: inbound.id } })).toMatchObject({ status: "RECEIVED", attempts: 0 });
-      expect(await db.backgroundJob.count({ where: { type: "whatsapp-assistant-inbound", idempotencyKey: { contains: ":doubt:" } } })).toBe(1);
-
-      // That attempt died without committing; once stale, the retry creates the lead exactly once.
-      await db.whatsAppAction.update({ where: { actionKey: `lead:${inbound.id}` }, data: { createdAt: new Date(Date.now() - ACTION_STALE_MS - 1_000) } });
-      await processContact(contactIds[0]);
-      expect(allText(api.take())).toMatch(/NES-IQ-/);
-      expect(await db.marketplaceLead.count()).toBe(1);
-    });
   });
 });

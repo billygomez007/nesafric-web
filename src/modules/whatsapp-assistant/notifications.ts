@@ -28,7 +28,34 @@ export async function runWhatsAppNotification(job: WhatsAppNotificationJob) {
       return notifyProviderIdentityDecision(job.providerId, job.status, job.reason, job.decisionKey);
     case "viewing_update":
       return notifyViewingUpdate(job.viewingRequestId, job.decisionKey);
+    case "affiliation_claim":
+      return notifyAffiliationClaim(job.agencyId, job.agentProfessionalId);
+    case "provider_enquiry":
+      return notifyProviderEnquiry(job.enquiryId);
   }
+}
+
+/**
+ * An agent's claim to work with an agency goes to the agency's own owners/admins (who can add them
+ * through the existing team settings). It grants the agent no access to the agency.
+ */
+async function notifyAffiliationClaim(agencyId: string, agentProfessionalId: string) {
+  const [agency, agent] = await Promise.all([
+    db.marketplaceProfessional.findUnique({
+      where: { id: agencyId },
+      select: { displayName: true, members: { where: { status: "ACTIVE", role: { in: ["OWNER", "ADMIN"] } }, select: { userId: true } } },
+    }),
+    db.marketplaceProfessional.findUnique({ where: { id: agentProfessionalId }, select: { displayName: true } }),
+  ]);
+  if (!agency || !agent) return;
+  await notifyUsers(agency.members.map(({ userId }) => userId), `affiliation:${agentProfessionalId}`, `👤 ${agent.displayName} registered on NesAfric and says they work with *${agency.displayName}*. If that's right, add them to your team in your NesAfric business settings. If not, you can ignore this — they have no access to your agency.`);
+}
+
+/** Tells a provider on WhatsApp about a new service request, when their account is linked. */
+async function notifyProviderEnquiry(enquiryId: string) {
+  const enquiry = await db.marketplaceEnquiry.findUnique({ where: { id: enquiryId }, select: { message: true, provider: { select: { administratorUserId: true } } } });
+  if (!enquiry) return;
+  await notifyUsers([enquiry.provider.administratorUserId], `provider-enquiry:${enquiryId}`, `📩 New service request on NesAfric (${referenceFor("QT", enquiryId)}):\n"${enquiry.message.slice(0, 300)}"\n\nOpen your NesAfric provider inbox to respond.`);
 }
 
 async function notifyUsers(userIds: Array<string | null | undefined>, key: string, body: string) {

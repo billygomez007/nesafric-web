@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PlatformPrincipal } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
+import type { InTransaction } from "@/platform/database/in-transaction";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { membershipHasPermission } from "@/platform/authorization/policy";
 import { AppError, forbidden, notFound } from "@/platform/errors";
@@ -94,6 +95,8 @@ async function performUpload(params: {
   targetType: string;
   input: ReturnType<typeof uploadDocumentSchema.parse>;
   entitlementScope?: UploadEntitlementScope;
+  /** Runs in the transaction that records the upload (e.g. a caller's idempotency binding). */
+  inTransaction?: InTransaction<{ id: string }>;
 }) {
   const { userId, targetType, input } = params;
   const descriptor = getUploadDescriptor(targetType);
@@ -221,10 +224,14 @@ async function performUpload(params: {
       await record(tx, authorization.organisationId, userId, "document.uploaded", "storage_object", storageObject.id, {
         targetType, targetId: input.targetId, classification, contentType: sniffed.mimeType, sizeBytes: bytes.length,
       });
+      await params.inTransaction?.(tx, storageObject);
       return { storageObject, attached, dimensionWarning: creativeDimensionWarning };
     });
   } catch (error) {
-    await adapter.deleteObject(storageKey, classification).catch(() => undefined);
+    // An exception does not prove the transaction rolled back (the commit acknowledgement can be
+    // lost): only remove the stored bytes when no record references them.
+    const committed = await db.storageObject.findFirst({ where: { storageKey }, select: { id: true } }).catch(() => ({ id: "unknown" }));
+    if (!committed) await adapter.deleteObject(storageKey, classification).catch(() => undefined);
     throw error;
   }
 }
@@ -355,6 +362,7 @@ export async function uploadMarketplaceListingMedia(
   marketplaceProfessionalId: string,
   listingId: string,
   input: unknown,
+  options: { inTransaction?: InTransaction<{ id: string }> } = {},
 ) {
   await requireMarketplaceRole(
     userId,
@@ -428,6 +436,7 @@ export async function uploadMarketplaceListingMedia(
       targetType: "LISTING_MEDIA",
       input: data,
       entitlementScope: { kind: "marketplace", marketplaceProfessionalId },
+      inTransaction: options.inTransaction,
     });
     console.info("[marketplace-listing-media] uploaded", {
       listingId,
@@ -449,15 +458,15 @@ export async function uploadMarketplaceListingMedia(
   }
 }
 
-export async function uploadProviderEvidenceDocument(userId: string, providerId: string, input: unknown) {
+export async function uploadProviderEvidenceDocument(userId: string, providerId: string, input: unknown, options: { inTransaction?: InTransaction<{ id: string }> } = {}) {
   const data = uploadDocumentSchema.parse({ ...(input as object), targetType: "PROVIDER_EVIDENCE", targetId: providerId });
-  return performUpload({ userId, organisationId: null, targetType: "PROVIDER_EVIDENCE", input: data });
+  return performUpload({ userId, organisationId: null, targetType: "PROVIDER_EVIDENCE", input: data, inTransaction: options.inTransaction });
 }
 
 /** A service provider's owner uploads or replaces its public logo: `{ fileName, contentType,
  * dataBase64 }`. Always PUBLIC (forced here, never trusted from the request); ownership is checked
  * by the upload target inside the transaction. Not plan-metered, like provider evidence. */
-export async function uploadServiceProviderLogo(userId: string, providerId: string, input: unknown) {
+export async function uploadServiceProviderLogo(userId: string, providerId: string, input: unknown, options: { inTransaction?: InTransaction<{ id: string }> } = {}) {
   if (!isUuid(providerId)) throw notFound();
   const raw = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
   const data = uploadDocumentSchema.parse({
@@ -468,7 +477,7 @@ export async function uploadServiceProviderLogo(userId: string, providerId: stri
     targetId: providerId,
     classification: "PUBLIC",
   });
-  const result = await performUpload({ userId, organisationId: null, targetType: SERVICE_PROVIDER_LOGO_TARGET, input: data });
+  const result = await performUpload({ userId, organisationId: null, targetType: SERVICE_PROVIDER_LOGO_TARGET, input: data, inTransaction: options.inTransaction });
   return result.attached;
 }
 

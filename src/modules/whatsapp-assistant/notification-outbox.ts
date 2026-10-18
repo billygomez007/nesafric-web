@@ -14,7 +14,9 @@ export type WhatsAppNotificationJob =
   | { kind: "listing_decision"; listingId: string; decision: "published" | "changes_requested" | "rejected"; note?: string | null; decisionKey: string }
   | { kind: "professional_verification"; professionalId: string; status: string; reason?: string | null; decisionKey: string }
   | { kind: "provider_identity"; providerId: string; status: string; reason?: string | null; decisionKey: string }
-  | { kind: "viewing_update"; viewingRequestId: string; decisionKey: string };
+  | { kind: "viewing_update"; viewingRequestId: string; decisionKey: string }
+  | { kind: "affiliation_claim"; agencyId: string; agentProfessionalId: string; decisionKey: string }
+  | { kind: "provider_enquiry"; enquiryId: string; decisionKey: string };
 
 export const notificationJobKey = (job: WhatsAppNotificationJob) => `wa-notify:${job.kind}:${job.decisionKey}`;
 

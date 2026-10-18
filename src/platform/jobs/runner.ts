@@ -1,9 +1,11 @@
+import type { Prisma } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { AppError, notFound } from "@/platform/errors";
 
-export async function enqueueJob(input: { organisationId?: string; type: string; idempotencyKey: string; payload: object; runAt?: Date; maxAttempts?: number }) {
-  return db.backgroundJob.upsert({
+/** Queues a job once per `idempotencyKey`. Pass a transaction client to commit it with the caller's writes. */
+export async function enqueueJob(input: { organisationId?: string; type: string; idempotencyKey: string; payload: object; runAt?: Date; maxAttempts?: number }, client: Pick<Prisma.TransactionClient, "backgroundJob"> = db) {
+  return client.backgroundJob.upsert({
     where: { idempotencyKey: input.idempotencyKey },
     update: {},
     create: { ...input, payload: input.payload, runAt: input.runAt ?? new Date(), maxAttempts: input.maxAttempts ?? 3 },

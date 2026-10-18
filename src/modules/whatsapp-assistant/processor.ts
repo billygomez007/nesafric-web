@@ -1,21 +1,17 @@
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { ActionInDoubtError } from "./actions";
 import type { InboundLocation, InboundMedia } from "./cloud-api";
 import { Ctx } from "./context";
 import { runEngine, showMenu, WORKFLOWS } from "./engine";
 import { stateFromSession, stateToSession } from "./state";
 import {
   acquireSession, extendSessionLease, flushOutbound, LeaseLostError, MAX_INBOUND_ATTEMPTS, nextPendingInbound,
-  queueOutboundInTransaction, recordEvent, releaseDeferredNotifications, releaseSession, scheduleInboundProcessing, type Lease,
+  queueOutboundInTransaction, recordEvent, releaseDeferredNotifications, releaseSession, type Lease,
 } from "./store";
 import { createSupportRequest } from "./workflows/status";
 import { errorLabel } from "./log";
 
 type StoredContent = { choiceId?: string | null; media?: InboundMedia | null; location?: InboundLocation | null };
-
-/** How long to wait before retrying a message whose business action may still be in flight. */
-const IN_DOUBT_RETRY_MS = 2 * 60_000;
 
 /**
  * Processes every pending message for one contact, oldest first, under the contact's lease, so the
@@ -23,7 +19,7 @@ const IN_DOUBT_RETRY_MS = 2 * 60_000;
  * message the new session state, the replies and the PROCESSED mark commit in one transaction
  * that is fenced by the lease token: a worker that stalled past its lease (and was replaced)
  * cannot commit anything, and a crash anywhere leads to a clean re-run. Business actions inside a
- * step are guarded separately by `runOnce`.
+ * step are bound exactly once to their records by `runOnce`, so a re-run returns the original record.
  *
  * `throwIfBusy` (used by the safety-net job) turns "another worker holds the lease" into an error so
  * the job is retried rather than recorded as done: if the holder died, its lease expires.
@@ -35,16 +31,12 @@ export async function processContact(contactId: string, options: { throwIfBusy?:
       if (options.throwIfBusy && (await nextPendingInbound(contactId))) throw new Error("Contact is being processed by another worker; retrying later.");
       return;
     }
-    let deferred = false;
     try {
       await failExhaustedMessages(lease);
       for (let processed = 0; processed < 25; processed += 1) {
         const inbound = await nextPendingInbound(contactId);
         if (!inbound) break;
-        if ((await processOne(lease, inbound.id)) === "deferred") {
-          deferred = true;
-          break;
-        }
+        await processOne(lease, inbound.id);
       }
     } catch (error) {
       if (error instanceof LeaseLostError) {
@@ -56,8 +48,7 @@ export async function processContact(contactId: string, options: { throwIfBusy?:
       await releaseSession(lease);
     }
     await flushOutbound(contactId);
-    // Stop when the queue is empty, or when it is waiting on an in-flight action (retried later).
-    if (deferred || !(await nextPendingInbound(contactId))) return;
+    if (!(await nextPendingInbound(contactId))) return;
   }
 }
 
@@ -76,7 +67,7 @@ async function claim(lease: Lease, inboundId: string) {
   });
 }
 
-async function processOne(lease: Lease, inboundId: string): Promise<"done" | "deferred"> {
+async function processOne(lease: Lease, inboundId: string): Promise<"done"> {
   const inbound = await claim(lease, inboundId);
   if (inbound.attempts === 1) await releaseDeferredNotifications(inbound.contactId);
   const session = await db.whatsAppAssistantSession.findUniqueOrThrow({ where: { id: lease.sessionId } });
@@ -102,17 +93,6 @@ async function processOne(lease: Lease, inboundId: string): Promise<"done" | "de
     }
   } catch (error) {
     if (error instanceof LeaseLostError) throw error;
-    if (error instanceof ActionInDoubtError) {
-      // An earlier attempt at this action may still be running. Put the message back without
-      // spending an attempt, and look again once that attempt has either finished or gone stale.
-      await db.$transaction(async (tx) => {
-        await extendSessionLease(lease, tx);
-        await tx.whatsAppInboundMessage.update({ where: { id: inboundId }, data: { status: "RECEIVED", attempts: { decrement: 1 }, lastError: "Waiting for an earlier attempt to finish." } });
-      });
-      await scheduleInboundProcessing(inbound.contactId, `${inbound.waMessageId}:doubt:${Date.now()}`, IN_DOUBT_RETRY_MS);
-      await recordEvent("action_in_doubt", inbound.contactId, {});
-      return "deferred";
-    }
     if (error instanceof AppError && error.status >= 400 && error.status < 500) {
       // A business rule refused the step (permission revoked, record gone, invalid state). Not
       // worth retrying: answer from the state as it was before this message.

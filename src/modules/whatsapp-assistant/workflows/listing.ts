@@ -11,7 +11,7 @@ import { listUserMarketplaceProfessionals } from "@/modules/marketplace-professi
 import { isBookableCategory } from "@/lib/listing-categories";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { runOnce, sinceStart } from "../actions";
+import { runOnce } from "../actions";
 import { aiPolishListingCopy } from "../ai";
 import type { Ctx, StartSeed, Workflow } from "../context";
 import { askField, askNextField, beginEdit, editOptions, handleFieldAnswer, SKIP_HINT, summaryLines, type FieldSpec, type FormData } from "../form";
@@ -23,7 +23,7 @@ import {
   parseInteger, parseList, parseListingType, parseLocation, parseMoneyMinor, PROPERTY_CATEGORIES, type ParsedLocation,
 } from "../nlu";
 import { referenceFor } from "../references";
-import { recordEvent } from "../store";
+import { recordEvent, recordEventInTx } from "../store";
 
 const MAX_PHOTOS = 12;
 
@@ -445,22 +445,20 @@ async function draftFromListing(userId: string, professionalId: string, listingI
 async function createDraft(ctx: Ctx) {
   const draft = ctx.data<Draft>();
   const userId = ctx.contact.userId!;
-  const outcome = await runOnce(ctx.actionKey("listing_draft"), ctx.contact.id, "listing_draft", async () => {
-    const listing = await createMarketplaceNativeListing(userId, draft.professionalId!, nativePayload(draft));
-    await db.listing.update({ where: { id: listing.id }, data: { sourceChannel: "WHATSAPP" } });
-    return { id: listing.id };
-  }, async (startedAt) => {
-    const found = await db.listing.findFirst({
-      where: { createdByUserId: userId, marketplaceProfessionalId: draft.professionalId, title: draft.title, createdAt: { gte: sinceStart(startedAt) } },
-      select: { id: true },
+  // The draft, its WhatsApp source channel, its event and the action binding commit together, so
+  // a retry returns this exact draft — never a look-alike with the same title.
+  const outcome = await runOnce(ctx.actionKey("listing_draft"), ctx.contact.id, "listing_draft", async (bind) => {
+    const listing = await createMarketplaceNativeListing(userId, draft.professionalId!, nativePayload(draft), {
+      inTransaction: bind(async (tx, listingId) => {
+        await tx.listing.update({ where: { id: listingId }, data: { sourceChannel: "WHATSAPP" } });
+        await recordEventInTx(tx, "listing_draft_created", ctx.contact.id, { listingId });
+      }),
     });
-    if (found) await db.listing.update({ where: { id: found.id }, data: { sourceChannel: "WHATSAPP" } });
-    return found?.id ?? null;
+    return { id: listing.id };
   });
   draft.listingId = outcome.resultId;
   draft.listingStatus = "DRAFT";
   draft.photos ??= 0;
-  if (!outcome.repeated) await recordEvent("listing_draft_created", ctx.contact.id, { listingId: outcome.resultId });
   ctx.say(`💾 Draft saved. Reference: ${referenceFor("PR", outcome.resultId)} (not public).`);
   return true;
 }
@@ -506,17 +504,22 @@ async function savePhoto(ctx: Ctx) {
     return;
   }
   try {
-    await uploadMarketplaceListingMedia(ctx.contact.userId!, draft.professionalId!, draft.listingId!, {
-      ...fetched.payload,
-      mediaType: "PHOTO",
-      ...(media.caption ? { title: media.caption.slice(0, 160) } : {}),
+    // One stored photo per WhatsApp message: a redelivered or retried message returns the photo
+    // its first attempt stored instead of adding a copy.
+    await runOnce(ctx.actionKey("listing_photo"), ctx.contact.id, "listing_photo", async (bind) => {
+      const { storageObject } = await uploadMarketplaceListingMedia(ctx.contact.userId!, draft.professionalId!, draft.listingId!, {
+        ...fetched.payload,
+        mediaType: "PHOTO",
+        ...(media.caption ? { title: media.caption.slice(0, 160) } : {}),
+      }, { inTransaction: bind((tx) => recordEventInTx(tx, "listing_photo_saved", ctx.contact.id, { listingId: draft.listingId })) });
+      return { id: storageObject.id };
     });
   } catch (error) {
+    // Reaching here means the photo was not stored (`runOnce` checked the binding).
     ctx.say(`Photo ${(draft.photos ?? 0) + 1} wasn't saved: ${await uploadFailureMessage(ctx.contact.id, "listing_photo", error)}`);
     return;
   }
   draft.photos = (draft.photos ?? 0) + 1;
-  await recordEvent("listing_photo_saved", ctx.contact.id, { listingId: draft.listingId });
   ctx.say(draft.photos === 1 ? "✅ Main photo saved. Send more, or reply *done*." : `✅ Photo ${draft.photos} saved.`);
 }
 
@@ -553,16 +556,15 @@ async function submit(ctx: Ctx) {
   }
   const authority = AUTHORITIES[draft.authority!];
   try {
-    await runOnce(ctx.actionKey("listing_submit"), ctx.contact.id, "listing_submit", async () => {
+    await runOnce(ctx.actionKey("listing_submit"), ctx.contact.id, "listing_submit", async (bind) => {
       await submitMarketplaceListingForReview(ctx.contact.userId!, draft.professionalId!, draft.listingId!, {
         note: "Submitted via NesAfric WhatsApp.",
         evidence: { type: authority.evidence, reference: draft.evidenceReference! },
+      }, {
+        inTransaction: bind((tx, listingId) => recordEventInTx(tx, "listing_submitted", ctx.contact.id, { listingId, resubmission: draft.listingStatus === "REJECTED" || Boolean(draft.dirty) })),
       });
       return { id: draft.listingId! };
-    }, async (startedAt) => (await db.listing.findFirst({
-      where: { id: draft.listingId!, status: "PENDING_REVIEW", submittedAt: { gte: sinceStart(startedAt) } },
-      select: { id: true },
-    }))?.id ?? null);
+    });
   } catch (error) {
     if (error instanceof AppError && error.status < 500) {
       ctx.say(`It couldn't be submitted yet: ${error.message}`);
@@ -570,7 +572,6 @@ async function submit(ctx: Ctx) {
     }
     throw error;
   }
-  await recordEvent("listing_submitted", ctx.contact.id, { listingId: draft.listingId, resubmission: draft.listingStatus === "REJECTED" || Boolean(draft.dirty) });
   ctx.say([
     "✅ Your listing has been submitted for review.",
     `Reference: ${referenceFor("PR", draft.listingId!)}`,

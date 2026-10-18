@@ -1,7 +1,7 @@
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
 import { aiClassifyIntent } from "./ai";
-import { AccountVerificationRequired, completeAccountVerification, startAccountVerification } from "./identity";
+import { AccountVerificationRequired, completeAccountVerification, linkedUser, startAccountVerification } from "./identity";
 import { Ctx, type StartSeed, type Workflow } from "./context";
 import { detectCommand, detectIntents, matchOption, type Intent } from "./nlu";
 import { parseReference } from "./references";
@@ -267,16 +267,26 @@ async function handleVerificationAnswer(ctx: Ctx) {
     ctx.say(`Please reply with the 6-digit code we sent by SMS to ${verification.destination}, *resend* for a new code, or *cancel*.`);
     return;
   }
-  try {
-    const { user, created } = await completeAccountVerification(ctx.contact, { challengeId: verification.challengeId, code, displayName: verification.displayName });
+  const alreadyLinked = await linkedUser(ctx.contact);
+  if (alreadyLinked) {
+    // An earlier attempt at this same message verified the code (consuming it) and linked the
+    // account, then died before its reply committed. Don't ask for the spent code again: continue
+    // with the replay below, which runs under this message's action keys and so returns whatever
+    // that attempt already created instead of creating it twice.
     ctx.state.verification = null;
-    await recordEvent("account_linked", ctx.contact.id, { created });
-    ctx.say(created ? "✅ Number verified — your NesAfric account is ready." : `✅ Verified — this WhatsApp number is now linked to your NesAfric account (${user.displayName}).`);
-  } catch (error) {
-    if (!(error instanceof AppError)) throw error;
-    if (error.code === "WHATSAPP_STAFF_ACCOUNT") ctx.state.verification = null;
-    ctx.say(error.message);
-    return;
+    ctx.say(`✅ Verified — this WhatsApp number is linked to your NesAfric account (${alreadyLinked.displayName}).`);
+  } else {
+    try {
+      const { user, created } = await completeAccountVerification(ctx.contact, { challengeId: verification.challengeId, code, displayName: verification.displayName });
+      ctx.state.verification = null;
+      await recordEvent("account_linked", ctx.contact.id, { created });
+      ctx.say(created ? "✅ Number verified — your NesAfric account is ready." : `✅ Verified — this WhatsApp number is now linked to your NesAfric account (${user.displayName}).`);
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      if (error.code === "WHATSAPP_STAFF_ACCOUNT") ctx.state.verification = null;
+      ctx.say(error.message);
+      return;
+    }
   }
   // Re-run the answer that needed the account, as a fresh step of this message.
   if (verification.replay && ctx.state.workflow) {

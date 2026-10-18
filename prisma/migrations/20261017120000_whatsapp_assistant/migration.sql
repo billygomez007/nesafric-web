@@ -5,9 +5,6 @@ CREATE TYPE "WhatsAppInboundStatus" AS ENUM ('RECEIVED', 'PROCESSING', 'PROCESSE
 CREATE TYPE "WhatsAppOutboundStatus" AS ENUM ('QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'SKIPPED');
 
 -- CreateEnum
-CREATE TYPE "WhatsAppActionStatus" AS ENUM ('STARTED', 'COMPLETED', 'FAILED');
-
--- CreateEnum
 CREATE TYPE "WhatsAppSupportStatus" AS ENUM ('OPEN', 'IN_PROGRESS', 'RESOLVED');
 
 -- AlterTable
@@ -48,6 +45,7 @@ CREATE TABLE "WhatsAppInboundMessage" (
     "sentAt" TIMESTAMP(3) NOT NULL,
     "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "processedAt" TIMESTAMP(3),
+    "redactedAt" TIMESTAMP(3),
 
     CONSTRAINT "WhatsAppInboundMessage_pkey" PRIMARY KEY ("id")
 );
@@ -67,6 +65,7 @@ CREATE TABLE "WhatsAppOutboundMessage" (
     "deliveredAt" TIMESTAMP(3),
     "readAt" TIMESTAMP(3),
     "failedAt" TIMESTAMP(3),
+    "redactedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -97,11 +96,8 @@ CREATE TABLE "WhatsAppAction" (
     "actionKey" TEXT NOT NULL,
     "contactId" UUID NOT NULL,
     "kind" TEXT NOT NULL,
-    "status" "WhatsAppActionStatus" NOT NULL DEFAULT 'STARTED',
-    "resultId" TEXT,
-    "error" TEXT,
+    "resultId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "completedAt" TIMESTAMP(3),
 
     CONSTRAINT "WhatsAppAction_pkey" PRIMARY KEY ("id")
 );
@@ -176,10 +172,10 @@ CREATE INDEX "WhatsAppAssistantSession_workflow_lastActivityAt_idx" ON "WhatsApp
 CREATE UNIQUE INDEX "WhatsAppAction_actionKey_key" ON "WhatsAppAction"("actionKey");
 
 -- CreateIndex
-CREATE INDEX "WhatsAppAction_contactId_createdAt_idx" ON "WhatsAppAction"("contactId", "createdAt");
+CREATE INDEX "WhatsAppAction_contactId_kind_createdAt_idx" ON "WhatsAppAction"("contactId", "kind", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "WhatsAppAction_status_createdAt_idx" ON "WhatsAppAction"("status", "createdAt");
+CREATE INDEX "WhatsAppAction_createdAt_idx" ON "WhatsAppAction"("createdAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "WhatsAppSupportRequest_reference_key" ON "WhatsAppSupportRequest"("reference");

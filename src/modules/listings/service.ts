@@ -11,6 +11,7 @@ import {
   ViewingRequestStatus,
 } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
+import type { InTransaction } from "@/platform/database/in-transaction";
 import { getObjectStorageAdapter } from "@/platform/storage";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { AppError, notFound } from "@/platform/errors";
@@ -330,7 +331,7 @@ function listingNotEditable() {
   return new AppError("LISTING_NOT_EDITABLE", 409, "Only draft, rejected, or paused listings can be edited.");
 }
 
-export async function createMarketplaceNativeListing(userId: string, marketplaceProfessionalId: string, input: unknown) {
+export async function createMarketplaceNativeListing(userId: string, marketplaceProfessionalId: string, input: unknown, options: { inTransaction?: InTransaction<{ id: string }> } = {}) {
   await requireMarketplaceMember(userId, marketplaceProfessionalId);
   await assertMarketplaceOperational(marketplaceProfessionalId, MARKETPLACE_ENTITLEMENTS.activeListingsMax.key);
   const data = createMarketplaceNativeListingSchema.parse(input);
@@ -373,6 +374,7 @@ export async function createMarketplaceNativeListing(userId: string, marketplace
       include: listingInclude,
     });
     await record(tx, professional.backingOrganisationId, userId, "marketplace_listing.created", "listing", listing.id, { marketplaceAssetId: asset.id, marketplaceProfessionalId, developmentUnitId: data.asset.developmentUnitId ?? null });
+    await options.inTransaction?.(tx, listing);
     return listing;
   });
 }
@@ -663,7 +665,7 @@ const VERIFICATION_NEEDS_EVIDENCE: ListingVerificationStatus[] = ["UNVERIFIED", 
  * longer sit "in review" while nobody has been asked to verify it. A REJECTED listing goes back
  * through DRAFT first so the lifecycle history stays truthful.
  */
-export async function submitMarketplaceListingForReview(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
+export async function submitMarketplaceListingForReview(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown, options: { inTransaction?: InTransaction<{ id: string }> } = {}) {
   await requireMarketplaceRole(userId, marketplaceProfessionalId, "AGENT");
   listingId = listingIdSchema.parse(listingId);
   const data = submitListingForReviewSchema.parse(input ?? {});
@@ -691,7 +693,9 @@ export async function submitMarketplaceListingForReview(userId: string, marketpl
     if (listing.status === "REJECTED") {
       await applyListingTransition(tx, userId, organisationId, listing.id, { status: "DRAFT", note: "Resubmitted by the professional." }, { via: "submit_for_review" });
     }
-    return applyListingTransition(tx, userId, organisationId, listing.id, { status: "PENDING_REVIEW", note: data.note }, { via: "submit_for_review" });
+    const submitted = await applyListingTransition(tx, userId, organisationId, listing.id, { status: "PENDING_REVIEW", note: data.note }, { via: "submit_for_review" });
+    await options.inTransaction?.(tx, submitted);
+    return submitted;
   }, REVIEW_TRANSACTION_OPTIONS);
 }
 
@@ -1469,7 +1473,7 @@ const leadListInclude = {
  */
 export type SubmissionBinding = { keyHash: string; fingerprint: string };
 
-export async function createMarketplaceLead(listingId: string, userId: string | undefined, input: unknown, options: { submission?: SubmissionBinding } = {}) {
+export async function createMarketplaceLead(listingId: string, userId: string | undefined, input: unknown, options: { submission?: SubmissionBinding; inTransaction?: InTransaction<{ id: string }> } = {}) {
   listingId = listingIdSchema.parse(listingId);
   const data = createMarketplaceLeadSchema.parse(input);
   const result = await db.$transaction(async (tx) => {
@@ -1504,16 +1508,18 @@ export async function createMarketplaceLead(listingId: string, userId: string | 
         payload: json({ listingId, authenticated: Boolean(userId) }),
       },
     });
-    return { id: lead.id, listingId, status: lead.status, createdAt: lead.createdAt, listingTitle: listing.title, recipientUserId: listing.createdByUserId, leadName: lead.name, leadEmail: lead.email, leadPhone: lead.phone };
+    // A brand-new lead never has an assignee yet (assignment happens later via a status-change
+    // action) — the listing's own creator is the one real, unambiguous, always-present recipient at
+    // this moment, never a guessed or unrelated organisation member. Enqueued in the transaction
+    // so the lead and its notification commit (or roll back) together.
+    await enqueueMarketplaceLeadNotification(listing.createdByUserId, {
+      listingTitle: listing.title, leadId: lead.id, prospectName: lead.name,
+      prospectEmail: lead.email ?? undefined, prospectPhone: lead.phone ?? undefined,
+    }, tx);
+    await options.inTransaction?.(tx, lead);
+    return { id: lead.id, listingId, status: lead.status, createdAt: lead.createdAt };
   });
-  // A brand-new lead never has an assignee yet (assignment happens later via a status-change
-  // action) — the listing's own creator is the one real, unambiguous, always-present recipient at
-  // this moment, never a guessed or unrelated organisation member.
-  await enqueueMarketplaceLeadNotification(result.recipientUserId, {
-    listingTitle: result.listingTitle, leadId: result.id, prospectName: result.leadName,
-    prospectEmail: result.leadEmail ?? undefined, prospectPhone: result.leadPhone ?? undefined,
-  });
-  return { id: result.id, listingId: result.listingId, status: result.status, createdAt: result.createdAt };
+  return result;
 }
 
 export async function listMarketplaceLeads(userId: string, organisationId: string, query: unknown = {}) {
@@ -1663,7 +1669,7 @@ export async function createViewingRequest(
   listingId: string,
   userId: string | undefined,
   input: unknown,
-  options: { submission?: SubmissionBinding } = {},
+  options: { submission?: SubmissionBinding; inTransaction?: InTransaction<{ id: string }> } = {},
 ) {
   listingId = listingIdSchema.parse(listingId);
   const data = createViewingRequestSchema.parse(input);
@@ -1727,23 +1733,14 @@ export async function createViewingRequest(
       : null;
     const recipientUserId = assignee?.userId ?? listing.createdByUserId;
     const firstPreferredTime = viewing.preferredTimes[0];
-    return {
-      id: viewing.id,
-      listingId,
-      leadId: lead.id,
-      status: viewing.status,
-      preferredTimes: viewing.preferredTimes,
-      createdAt: viewing.createdAt,
-      listingTitle: listing.title,
-      recipientUserId,
-      leadName: lead.name,
+    await enqueueViewingRequestNotification(recipientUserId, {
+      listingTitle: listing.title, viewingRequestId: viewing.id, prospectName: lead.name,
       requestedTimeLabel: firstPreferredTime ? firstPreferredTime.startsAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : undefined,
-    };
+    }, tx);
+    await options.inTransaction?.(tx, viewing);
+    return { id: viewing.id, listingId, leadId: lead.id, status: viewing.status, preferredTimes: viewing.preferredTimes, createdAt: viewing.createdAt };
   });
-  await enqueueViewingRequestNotification(result.recipientUserId, {
-    listingTitle: result.listingTitle, viewingRequestId: result.id, prospectName: result.leadName, requestedTimeLabel: result.requestedTimeLabel,
-  });
-  return { id: result.id, listingId: result.listingId, leadId: result.leadId, status: result.status, preferredTimes: result.preferredTimes, createdAt: result.createdAt };
+  return result;
 }
 
 export async function listViewingRequests(userId: string, organisationId: string, query: unknown = {}) {
