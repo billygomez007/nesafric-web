@@ -1,4 +1,4 @@
-import { normalizePhone } from "@/platform/identity/phone";
+import { normalizeBusinessWhatsAppNumber } from "@/modules/business-whatsapp/phone";
 import type { Prisma } from "@/platform/database/generated/client";
 import { lockWhatsAppChannelShared } from "@/modules/conversations/channels/whatsapp-numbers";
 import { resolveWhatsAppSendConfig, whatsappTemplate, type WhatsAppTemplateKey } from "@/modules/conversations/channels/whatsapp-sender";
@@ -42,6 +42,19 @@ export async function officialTemplateReadiness(template: WhatsAppTemplateKey, t
  * reason when it cannot be sent. Delivery happens in the conversation-delivery job, which never
  * resends an unconfirmed attempt.
  */
+/**
+ * The recipient as WhatsApp addresses it: any valid E.164 number, fixed lines included (a
+ * landline can run WhatsApp Business). This is deliberately not the SMS sign-in normaliser,
+ * which accepts only numbers that can receive text messages. Local Ghana formats convert.
+ */
+export function whatsappRecipientE164(raw: string) {
+  try {
+    return normalizeBusinessWhatsAppNumber(raw);
+  } catch {
+    return null;
+  }
+}
+
 /** Someone who replied STOP gets no business-initiated message of any kind until they reply START. */
 async function optedOut(tx: Tx, phoneE164: string) {
   const identity = await tx.channelIdentity.findUnique({ where: { channel_address: { channel: "WHATSAPP", address: `+${phoneE164.replace(/^\+/, "")}` } }, select: { optedOutAt: true } });
@@ -59,8 +72,8 @@ export function safeTemplateText(value: string, max = 80) {
 
 export async function queueOfficialTemplate(tx: Tx, original: OfficialTemplateMessage): Promise<{ messageId: string } | { messageId: null; reason: string }> {
   // Stored numbers may be local ("024…"): send to, and check opt-out for, the E.164 form only.
-  const phoneE164 = normalizePhone(original.phoneE164);
-  if (!phoneE164) return { messageId: null, reason: "The recipient's phone number is not a valid mobile number." };
+  const phoneE164 = whatsappRecipientE164(original.phoneE164);
+  if (!phoneE164) return { messageId: null, reason: "The recipient's phone number is not a valid WhatsApp number." };
   const message = { ...original, phoneE164 };
   if (await optedOut(tx, message.phoneE164)) return { messageId: null, reason: "The recipient opted out of WhatsApp messages (STOP)." };
   const readiness = await officialTemplateReadiness(message.template, tx);
@@ -93,8 +106,8 @@ export async function queueOfficialTemplate(tx: Tx, original: OfficialTemplateMe
  * null with a reason when neither is possible (nothing is sent then).
  */
 export async function queueOfficialText(tx: Tx, original: { phoneE164: string; displayName: string; text: string; externalMessageId: string; metadata?: Record<string, unknown> }): Promise<{ messageId: string } | { messageId: null; reason: string }> {
-  const phoneE164 = normalizePhone(original.phoneE164);
-  if (!phoneE164) return { messageId: null, reason: "The recipient's phone number is not a valid mobile number." };
+  const phoneE164 = whatsappRecipientE164(original.phoneE164);
+  if (!phoneE164) return { messageId: null, reason: "The recipient's phone number is not a valid WhatsApp number." };
   const input = { ...original, phoneE164 };
   if (await optedOut(tx, input.phoneE164)) return { messageId: null, reason: "The recipient opted out of WhatsApp messages (STOP)." };
   // Free text needs the number assignment just as a template does; only the template approval is optional here.
