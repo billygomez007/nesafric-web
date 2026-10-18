@@ -23,6 +23,8 @@ import { getEmailProviderStatus } from "@/modules/conversations/channels/email-p
 import { runDueJobs, runPendingJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { buildMaintenanceTimeline } from "@/modules/maintenance-routing/oversight";
+import { lockWhatsAppChannel, PLATFORM_ASSIGNED_WHATSAPP_KEYS } from "@/modules/conversations/service";
+import { officialWhatsAppOrganisationId } from "@/modules/whatsapp-assistant/identity";
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 const MAX_ACTIVE_SUPPORT_SESSIONS_PER_PRINCIPAL = 3;
@@ -2623,4 +2625,91 @@ export async function reviewPortfolioVerificationForPlatform(principal: Platform
   await recordPlatformAudit(principal, `platform_admin.portfolio_${data.status.toLowerCase()}`, "portfolio_verification", verificationId, current.organisationId, { propertyId: current.propertyId });
   await db.auditEvent.create({ data: { organisationId: current.organisationId, action: `portfolio_verification.${data.status.toLowerCase()}`, entityType: "portfolio_verification", entityId: verificationId, metadata: { propertyId: current.propertyId } } });
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp number assignment (platform only)
+// ---------------------------------------------------------------------------
+
+const whatsappNumberId = z.string().regex(/^\d{1,32}$/);
+const whatsappNumberAssignmentSchema = z.object({
+  organisationId: z.string().uuid(),
+  phoneNumberId: whatsappNumberId,
+  businessAccountId: whatsappNumberId.optional(),
+  /// Required to take a number from the organisation that has it now; that organisation's
+  /// WhatsApp channel loses the number and is disabled.
+  move: z.boolean().default(false),
+  reason: z.string().trim().min(3).max(2000),
+}).strict();
+
+const channelSettings = (config: Prisma.JsonValue | null | undefined) => (config && typeof config === "object" && !Array.isArray(config) ? config : {}) as Record<string, unknown>;
+
+function withoutAssignedNumber(config: Prisma.JsonValue | null | undefined) {
+  const settings = { ...channelSettings(config) };
+  for (const key of PLATFORM_ASSIGNED_WHATSAPP_KEYS) delete settings[key];
+  return settings;
+}
+
+export async function listWhatsAppNumbersForPlatform(principal: PlatformPrincipal) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.communicationsRead);
+  const official = officialWhatsAppOrganisationId();
+  const channels = await db.communicationChannelConfig.findMany({
+    where: { channel: "WHATSAPP" },
+    select: { id: true, enabled: true, config: true, updatedAt: true, organisation: { select: { id: true, name: true } } },
+    orderBy: { updatedAt: "desc" },
+  });
+  return channels.flatMap(({ config, organisation, ...channel }) => {
+    const { phoneNumberId, businessAccountId } = channelSettings(config);
+    if (typeof phoneNumberId !== "string") return [];
+    return [{ ...channel, organisation, phoneNumberId, businessAccountId: typeof businessAccountId === "string" ? businessAccountId : null, official: organisation.id === official }];
+  });
+}
+
+/**
+ * The only way a WhatsApp phone number ID reaches an organisation's channel. A number belongs to
+ * one organisation at a time; moving it needs `move: true`, and the official NesAfric number
+ * (`WHATSAPP_OFFICIAL_ORGANISATION_ID`) never moves off the official organisation. Recorded in
+ * the platform audit trail and in each affected organisation's audit log.
+ */
+export async function assignWhatsAppNumberForPlatform(principal: PlatformPrincipal, input: unknown) {
+  requirePermission(principal, PLATFORM_PERMISSIONS.whatsappNumbersManage);
+  const data = whatsappNumberAssignmentSchema.parse(input);
+  const official = officialWhatsAppOrganisationId();
+  return db.$transaction(async (tx) => {
+    const organisation = await tx.organisation.findFirst({ where: { id: data.organisationId, archivedAt: null }, select: { id: true } });
+    if (!organisation) throw notFound();
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp-number:${data.phoneNumberId}`}, 0))`;
+    const others = await tx.communicationChannelConfig.findMany({ where: { channel: "WHATSAPP", organisationId: { not: organisation.id } } });
+    const holders = others.filter((other) => channelSettings(other.config).phoneNumberId === data.phoneNumberId);
+    if (holders.some((holder) => holder.organisationId === official)) {
+      throw new AppError("OFFICIAL_WHATSAPP_NUMBER", 409, "This is the official NesAfric number. It stays on the official organisation.");
+    }
+    if (holders.length && !data.move) {
+      throw new AppError("WHATSAPP_NUMBER_IN_USE", 409, "This WhatsApp number is connected to another organisation. Confirm the move to take it from that organisation.", { organisationIds: holders.map((holder) => holder.organisationId) });
+    }
+    // Same lock order everywhere (sorted ids), so two assignments never wait on each other in a cycle.
+    for (const id of [organisation.id, ...holders.map((holder) => holder.organisationId)].sort()) await lockWhatsAppChannel(tx, id);
+    for (const holder of holders) {
+      await tx.communicationChannelConfig.update({ where: { id: holder.id }, data: { enabled: false, config: json(withoutAssignedNumber(holder.config)) } });
+      await tx.auditEvent.create({ data: { organisationId: holder.organisationId, action: "communication_channel.whatsapp_number_removed", entityType: "communication_channel", entityId: holder.id, metadata: json({ phoneNumberId: data.phoneNumberId, movedToOrganisationId: organisation.id, platformPrincipalId: principal.id }) } });
+    }
+    const current = await tx.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId: organisation.id, channel: "WHATSAPP" } } });
+    const previous = channelSettings(current?.config);
+    const config = json({ ...withoutAssignedNumber(current?.config), phoneNumberId: data.phoneNumberId, ...(data.businessAccountId ? { businessAccountId: data.businessAccountId } : {}) });
+    const channel = await tx.communicationChannelConfig.upsert({
+      where: { organisationId_channel: { organisationId: organisation.id, channel: "WHATSAPP" } },
+      update: { config },
+      create: { organisationId: organisation.id, channel: "WHATSAPP", enabled: true, config },
+    });
+    const metadata = {
+      phoneNumberId: data.phoneNumberId,
+      businessAccountId: data.businessAccountId ?? null,
+      previousPhoneNumberId: typeof previous.phoneNumberId === "string" ? previous.phoneNumberId : null,
+      movedFromOrganisationIds: holders.map((holder) => holder.organisationId),
+      reason: data.reason,
+    };
+    await tx.platformAuditEvent.create({ data: { platformPrincipalId: principal.id, action: holders.length ? "platform_admin.whatsapp_number_moved" : "platform_admin.whatsapp_number_assigned", entityType: "communication_channel", entityId: channel.id, organisationId: organisation.id, metadata: json(metadata) } });
+    await tx.auditEvent.create({ data: { organisationId: organisation.id, action: "communication_channel.whatsapp_number_assigned", entityType: "communication_channel", entityId: channel.id, metadata: json({ ...metadata, platformPrincipalId: principal.id }) } });
+    return channel;
+  });
 }

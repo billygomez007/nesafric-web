@@ -7,12 +7,12 @@ import { createProperty } from "@/modules/assets/service";
 import { createTenant } from "@/modules/tenants/service";
 import { createTenantAccessInvitation } from "@/modules/tenants/access-invitations";
 import { createMaintenanceRequest } from "@/modules/maintenance/service";
-import { upsertChannelConfig } from "@/modules/conversations/service";
 import { defaultChannelAdapters, type ChannelAdapters } from "@/modules/conversations/channels/registry";
 import { linkWhatsAppIdentity } from "@/modules/whatsapp-assistant/identity";
 import { createJobHandlers } from "@/platform/jobs/handlers";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { db } from "@/platform/database/client";
+import { connectWhatsAppChannel } from "./helpers/whatsapp-channel";
 import { createLease } from "./helpers/lease";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -48,7 +48,7 @@ const photo = (mediaId: string) => deliver({ id: `wamid.${++counter}`, type: "im
 async function fixture() {
   const staff = await registerUser({ displayName: "NesAfric Support", email: "support@example.com", password: "secure-password-123" });
   const official = await createOrganisation(staff.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
-  await upsertChannelConfig(staff.id, official.id, "WHATSAPP", { enabled: true, config: { phoneNumberId: PHONE_NUMBER_ID, businessAccountId: "555", marketplaceAssistantEnabled: true } });
+  await connectWhatsAppChannel(staff.id, official.id, { enabled: true, config: { phoneNumberId: PHONE_NUMBER_ID, businessAccountId: "555", marketplaceAssistantEnabled: true } });
   vi.stubEnv("WHATSAPP_OFFICIAL_ORGANISATION_ID", official.id);
   const landlord = await registerUser({ displayName: "Ama Owusu", email: "ama@example.com", password: "secure-password-123" });
   const organisation = await createOrganisation(landlord.id, { name: "Owusu Homes", type: "INDIVIDUAL_LANDLORD", countryCode: "GH" });

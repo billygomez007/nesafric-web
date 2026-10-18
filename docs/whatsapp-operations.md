@@ -19,13 +19,31 @@ Real WhatsApp delivery has **not** been verified end to end. Every test uses a r
 
 ### Official organisation
 
-Create an organisation for NesAfric itself. As its owner, save its WhatsApp channel through `PUT /api/organisations/<id>/communication-channels/WHATSAPP` (or the existing channel settings screen) with:
+Create an organisation for NesAfric itself and set `WHATSAPP_OFFICIAL_ORGANISATION_ID` to its ID. Then:
 
-```json
-{ "enabled": true, "webhookVerifyToken": "<verify token>", "config": { "phoneNumberId": "<phone number id>", "businessAccountId": "<WABA id>", "marketplaceAssistantEnabled": true, "defaultCountry": "GH", "defaultCurrency": "GHS" } }
-```
+1. A platform admin with `whatsapp_numbers.manage` (SUPER_ADMIN only) assigns the number:
 
-A phone number ID can belong to one organisation only. Saving one that another organisation already uses is refused with `WHATSAPP_NUMBER_IN_USE`.
+   ```
+   POST /api/platform-admin/whatsapp-numbers
+   { "organisationId": "<official org id>", "phoneNumberId": "<phone number id>", "businessAccountId": "<WABA id>", "reason": "Official NesAfric number" }
+   ```
+
+2. As the organisation's owner, save the rest of the channel through `PUT /api/organisations/<id>/communication-channels/WHATSAPP` (or the channel settings screen):
+
+   ```json
+   { "enabled": true, "webhookVerifyToken": "<verify token>", "config": { "marketplaceAssistantEnabled": true, "defaultCountry": "GH", "defaultCurrency": "GHS" } }
+   ```
+
+### WhatsApp numbers are assigned by NesAfric
+
+Every number sends with the same system-user token, so the phone number ID decides who sends as which number. Only the platform sets it:
+
+- **Organisations.** The channel update refuses any `phoneNumberId` or `businessAccountId` different from the assigned one (`403 WHATSAPP_NUMBER_PLATFORM_ASSIGNED`). Leaving them out keeps the assigned values.
+- **Assign.** `POST /api/platform-admin/whatsapp-numbers` assigns a number to any organisation, including a landlord's own number. Replacing a number records the old one.
+- **Move.** A number belongs to one organisation at a time. Taking it from another organisation is refused (`409 WHATSAPP_NUMBER_IN_USE`) unless the request has `"move": true`. The organisation that loses it has its WhatsApp channel disabled.
+- **Official number.** The official number never moves off the official organisation (`409 OFFICIAL_WHATSAPP_NUMBER`). Change `WHATSAPP_OFFICIAL_ORGANISATION_ID` first if it really must move.
+- **Audit.** Each assignment or move writes `platform_admin.whatsapp_number_assigned` or `platform_admin.whatsapp_number_moved` to the platform audit trail with the reason. The organisations involved get `communication_channel.whatsapp_number_assigned` or `communication_channel.whatsapp_number_removed` in their audit log.
+- **Review.** `GET /api/platform-admin/whatsapp-numbers` (needs `communications.read`) lists every assigned number and its organisation.
 
 ### Environment variables
 
@@ -105,7 +123,9 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 
 ## 7. Known limits
 
-- WhatsApp numbers are tied to organisations by ownership check only. Moving a number between organisations needs support. Platform-assigned numbers (embedded signup) are a follow-up.
+- WhatsApp numbers are assigned by NesAfric support (section 2). There is no embedded signup yet, so a landlord cannot connect their own number without support.
+- Numbers saved by organisations before assignment became platform-only still send. Review them with `GET /api/platform-admin/whatsapp-numbers` and reassign or move any that look wrong.
+- All numbers share one system-user token; a per-number or per-business token is not supported.
 - Rent-due reminders are not configured by onboarding; only lease-expiry policies exist.
 - Provider photo access uses short-lived signed links; links are removed from the stored transcript after sending.
 - Times are Ghana time (UTC); there is no per-organisation time zone.

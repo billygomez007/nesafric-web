@@ -721,24 +721,44 @@ export async function getWebhookChannelConfig(organisationId: string, channel: C
   return db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel } } });
 }
 
+/**
+ * WhatsApp channel config keys only NesAfric can set (`assignWhatsAppNumberForPlatform`). Every
+ * number sends with one Meta system-user token, so the number an organisation sends from must be
+ * the one the platform assigned to it.
+ */
+export const PLATFORM_ASSIGNED_WHATSAPP_KEYS = ["phoneNumberId", "businessAccountId"] as const;
+
+/** Serialises writes to one organisation's WhatsApp channel between the org and platform paths. */
+export async function lockWhatsAppChannel(tx: Prisma.TransactionClient, organisationId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp-channel:${organisationId}`}, 0))`;
+}
+
 export async function upsertChannelConfig(userId: string, organisationId: string, channel: ConversationChannel, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.communicationChannelManage);
   const data = channelConfigSchema.parse(input);
   return db.$transaction(async (tx) => {
-    // All WhatsApp numbers are sent through one Meta system-user token, so a receiving number may
-    // belong to one organisation only, and the official NesAfric number to none but its own.
-    if (channel === "WHATSAPP" && typeof data.config.phoneNumberId === "string") {
-      const phoneNumberId = data.config.phoneNumberId;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp-number:${phoneNumberId}`}, 0))`;
-      const others = await tx.communicationChannelConfig.findMany({ where: { channel: "WHATSAPP", organisationId: { not: organisationId } }, select: { config: true } });
-      if (others.some((other) => (other.config as Record<string, unknown> | null)?.phoneNumberId === phoneNumberId)) {
-        throw new AppError("WHATSAPP_NUMBER_IN_USE", 409, "This WhatsApp number is already connected to another organisation. Contact NesAfric support to move it.");
+    let channelConfig = data.config;
+    if (channel === "WHATSAPP") {
+      // The organisation may resend the values it already has (settings screens round-trip the
+      // config) but never set or change them; whatever the platform assigned is always kept.
+      await lockWhatsAppChannel(tx, organisationId);
+      const current = await tx.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel } }, select: { config: true } });
+      const assigned = (current?.config ?? {}) as Record<string, unknown>;
+      for (const key of PLATFORM_ASSIGNED_WHATSAPP_KEYS) {
+        if (key in data.config && data.config[key] !== assigned[key]) {
+          throw new AppError("WHATSAPP_NUMBER_PLATFORM_ASSIGNED", 403, "WhatsApp numbers are connected by NesAfric. Contact NesAfric support to connect or move a number.");
+        }
+      }
+      channelConfig = { ...data.config };
+      for (const key of PLATFORM_ASSIGNED_WHATSAPP_KEYS) {
+        delete channelConfig[key];
+        if (key in assigned) channelConfig[key] = assigned[key];
       }
     }
     const config = await tx.communicationChannelConfig.upsert({
       where: { organisationId_channel: { organisationId, channel } },
-      update: { enabled: data.enabled, providerKey: data.providerKey, fromAddress: data.fromAddress, webhookVerifyToken: data.webhookVerifyToken, config: json(data.config) },
-      create: { organisationId, channel, enabled: data.enabled, providerKey: data.providerKey, fromAddress: data.fromAddress, webhookVerifyToken: data.webhookVerifyToken, config: json(data.config) },
+      update: { enabled: data.enabled, providerKey: data.providerKey, fromAddress: data.fromAddress, webhookVerifyToken: data.webhookVerifyToken, config: json(channelConfig) },
+      create: { organisationId, channel, enabled: data.enabled, providerKey: data.providerKey, fromAddress: data.fromAddress, webhookVerifyToken: data.webhookVerifyToken, config: json(channelConfig) },
     });
     await record(organisationId, userId, "communication_channel.updated", "communication_channel", config.id, { channel, enabled: data.enabled });
     return config;
