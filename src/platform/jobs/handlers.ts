@@ -12,6 +12,7 @@ import { processAssistantMessage, processLegacyWhatsAppMessage, recordWhatsAppDe
 import type { WhatsAppStatusEvent } from "@/modules/conversations/channels/whatsapp-payload";
 import { NonRetryableJobError } from "./errors";
 import { handleDispatchTimeout, routeMaintenanceRequest } from "@/modules/maintenance-routing/dispatch";
+import { deliverDigest, deliverEscalation } from "@/modules/staff-notifications/service";
 
 export function createJobHandlers(notificationProviders: NotificationProviders = defaultNotificationProviders, channelAdapters: ChannelAdapters = defaultChannelAdapters) {
   return {
@@ -50,6 +51,12 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   },
   "maintenance-dispatch-timeout": async (payload: Record<string, unknown>) => {
     await handleDispatchTimeout(String(payload.organisationId), String(payload.attemptId));
+  },
+  "escalation-alert": async (payload: Record<string, unknown>) => {
+    await deliverEscalation(String(payload.escalationId));
+  },
+  "daily-digest": async (payload: Record<string, unknown>) => {
+    await deliverDigest(String(payload.organisationId), String(payload.memberId), String(payload.date));
   },
   "calendar-sync": async (payload: Record<string, unknown>) => {
     await syncCalendarEventJob(String(payload.organisationId), String(payload.calendarEventId));

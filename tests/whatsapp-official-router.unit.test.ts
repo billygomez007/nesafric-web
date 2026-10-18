@@ -21,6 +21,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     report: vi.fn(async () => null),
     rules: vi.fn(async () => null),
     jobs: vi.fn(async () => null),
+    landlord: vi.fn(async () => null),
     ...overrides,
   } as never;
 }

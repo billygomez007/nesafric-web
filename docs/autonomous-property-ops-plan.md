@@ -1,6 +1,6 @@
 # Autonomous property operations: architecture map and phased plan
 
-Status (2026-10-18): phases 0-6 are implemented on `feat/autonomous-property-ops`; phases 7-8 are not started. See section 5.
+Status (2026-10-18): phases 0-7 are implemented on `feat/autonomous-property-ops`; phase 8 is not started. See section 5.
 
 ## 1. What already exists (reuse, do not duplicate)
 
@@ -143,6 +143,15 @@ Real WhatsApp delivery will not be claimed working until the Meta app, the numbe
 - Completion: `done` asks for the work performed, total cost, photos (stored as private attachments through the document pipeline; the upload target now also admits the provider of an accepted assignment on that request) and anything left to fix, then a confirm. The work order is COMPLETED with the actual cost. The ticket is CLOSED, or COMPLETED awaiting verification when the rule requires it (`verify NM-1001` by the landlord closes it). Cost above what was authorised (`COST_OVER_AUTHORISED`) and remaining work (`FURTHER_WORK_REQUESTED`) are escalated.
 - The tenant is told when the job is accepted, a visit is planned and the work is recorded (free text inside the 24-hour window, otherwise the NOTIFICATION template), and can reply `ok NM-1001` or `problem NM-1001`. A problem reopens the ticket and raises `TENANT_DISPUTE`.
 - Tests: `tests/postgres-provider-jobs.integration.test.ts`.
+
+### Phase 7: notification levels and daily digest (done)
+
+- Every `MaintenanceEscalation` queues an `escalation-alert` job. Recipients are the escalation's member, or everyone in the organisation who can approve maintenance. CRITICAL is sent at once to all of them, whatever their settings. ATTENTION is sent at once unless the member chose `alerts in digest`. Routine events (dispatches, acceptances, completions) only appear in the digest. Each recipient gets a `StaffNotification` row (QUEUED, SKIPPED with the reason, or FAILED with the reason), and an undeliverable CRITICAL alert is logged as `maintenance.critical_alert_undelivered` for monitoring.
+- Messages use free text inside the 24-hour window, otherwise the approved NOTIFICATION template (`queueOfficialText`).
+- `NotificationPreference` per member: digest on/off, digest hour (Ghana time), quiet-day summaries, attention items in the digest, and extra reasons to send immediately. WhatsApp: `digest on|off`, `digest at 18`, `quiet days on|off`, `alerts now|in digest`.
+- Daily digest (`buildDigest`): new tickets, automatic dispatches, acceptances, jobs in progress, completions, costs and approved quotes (only for members with payment or maintenance-cost rights), tickets open over 7 days, provider declines and no-answers, open alerts, pending approvals, and leases ending within 30 days. Quiet days are skipped unless asked for. `scheduleDueDigests` runs on every worker poll and `/api/jobs/run`; one digest per member per day (dedupe key), so overlapping runs never send two.
+- Landlord questions (`landlord.ts`), answered from records with the same permissions as the web: `show ticket NM-1001`, today's costs, work completed today, open requests by unit, repairs needing approval, upcoming lease expiries, units managed, alerts, and `digest` for today so far. Deterministic phrasing first; an AI provider may only pick one read-only report from a fixed list. Phrases that mean a change (“add another electrician”, “set a quote approval limit”) are routed into the confirmed command flows instead of being executed.
+- Tests: `tests/whatsapp-landlord-queries.unit.test.ts`, `tests/postgres-staff-notifications.integration.test.ts`.
 
 ### Before going live (not done)
 

@@ -24,6 +24,8 @@ export async function escalate(client: Client, input: { organisationId: string; 
     const created = await client.maintenanceEscalation.create({ data: { organisationId: input.organisationId, maintenanceRequestId: input.requestId, level: input.level, reason: input.reason, detail: input.detail, recipientMemberId: input.recipientMemberId ?? null, dedupeKey: input.dedupeKey } });
     await client.domainEvent.create({ data: { organisationId: input.organisationId, name: "maintenance.escalated", aggregateType: "maintenance_request", aggregateId: input.requestId, payload: { escalationId: created.id, level: input.level, reason: input.reason } } });
     await client.auditEvent.create({ data: { organisationId: input.organisationId, action: "maintenance.escalated", entityType: "maintenance_request", entityId: input.requestId, metadata: { level: input.level, reason: input.reason } } });
+    // Delivery (immediate alert or digest) is decided by the notification policy in a job.
+    await client.backgroundJob.create({ data: { organisationId: input.organisationId, type: "escalation-alert", idempotencyKey: `escalation-alert:${created.id}`, payload: { organisationId: input.organisationId, escalationId: created.id }, maxAttempts: 5 } });
     return created;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return client.maintenanceEscalation.findUniqueOrThrow({ where: { dedupeKey: input.dedupeKey } });

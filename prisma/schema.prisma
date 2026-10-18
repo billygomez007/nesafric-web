@@ -1134,6 +1134,7 @@ model OrganisationMember {
   aiEmployeeHandoffs      AIEmployeeHandoff[]
   assignedConversations   Conversation[]           @relation("ConversationAssigneeMember")
   conversationAssignments ConversationAssignment[] @relation("ConversationAssignmentMember")
+  notificationPreference  NotificationPreference?
 
   @@unique([organisationId, userId])
   @@index([userId, status])
@@ -2233,6 +2234,45 @@ model MaintenanceEscalation {
   maintenanceRequest   MaintenanceRequest @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
 
   @@index([organisationId, resolvedAt, createdAt])
+}
+
+/// How one team member wants to hear about maintenance. CRITICAL alerts are always sent at once,
+/// whatever these settings say.
+model NotificationPreference {
+  memberId          String             @id @db.Uuid
+  organisationId    String             @db.Uuid
+  digestEnabled     Boolean            @default(true)
+  /// Hour of day (Ghana time = UTC) the daily digest is sent.
+  digestHour        Int                @default(18)
+  /// Send a short "nothing happened" digest on quiet days.
+  noActivitySummary Boolean            @default(false)
+  /// ATTENTION items go to the digest instead of a message each time.
+  attentionInDigest Boolean            @default(false)
+  /// Extra escalation reasons (or routine events) the member wants immediately.
+  immediateReasons  String[]           @default([])
+  updatedAt         DateTime           @updatedAt
+  member            OrganisationMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+/// One message NesAfric sent (or decided not to send) to a team member: an immediate alert or a
+/// daily digest. `dedupeKey` makes retries and overlapping schedulers harmless.
+model StaffNotification {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @db.Uuid
+  memberId       String   @db.Uuid
+  kind           String
+  level          String?
+  escalationId   String?  @db.Uuid
+  digestDate     String?
+  dedupeKey      String   @unique
+  /// QUEUED (message created), SKIPPED (nothing to send / no channel), FAILED (could not queue).
+  status         String
+  messageId      String?  @db.Uuid
+  detail         String?
+  createdAt      DateTime @default(now())
+
+  @@index([organisationId, createdAt])
+  @@index([memberId, kind, createdAt])
 }
 
 model BackgroundJob {

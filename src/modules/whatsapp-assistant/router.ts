@@ -12,6 +12,7 @@ import { advanceNetwork, handleProviderMessage } from "./network";
 import { advanceReport } from "./maintenance/report";
 import { advanceRules, isRuleCommand } from "./rules";
 import { advanceJobs } from "./jobs";
+import { answerLandlord } from "./landlord";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean };
@@ -36,8 +37,9 @@ type Dependencies = {
   report: typeof advanceReport;
   rules: typeof advanceRules;
   jobs: typeof advanceJobs;
+  landlord: typeof answerLandlord;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -92,6 +94,18 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
     if (state.workflow !== "rules") {
       const network = await dependencies.network(command, input.body.trim(), linked, state, reset);
       if (network) return network;
+    }
+    // Landlord questions and notification settings. Phrases meaning a change are rewritten into
+    // the confirmed command flows above instead of being executed here.
+    if (state.workflow === "idle") {
+      const answer = await dependencies.landlord(input.body, linked, state);
+      if (answer && "rewrite" in answer) {
+        const rewritten = answer.rewrite === "rules" ? await dependencies.rules("rules", "rules", linked, state, reset) : await dependencies.network(answer.rewrite, answer.rewrite, linked, state, reset);
+        if (rewritten) return answer.rewrite === "rules" ? { ...rewritten, reply: `${rewritten.reply}
+To set a limit, reply set limit rule <number> <amount>, for example set limit rule 1 500.` } : rewritten;
+      } else if (answer) {
+        return answer;
+      }
     }
   }
 
