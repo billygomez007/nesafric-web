@@ -5,6 +5,7 @@ import {
   ProviderVerificationStatus,
 } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
+import type { InTransaction } from "@/platform/database/in-transaction";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { AppError, forbidden, notFound } from "@/platform/errors";
 import { providerLogoView } from "@/modules/providers/logo";
@@ -247,138 +248,141 @@ export async function rateMarketplaceProvider(
 }
 
 export async function updateMarketplaceProfile(userId: string, providerId: string, input: unknown) {
-  const data = updateMarketplaceProfileSchema.parse(input);
-  return db.$transaction(async (tx) => {
-    const provider = await requireProviderOwner(userId, providerId, tx);
-    const current = await tx.providerMarketplaceProfile.findUnique({
-      where: { providerId },
-      include: { categories: true, serviceAreas: true },
-    });
-    if (data.categoryIds) {
-      const count = await tx.serviceProviderCategory.count({
-        where: { providerId, categoryId: { in: data.categoryIds }, category: { active: true } },
-      });
-      if (count !== new Set(data.categoryIds).size) {
-        throw new AppError("INVALID_PUBLIC_CATEGORY", 422, "Public categories must be active categories on this provider.");
-      }
-    }
-    if (
-      provider.verificationStatus !== "VERIFIED"
-      && (data.showContactEmail || data.showContactPhone)
-    ) {
-      throw new AppError(
-        "PROVIDER_NOT_VERIFIED",
-        409,
-        "Contact details cannot be published until the provider is verified.",
-      );
-    }
-    if (data.showContactEmail && !provider.contactEmail) {
-      throw new AppError("PUBLIC_CONTACT_UNAVAILABLE", 422, "The provider has no email address to publish.");
-    }
-    if (data.showContactPhone && !provider.contactPhone) {
-      throw new AppError("PUBLIC_CONTACT_UNAVAILABLE", 422, "The provider has no phone number to publish.");
-    }
-    const startingRateMinor = data.startingRateMinor === undefined
-      ? current?.startingRateMinor
-      : data.startingRateMinor === null ? null : new Prisma.Decimal(data.startingRateMinor);
-    const currencyCode = data.currencyCode === undefined ? current?.currencyCode : data.currencyCode;
-    if (startingRateMinor !== null && startingRateMinor !== undefined && !currencyCode) {
-      throw new AppError("RATE_CURRENCY_REQUIRED", 422, "Currency is required when a starting rate is published.");
-    }
-    if (data.currencyCode === null && startingRateMinor !== null && startingRateMinor !== undefined) {
-      throw new AppError("RATE_CURRENCY_REQUIRED", 422, "Remove the starting rate before removing its currency.");
-    }
-    const categoryCount = data.categoryIds?.length ?? current?.categories.length ?? 0;
-    const areaCount = data.serviceAreas?.length ?? current?.serviceAreas.length ?? 0;
-    if (data.listed && (!categoryCount || !areaCount)) {
-      throw new AppError("INCOMPLETE_MARKETPLACE_PROFILE", 409, "At least one explicit public category and service area are required to list.");
-    }
-    if (data.listed && provider.suspendedAt) {
-      throw new AppError("PROVIDER_SUSPENDED", 409, "A suspended provider cannot be publicly listed.");
-    }
-    if (data.serviceAreas) {
-      const keys = data.serviceAreas.map((area) => [
-        area.countryCode,
-        area.region?.toLocaleLowerCase() ?? "",
-        area.city?.toLocaleLowerCase() ?? "",
-        area.district?.toLocaleLowerCase() ?? "",
-      ].join("|"));
-      if (new Set(keys).size !== keys.length) {
-        throw new AppError("DUPLICATE_PUBLIC_SERVICE_AREA", 422, "Public service areas must be unique.");
-      }
-    }
+  return db.$transaction((tx) => updateMarketplaceProfileInTransaction(tx, userId, providerId, input));
+}
 
-    const now = new Date();
-    const listed = data.listed ?? current?.listed ?? false;
-    const { categoryIds, serviceAreas, ...fields } = data;
-    await tx.providerMarketplaceProfile.upsert({
-      where: { providerId },
-      create: {
-        providerId,
-        ...fields,
-        startingRateMinor,
-        currencyCode,
-        listed,
-        listedAt: listed ? now : null,
-        unlistedAt: listed ? null : now,
-      },
-      update: {
-        ...fields,
-        startingRateMinor,
-        currencyCode,
-        ...(data.listed === undefined ? {} : {
-          listed,
-          listedAt: listed ? current?.listedAt ?? now : current?.listedAt,
-          unlistedAt: listed ? null : now,
-        }),
-      },
-    });
-    if (categoryIds) {
-      await tx.providerMarketplaceCategory.deleteMany({ where: { providerId } });
-      if (categoryIds.length) {
-        await tx.providerMarketplaceCategory.createMany({
-          data: categoryIds.map((categoryId) => ({ providerId, categoryId })),
-        });
-      }
-    }
-    if (serviceAreas) {
-      await tx.providerMarketplaceServiceArea.deleteMany({ where: { providerId } });
-      if (serviceAreas.length) {
-        await tx.providerMarketplaceServiceArea.createMany({
-          data: serviceAreas.map((area) => ({
-            ...area,
-            providerId,
-            latitude: area.latitude === undefined ? undefined : new Prisma.Decimal(area.latitude),
-            longitude: area.longitude === undefined ? undefined : new Prisma.Decimal(area.longitude),
-            radiusKm: area.radiusKm === undefined ? undefined : new Prisma.Decimal(area.radiusKm),
-          })),
-        });
-      }
-    }
-    const updated = await tx.providerMarketplaceProfile.findUniqueOrThrow({
-      where: { providerId },
-      include: { categories: true, serviceAreas: true },
-    });
-    const action = !current?.listed && updated.listed
-      ? "provider.marketplace_listed"
-      : current?.listed && !updated.listed
-        ? "provider.marketplace_unlisted"
-        : "provider.marketplace_profile_updated";
-    const changedFields = Object.keys(data).sort();
-    await tx.providerMarketplaceProfileHistory.create({
-      data: {
-        providerId,
-        actorUserId: userId,
-        action,
-        changedFields,
-        snapshot: json(profileSnapshot(updated)),
-      },
-    });
-    for (const organisationId of await marketplaceEventOrganisations(tx, providerId)) {
-      await record(tx, organisationId, userId, action, "provider_marketplace_profile", providerId, { changedFields });
-    }
-    return tx.providerMarketplaceProfile.findUniqueOrThrow({ where: { providerId }, include: profileInclude });
+/** `updateMarketplaceProfile` within a caller's transaction (same owner check and validation). */
+export async function updateMarketplaceProfileInTransaction(tx: Prisma.TransactionClient, userId: string, providerId: string, input: unknown) {
+  const data = updateMarketplaceProfileSchema.parse(input);
+  const provider = await requireProviderOwner(userId, providerId, tx);
+  const current = await tx.providerMarketplaceProfile.findUnique({
+    where: { providerId },
+    include: { categories: true, serviceAreas: true },
   });
+  if (data.categoryIds) {
+    const count = await tx.serviceProviderCategory.count({
+      where: { providerId, categoryId: { in: data.categoryIds }, category: { active: true } },
+    });
+    if (count !== new Set(data.categoryIds).size) {
+      throw new AppError("INVALID_PUBLIC_CATEGORY", 422, "Public categories must be active categories on this provider.");
+    }
+  }
+  if (
+    provider.verificationStatus !== "VERIFIED"
+    && (data.showContactEmail || data.showContactPhone)
+  ) {
+    throw new AppError(
+      "PROVIDER_NOT_VERIFIED",
+      409,
+      "Contact details cannot be published until the provider is verified.",
+    );
+  }
+  if (data.showContactEmail && !provider.contactEmail) {
+    throw new AppError("PUBLIC_CONTACT_UNAVAILABLE", 422, "The provider has no email address to publish.");
+  }
+  if (data.showContactPhone && !provider.contactPhone) {
+    throw new AppError("PUBLIC_CONTACT_UNAVAILABLE", 422, "The provider has no phone number to publish.");
+  }
+  const startingRateMinor = data.startingRateMinor === undefined
+    ? current?.startingRateMinor
+    : data.startingRateMinor === null ? null : new Prisma.Decimal(data.startingRateMinor);
+  const currencyCode = data.currencyCode === undefined ? current?.currencyCode : data.currencyCode;
+  if (startingRateMinor !== null && startingRateMinor !== undefined && !currencyCode) {
+    throw new AppError("RATE_CURRENCY_REQUIRED", 422, "Currency is required when a starting rate is published.");
+  }
+  if (data.currencyCode === null && startingRateMinor !== null && startingRateMinor !== undefined) {
+    throw new AppError("RATE_CURRENCY_REQUIRED", 422, "Remove the starting rate before removing its currency.");
+  }
+  const categoryCount = data.categoryIds?.length ?? current?.categories.length ?? 0;
+  const areaCount = data.serviceAreas?.length ?? current?.serviceAreas.length ?? 0;
+  if (data.listed && (!categoryCount || !areaCount)) {
+    throw new AppError("INCOMPLETE_MARKETPLACE_PROFILE", 409, "At least one explicit public category and service area are required to list.");
+  }
+  if (data.listed && provider.suspendedAt) {
+    throw new AppError("PROVIDER_SUSPENDED", 409, "A suspended provider cannot be publicly listed.");
+  }
+  if (data.serviceAreas) {
+    const keys = data.serviceAreas.map((area) => [
+      area.countryCode,
+      area.region?.toLocaleLowerCase() ?? "",
+      area.city?.toLocaleLowerCase() ?? "",
+      area.district?.toLocaleLowerCase() ?? "",
+    ].join("|"));
+    if (new Set(keys).size !== keys.length) {
+      throw new AppError("DUPLICATE_PUBLIC_SERVICE_AREA", 422, "Public service areas must be unique.");
+    }
+  }
+
+  const now = new Date();
+  const listed = data.listed ?? current?.listed ?? false;
+  const { categoryIds, serviceAreas, ...fields } = data;
+  await tx.providerMarketplaceProfile.upsert({
+    where: { providerId },
+    create: {
+      providerId,
+      ...fields,
+      startingRateMinor,
+      currencyCode,
+      listed,
+      listedAt: listed ? now : null,
+      unlistedAt: listed ? null : now,
+    },
+    update: {
+      ...fields,
+      startingRateMinor,
+      currencyCode,
+      ...(data.listed === undefined ? {} : {
+        listed,
+        listedAt: listed ? current?.listedAt ?? now : current?.listedAt,
+        unlistedAt: listed ? null : now,
+      }),
+    },
+  });
+  if (categoryIds) {
+    await tx.providerMarketplaceCategory.deleteMany({ where: { providerId } });
+    if (categoryIds.length) {
+      await tx.providerMarketplaceCategory.createMany({
+        data: categoryIds.map((categoryId) => ({ providerId, categoryId })),
+      });
+    }
+  }
+  if (serviceAreas) {
+    await tx.providerMarketplaceServiceArea.deleteMany({ where: { providerId } });
+    if (serviceAreas.length) {
+      await tx.providerMarketplaceServiceArea.createMany({
+        data: serviceAreas.map((area) => ({
+          ...area,
+          providerId,
+          latitude: area.latitude === undefined ? undefined : new Prisma.Decimal(area.latitude),
+          longitude: area.longitude === undefined ? undefined : new Prisma.Decimal(area.longitude),
+          radiusKm: area.radiusKm === undefined ? undefined : new Prisma.Decimal(area.radiusKm),
+        })),
+      });
+    }
+  }
+  const updated = await tx.providerMarketplaceProfile.findUniqueOrThrow({
+    where: { providerId },
+    include: { categories: true, serviceAreas: true },
+  });
+  const action = !current?.listed && updated.listed
+    ? "provider.marketplace_listed"
+    : current?.listed && !updated.listed
+      ? "provider.marketplace_unlisted"
+      : "provider.marketplace_profile_updated";
+  const changedFields = Object.keys(data).sort();
+  await tx.providerMarketplaceProfileHistory.create({
+    data: {
+      providerId,
+      actorUserId: userId,
+      action,
+      changedFields,
+      snapshot: json(profileSnapshot(updated)),
+    },
+  });
+  for (const organisationId of await marketplaceEventOrganisations(tx, providerId)) {
+    await record(tx, organisationId, userId, action, "provider_marketplace_profile", providerId, { changedFields });
+  }
+  return tx.providerMarketplaceProfile.findUniqueOrThrow({ where: { providerId }, include: profileInclude });
 }
 
 type RankRow = {
@@ -782,6 +786,7 @@ export async function createMarketplaceEnquiry(
   userId: string,
   organisationId: string | null,
   input: unknown,
+  options: { inTransaction?: InTransaction<{ id: string }> } = {},
 ) {
   if (organisationId) {
     await requirePermission(
@@ -932,6 +937,7 @@ export async function createMarketplaceEnquiry(
       );
     }
 
+    await options.inTransaction?.(tx, enquiry);
     return enquiry;
   });
 }

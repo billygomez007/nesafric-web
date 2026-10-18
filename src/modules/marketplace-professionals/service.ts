@@ -1,7 +1,9 @@
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx, type WhatsAppNotificationJob } from "@/modules/whatsapp-assistant/notification-outbox";
 import { randomBytes } from "crypto";
 import { db } from "@/platform/database/client";
-import { AppError, notFound } from "@/platform/errors";
-import { createOrganisation, listUserOrganisations } from "@/modules/organisations/service";
+import { AppError, forbidden, notFound } from "@/platform/errors";
+import { createOrganisationInTransaction, listUserOrganisations, prepareOrganisation } from "@/modules/organisations/service";
+import type { InTransaction } from "@/platform/database/in-transaction";
 import { listOwnedProviders } from "@/modules/providers/service";
 import { PUBLIC_LISTING_WHERE, updateMarketplaceProfessionalLead } from "@/modules/listings/service";
 import { requirePlatformPrincipal, PLATFORM_PERMISSIONS } from "@/platform/platform-admin/auth";
@@ -31,7 +33,7 @@ import {
 import { isUuid } from "@/platform/validation/uuid";
 import { clearMarketplaceProfessionalLogo } from "./logo";
 import { enqueueOnboardingCompleteEmail } from "@/modules/account-emails/service";
-import type { User } from "@/platform/database/generated/client";
+import type { Prisma, User } from "@/platform/database/generated/client";
 
 const PROFESSIONAL_TYPE_TO_ORGANISATION_TYPE: Record<string, "REAL_ESTATE" | "DEVELOPER" | "OTHER"> = {
   INDIVIDUAL_AGENT: "OTHER",
@@ -66,7 +68,7 @@ async function uniqueSlug(base: string) {
  * `MarketplaceSubscription`, defaulted to the free plan (item 8/9): no separate signup step, and
  * never attached to any `OrganisationSubscription`.
  */
-export async function createMarketplaceProfessional(userId: string, input: unknown) {
+export async function createMarketplaceProfessional(userId: string, input: unknown, options: { inTransaction?: InTransaction<{ id: string; backingOrganisationId: string }> } = {}) {
   const data = createMarketplaceProfessionalSchema.parse(input);
   const country = await db.country.findUnique({ where: { code: data.countryCode } });
   if (!country?.isActive) throw new AppError("COUNTRY_UNSUPPORTED", 422, "The selected country is not supported.");
@@ -74,13 +76,13 @@ export async function createMarketplaceProfessional(userId: string, input: unkno
   if (!freePlan) throw new Error("The default marketplace plan has not been seeded.");
   const slug = await uniqueSlug(data.displayName);
 
-  const organisation = await createOrganisation(
-    userId,
-    { name: data.displayName, type: PROFESSIONAL_TYPE_TO_ORGANISATION_TYPE[data.type], countryCode: data.countryCode },
-    { skipSubscription: true },
-  );
+  const preparedOrganisation = await prepareOrganisation({ name: data.displayName, type: PROFESSIONAL_TYPE_TO_ORGANISATION_TYPE[data.type], countryCode: data.countryCode });
 
+  // The hidden backing organisation, the profile, its owner membership, subscription, audit,
+  // onboarding email job and any caller hook commit together: no orphaned organisation if a later
+  // step fails.
   return db.$transaction(async (tx) => {
+    const organisation = await createOrganisationInTransaction(tx, userId, preparedOrganisation, { skipSubscription: true });
     const professional = await tx.marketplaceProfessional.create({
       data: {
         backingOrganisationId: organisation.id,
@@ -112,9 +114,8 @@ export async function createMarketplaceProfessional(userId: string, input: unkno
     });
     await tx.auditEvent.create({ data: { organisationId: organisation.id, actorUserId: userId, action: "marketplace_professional.created", entityType: "marketplace_professional", entityId: professional.id } });
     await tx.domainEvent.create({ data: { organisationId: organisation.id, name: "marketplace_professional.created", aggregateType: "marketplace_professional", aggregateId: professional.id, payload: { type: professional.type, slug } } });
-    return professional;
-  }).then(async (professional) => {
-    await enqueueOnboardingCompleteEmail(userId, "ONBOARDING_COMPLETE_MARKETPLACE", professional.displayName);
+    await enqueueOnboardingCompleteEmail(userId, "ONBOARDING_COMPLETE_MARKETPLACE", professional.displayName, tx);
+    await options.inTransaction?.(tx, professional);
     return professional;
   });
 }
@@ -259,15 +260,24 @@ export async function updateMarketplaceMember(userId: string, marketplaceProfess
 
 export async function submitMarketplaceVerification(userId: string, marketplaceProfessionalId: string, input: unknown) {
   await requireMarketplaceRole(userId, marketplaceProfessionalId, "ADMIN");
+  return db.$transaction((tx) => submitMarketplaceVerificationInTransaction(tx, userId, marketplaceProfessionalId, input));
+}
+
+/**
+ * The verification submission inside a caller's transaction — e.g. the same transaction that just
+ * created the profile, where the new owner membership isn't visible outside it yet. The role check
+ * therefore reads through `tx`.
+ */
+export async function submitMarketplaceVerificationInTransaction(tx: Prisma.TransactionClient, userId: string, marketplaceProfessionalId: string, input: unknown) {
+  const member = await tx.marketplaceProfessionalMember.findUnique({ where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId, userId } } });
+  if (!member || member.status !== "ACTIVE" || member.role === "AGENT") throw forbidden();
   const data = submitMarketplaceVerificationSchema.parse(input);
-  const professional = await db.marketplaceProfessional.findFirst({ where: { id: marketplaceProfessionalId, archivedAt: null } });
+  const professional = await tx.marketplaceProfessional.findFirst({ where: { id: marketplaceProfessionalId, archivedAt: null } });
   if (!professional) throw notFound();
   if (professional.verificationStatus === "VERIFIED") throw new AppError("ALREADY_VERIFIED", 409, "This profile is already verified.");
-  return db.$transaction(async (tx) => {
-    const updated = await tx.marketplaceProfessional.update({ where: { id: marketplaceProfessionalId }, data: { verificationStatus: "PENDING", verificationEvidenceReferences: data.evidenceReferences } });
-    await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: professional.verificationStatus, toStatus: "PENDING", actorUserId: userId, reason: "Evidence submitted." } });
-    return updated;
-  });
+  const updated = await tx.marketplaceProfessional.update({ where: { id: marketplaceProfessionalId }, data: { verificationStatus: "PENDING", verificationEvidenceReferences: data.evidenceReferences } });
+  await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: professional.verificationStatus, toStatus: "PENDING", actorUserId: userId, reason: "Evidence submitted." } });
+  return updated;
 }
 
 /** Verification review is a NesAfric platform-administration action (reusing Phase 20's
@@ -294,10 +304,11 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
   if (verificationReasonRequired(data.status) && !data.reason) {
     throw new AppError("REASON_REQUIRED", 422, data.status === "REJECTED" ? "Enter a reason for rejecting this verification." : "Enter a reason for suspending this verification.");
   }
-  return db.$transaction(async (tx) => {
+  let notification: WhatsAppNotificationJob | undefined;
+  const reviewed = await db.$transaction(async (tx) => {
     const changed = await tx.marketplaceProfessional.updateMany({ where: { id: marketplaceProfessionalId, verificationStatus: from }, data: { verificationStatus: data.status } });
     if (changed.count !== 1) throw verificationChanged();
-    await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: from, toStatus: data.status, actorUserId: principal.userId, reason: data.reason } });
+    const event = await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: from, toStatus: data.status, actorUserId: principal.userId, reason: data.reason } });
     await tx.platformAuditEvent.create({
       data: {
         platformPrincipalId: principal.id, action: verificationAuditAction(from, data.status), entityType: "marketplace_professional",
@@ -305,8 +316,11 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
         metadata: { fromStatus: from, toStatus: data.status, reason: data.reason ?? null, actorUserId: principal.userId },
       },
     });
+    notification = await enqueueWhatsAppNotificationInTx(tx, { kind: "professional_verification", professionalId: marketplaceProfessionalId, status: data.status, reason: data.reason ?? null, decisionKey: event.id });
     return tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
   });
+  if (notification) await deliverWhatsAppNotificationNow(notification);
+  return reviewed;
 }
 
 const verificationChanged = () =>

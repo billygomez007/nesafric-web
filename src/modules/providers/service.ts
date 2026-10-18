@@ -1,3 +1,4 @@
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx } from "@/modules/whatsapp-assistant/notification-outbox";
 import { randomBytes } from "crypto";
 import {
   Prisma,
@@ -5,6 +6,7 @@ import {
 } from "@/platform/database/generated/client";
 import type { User } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
+import type { InTransaction } from "@/platform/database/in-transaction";
 import {
   PERMISSIONS,
   requirePermission,
@@ -551,7 +553,11 @@ async function providerIdentityExists(
   );
 }
 
-export async function createServiceProvider(userId: string, input: unknown) {
+export async function createServiceProvider(
+  userId: string,
+  input: unknown,
+  options: { inTransaction?: InTransaction<{ id: string; displayName: string }> } = {},
+) {
   const data = createProviderSchema.parse(input);
   return db
     .$transaction(async (tx) => {
@@ -574,8 +580,9 @@ export async function createServiceProvider(userId: string, input: unknown) {
       }
       const contactReady = Boolean(data.contactEmail || data.contactPhone);
       const slug = await uniqueProviderSlug(tx, data.displayName);
+      let provider;
       try {
-        return await tx.serviceProvider.create({
+        provider = await tx.serviceProvider.create({
           data: {
             type: data.type,
             slug,
@@ -605,13 +612,14 @@ export async function createServiceProvider(userId: string, input: unknown) {
         }
         throw error;
       }
-    })
-    .then(async (provider) => {
+      // Enqueued in the transaction so the provider and its email commit (or roll back) together.
       await enqueueOnboardingCompleteEmail(
         userId,
         "ONBOARDING_COMPLETE_SERVICES",
         provider.displayName,
+        tx,
       );
+      await options.inTransaction?.(tx, provider);
       return provider;
     });
 }
@@ -1255,6 +1263,7 @@ export async function reviewProviderIdentity(
       }
     }
 
+    await enqueueWhatsAppNotificationInTx(tx, { kind: "provider_identity", providerId, status: data.status, reason: data.reason ?? null, decisionKey: history.id });
     return {
       updated,
       historyId: history.id,
@@ -1282,6 +1291,7 @@ export async function reviewProviderIdentity(
       data.reason,
     );
   }
+  await deliverWhatsAppNotificationNow({ kind: "provider_identity", providerId, status: data.status, reason: data.reason ?? null, decisionKey: result.historyId });
   return result.updated;
 }
 

@@ -283,6 +283,9 @@ export const publicListingSearchSchema = z.object({
   state: z.string().trim().min(1).max(150).optional(),
   city: z.string().trim().min(1).max(150).optional(),
   district: z.string().trim().min(1).max(150).optional(),
+  /** Neighbourhood or area name (e.g. "East Legon"), matched against every public location field. */
+  area: z.string().trim().min(2).max(150).optional(),
+  furnishing: z.enum(["FURNISHED", "SEMI_FURNISHED", "UNFURNISHED"]).optional(),
   amenities: commaSeparated(amenityKey).optional(),
   mediaTypes: commaSeparated(z.enum(["PHOTO", "VIDEO", "FLOOR_PLAN"])).optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),

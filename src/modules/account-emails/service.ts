@@ -1,5 +1,9 @@
+import type { Prisma } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { enqueueJob } from "@/platform/jobs/runner";
+
+/** Lets a caller commit the email job atomically with its own writes. */
+type JobClient = Pick<Prisma.TransactionClient, "backgroundJob">;
 import { EmailChannelAdapter } from "@/modules/conversations/channels/registry";
 import { BRAND } from "@/platform/brand";
 import {
@@ -118,13 +122,14 @@ export async function enqueueOnboardingCompleteEmail(
   userId: string,
   template: "ONBOARDING_COMPLETE_PROPERTYOS" | "ONBOARDING_COMPLETE_MARKETPLACE" | "ONBOARDING_COMPLETE_SERVICES",
   workspaceName: string,
+  client: JobClient = db,
 ) {
   const dedupeKey = `account-email:${template}:${userId}`;
   return enqueueJob({
     type: "account-email",
     idempotencyKey: dedupeKey,
     payload: { userId, template, workspaceName, dedupeKey } satisfies AccountEmailPayload,
-  });
+  }, client);
 }
 
 /**
@@ -155,7 +160,7 @@ export async function enqueueProviderVerificationEmail(
  * otherwise the listing's own creator — both real, existing ownership fields, never a guessed
  * recipient) of a brand-new marketplace enquiry. Keyed to the lead's own id, since each lead is a
  * genuinely distinct event deserving its own email. */
-export async function enqueueMarketplaceLeadNotification(recipientUserId: string, input: { listingTitle: string; leadId: string; prospectName: string; prospectEmail?: string; prospectPhone?: string }) {
+export async function enqueueMarketplaceLeadNotification(recipientUserId: string, input: { listingTitle: string; leadId: string; prospectName: string; prospectEmail?: string; prospectPhone?: string }, client: JobClient = db) {
   const dedupeKey = `account-email:MARKETPLACE_LEAD_CREATED:${input.leadId}`;
   return enqueueJob({
     type: "account-email",
@@ -165,12 +170,12 @@ export async function enqueueMarketplaceLeadNotification(recipientUserId: string
       listingTitle: input.listingTitle, leadId: input.leadId, prospectName: input.prospectName,
       prospectEmail: input.prospectEmail, prospectPhone: input.prospectPhone,
     } satisfies AccountEmailPayload,
-  });
+  }, client);
 }
 
 /** Same recipient-resolution rule as the lead notification above, keyed to the viewing request's
  * own id. */
-export async function enqueueViewingRequestNotification(recipientUserId: string, input: { listingTitle: string; viewingRequestId: string; prospectName: string; requestedTimeLabel?: string }) {
+export async function enqueueViewingRequestNotification(recipientUserId: string, input: { listingTitle: string; viewingRequestId: string; prospectName: string; requestedTimeLabel?: string }, client: JobClient = db) {
   const dedupeKey = `account-email:VIEWING_REQUEST_CREATED:${input.viewingRequestId}`;
   return enqueueJob({
     type: "account-email",
@@ -180,7 +185,7 @@ export async function enqueueViewingRequestNotification(recipientUserId: string,
       listingTitle: input.listingTitle, viewingRequestId: input.viewingRequestId, prospectName: input.prospectName,
       requestedTimeLabel: input.requestedTimeLabel,
     } satisfies AccountEmailPayload,
-  });
+  }, client);
 }
 
 export type BookingEmailDetails = {

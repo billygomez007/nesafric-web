@@ -1,3 +1,4 @@
+import { deliverWhatsAppNotificationNow, enqueueWhatsAppNotificationInTx, type WhatsAppNotificationJob } from "@/modules/whatsapp-assistant/notification-outbox";
 import { Prisma, type PlatformPrincipal } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
@@ -2511,7 +2512,8 @@ async function recordListingDecision(tx: ListingReviewTx, principal: PlatformPri
 export async function verifyAndPublishListingForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
   const data = listingPublishDecisionSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  let notification: WhatsAppNotificationJob | undefined;
+  const decided = await db.$transaction(async (tx) => {
     const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
     if (listing.verificationStatus !== "PENDING" && listing.verificationStatus !== "VERIFIED") {
       throw new AppError("LISTING_VERIFICATION_NOT_SUBMITTED", 409, "This listing's authority verification has not been submitted.");
@@ -2527,8 +2529,11 @@ export async function verifyAndPublishListingForPlatform(principal: PlatformPrin
     }
     const published = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "PUBLISHED", note: data.note ?? "Verified and published by NesAfric." }, via);
     await recordListingDecision(tx, principal, "platform_admin.listing_verified_and_published", listing, { verifiedNow, note: data.note ?? null });
+    notification = await enqueueWhatsAppNotificationInTx(tx, { kind: "listing_decision", listingId: listing.id, decision: "published", note: data.note ?? null, decisionKey: `${listing.id}:published:${published.updatedAt.getTime()}` });
     return published;
   }, REVIEW_TRANSACTION_OPTIONS);
+  if (notification) await deliverWhatsAppNotificationNow(notification);
+  return decided;
 }
 
 /**
@@ -2539,12 +2544,16 @@ export async function verifyAndPublishListingForPlatform(principal: PlatformPrin
 export async function requestListingChangesForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
   const data = listingReturnDecisionSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  let notification: WhatsAppNotificationJob | undefined;
+  const decided = await db.$transaction(async (tx) => {
     const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
     const returned = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "DRAFT", note: data.note }, { authority: "PLATFORM", via: "request_changes" });
     await recordListingDecision(tx, principal, "platform_admin.listing_changes_requested", listing, { note: data.note });
+    notification = await enqueueWhatsAppNotificationInTx(tx, { kind: "listing_decision", listingId: listing.id, decision: "changes_requested", note: data.note, decisionKey: `${listing.id}:changes_requested:${returned.updatedAt.getTime()}` });
     return returned;
   }, REVIEW_TRANSACTION_OPTIONS);
+  if (notification) await deliverWhatsAppNotificationNow(notification);
+  return decided;
 }
 
 /**
@@ -2555,7 +2564,8 @@ export async function requestListingChangesForPlatform(principal: PlatformPrinci
 export async function rejectListingForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
   const data = listingReturnDecisionSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  let notification: WhatsAppNotificationJob | undefined;
+  const decided = await db.$transaction(async (tx) => {
     const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
     const via = { authority: "PLATFORM", via: "reject" };
     if (listing.verificationStatus === "PENDING") {
@@ -2563,6 +2573,9 @@ export async function rejectListingForPlatform(principal: PlatformPrincipal, lis
     }
     const rejected = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "REJECTED", note: data.note }, via);
     await recordListingDecision(tx, principal, "platform_admin.listing_rejected", listing, { note: data.note });
+    notification = await enqueueWhatsAppNotificationInTx(tx, { kind: "listing_decision", listingId: listing.id, decision: "rejected", note: data.note, decisionKey: `${listing.id}:rejected:${rejected.updatedAt.getTime()}` });
     return rejected;
   }, REVIEW_TRANSACTION_OPTIONS);
+  if (notification) await deliverWhatsAppNotificationNow(notification);
+  return decided;
 }

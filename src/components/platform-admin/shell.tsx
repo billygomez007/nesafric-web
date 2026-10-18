@@ -46,6 +46,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { href: "/platform-admin/maintenance", label: "Maintenance" },
       { href: "/platform-admin/communications", label: "Communications" },
+      { href: "/platform-admin/whatsapp", label: "WhatsApp Assistant" },
       { href: "/platform-admin/ai", label: "AI Operations" },
     ],
   },
