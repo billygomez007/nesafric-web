@@ -21,37 +21,56 @@ type WhatsAppCloudEntry = {
  * WhatsApp transport abstraction. The wire shape mirrors the WhatsApp Cloud
  * API webhook contract (the most common Business Solution Provider shape),
  * but the adapter interface itself is provider-neutral: swapping to a
- * different BSP means adjusting `send()`/`normalizeInbound()` internals, not
- * the conversation/service layer that calls this adapter. Falls back to a
- * deterministic test transport when no provider credentials are configured.
+ * different BSP means adjusting this adapter. The deterministic transport is
+ * explicitly test-only; missing live credentials must never imply delivery.
  */
 export class WhatsAppChannelAdapter implements ChannelAdapter {
   readonly channel = "WHATSAPP" as const;
 
   async send(request: OutboundMessageRequest): Promise<OutboundDeliveryResult> {
-    if (!request.recipientAddress) return { status: "FAILED", failureReason: "No recipient WhatsApp number is available for this conversation." };
-    const sendUrl = process.env.WHATSAPP_PROVIDER_SEND_URL;
+    if (!request.recipientAddress) return { status: "FAILED", retryable: false, failureReason: "No recipient WhatsApp number is available for this conversation." };
+    const phoneNumberId = request.config?.phoneNumberId;
+    const graphVersion = process.env.WHATSAPP_GRAPH_API_VERSION;
+    const sendUrl = process.env.WHATSAPP_PROVIDER_SEND_URL ||
+      (typeof phoneNumberId === "string" && /^\d+$/.test(phoneNumberId) && graphVersion && /^v\d+\.\d+$/.test(graphVersion)
+        ? `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages` : undefined);
     const accessToken = process.env.WHATSAPP_PROVIDER_ACCESS_TOKEN;
     if (!sendUrl || !accessToken) {
-      return { status: "SENT", providerReference: `test-whatsapp:${request.messageId}` };
+      if (process.env.NODE_ENV === "test" && request.providerKey === "test") return { status: "SENT", providerReference: `test-whatsapp:${request.messageId}` };
+      return { status: "FAILED", retryable: false, failureReason: "WhatsApp delivery is not configured." };
     }
+    if (!sendUrl.startsWith("https://")) return { status: "FAILED", retryable: false, failureReason: "WhatsApp delivery requires HTTPS." };
+    if (!request.whatsappTemplate && (!request.lastInboundAt || Date.now() - request.lastInboundAt.getTime() >= 24 * 60 * 60_000 || request.lastInboundAt.getTime() > Date.now())) {
+      return { status: "FAILED", retryable: false, failureReason: "The WhatsApp customer service window is closed; an approved template is required." };
+    }
+    if (!request.whatsappTemplate && request.body.length > 4096) return { status: "FAILED", retryable: false, failureReason: "WhatsApp text exceeds 4096 characters." };
     try {
       const response = await fetch(sendUrl, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(15_000),
+        redirect: "error",
         body: JSON.stringify({
           messaging_product: "whatsapp",
           to: request.recipientAddress,
-          type: "text",
-          text: { body: request.body },
+          ...(request.whatsappTemplate ? {
+            type: "template",
+            template: {
+              name: request.whatsappTemplate.name, language: { code: request.whatsappTemplate.language },
+              ...(request.whatsappTemplate.bodyParameters?.length ? { components: [{ type: "body", parameters: request.whatsappTemplate.bodyParameters.map((value) => ({ type: "text", text: value })) }] } : {}),
+            },
+          } : { type: "text", text: { body: request.body } }),
         }),
       });
-      if (!response.ok) return { status: "FAILED", failureReason: `WhatsApp provider responded with status ${response.status}.` };
+      // 429 and 5xx are transient. Any other rejection will be rejected again.
+      if (!response.ok) return { status: "FAILED", retryable: response.status === 429 || response.status >= 500, failureReason: `WhatsApp provider responded with status ${response.status}.` };
       const payload = await response.json().catch(() => ({}) as Record<string, unknown>);
       const messages = (payload as { messages?: Array<{ id?: string }> }).messages;
+      if (!messages?.[0]?.id) return { status: "FAILED", unconfirmed: true, retryable: false, failureReason: "WhatsApp accepted the request but returned no message receipt; delivery is unconfirmed." };
       return { status: "SENT", providerReference: messages?.[0]?.id };
-    } catch (error) {
-      return { status: "FAILED", failureReason: error instanceof Error ? error.message : "WhatsApp provider request failed." };
+    } catch {
+      // A timeout can fire after Meta accepted the message, so this is never retried blindly.
+      return { status: "FAILED", unconfirmed: true, retryable: false, failureReason: "WhatsApp provider request failed or timed out; delivery is unconfirmed." };
     }
   }
 

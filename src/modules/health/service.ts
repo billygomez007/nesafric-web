@@ -128,7 +128,8 @@ function checkCommunications(): ProviderHealthEntry[] {
       readiness: arkeselStatus().configured ? "CONFIGURED" : "UNCONFIGURED",
       detail: arkeselStatus().configured ? "Arkesel SMS codes (sign-in by phone)." : "Arkesel not configured: phone sign-in codes are refused.",
     },
-    { name: "whatsapp", readiness: envPresent("WHATSAPP_PROVIDER_SEND_URL", "WHATSAPP_PROVIDER_ACCESS_TOKEN") ? "CONFIGURED" : "TEST_MODE", detail: "Provider-neutral WhatsApp transport." },
+    // No test transport outside NODE_ENV=test: without these, WhatsApp sends fail closed.
+    { name: "whatsapp", readiness: envPresent("WHATSAPP_PROVIDER_ACCESS_TOKEN", "WHATSAPP_APP_SECRET") && (envPresent("WHATSAPP_PROVIDER_SEND_URL") || envPresent("WHATSAPP_GRAPH_API_VERSION")) ? "CONFIGURED" : "UNCONFIGURED", detail: envPresent("WHATSAPP_OFFICIAL_ORGANISATION_ID") ? "WhatsApp Cloud API; official NesAfric number configured." : "WhatsApp Cloud API; no official NesAfric number configured." },
     {
       name: "email",
       readiness: email.configured ? "CONFIGURED" : "TEST_MODE",

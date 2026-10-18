@@ -1,3 +1,4 @@
+import { isWhatsAppOptedOut } from "@/modules/whatsapp-assistant/identity";
 import { randomBytes } from "node:crypto";
 import { Prisma, type ConversationChannel, type ConversationStatus } from "@/platform/database/generated/client";
 import { db } from "@/platform/database/client";
@@ -492,16 +493,32 @@ async function recordOutboundMessage(organisationId: string, conversationId: str
   return message;
 }
 
+function storedWhatsAppTemplate(metadata: unknown) {
+  const template = (metadata as { whatsappTemplate?: { name?: unknown; language?: unknown; bodyParameters?: unknown } } | null)?.whatsappTemplate;
+  if (!template || typeof template.name !== "string" || typeof template.language !== "string") return undefined;
+  const bodyParameters = Array.isArray(template.bodyParameters) ? template.bodyParameters.filter((value): value is string => typeof value === "string") : undefined;
+  return { name: template.name, language: template.language, bodyParameters };
+}
+
 export async function deliverConversationMessage(organisationId: string, deliveryId: string, adapters: ChannelAdapters | undefined = undefined) {
   const delivery = await db.messageDelivery.findFirst({ where: { id: deliveryId, organisationId }, include: { message: true } });
   if (!delivery) throw notFound();
-  if (["SENT", "DELIVERED", "SKIPPED"].includes(delivery.status)) return delivery;
+  if (["SENT", "DELIVERED", "READ", "SKIPPED"].includes(delivery.status)) return delivery;
   const claimed = await db.messageDelivery.updateMany({ where: { id: deliveryId, organisationId, status: { in: ["QUEUED", "FAILED"] } }, data: { status: "SENDING", attempts: { increment: 1 }, lastAttemptAt: new Date(), failedAt: null, failureReason: null } });
   if (!claimed.count) return db.messageDelivery.findFirstOrThrow({ where: { id: deliveryId, organisationId } });
 
   const conversation = await db.conversation.findUniqueOrThrow({ where: { id: delivery.message.conversationId } });
   const channelConfig = await db.communicationChannelConfig.findUnique({ where: { organisationId_channel: { organisationId, channel: delivery.channel } } });
+  if (!channelConfig?.enabled) {
+    return db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "SKIPPED", failureReason: "The communication channel is disabled." } });
+  }
   const adapter = getChannelAdapter(delivery.channel, adapters);
+  // Business-initiated WhatsApp messages are never sent to someone who replied STOP, even if they
+  // were queued before the opt-out.
+  const template = delivery.channel === "WHATSAPP" ? storedWhatsAppTemplate(delivery.message.metadata) : undefined;
+  if (template && delivery.recipientAddress && await isWhatsAppOptedOut(delivery.recipientAddress)) {
+    return db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "SKIPPED", failureReason: "The recipient opted out of WhatsApp messages (STOP)." } });
+  }
   try {
     const result = await adapter.send({
       organisationId,
@@ -511,19 +528,27 @@ export async function deliverConversationMessage(organisationId: string, deliver
       recipientAddress: delivery.recipientAddress ?? conversation.channelAddress,
       fromAddress: channelConfig?.fromAddress ?? null,
       body: delivery.message.body,
+      lastInboundAt: conversation.lastInboundAt,
+      // Business-initiated messages (invitations, work orders) carry their approved template.
+      whatsappTemplate: template,
       externalReferenceId: delivery.message.externalReferenceId,
       providerKey: channelConfig?.providerKey,
       config: (channelConfig?.config as Record<string, unknown>) ?? {},
     });
     if (result.status === "FAILED") {
-      return db.$transaction(async (tx) => {
-        const failed = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status: "FAILED", failedAt: new Date(), failureReason: result.failureReason ?? "Delivery failed." } });
-        await record(organisationId, undefined, "message.delivery_failed", "conversation", conversation.id, { channel: delivery.channel, reason: result.failureReason });
+      const status = result.unconfirmed ? "UNCONFIRMED" as const : "FAILED" as const;
+      const failed = await db.$transaction(async (tx) => {
+        const failed = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status, failedAt: new Date(), failureReason: result.failureReason ?? "Delivery failed." } });
+        await record(organisationId, undefined, status === "UNCONFIRMED" ? "message.delivery_unconfirmed" : "message.delivery_failed", "conversation", conversation.id, { channel: delivery.channel, reason: result.failureReason });
         return failed;
       });
+      return Object.assign(failed, { retryable: result.retryable !== false });
     }
     return db.$transaction(async (tx) => {
       const sent = await tx.messageDelivery.update({ where: { id: deliveryId }, data: { status: result.status, providerReference: result.providerReference, sentAt: new Date(), deliveredAt: result.status === "DELIVERED" ? new Date() : undefined } });
+      // Short-lived secrets (e.g. signed photo links) leave the stored transcript once sent.
+      const redaction = (delivery.message.metadata as { redactAfterSend?: unknown } | null)?.redactAfterSend;
+      if (typeof redaction === "string") await tx.message.update({ where: { id: delivery.message.id }, data: { body: redaction } });
       await record(organisationId, undefined, "message.sent", "conversation", conversation.id, { channel: delivery.channel, providerReference: result.providerReference ?? null });
       return sent;
     });
@@ -541,7 +566,8 @@ export async function retryConversationMessageDelivery(userId: string, organisat
   await requirePermission(userId, organisationId, PERMISSIONS.conversationManage);
   const delivery = await db.messageDelivery.findFirst({ where: { id: deliveryId, organisationId } });
   if (!delivery) throw notFound();
-  if (delivery.status !== "FAILED") throw new AppError("DELIVERY_NOT_RETRYABLE", 409, "Only failed message deliveries can be retried.");
+  // UNCONFIRMED is retried only on this explicit staff request: the recipient may get it twice.
+  if (delivery.status !== "FAILED" && delivery.status !== "UNCONFIRMED") throw new AppError("DELIVERY_NOT_RETRYABLE", 409, "Only failed or unconfirmed message deliveries can be retried.");
   await db.messageDelivery.update({ where: { id: deliveryId }, data: { status: "QUEUED", failedAt: null, failureReason: null } });
   await enqueueJob({ organisationId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery-retry:${deliveryId}:${Date.now()}`, payload: { organisationId, deliveryId } });
   return db.messageDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
@@ -699,6 +725,16 @@ export async function upsertChannelConfig(userId: string, organisationId: string
   await requirePermission(userId, organisationId, PERMISSIONS.communicationChannelManage);
   const data = channelConfigSchema.parse(input);
   return db.$transaction(async (tx) => {
+    // All WhatsApp numbers are sent through one Meta system-user token, so a receiving number may
+    // belong to one organisation only, and the official NesAfric number to none but its own.
+    if (channel === "WHATSAPP" && typeof data.config.phoneNumberId === "string") {
+      const phoneNumberId = data.config.phoneNumberId;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`whatsapp-number:${phoneNumberId}`}, 0))`;
+      const others = await tx.communicationChannelConfig.findMany({ where: { channel: "WHATSAPP", organisationId: { not: organisationId } }, select: { config: true } });
+      if (others.some((other) => (other.config as Record<string, unknown> | null)?.phoneNumberId === phoneNumberId)) {
+        throw new AppError("WHATSAPP_NUMBER_IN_USE", 409, "This WhatsApp number is already connected to another organisation. Contact NesAfric support to move it.");
+      }
+    }
     const config = await tx.communicationChannelConfig.upsert({
       where: { organisationId_channel: { organisationId, channel } },
       update: { enabled: data.enabled, providerKey: data.providerKey, fromAddress: data.fromAddress, webhookVerifyToken: data.webhookVerifyToken, config: json(data.config) },

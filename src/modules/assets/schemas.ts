@@ -25,6 +25,11 @@ export const updateUnitSchema = z
   .strict()
   .refine((input) => Object.keys(input).length > 0, "At least one unit field must be provided.");
 
+export const createBuildingSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  units: z.array(unitSchema).max(500).default([]),
+});
+
 export const createPortfolioSchema = z.object({
   name: z.string().trim().min(2).max(160),
   description: z.string().trim().max(1000).optional(),

@@ -61,7 +61,7 @@ function slugify(value: string) {
   );
 }
 
-async function uniqueProviderSlug(tx: Tx, base: string) {
+export async function uniqueProviderSlug(tx: Tx, base: string) {
   const root = slugify(base);
   let candidate = root;
   for (let attempt = 0; attempt < 6; attempt += 1) {

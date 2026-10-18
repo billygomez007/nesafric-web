@@ -1,0 +1,108 @@
+import { absoluteUrl } from "@/platform/brand";
+import { AppError } from "@/platform/errors";
+import { assistantStateSchema, initialState, type AssistantState, type Interpretation } from "./schemas";
+import { interpretMessage } from "./interpret";
+import { marketplaceTools, type MarketplaceTools } from "./tools";
+
+export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
+
+type Result = { state: AssistantState; reply: string; handoff?: boolean };
+export type EngineInput = { state: unknown; body: string; kind: string; phone: string; conversationId: string; messageId: string; defaultCountry: string; defaultCurrency: string };
+type Dependencies = { tools: MarketplaceTools; interpret: typeof interpretMessage };
+
+function promptFor(state: AssistantState) {
+  if (state.step === "name") return "What name should the agent use for this request?";
+  if (state.step === "message") return "What would you like to ask about this property?";
+  if (state.step === "time") return "Send your preferred viewing date and time with its UTC offset, for example 2026-12-20T14:00:00+00:00. Ghana uses +00:00. This requests a one-hour slot; the agent must confirm it.";
+  if (state.step === "confirm") return "Reply confirm to submit this request, or cancel to discard it.";
+  if (state.workflow === "property_search") return !state.property.listingType ? "Are you looking to rent or buy?" : !state.property.location ? "Which area should I search?" : "Send search to see matching properties, or tell me which filters to change.";
+  if (state.workflow === "service_search") return !state.service.q ? "What service do you need?" : !state.service.city ? "Which area do you need the service in?" : "Send search to see providers, or tell me what to change.";
+  return MAIN_MENU;
+}
+
+export async function advanceConversation(input: EngineInput, dependencies: Dependencies = { tools: marketplaceTools, interpret: interpretMessage }): Promise<Result> {
+  const parsed = assistantStateSchema.safeParse(input.state ?? {});
+  const state = parsed.success ? structuredClone(parsed.data) : initialState();
+  const body = input.body.trim();
+  const command = body.toLowerCase();
+  const reply = (text: string): Result => ({ state, reply: text });
+  if (command === "cancel") return { state: { ...initialState(), lastRequest: state.lastRequest }, reply: "The current conversation workflow is cancelled. Submitted requests are unchanged.\n\n" + MAIN_MENU };
+  if (["menu", "help", "hi", "hello", "start"].includes(command)) {
+    state.paused = state.workflow !== "idle";
+    return reply(MAIN_MENU + (state.paused ? "\n\nYour previous workflow is saved. Reply resume to continue or cancel before starting another." : ""));
+  }
+  if (command === "resume") { state.paused = false; return reply(promptFor(state)); }
+  if (/^(support|human|8)$/.test(command)) return { ...reply("Your conversation has been added to the support queue. A team member will need to respond; no response time is guaranteed. Reply menu to go back to the assistant."), handoff: true };
+  if (state.paused) return reply("Your unfinished workflow is saved. Reply resume to continue, or cancel to start another.");
+  if (input.kind !== "text") return reply("I received your message, but WhatsApp media uploads and map locations are not supported by this assistant yet. No file has been attached to a listing. Use the secure website to upload files, or reply support for help.");
+
+  // Only exact, user-authored confirmation can write a business record. No model call here.
+  if (state.workflow === "inquiry" || state.workflow === "viewing") {
+    if (state.step === "name") {
+      if (body.length < 2 || body.length > 160) return reply("Please send a name between 2 and 160 characters.");
+      state.name = body; state.step = state.workflow === "viewing" ? "time" : "message";
+      return reply(promptFor(state));
+    }
+    if (state.step === "message") {
+      if (body.length > 5000) return reply("Please shorten your inquiry to 5,000 characters.");
+      state.message = body; state.step = "confirm";
+    } else if (state.step === "time") {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(body) || !Number.isFinite(Date.parse(body)) || Date.parse(body) <= Date.now()) return reply("Please send a valid future date and time including its UTC offset.\n" + promptFor(state));
+      state.startsAt = new Date(body).toISOString(); state.step = "confirm";
+    } else if (state.step === "confirm") {
+      if (command !== "confirm") return reply("Nothing has been submitted. Reply confirm to submit, or cancel to start again.");
+      try {
+        const request = await dependencies.tools.submitCustomerRequest({ state, phone: input.phone, messageId: input.messageId, conversationId: input.conversationId });
+        return { state: { ...initialState(), lastRequest: request }, reply: request.viewingId ? `Viewing request saved. Reference: ${request.viewingId}. The appointment is not confirmed. Reply status to check it.` : `Inquiry saved. Reference: ${request.leadId}. Reply status to check it.` };
+      } catch (error) {
+        if (error instanceof AppError && error.status < 500) return reply("This request cannot currently be submitted. The property may no longer be available or the viewing time may have passed. Your details are saved; reply cancel to search again or support for help.");
+        // The worker rolls back state/reply and retries the same idempotent domain action.
+        throw error;
+      }
+    }
+    const details = await dependencies.tools.propertyDetails(state.selectedListingId!);
+    return reply(`Review your ${state.workflow === "viewing" ? "viewing request" : "inquiry"}:\nProperty: ${details.title}\nName: ${state.name}\nPhone shared with the listing team: +${input.phone.replace(/^\+/, "")}\n${state.startsAt ? `Preferred one-hour slot starts: ${state.startsAt}` : `Question: ${state.message}`}\n\nReply confirm to submit and share these details, or cancel.`);
+  }
+
+  const selection = command.match(/^(details|inquire|view)\s+([1-3])$/);
+  if (selection && state.workflow === "property_search") {
+    const id = state.results[Number(selection[2]) - 1];
+    if (!id) return reply("Choose a property number from the most recent results.");
+    try {
+      const details = await dependencies.tools.propertyDetails(id);
+      if (selection[1] === "details") return reply(`${details.title}\n${details.description}\n${details.url}\n\nOnly the published details above are known. Reply inquire ${selection[2]} to ask the listing team, or view ${selection[2]} to request a viewing.`);
+      if (!details.enquiryEnabled) return reply(`This property does not accept this request here. See its available actions: ${details.url}`);
+      state.selectedListingId = id; state.workflow = selection[1] === "view" ? "viewing" : "inquiry"; state.step = "name";
+      return reply(promptFor(state));
+    } catch (error) {
+      if (error instanceof AppError && error.status === 404) return reply("This property is no longer available in the public marketplace. Send search for current results.");
+      throw error;
+    }
+  }
+  if (command === "more" && (state.workflow === "property_search" || state.workflow === "service_search")) {
+    if (!state.hasMore) return reply("There are no more results for these filters. Change the area or budget, or cancel to start another search.");
+    state.page += 1;
+  } else {
+    const interpretation: Interpretation = await dependencies.interpret(body, state);
+    if (interpretation.intent === "support") return { ...reply("Your conversation has been added to the support queue. Reply menu to go back to the assistant."), handoff: true };
+    if (interpretation.intent === "registration" || interpretation.intent === "listing") return reply(`Continue securely in your NesAfric account: ${absoluteUrl(interpretation.intent === "registration" ? "/onboarding" : "/pro")}\nWhatsApp business onboarding and listing editing are not enabled yet. Your WhatsApp number alone cannot grant access to a business or its listings. Reply support if you need help.`);
+    if (interpretation.intent === "status") return reply(state.lastRequest ? await dependencies.tools.customerRequestStatus(state.lastRequest, input.phone) : `There is no submitted customer request in this conversation. For your business applications and listings, sign in: ${absoluteUrl("/pro")}`);
+    if (interpretation.intent === "unknown") return reply("Would you like to find a property, find a service provider, or talk to support? Please choose one task first.");
+    if (state.workflow !== "idle" && state.workflow !== interpretation.intent) { state.paused = true; return reply("You have a saved search. Reply resume to continue it, or cancel and send your new request again."); }
+    state.workflow = interpretation.intent; state.page = 1;
+    if (interpretation.intent === "property_search") state.property = { country: input.defaultCountry, currencyCode: input.defaultCurrency, ...state.property, ...interpretation.property };
+    else state.service = { country: input.defaultCountry, ...state.service, ...interpretation.service };
+  }
+  if (state.workflow === "property_search") {
+    if (!state.property.listingType || !state.property.location) return reply(promptFor(state));
+    if (state.property.listingType === "RENT" && state.property.maxPriceMinor && !state.property.frequency) return reply("Is that rental budget per month, per year, per week or per night?");
+    const found = await dependencies.tools.searchProperties(state.property, state.page);
+    state.results = found.ids; state.hasMore = found.hasMore;
+    const filters = `Filters: ${state.property.listingType}, ${state.property.location}${state.property.category ? `, ${state.property.category}` : ""}${state.property.maxPriceMinor ? `, maximum ${state.property.currencyCode} ${Number(state.property.maxPriceMinor) / 100}${state.property.frequency ? ` ${state.property.frequency}` : ""}` : ""}${state.property.bedroomsMin !== undefined ? `, ${state.property.bedroomsMin} bedrooms` : ""}.`;
+    return reply(found.ids.length ? `${filters}\n\n${found.cards.join("\n\n")}\n\nReply details 1, inquire 1 or view 1 for a result.${found.hasMore ? " Reply more for the next page." : ""}` : `${filters}\nNo published, available properties match. You can change the area or budget. I have not relaxed your filters.`);
+  }
+  if (!state.service.q || !state.service.city) return reply(promptFor(state));
+  const found = await dependencies.tools.searchServices(state.service, state.page);
+  state.results = found.ids; state.hasMore = found.hasMore;
+  return reply(found.ids.length ? `${found.cards.join("\n\n")}\n\nOpen a provider profile to contact them or request a quote securely.${found.hasMore ? " Reply more for the next page." : ""}` : "No verified providers match this service and area. Try another area or service; I have not broadened your search.");
+}

@@ -3,6 +3,8 @@ import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 import { enqueueJob } from "@/platform/jobs/runner";
 import { defaultNotificationProviders, NotificationProviders } from "./providers";
+import { isWhatsAppOptedOut } from "@/modules/whatsapp-assistant/identity";
+import { normalizePhone } from "@/platform/identity/phone";
 
 export async function enqueueNotificationDelivery(notification: { id: string; organisationId: string }) {
   return enqueueJob({
@@ -40,6 +42,9 @@ function communicationAllowed(notification: {
   return tenant.communicationWhatsappAllowed && notification.organisation.notifyWhatsapp;
 }
 
+/** E.164 when the stored number parses, so local formats ("024…") match the WhatsApp identity. */
+const normalizeWhatsAppAddress = (phone: string) => normalizePhone(phone) ?? phone;
+
 export async function deliverNotification(
   organisationId: string,
   notificationId: string,
@@ -68,11 +73,13 @@ export async function deliverNotification(
     return db.notification.findFirstOrThrow({ where: { id: notificationId, organisationId } });
   }
 
-  if (!communicationAllowed(notification)) {
+  // A recipient who replied STOP on WhatsApp gets no WhatsApp notifications until they reply START.
+  const optedOut = notification.channel === "WHATSAPP" && Boolean(notification.tenantOrganisation?.phone) && await isWhatsAppOptedOut(normalizeWhatsAppAddress(notification.tenantOrganisation!.phone!));
+  if (optedOut || !communicationAllowed(notification)) {
     return db.$transaction(async (tx) => {
       const skipped = await tx.notification.update({
         where: { id: notificationId },
-        data: { status: "SKIPPED", failureReason: `${notification.channel} communication is disabled for this recipient.` },
+        data: { status: "SKIPPED", failureReason: optedOut ? "The recipient opted out of WhatsApp messages (STOP)." : `${notification.channel} communication is disabled for this recipient.` },
       });
       await tx.auditEvent.create({ data: { organisationId, action: "notification.skipped", entityType: "notification", entityId: notificationId, metadata: { channel: notification.channel } } });
       await tx.domainEvent.create({ data: { organisationId, name: "notification.skipped", aggregateType: "notification", aggregateId: notificationId, payload: { channel: notification.channel } } });

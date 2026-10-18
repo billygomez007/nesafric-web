@@ -6,6 +6,7 @@ import type { MaintenancePriority, MaintenanceStatus, WorkOrderStatus } from "@/
 
 type TenantViewSource = {
   id: string;
+  referenceNumber: string | null;
   tenantOrganisationId: string | null;
   title: string;
   description: string;
@@ -35,6 +36,7 @@ type TenantViewSource = {
 export function toTenantMaintenanceView(request: TenantViewSource) {
   return {
     id: request.id,
+    referenceNumber: request.referenceNumber,
     tenantOrganisationId: request.tenantOrganisationId,
     title: request.title,
     description: request.description,

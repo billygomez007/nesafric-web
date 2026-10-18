@@ -69,7 +69,7 @@ async function cleanDatabase() {
 
 const REQUEST_KEYS = [
   "attachments", "category", "closedAt", "completedAt", "createdAt", "description", "id", "priority",
-  "property", "status", "tenantOrganisationId", "timeline", "title", "unit", "updatedAt", "workOrders",
+  "property", "referenceNumber", "status", "tenantOrganisationId", "timeline", "title", "unit", "updatedAt", "workOrders",
 ].sort();
 const FORBIDDEN_TEXT = ["STAFF-ONLY-NOTE", "STAFF-APPROVAL-REASON", "STAFF-COST-NOTE", "ledger-ref-secret", "pay-ref-secret", "maintenance/secret-key.jpg", "quote-secret"];
 

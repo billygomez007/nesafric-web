@@ -13,6 +13,7 @@ import "dotenv/config";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
+import { scheduleDueDigests } from "@/modules/staff-notifications/service";
 
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 15_000);
 let stopping = false;
@@ -20,6 +21,8 @@ const SWEEP_INTERVAL_MS = 5 * 60_000;
 let lastSweepAt = 0;
 
 async function tick() {
+  // Queues today's landlord digests once each member's digest hour has passed (idempotent).
+  await scheduleDueDigests().catch((error) => console.error("Digest scheduling failed:", error instanceof Error ? error.message : error));
   try {
     await runDueJobs(jobHandlers);
   } catch (error) {

@@ -23,7 +23,7 @@ import { createLease } from "./helpers/lease";
 const PASSWORD = "correct-horse-battery-1";
 const TENANT_REQUEST_KEYS = [
   "attachments", "category", "closedAt", "completedAt", "createdAt", "description", "id", "priority",
-  "property", "status", "tenantOrganisationId", "timeline", "title", "unit", "updatedAt", "workOrders",
+  "property", "referenceNumber", "status", "tenantOrganisationId", "timeline", "title", "unit", "updatedAt", "workOrders",
 ].sort();
 
 async function cleanDatabase() {

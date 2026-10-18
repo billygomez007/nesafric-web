@@ -36,6 +36,9 @@ export const createMaintenanceRequestSchema = z.object({
   category: maintenanceCategorySchema,
   priority: z.enum(["EMERGENCY", "URGENT", "NORMAL", "LOW"]).default("NORMAL"),
   attachments: z.array(attachmentSchema).max(20).default([]),
+  intakeChannel: z.enum(["WEB", "MOBILE", "WHATSAPP", "VOICE"]).optional(),
+  originalReport: z.string().trim().max(10_000).optional(),
+  classification: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const maintenanceListQuerySchema = z.object({

@@ -4,12 +4,14 @@ import { errorResponse, AppError } from "@/platform/errors";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
+import { scheduleDueDigests } from "@/modules/staff-notifications/service";
 
 /**
  * Drains due jobs and prunes expired guest-write rate-limit / idempotency rows. The sweep runs even
  * if the job drain throws (and never fails the run itself), so cleanup doesn't depend on job health.
  */
 async function runScheduledWork() {
+  await scheduleDueDigests().catch(() => console.error("Digest scheduling failed."));
   try {
     await runDueJobs(jobHandlers);
   } finally {

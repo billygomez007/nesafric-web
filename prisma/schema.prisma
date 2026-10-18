@@ -145,6 +145,9 @@ enum MessageDeliveryStatus {
   READ
   FAILED
   SKIPPED
+  /// The provider may or may not have accepted the message (timeout, crash mid-send). Never
+  /// resent automatically, because a resend could duplicate it; staff decide.
+  UNCONFIRMED
 }
 
 enum NoticeToVacateStatus {
@@ -536,6 +539,9 @@ enum BackgroundJobStatus {
   RUNNING
   SUCCEEDED
   FAILED
+  /// Exhausted its attempts or failed permanently. Never picked up again automatically; an
+  /// operator can requeue it with `retryBackgroundJob`.
+  DEAD_LETTER
 }
 
 enum MaintenancePriority {
@@ -807,6 +813,11 @@ model User {
   createdAt                          DateTime                                   @default(now())
   updatedAt                          DateTime                                   @updatedAt
   sessions                           Session[]
+  channelIdentities                  ChannelIdentity[]
+  onboardingDrafts                   OnboardingDraft[]
+  portfolioVerificationClaims        PortfolioVerification[]
+  providerInvitationsSent            ProviderNetworkInvitation[]
+  routingRulesCreated                MaintenanceRoutingRule[]
   memberships                        OrganisationMember[]
   invitations                        OrganisationInvitation[]                   @relation("InvitationSender")
   audits                             AuditEvent[]                               @relation("AuditActor")
@@ -1001,6 +1012,11 @@ model Organisation {
   members                     OrganisationMember[]
   invitations                 OrganisationInvitation[]
   portfolios                  Portfolio[]
+  onboardingDrafts            OnboardingDraft[]
+  portfolioVerifications      PortfolioVerification[]
+  providerNetworkInvitations  ProviderNetworkInvitation[]
+  counters                    OrganisationCounter[]
+  routingRules                MaintenanceRoutingRule[]
   properties                  Property[]                        @relation("ManagingOrganisation")
   auditEvents                 AuditEvent[]
   domainEvents                DomainEvent[]
@@ -1118,6 +1134,7 @@ model OrganisationMember {
   aiEmployeeHandoffs      AIEmployeeHandoff[]
   assignedConversations   Conversation[]           @relation("ConversationAssigneeMember")
   conversationAssignments ConversationAssignment[] @relation("ConversationAssignmentMember")
+  notificationPreference  NotificationPreference?
 
   @@unique([organisationId, userId])
   @@index([userId, status])
@@ -1231,6 +1248,9 @@ model Property {
   owner                      PropertyOwner?              @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   buildings                  Building[]
   units                      Unit[]
+  portfolioVerifications     PortfolioVerification[]
+  providerPropertyScopes     ProviderPropertyScope[]
+  routingRules               MaintenanceRoutingRule[]
   leases                     Lease[]
   rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
@@ -1287,6 +1307,7 @@ model Unit {
   archivedAt                 DateTime?
   property                   Property                    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   building                   Building?                   @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  routingRules               MaintenanceRoutingRule[]
   leases                     Lease[]
   rentObligations            RentObligation[]
   recurringChargeDefinitions RecurringChargeDefinition[]
@@ -1944,6 +1965,316 @@ model Notification {
   @@index([organisationId, readAt, createdAt])
 }
 
+enum ChannelIdentityVerification {
+  SMS_OTP
+  EMAIL_OTP
+  ADMIN
+  /// The person replied from this number to a message NesAfric sent to it (WhatsApp sender ids
+  /// are attested by Meta).
+  WHATSAPP_REPLY
+}
+
+/// A messaging address (today: a WhatsApp number) as seen on an inbound channel, and the NesAfric
+/// account it has been proven to belong to. Global, not organisation-scoped: one person can be a
+/// landlord in one organisation and a tenant in another. A row without `userId`/`verifiedAt` is
+/// only "someone messaged from this number"; it never grants access to anything.
+model ChannelIdentity {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  channel            ConversationChannel
+  /// E.164 with a leading "+".
+  address            String
+  userId             String?                      @db.Uuid
+  verifiedAt         DateTime?
+  verificationMethod ChannelIdentityVerification?
+  /// The person replied STOP. Outbound notifications are skipped until they reply START.
+  optedOutAt         DateTime?
+  lastInboundAt      DateTime?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  user               User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([channel, address])
+  @@index([userId])
+}
+
+enum OnboardingDraftStatus {
+  IN_PROGRESS
+  /// Saving through the domain services. Each record created is written back to `data.committed`
+  /// so a retry resumes instead of creating duplicates.
+  COMMITTING
+  COMMITTED
+  ABANDONED
+}
+
+/// A landlord or property manager setting up their portfolio over a messaging channel. The draft
+/// is the only state: it survives conversation resets and can be resumed days later. Nothing in
+/// `data` exists as a domain record until the person confirms the summary.
+model OnboardingDraft {
+  id             String                @id @default(uuid()) @db.Uuid
+  channel        ConversationChannel
+  /// E.164 with a leading "+".
+  address        String
+  userId         String?               @db.Uuid
+  status         OnboardingDraftStatus @default(IN_PROGRESS)
+  step           String
+  data           Json
+  /// The inbound message last applied. A re-run of the same message changes nothing.
+  lastMessageId  String?
+  organisationId String?               @db.Uuid
+  committedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  user           User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organisation   Organisation?         @relation(fields: [organisationId], references: [id], onDelete: SetNull)
+
+  @@index([channel, address, status])
+  @@index([userId])
+}
+
+enum PortfolioVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PortfolioAuthorityClaim {
+  OWNER
+  MANAGER
+}
+
+/// A claim that a person owns or is authorised to manage a property. Created PENDING whenever a
+/// property is registered without evidence (for example over WhatsApp). Completing a conversation
+/// never verifies it; only a NesAfric reviewer does.
+model PortfolioVerification {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  organisationId        String                      @db.Uuid
+  propertyId            String?                     @db.Uuid
+  claimedByUserId       String                      @db.Uuid
+  claim                 PortfolioAuthorityClaim
+  status                PortfolioVerificationStatus @default(PENDING)
+  source                String
+  reviewedAt            DateTime?
+  reviewedByPrincipalId String?                     @db.Uuid
+  reviewNote            String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  organisation          Organisation                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property              Property?                   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  claimedBy             User                        @relation(fields: [claimedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, propertyId])
+  @@index([status, createdAt])
+}
+
+/// A property the provider serves for this organisation, when `allPropertiesScope` is false.
+model ProviderPropertyScope {
+  id                     String               @id @default(uuid()) @db.Uuid
+  providerOrganisationId String               @db.Uuid
+  propertyId             String               @db.Uuid
+  createdAt              DateTime             @default(now())
+  providerOrganisation   ProviderOrganisation @relation(fields: [providerOrganisationId], references: [id], onDelete: Cascade)
+  property               Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([providerOrganisationId, propertyId])
+  @@index([propertyId])
+}
+
+enum ProviderInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+  EXPIRED
+}
+
+/// An organisation asking a maintenance professional to join its private network. Nothing about
+/// the provider exists as a provider profile or directory entry until they accept from the
+/// invited number; until then no operational message is ever sent to them.
+model ProviderNetworkInvitation {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                   @db.Uuid
+  invitedByUserId        String                   @db.Uuid
+  /// Set when inviting a provider that already has a NesAfric profile.
+  existingProviderId     String?                  @db.Uuid
+  displayName            String
+  /// E.164 with a leading "+". The only number allowed to answer.
+  phoneE164              String
+  scopeCategories        String[]                 @default([])
+  /// Empty = all of the organisation's properties.
+  propertyIds            String[]                 @default([]) @db.Uuid
+  autoDispatchAllowed    Boolean                  @default(false)
+  spendingLimitMinor     BigInt?
+  emergencyCallouts      Boolean                  @default(false)
+  workingHours           String?
+  paymentTerms           String?
+  status                 ProviderInvitationStatus @default(PENDING)
+  source                 String
+  /// Idempotency key for invitations created by another workflow (e.g. onboarding draft + index).
+  sourceReference        String?                  @unique
+  messageId              String?                  @db.Uuid
+  deliveryFailureReason  String?
+  expiresAt              DateTime
+  respondedAt            DateTime?
+  providerOrganisationId String?                  @db.Uuid
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  landlordOrganisation   Organisation             @relation(fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  invitedBy              User                     @relation(fields: [invitedByUserId], references: [id], onDelete: Restrict)
+  existingProvider       ServiceProvider?         @relation(fields: [existingProviderId], references: [id], onDelete: Restrict)
+  providerOrganisation   ProviderOrganisation?    @relation(fields: [providerOrganisationId], references: [id], onDelete: SetNull)
+
+  @@index([phoneE164, status])
+  @@index([landlordOrganisationId, status])
+}
+
+/// Per-organisation sequences (for example maintenance ticket numbers). Incremented with a single
+/// upsert inside the transaction that uses the value, so numbers never repeat.
+model OrganisationCounter {
+  organisationId String       @db.Uuid
+  key            String
+  value          Int
+  updatedAt      DateTime     @updatedAt
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@id([organisationId, key])
+}
+
+enum RoutingAuthorizationMode {
+  /// Go ahead with the repair, up to the spending cap.
+  PRE_AUTHORIZED
+  /// Inspect and diagnose only; no paid work is authorised.
+  INSPECTION_ONLY
+  /// Send a quote before starting any work.
+  QUOTE_REQUIRED
+  /// Do not dispatch automatically: the landlord decides.
+  APPROVAL_REQUIRED
+  /// Do not dispatch: alert the responsible person (for example structural damage).
+  ESCALATE
+}
+
+/// Landlord-defined rule mapping a kind of maintenance issue to who handles it and what they may
+/// do. Evaluated by deterministic code only; the AI classification is an input, never the decision.
+model MaintenanceRoutingRule {
+  id                            String                       @id @default(uuid()) @db.Uuid
+  organisationId                String                       @db.Uuid
+  name                          String
+  /// Null = every property. With `unitId`, only that unit.
+  propertyId                    String?                      @db.Uuid
+  unitId                        String?                      @db.Uuid
+  /// Provider-network category key (plumbing, electrical, locksmith, ...).
+  category                      String
+  /// Optional words that must appear in the report (any of them) for the rule to apply.
+  keywords                      String[]                     @default([])
+  /// Empty = any priority.
+  priorities                    MaintenancePriority[]        @default([])
+  primaryProviderOrganisationId String?                      @db.Uuid
+  /// Tried in order after the primary declines or does not answer.
+  backupProviderOrganisationIds String[]                     @default([]) @db.Uuid
+  autoDispatch                  Boolean                      @default(true)
+  authorizationMode             RoutingAuthorizationMode     @default(QUOTE_REQUIRED)
+  spendingCapMinor              BigInt?
+  responseTimeoutMinutes        Int                          @default(60)
+  /// Providers tried in total before escalating.
+  maxAttempts                   Int                          @default(3)
+  /// Who is alerted when this rule cannot be satisfied. Null = the organisation's owners.
+  escalationMemberId            String?                      @db.Uuid
+  notifyTenant                  Boolean                      @default(true)
+  requireCompletionVerification Boolean                      @default(false)
+  pausedAt                      DateTime?
+  createdByUserId               String                       @db.Uuid
+  archivedAt                    DateTime?
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+  organisation                  Organisation                 @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  property                      Property?                    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  unit                          Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  createdBy                     User                         @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  decisions                     MaintenanceRoutingDecision[]
+
+  @@index([organisationId, category, archivedAt])
+}
+
+/// Why a maintenance request was (or was not) dispatched: one row per evaluation, never edited.
+model MaintenanceRoutingDecision {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  organisationId       String                  @db.Uuid
+  maintenanceRequestId String                  @db.Uuid
+  routingRuleId        String?                 @db.Uuid
+  /// DISPATCHED, NO_RULE, AMBIGUOUS_RULES, RULE_PAUSED, APPROVAL_REQUIRED, ESCALATE, NO_PROVIDER, ...
+  outcome              String
+  reason               String
+  details              Json?
+  createdAt            DateTime                @default(now())
+  maintenanceRequest   MaintenanceRequest      @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
+  routingRule          MaintenanceRoutingRule? @relation(fields: [routingRuleId], references: [id], onDelete: SetNull)
+
+  @@index([maintenanceRequestId, createdAt])
+}
+
+enum EscalationLevel {
+  ATTENTION
+  CRITICAL
+}
+
+/// Something a landlord or manager must look at. Delivery (immediate alert or daily digest) is
+/// decided by the notification policy; this row is the durable record.
+model MaintenanceEscalation {
+  id                   String             @id @default(uuid()) @db.Uuid
+  organisationId       String             @db.Uuid
+  maintenanceRequestId String             @db.Uuid
+  level                EscalationLevel
+  reason               String
+  detail               String
+  recipientMemberId    String?            @db.Uuid
+  /// One escalation per cause, so retries never alert twice.
+  dedupeKey            String             @unique
+  notifiedAt           DateTime?
+  resolvedAt           DateTime?
+  createdAt            DateTime           @default(now())
+  maintenanceRequest   MaintenanceRequest @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId, resolvedAt, createdAt])
+}
+
+/// How one team member wants to hear about maintenance. CRITICAL alerts are always sent at once,
+/// whatever these settings say.
+model NotificationPreference {
+  memberId          String             @id @db.Uuid
+  organisationId    String             @db.Uuid
+  digestEnabled     Boolean            @default(true)
+  /// Hour of day (Ghana time = UTC) the daily digest is sent.
+  digestHour        Int                @default(18)
+  /// Send a short "nothing happened" digest on quiet days.
+  noActivitySummary Boolean            @default(false)
+  /// ATTENTION items go to the digest instead of a message each time.
+  attentionInDigest Boolean            @default(false)
+  /// Extra escalation reasons (or routine events) the member wants immediately.
+  immediateReasons  String[]           @default([])
+  updatedAt         DateTime           @updatedAt
+  member            OrganisationMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+/// One message NesAfric sent (or decided not to send) to a team member: an immediate alert or a
+/// daily digest. `dedupeKey` makes retries and overlapping schedulers harmless.
+model StaffNotification {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @db.Uuid
+  memberId       String   @db.Uuid
+  kind           String
+  level          String?
+  escalationId   String?  @db.Uuid
+  digestDate     String?
+  dedupeKey      String   @unique
+  /// QUEUED (message created), SKIPPED (nothing to send / no channel), FAILED (could not queue).
+  status         String
+  messageId      String?  @db.Uuid
+  detail         String?
+  createdAt      DateTime @default(now())
+
+  @@index([organisationId, createdAt])
+  @@index([memberId, kind, createdAt])
+}
+
 model BackgroundJob {
   id             String              @id @default(uuid()) @db.Uuid
   organisationId String?             @db.Uuid
@@ -2506,6 +2837,15 @@ model MaintenanceRequest {
   unitId               String?                      @db.Uuid
   tenantOrganisationId String?                      @db.Uuid
   reportedByUserId     String                       @db.Uuid
+  /// Per-organisation ticket reference shown to tenants, landlords and providers (NM-1001, ...).
+  referenceNumber      String?
+  /// How the report arrived (WEB, WHATSAPP, VOICE, ...). Null for older requests.
+  intakeChannel        String?
+  /// The reporter's own words, kept unchanged next to the normalised title/description.
+  originalReport       String?
+  /// Structured interpretation of the report (category, urgency, safety flags) and its source
+  /// (model or deterministic rules). Informational: routing rules decide what happens.
+  classification       Json?
   title                String
   description          String
   category             String
@@ -2531,8 +2871,11 @@ model MaintenanceRequest {
   depositDeductions    DepositDeduction[]
   turnoverTasks        VacancyTurnoverTask[]
   conversations        Conversation[]
+  routingDecisions     MaintenanceRoutingDecision[]
+  escalations          MaintenanceEscalation[]
   dispatchAttempts     MaintenanceDispatchAttempt[]
 
+  @@unique([organisationId, referenceNumber])
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
   @@index([tenantOrganisationId, createdAt])
@@ -2624,6 +2967,11 @@ model WorkOrder {
   assigneeMember           OrganisationMember?          @relation("WorkOrderAssigneeMember", fields: [assigneeMemberId], references: [id], onDelete: Restrict)
   assigneeUser             User?                        @relation("WorkOrderAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
   history                  WorkOrderHistory[]
+  /// Set when a routing rule sent this work order: what the provider may do without approval.
+  authorizationMode        RoutingAuthorizationMode?
+  /// Pre-authorised spend in minor units (null = none). Quotes above it need approval.
+  authorizedSpendMinor     BigInt?
+  routingRuleId            String?                      @db.Uuid
   providerAssignments      ProviderAssignment[]
   providerRating           ProviderRating?
   conversations            Conversation[]
@@ -2723,6 +3071,7 @@ model ServiceProvider {
   campaigns                  Campaign[]
   savedBy                    SavedServiceProvider[]
   businessWhatsAppConfig     BusinessWhatsAppConfig?
+  networkInvitations         ProviderNetworkInvitation[]
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
   @@index([identityVerifiedAt])
@@ -2900,10 +3249,10 @@ model ProviderVerificationHistory {
 }
 
 model ProviderOrganisation {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  landlordOrganisationId String                  @db.Uuid
-  providerId             String                  @db.Uuid
-  status                 ProviderDirectoryStatus @default(ACTIVE)
+  id                     String                      @id @default(uuid()) @db.Uuid
+  landlordOrganisationId String                      @db.Uuid
+  providerId             String                      @db.Uuid
+  status                 ProviderDirectoryStatus     @default(ACTIVE)
   internalNotes          String?
   /// Phase 21 items 16-17 — the AI maintenance-dispatch provider hierarchy. Lower `priority`
   /// values are contacted first among an organisation's own directory; `isBackup` providers are
@@ -2911,14 +3260,33 @@ model ProviderOrganisation {
   /// marketplace fallback (outside this organisation's own directory entirely) is the last resort,
   /// resolved separately in `maintenance-dispatch/service.ts` and never automatic unless policy
   /// / entitlement explicitly permits it.
-  priority               Int                     @default(100)
-  isBackup               Boolean                 @default(false)
-  createdByUserId        String                  @db.Uuid
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  landlordOrganisation   Organisation            @relation("LandlordProviderDirectory", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
-  provider               ServiceProvider         @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  createdBy              User                    @relation("ProviderDirectoryCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  priority               Int                         @default(100)
+  isBackup               Boolean                     @default(false)
+  /// Set when the provider themself agreed to receive this organisation's work orders (for
+  /// example by replying ACCEPT to a WhatsApp invitation). Entries added on the web before
+  /// invitations existed have none and are never used for automatic dispatch.
+  consentedAt            DateTime?
+  consentMethod          String?
+  /// Work this organisation uses the provider for (provider-network category keys, e.g. plumbing).
+  scopeCategories        String[]                    @default([])
+  /// When false, only the properties in `propertyScopes` are served.
+  allPropertiesScope     Boolean                     @default(true)
+  /// Jobs may be sent without a person choosing the provider each time. Spending is separate.
+  autoDispatchAllowed    Boolean                     @default(false)
+  /// The most a job sent to this provider may cost without the landlord's approval. Null = no
+  /// pre-authorised spend.
+  spendingLimitMinor     BigInt?
+  emergencyCallouts      Boolean                     @default(false)
+  workingHours           String?
+  paymentTerms           String?
+  createdByUserId        String                      @db.Uuid
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  landlordOrganisation   Organisation                @relation("LandlordProviderDirectory", fields: [landlordOrganisationId], references: [id], onDelete: Restrict)
+  provider               ServiceProvider             @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  createdBy              User                        @relation("ProviderDirectoryCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  propertyScopes         ProviderPropertyScope[]
+  invitations            ProviderNetworkInvitation[]
 
   @@unique([landlordOrganisationId, providerId])
   @@index([landlordOrganisationId, status, isBackup, priority])
@@ -4142,6 +4510,8 @@ model Conversation {
   assignedMemberId     String?                   @db.Uuid
   aiSummary            String?
   webChatTokenHash     String?                   @unique
+  whatsappSessionKey   String?                   @unique
+  assistantState       Json?
   lastMessageAt        DateTime?
   lastInboundAt        DateTime?
   lastOutboundAt       DateTime?
@@ -4216,6 +4586,7 @@ model Message {
   externalReferenceId   String?
   metadata              Json?
   containsSensitiveData Boolean             @default(false)
+  processedAt           DateTime?
   createdAt             DateTime            @default(now())
   conversation          Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   organisation          Organisation        @relation(fields: [organisationId], references: [id], onDelete: Restrict)
@@ -4224,6 +4595,7 @@ model Message {
 
   @@unique([organisationId, channel, externalMessageId])
   @@index([conversationId, createdAt])
+  @@index([conversationId, direction, processedAt, createdAt])
   @@index([organisationId, createdAt])
 }
 
@@ -4250,6 +4622,7 @@ model MessageDelivery {
 
   @@index([organisationId, status])
   @@index([messageId])
+  @@index([organisationId, channel, providerReference])
 }
 
 model ConversationAssignment {
@@ -5280,6 +5653,8 @@ enum DispatchAttemptStatus {
   NO_RESPONSE
   BACKUP_REQUIRED
   ASSIGNED
+  /// The work order could not be sent (for example no approved template). Never retried as a send.
+  CONTACT_FAILED
 }
 
 /// One attempt to dispatch a work order to a provider, in hierarchy order (item 17: private/
@@ -5299,6 +5674,16 @@ model MaintenanceDispatchAttempt {
   respondedAt             DateTime?
   initiatedByAIEmployeeId String?               @db.Uuid
   createdByUserId         String?               @db.Uuid
+  /// Rule-driven dispatch only (null for voice/manual proposals).
+  routingRuleId           String?               @db.Uuid
+  providerOrganisationId  String?               @db.Uuid
+  providerAssignmentId    String?               @db.Uuid
+  /// 1 for the first provider tried, 2 for the next... Unique per work order, so a retried
+  /// worker can never send the same attempt twice.
+  attemptNumber           Int?
+  /// The provider must answer before this; afterwards the attempt becomes NO_RESPONSE.
+  expiresAt               DateTime?
+  messageId               String?               @db.Uuid
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
 
@@ -5310,6 +5695,7 @@ model MaintenanceDispatchAttempt {
   createdBy             User?              @relation("MaintenanceDispatchAttemptCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   voiceCalls            VoiceCall[]
 
+  @@unique([workOrderId, attemptNumber])
   @@index([organisationId, status, createdAt])
   @@index([workOrderId, createdAt])
   @@index([serviceProviderId, status])

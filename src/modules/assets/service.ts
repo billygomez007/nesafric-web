@@ -5,7 +5,7 @@ import { requirePermission, PERMISSIONS } from "@/platform/authorization/permiss
 import { recordAudit } from "@/modules/audit/service";
 import { assertOperational, assertWithinLimit } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
-import { createPortfolioSchema, createPropertySchema, createUnitSchema, updatePropertySchema, updateUnitSchema } from "./schemas";
+import { createBuildingSchema, createPortfolioSchema, createPropertySchema, createUnitSchema, updatePropertySchema, updateUnitSchema } from "./schemas";
 import { activePropertyScope } from "./repository";
 
 export async function createPortfolio(userId: string, organisationId: string, input: unknown) {
@@ -69,6 +69,23 @@ export async function createProperty(userId: string, organisationId: string, inp
     await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "property.created", entityType: "property", entityId: property.id } });
     await tx.domainEvent.create({ data: { organisationId, name: "property.created", aggregateType: "property", aggregateId: property.id, payload: { referenceNumber: property.referenceNumber } } });
     return property;
+  });
+}
+
+/** Adds a building (block) with its units to an existing property. */
+export async function createBuilding(userId: string, organisationId: string, propertyId: string, input: unknown) {
+  await requirePermission(userId, organisationId, PERMISSIONS.propertyUpdate);
+  const data = createBuildingSchema.parse(input);
+  await assertOperational(organisationId, ENTITLEMENTS.unitsMax.key);
+  if (data.units.length) await assertWithinLimit(organisationId, ENTITLEMENTS.unitsMax.key, data.units.length);
+  return db.$transaction(async (tx) => {
+    const property = await tx.property.findFirst({ where: activePropertyScope(organisationId, propertyId), select: { id: true } });
+    if (!property) throw notFound();
+    const building = await tx.building.create({ data: { propertyId: property.id, name: data.name } });
+    if (data.units.length) await tx.unit.createMany({ data: data.units.map((unit) => ({ ...unit, propertyId: property.id, buildingId: building.id })) });
+    await tx.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "building.created", entityType: "building", entityId: building.id, metadata: { propertyId: property.id, units: data.units.length } } });
+    await tx.domainEvent.create({ data: { organisationId, name: "building.created", aggregateType: "building", aggregateId: building.id, payload: { propertyId: property.id } } });
+    return building;
   });
 }
 
