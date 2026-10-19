@@ -36,11 +36,16 @@ async function assignmentForReply(replyTo: string | undefined) {
   return (await db.maintenanceDispatchAttempt.findUnique({ where: { id: attemptId }, select: { providerAssignmentId: true } }))?.providerAssignmentId ?? null;
 }
 
+/** Completion evidence, one attachment per WhatsApp media item (see attachMedia). */
 async function attachEvidence(userId: string, job: ProviderJob, media: { id: string; mimeType?: string }) {
+  const sourceMediaId = `whatsapp-completion:${media.id}`;
+  const maintenanceRequestId = job.workOrder.maintenanceRequestId;
+  const attached = async () => Boolean(await db.maintenanceAttachment.findUnique({ where: { maintenanceRequestId_sourceMediaId: { maintenanceRequestId, sourceMediaId } }, select: { id: true } }));
+  if (await attached()) return true;
   const file = await downloadWhatsAppMedia(media.id).catch(() => null);
   if (!file) return false;
   const extension = file.contentType === "application/pdf" ? "pdf" : file.contentType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
-  return uploadOrganisationDocument(userId, job.landlordOrganisationId, { targetType: "MAINTENANCE_ATTACHMENT", targetId: job.workOrder.maintenanceRequestId, fileName: `completion-${media.id}.${extension}`, contentType: file.contentType, dataBase64: file.body.toString("base64") }).then(() => true, () => false);
+  return uploadOrganisationDocument(userId, job.landlordOrganisationId, { targetType: "MAINTENANCE_ATTACHMENT", targetId: maintenanceRequestId, fileName: `completion-${media.id}.${extension}`, contentType: file.contentType, dataBase64: file.body.toString("base64"), sourceMediaId }).then(() => true, attached);
 }
 
 /** Organisations where this user may make the decision, for a ticket reference. */

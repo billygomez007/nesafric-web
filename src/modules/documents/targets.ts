@@ -148,9 +148,11 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
       }
       return { organisationId };
     },
-    attach: (tx, { targetId, storageObject, fileName, contentType, sizeBytes }) =>
+    // With a source media id the database allows one attachment per photo: a concurrent second
+    // upload fails here, its transaction rolls back and the upload pipeline deletes its bytes.
+    attach: (tx, { targetId, storageObject, fileName, contentType, sizeBytes, input }) =>
       tx.maintenanceAttachment.create({
-        data: { maintenanceRequestId: targetId, fileKey: storageObject.storageKey, fileName, contentType, sizeBytes },
+        data: { maintenanceRequestId: targetId, fileKey: storageObject.storageKey, fileName, contentType, sizeBytes, sourceMediaId: input.sourceMediaId },
       }),
   },
 

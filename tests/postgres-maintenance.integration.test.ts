@@ -131,6 +131,8 @@ describe("PostgreSQL Phase 6 maintenance and work orders", () => {
     });
     expect(request).toMatchObject({ status: "REPORTED" });
     expect((await db.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id } })).reportedByUserId).toBe(reporter.id);
+    // A create-only replay returns a receipt; a first creation by a tenant returns the tenant view.
+    if (!("attachments" in request)) throw new Error("Expected the tenant view of a new request.");
     expect(request.attachments).toHaveLength(1);
     expect((await getTenantMaintenanceHistory(reporter.id, organisation.id, tenant.relationship.id))[0].id).toBe(request.id);
 

@@ -350,6 +350,11 @@ async function nextMaintenanceReference(tx: Tx, organisationId: string) {
   return `NM-${row.value}`;
 }
 
+/** What a caller may see of a request they created but cannot read: that it exists, and its reference. */
+function toMaintenanceReceipt(request: { id: string; referenceNumber: string | null; status: MaintenanceStatus; createdAt: Date }) {
+  return { id: request.id, referenceNumber: request.referenceNumber, status: request.status, createdAt: request.createdAt };
+}
+
 export async function createMaintenanceRequest(userId: string, organisationId: string, input: unknown) {
   const data = createMaintenanceRequestSchema.parse(input);
   const internal = await hasPermission(userId, organisationId, PERMISSIONS.maintenanceCreate);
@@ -362,9 +367,19 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
     if (!data.intakeReference) return null;
     const existing = await db.maintenanceRequest.findUnique({ where: { organisationId_intakeReference: { organisationId, intakeReference: data.intakeReference } }, include: requestInclude() });
     if (!existing) return null;
-    // The same source can only ever be the same reporter's request.
-    if (existing.reportedByUserId !== userId) throw forbidden();
-    return internal ? existing : toTenantMaintenanceView(existing);
+    // A replay must describe the same request: same reporter, property, unit and tenancy.
+    // Anything else is refused without saying what the reference belongs to.
+    const sameRequest = existing.reportedByUserId === userId && existing.propertyId === data.propertyId
+      && (existing.unitId ?? null) === (data.unitId ?? null) && (existing.tenantOrganisationId ?? null) === (data.tenantOrganisationId ?? null);
+    if (!sameRequest) throw forbidden();
+    // Then the ordinary visibility rules for the existing request itself (as getMaintenanceRequest):
+    // staff with maintenance.read see it in full, its tenant sees the tenant view.
+    const access = await requireRequestRead(userId, organisationId, existing.tenantOrganisationId).catch(() => null);
+    if (access === "internal") return existing;
+    if (access === "tenant") return toTenantMaintenanceView(existing);
+    // A creator without read access learns only that their request exists, not what happened since.
+    if (await hasPermission(userId, organisationId, PERMISSIONS.maintenanceCreate)) return toMaintenanceReceipt(existing);
+    throw forbidden();
   };
   const earlier = await existingForIntake();
   if (earlier) return earlier;

@@ -38,6 +38,8 @@ export const uploadDocumentSchema = z.object({
   evidenceExpiresAt: z.coerce.date().optional(),
   areaId: id.optional(),
   mediaSlot: z.enum(["desktop", "mobile", "nativeApp"]).optional(),
+  /** MAINTENANCE_ATTACHMENT only: the external media the file came from; one attachment per source. */
+  sourceMediaId: z.string().regex(/^[a-z][a-z-]{0,30}:[A-Za-z0-9._:=-]{1,160}$/).optional(),
 }).strict().superRefine((value, context) => {
   if (value.targetType === "LISTING_MEDIA" && !value.mediaType) {
     context.addIssue({ code: "custom", path: ["mediaType"], message: "mediaType is required for listing media uploads." });

@@ -2893,12 +2893,16 @@ model MaintenanceAttachment {
   maintenanceRequestId String             @db.Uuid
   fileKey              String
   fileName             String
+  /// The external media this file came from (for example `whatsapp:<media id>`). Unique per
+  /// request, so one photo is attached once however many workers process its message.
+  sourceMediaId        String?
   contentType          String?
   sizeBytes            Int?
   createdAt            DateTime           @default(now())
   maintenanceRequest   MaintenanceRequest @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
 
   @@unique([maintenanceRequestId, fileKey])
+  @@unique([maintenanceRequestId, sourceMediaId])
 }
 
 model MaintenanceHistory {

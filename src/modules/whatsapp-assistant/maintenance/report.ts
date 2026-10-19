@@ -94,17 +94,28 @@ function confirmText(report: ReportState, choice: Choice) {
   ].filter((line) => line !== null).join("\n");
 }
 
-async function attachMedia(userId: string, organisationId: string, requestId: string, media: ReportState["media"]) {
-  const existing = new Set((await db.maintenanceAttachment.findMany({ where: { maintenanceRequestId: requestId }, select: { fileName: true } })).map((item) => item.fileName));
+/**
+ * One attachment per WhatsApp photo, however many workers handle the confirming message: the
+ * database allows one row per (request, source media). A worker that loses the race has its upload
+ * rolled back and its stored bytes deleted by the upload pipeline, and counts the winner's copy.
+ * A photo that could not be downloaded or stored leaves no row, so a later pass can add it.
+ */
+export async function attachMedia(userId: string, organisationId: string, requestId: string, media: ReportState["media"]) {
   let saved = 0;
   for (const item of media) {
-    const fileName = `whatsapp-${item.id}.${(item.mimeType ?? "image/jpeg").split("/")[1]?.replace("jpeg", "jpg") ?? "jpg"}`;
-    if (existing.has(fileName)) { saved += 1; continue; }
+    const sourceMediaId = `whatsapp:${item.id}`;
+    const attached = async () => Boolean(await db.maintenanceAttachment.findUnique({ where: { maintenanceRequestId_sourceMediaId: { maintenanceRequestId: requestId, sourceMediaId } }, select: { id: true } }));
+    if (await attached()) { saved += 1; continue; }
     const file = await downloadWhatsAppMedia(item.id).catch(() => null);
     if (!file) continue;
-    await uploadOrganisationDocument(userId, organisationId, { targetType: "MAINTENANCE_ATTACHMENT", targetId: requestId, fileName, contentType: file.contentType, dataBase64: file.body.toString("base64") })
-      .then(() => { saved += 1; })
-      .catch(() => undefined);
+    const fileName = `whatsapp-${item.id}.${(item.mimeType ?? file.contentType).split("/")[1]?.replace("jpeg", "jpg") ?? "jpg"}`;
+    try {
+      await uploadOrganisationDocument(userId, organisationId, { targetType: "MAINTENANCE_ATTACHMENT", targetId: requestId, fileName, contentType: file.contentType, dataBase64: file.body.toString("base64"), sourceMediaId });
+      saved += 1;
+    } catch {
+      // Lost the race to a concurrent pass (its attachment stands), or the upload failed (retryable).
+      if (await attached()) saved += 1;
+    }
   }
   return saved;
 }
