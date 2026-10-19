@@ -73,6 +73,8 @@ export async function createRoutingRule(userId: string, organisationId: string, 
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceManage);
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceAssign);
   const data = createRuleSchema.parse(input);
+  // A rule that pre-authorises spend needs the same right as approving a quote (as on update).
+  if (data.authorizationMode === "PRE_AUTHORIZED" || data.spendingCapMinor) await requirePermission(userId, organisationId, PERMISSIONS.maintenanceApprove);
   return db.$transaction(async (tx) => {
     await validateReferences(tx, organisationId, data);
     const rule = await tx.maintenanceRoutingRule.create({ data: { ...data, organisationId, createdByUserId: userId, spendingCapMinor: data.spendingCapMinor ? BigInt(data.spendingCapMinor) : null } });

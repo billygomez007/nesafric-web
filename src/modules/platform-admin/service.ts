@@ -2618,13 +2618,17 @@ export async function reviewPortfolioVerificationForPlatform(principal: Platform
   requirePermission(principal, PLATFORM_PERMISSIONS.portfolioVerify);
   const data = z.object({ status: z.enum(["VERIFIED", "REJECTED"]), note: z.string().trim().min(3).max(2000) }).strict().parse(input);
   if (!isUuid(verificationId)) throw notFound();
-  const current = await db.portfolioVerification.findUnique({ where: { id: verificationId } });
-  if (!current) throw notFound();
-  if (current.status !== "PENDING") throw new AppError("ALREADY_REVIEWED", 409, "This claim has already been reviewed.");
-  const updated = await db.portfolioVerification.update({ where: { id: verificationId }, data: { status: data.status, reviewNote: data.note, reviewedAt: new Date(), reviewedByPrincipalId: principal.id } });
-  await recordPlatformAudit(principal, `platform_admin.portfolio_${data.status.toLowerCase()}`, "portfolio_verification", verificationId, current.organisationId, { propertyId: current.propertyId });
-  await db.auditEvent.create({ data: { organisationId: current.organisationId, action: `portfolio_verification.${data.status.toLowerCase()}`, entityType: "portfolio_verification", entityId: verificationId, metadata: { propertyId: current.propertyId } } });
-  return updated;
+  // One decision per claim: the update only applies while it is still PENDING, and the decision
+  // and both audit records commit together or not at all.
+  return db.$transaction(async (tx) => {
+    const decided = await tx.portfolioVerification.updateMany({ where: { id: verificationId, status: "PENDING" }, data: { status: data.status, reviewNote: data.note, reviewedAt: new Date(), reviewedByPrincipalId: principal.id } });
+    const current = await tx.portfolioVerification.findUnique({ where: { id: verificationId } });
+    if (!current) throw notFound();
+    if (!decided.count) throw new AppError("ALREADY_REVIEWED", 409, "This claim has already been reviewed.");
+    await tx.platformAuditEvent.create({ data: { platformPrincipalId: principal.id, action: `platform_admin.portfolio_${data.status.toLowerCase()}`, entityType: "portfolio_verification", entityId: verificationId, organisationId: current.organisationId, metadata: { propertyId: current.propertyId } } });
+    await tx.auditEvent.create({ data: { organisationId: current.organisationId, action: `portfolio_verification.${data.status.toLowerCase()}`, entityType: "portfolio_verification", entityId: verificationId, metadata: { propertyId: current.propertyId } } });
+    return current;
+  });
 }
 
 // ---------------------------------------------------------------------------

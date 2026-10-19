@@ -350,6 +350,11 @@ async function nextMaintenanceReference(tx: Tx, organisationId: string) {
   return `NM-${row.value}`;
 }
 
+/** What a caller may see of a request they created but cannot read: that it exists, and its reference. */
+function toMaintenanceReceipt(request: { id: string; referenceNumber: string | null; status: MaintenanceStatus; createdAt: Date }) {
+  return { id: request.id, referenceNumber: request.referenceNumber, status: request.status, createdAt: request.createdAt };
+}
+
 export async function createMaintenanceRequest(userId: string, organisationId: string, input: unknown) {
   const data = createMaintenanceRequestSchema.parse(input);
   const internal = await hasPermission(userId, organisationId, PERMISSIONS.maintenanceCreate);
@@ -357,6 +362,27 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
     ? await isTenantUser(userId, organisationId, data.tenantOrganisationId)
     : null;
   if (!internal && !tenantIdentity) throw forbidden();
+
+  const existingForIntake = async () => {
+    if (!data.intakeReference) return null;
+    const existing = await db.maintenanceRequest.findUnique({ where: { organisationId_intakeReference: { organisationId, intakeReference: data.intakeReference } }, include: requestInclude() });
+    if (!existing) return null;
+    // A replay must describe the same request: same reporter, property, unit and tenancy.
+    // Anything else is refused without saying what the reference belongs to.
+    const sameRequest = existing.reportedByUserId === userId && existing.propertyId === data.propertyId
+      && (existing.unitId ?? null) === (data.unitId ?? null) && (existing.tenantOrganisationId ?? null) === (data.tenantOrganisationId ?? null);
+    if (!sameRequest) throw forbidden();
+    // Then the ordinary visibility rules for the existing request itself (as getMaintenanceRequest):
+    // staff with maintenance.read see it in full, its tenant sees the tenant view.
+    const access = await requireRequestRead(userId, organisationId, existing.tenantOrganisationId).catch(() => null);
+    if (access === "internal") return existing;
+    if (access === "tenant") return toTenantMaintenanceView(existing);
+    // A creator without read access learns only that their request exists, not what happened since.
+    if (await hasPermission(userId, organisationId, PERMISSIONS.maintenanceCreate)) return toMaintenanceReceipt(existing);
+    throw forbidden();
+  };
+  const earlier = await existingForIntake();
+  if (earlier) return earlier;
 
   return db.$transaction(async (tx) => {
     await validatePropertyUnit(tx, organisationId, data.propertyId, data.unitId);
@@ -384,6 +410,7 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
       data: {
         organisationId,
         referenceNumber,
+        intakeReference: data.intakeReference,
         intakeChannel: data.intakeChannel,
         originalReport: data.originalReport,
         classification: data.classification as Prisma.InputJsonValue | undefined,
@@ -421,6 +448,13 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
     }
     const created = await tx.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id }, include: requestInclude() });
     return internal ? created : toTenantMaintenanceView(created);
+  }).catch(async (error) => {
+    // Lost the race for this intake reference: the other attempt's request is the request.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && data.intakeReference) {
+      const winner = await existingForIntake();
+      if (winner) return winner;
+    }
+    throw error;
   });
 }
 
@@ -763,6 +797,8 @@ export async function addTenantMaintenanceDetails(userId: string, organisationId
   return db.$transaction(async (tx) => {
     const request = await tx.maintenanceRequest.findFirst({ where: { id: requestId, organisationId } });
     if (!request?.tenantOrganisationId || !await isTenantUser(userId, organisationId, request.tenantOrganisationId)) throw notFound();
+    // Serialise passes for the same source message so the check and the insert are atomic.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`maintenance-details:${request.id}:${input.sourceMessageId}`}, 0))`;
     const existing = await tx.maintenanceHistory.findFirst({ where: { maintenanceRequestId: request.id, type: "NOTE", metadata: { path: ["sourceMessageId"], equals: input.sourceMessageId } } });
     if (existing) return existing;
     const history = await tx.maintenanceHistory.create({ data: { maintenanceRequestId: request.id, actorUserId: userId, type: "NOTE", note, metadata: { sourceMessageId: input.sourceMessageId, by: "tenant" } } });

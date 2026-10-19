@@ -39,6 +39,8 @@ export const createMaintenanceRequestSchema = z.object({
   intakeChannel: z.enum(["WEB", "MOBILE", "WHATSAPP", "VOICE"]).optional(),
   originalReport: z.string().trim().max(10_000).optional(),
   classification: z.record(z.string(), z.unknown()).optional(),
+  /** Unique per organisation: a second request with the same reference returns the first one. */
+  intakeReference: z.string().trim().min(3).max(200).optional(),
 });
 
 export const maintenanceListQuerySchema = z.object({

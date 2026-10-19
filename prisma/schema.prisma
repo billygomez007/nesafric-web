@@ -2839,6 +2839,9 @@ model MaintenanceRequest {
   tenantOrganisationId String?                      @db.Uuid
   reportedByUserId     String                       @db.Uuid
   /// Per-organisation ticket reference shown to tenants, landlords and providers (NM-1001, ...).
+  /// Where the report came from, unique per organisation (for example `whatsapp:<message id>`),
+  /// so one inbound message can never create two tickets, even when processed twice at once.
+  intakeReference      String?
   referenceNumber      String?
   /// How the report arrived (WEB, WHATSAPP, VOICE, ...). Null for older requests.
   intakeChannel        String?
@@ -2876,6 +2879,7 @@ model MaintenanceRequest {
   escalations          MaintenanceEscalation[]
   dispatchAttempts     MaintenanceDispatchAttempt[]
 
+  @@unique([organisationId, intakeReference])
   @@unique([organisationId, referenceNumber])
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
@@ -2889,12 +2893,16 @@ model MaintenanceAttachment {
   maintenanceRequestId String             @db.Uuid
   fileKey              String
   fileName             String
+  /// The external media this file came from (for example `whatsapp:<media id>`). Unique per
+  /// request, so one photo is attached once however many workers process its message.
+  sourceMediaId        String?
   contentType          String?
   sizeBytes            Int?
   createdAt            DateTime           @default(now())
   maintenanceRequest   MaintenanceRequest @relation(fields: [maintenanceRequestId], references: [id], onDelete: Restrict)
 
   @@unique([maintenanceRequestId, fileKey])
+  @@unique([maintenanceRequestId, sourceMediaId])
 }
 
 model MaintenanceHistory {
