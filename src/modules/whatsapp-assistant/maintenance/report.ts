@@ -5,6 +5,7 @@ import { addTenantMaintenanceDetails, createMaintenanceRequest, getTenantMainten
 import { uploadOrganisationDocument } from "@/modules/documents/service";
 import { listUserTenancies } from "@/modules/tenants/self-service";
 import { redeemTenantAccessCode } from "@/modules/tenants/access-invitations";
+import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import type { AssistantState } from "../schemas";
 import { classifyReport, looksLikeMaintenance } from "./classify";
 import { downloadWhatsAppMedia } from "./media";
@@ -13,7 +14,7 @@ type ReportState = NonNullable<AssistantState["report"]>;
 type Choice = ReportState["choices"][number];
 type Linked = { user: { id: string; displayName: string } } | null;
 export type ReportInput = { body: string; kind: string; messageId: string; media?: { id: string; mimeType?: string } };
-export type ReportResult = { state: AssistantState; reply: string; redactInbound?: boolean };
+export type ReportResult = { state: AssistantState; reply: string; redactInbound?: boolean; /** Reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
 
 const OPEN: MaintenanceStatus[] = ["REPORTED", "TRIAGED", "AWAITING_APPROVAL", "APPROVED", "ASSIGNED", "IN_PROGRESS"];
 const STATUS_TEXT: Record<string, string> = { REPORTED: "received", TRIAGED: "being reviewed", AWAITING_APPROVAL: "waiting for landlord approval", APPROVED: "approved", ASSIGNED: "assigned to a provider", IN_PROGRESS: "in progress", COMPLETED: "completed", CLOSED: "closed", REJECTED: "declined", CANCELLED: "cancelled" };
@@ -34,6 +35,15 @@ async function tenancyChoices(userId: string): Promise<Choice[]> {
     propertyId: lease.property.id, propertyName: lease.property.name, unitId: lease.unit?.id, unitName: lease.unit?.name,
   }))).slice(0, 9);
 }
+
+/** Reply buttons whose ids are the commands this flow already handles. */
+const ask = (state: AssistantState, reply: string, buttons: Array<{ id: string; title: string }>): ReportResult => ({ state, reply, interactive: replyButtons(reply, buttons) });
+const SKIP = [{ id: "skip", title: "Skip photos" }];
+const DONE = [{ id: "done", title: "Done" }];
+const SAME_OR_NEW = [{ id: "same", title: "Same problem" }, { id: "new", title: "New problem" }];
+const CONFIRM = [{ id: "confirm", title: "Confirm" }, { id: "edit", title: "Edit" }, { id: "cancel", title: "Cancel" }];
+const CONFIRM_OR_CANCEL = CONFIRM.filter((button) => button.id !== "edit");
+const photosPrompt = `Thanks. Send up to ${MAX_PHOTOS} photos of the problem now, or reply skip.`;
 
 const notLinkedReply = "To report a repair, first connect this WhatsApp number to your NesAfric account: reply link. If you do not have an account yet, ask your landlord for your tenant access code.";
 const noTenancyReply = "No active tenancy is connected to your account yet. If your landlord gave you a tenant access code (it starts with NT-), send it here.";
@@ -57,7 +67,7 @@ async function requestsReply(userId: string, choices: Choice[], reference?: stri
 async function describeStep(input: ReportInput, report: ReportState, state: AssistantState): Promise<ReportResult> {
   const description = [report.description, input.kind === "text" ? input.body.trim() : null].filter(Boolean).join("\n").slice(0, 4000);
   if (description.length < 5) return { state: { ...state, report: { ...report, step: "describe" } }, reply: "Please describe the problem: what is wrong, where in the home, and since when." };
-  return { state: { ...state, report: { ...report, description, step: "photos" } }, reply: `Thanks. Send up to ${MAX_PHOTOS} photos of the problem now, or reply skip.` };
+  return ask({ ...state, report: { ...report, description, step: "photos" } }, photosPrompt, SKIP);
 }
 
 async function toConfirm(report: ReportState, state: AssistantState): Promise<ReportResult> {
@@ -73,12 +83,13 @@ async function toConfirm(report: ReportState, state: AssistantState): Promise<Re
   });
   const next = { ...report, classification };
   if (duplicate?.referenceNumber) {
-    return {
-      state: { ...state, report: { ...next, step: "duplicate", duplicate: { id: duplicate.id, referenceNumber: duplicate.referenceNumber, title: duplicate.title } } },
-      reply: `You already have an open request ${duplicate.referenceNumber}: "${duplicate.title}" (${STATUS_TEXT[duplicate.status]}). Is this the same problem?\nReply same to add these details to it, or new to report a separate problem.`,
-    };
+    return ask(
+      { ...state, report: { ...next, step: "duplicate", duplicate: { id: duplicate.id, referenceNumber: duplicate.referenceNumber, title: duplicate.title } } },
+      `You already have an open request ${duplicate.referenceNumber}: "${duplicate.title}" (${STATUS_TEXT[duplicate.status]}). Is this the same problem?\nReply same to add these details to it, or new to report a separate problem.`,
+      SAME_OR_NEW,
+    );
   }
-  return { state: { ...state, report: { ...next, step: "confirm", duplicate: undefined } }, reply: confirmText(next, choice) };
+  return ask({ ...state, report: { ...next, step: "confirm", duplicate: undefined } }, confirmText(next, choice), CONFIRM);
 }
 
 function confirmText(report: ReportState, choice: Choice) {
@@ -192,7 +203,7 @@ export async function advanceReport(input: ReportInput, linked: Linked, state: A
     const next = { ...reset(), workflow: "report" as const, report };
     if (choices.length > 1) return { state: { ...next, report: { ...report, step: "tenancy" } }, reply: `Which home is this about?\n${choices.map((choice, index) => `${index + 1}. ${label(choice)}`).join("\n")}` };
     report.selected = 0;
-    if (report.description) return { state: { ...next, report: { ...report, step: "photos" } }, reply: `Thanks. Send up to ${MAX_PHOTOS} photos of the problem now, or reply skip.` };
+    if (report.description) return ask({ ...next, report: { ...report, step: "photos" } }, photosPrompt, SKIP);
     return { state: next, reply: "Please describe the problem: what is wrong, where in the home, and since when." };
   }
 
@@ -205,7 +216,7 @@ export async function advanceReport(input: ReportInput, linked: Linked, state: A
       const index = Number(command) - 1;
       if (!report.choices[index]) return { state, reply: `Reply with the number of the home:\n${report.choices.map((choice, position) => `${position + 1}. ${label(choice)}`).join("\n")}` };
       const next = { ...report, selected: index };
-      if (next.description) return { state: { ...state, report: { ...next, step: "photos" } }, reply: `Thanks. Send up to ${MAX_PHOTOS} photos of the problem now, or reply skip.` };
+      if (next.description) return ask({ ...state, report: { ...next, step: "photos" } }, photosPrompt, SKIP);
       return { state: { ...state, report: { ...next, step: "describe" } }, reply: "Please describe the problem: what is wrong, where in the home, and since when." };
     }
     case "describe":
@@ -214,21 +225,21 @@ export async function advanceReport(input: ReportInput, linked: Linked, state: A
       if (input.kind === "image" && input.media) {
         if (report.media.length >= MAX_PHOTOS) return { state, reply: `I have ${MAX_PHOTOS} photos already. Reply done to continue.` };
         const media = [...report.media, input.media];
-        return { state: { ...state, report: { ...report, media } }, reply: `Photo ${media.length} received. Send another, or reply done.` };
+        return ask({ ...state, report: { ...report, media } }, `Photo ${media.length} received. Send another, or reply done.`, DONE);
       }
-      if (input.kind !== "text") return { state, reply: "Please send photos only, or reply done." };
+      if (input.kind !== "text") return ask(state, "Please send photos only, or reply done.", DONE);
       if (["skip", "done", "no", "none"].includes(command)) return toConfirm(report, state);
       // More words: add them to the description.
-      return describeStep(input, { ...report, step: "describe" }, state).then((result) => ({ ...result, reply: "Added to the description. Send photos, or reply done." }));
+      return describeStep(input, { ...report, step: "describe" }, state).then((result) => ask(result.state, "Added to the description. Send photos, or reply done.", DONE));
     }
     case "duplicate": {
-      if (command === "same") return { state: { ...state, report: { ...report, step: "confirm" } }, reply: `Reply confirm to add these details${report.media.length ? ` and ${report.media.length} photo(s)` : ""} to ${report.duplicate!.referenceNumber}, or cancel.` };
-      if (command === "new") return { state: { ...state, report: { ...report, step: "confirm", duplicate: undefined } }, reply: confirmText(report, report.choices[report.selected ?? 0]) };
-      return { state, reply: "Reply same or new." };
+      if (command === "same") return ask({ ...state, report: { ...report, step: "confirm" } }, `Reply confirm to add these details${report.media.length ? ` and ${report.media.length} photo(s)` : ""} to ${report.duplicate!.referenceNumber}, or cancel.`, CONFIRM_OR_CANCEL);
+      if (command === "new") return ask({ ...state, report: { ...report, step: "confirm", duplicate: undefined } }, confirmText(report, report.choices[report.selected ?? 0]), CONFIRM);
+      return ask(state, "Reply same or new.", SAME_OR_NEW);
     }
     case "confirm": {
       if (command === "edit") return { state: { ...state, report: { ...report, step: "describe", description: undefined, classification: undefined, duplicate: undefined } }, reply: "Please describe the problem again." };
-      if (command !== "confirm") return { state, reply: "Reply confirm to send it, edit to describe it again, or cancel." };
+      if (command !== "confirm") return ask(state, "Reply confirm to send it, edit to describe it again, or cancel.", CONFIRM);
       return submit(linked.user.id, report, input.messageId, state, reset);
     }
   }

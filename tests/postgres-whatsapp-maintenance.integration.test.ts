@@ -8,6 +8,7 @@ import { createTenant } from "@/modules/tenants/service";
 import { createTenantAccessInvitation } from "@/modules/tenants/access-invitations";
 import { createMaintenanceRequest } from "@/modules/maintenance/service";
 import { defaultChannelAdapters, type ChannelAdapters } from "@/modules/conversations/channels/registry";
+import type { OutboundMessageRequest } from "@/modules/conversations/channels/types";
 import { linkWhatsAppIdentity } from "@/modules/whatsapp-assistant/identity";
 import { createJobHandlers } from "@/platform/jobs/handlers";
 import { runDueJobs } from "@/platform/jobs/runner";
@@ -30,7 +31,8 @@ async function cleanDatabase() {
 
 let counter = 0;
 const sent: string[] = [];
-const adapters: ChannelAdapters = { ...defaultChannelAdapters, WHATSAPP: { ...defaultChannelAdapters.WHATSAPP, channel: "WHATSAPP", send: async (request) => { sent.push(request.body); return { status: "SENT", providerReference: `wamid.out.${++counter}` }; }, normalizeInbound: () => [], verifyWebhookSignature: () => ({ verified: false }) } };
+const requests: OutboundMessageRequest[] = [];
+const adapters: ChannelAdapters = { ...defaultChannelAdapters, WHATSAPP: { ...defaultChannelAdapters.WHATSAPP, channel: "WHATSAPP", send: async (request) => { sent.push(request.body); requests.push(request); return { status: "SENT", providerReference: `wamid.out.${++counter}` }; }, normalizeInbound: () => [], verifyWebhookSignature: () => ({ verified: false }) } };
 
 async function deliver(message: Record<string, unknown>) {
   const before = sent.length;
@@ -43,6 +45,11 @@ async function deliver(message: Record<string, unknown>) {
   return sent.slice(before).join("\n---\n");
 }
 const say = (body: string, id = `wamid.${++counter}`) => deliver({ id, type: "text", text: { body } });
+const tap = (id: string, title: string) => deliver({ id: `wamid.${++counter}`, type: "interactive", interactive: { type: "button_reply", button_reply: { id, title } } });
+const buttonsOfLastReply = () => {
+  const interactive = requests.at(-1)?.whatsappInteractive;
+  return interactive?.type === "button" ? interactive.buttons : undefined;
+};
 const photo = (mediaId: string) => deliver({ id: `wamid.${++counter}`, type: "image", image: { id: mediaId, mime_type: "image/jpeg" } });
 
 async function fixture() {
@@ -75,6 +82,7 @@ describe("PostgreSQL WhatsApp tenant maintenance reports", () => {
       ? new Response(JSON.stringify({ url: "https://lookaside.fbsbx.com/media/1", mime_type: "image/jpeg", file_size: JPEG.length }))
       : new Response(JPEG, { headers: { "content-type": "image/jpeg" } })));
     sent.length = 0;
+    requests.length = 0;
     await cleanDatabase();
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -103,6 +111,24 @@ describe("PostgreSQL WhatsApp tenant maintenance reports", () => {
     expect(requests[0].attachments.map((attachment) => attachment.fileName)).toEqual(["whatsapp-998877.jpg"]);
     expect(await db.storageObject.count({ where: { targetType: "MAINTENANCE_ATTACHMENT", classification: "PRIVATE" } })).toBe(1);
     expect(await say("status NM-1001")).toContain("NM-1001: The pipe under my kitchen sink is leaking since this morning at Palm Court, A1 — received");
+  });
+
+  it("offers reply buttons for skip and confirm, and a tap takes the same path as typing", async () => {
+    const context = await fixture();
+    await connectTenancy(context);
+    await say("The bathroom ceiling light keeps flickering");
+    expect(buttonsOfLastReply()).toEqual([{ id: "skip", title: "Skip photos" }]);
+    const confirm = await tap("skip", "Skip photos");
+    expect(confirm).toContain("Reply confirm to send it, edit to describe it again, or cancel.");
+    expect(buttonsOfLastReply()).toEqual([{ id: "confirm", title: "Confirm" }, { id: "edit", title: "Edit" }, { id: "cancel", title: "Cancel" }]);
+    // The stored reply is the plain-text fallback; the buttons ride in its metadata.
+    const stored = await db.message.findFirstOrThrow({ where: { direction: "OUTBOUND" }, orderBy: { createdAt: "desc" } });
+    expect(stored.body).toBe(confirm);
+    expect(stored.metadata).toMatchObject({ whatsappInteractive: { type: "button", body: confirm } });
+
+    expect(await tap("confirm", "Confirm")).toContain("Request NM-1001 is logged with Owusu Homes");
+    expect(await db.maintenanceRequest.count({ where: { organisationId: context.organisation.id } })).toBe(1);
+    expect(await db.message.count({ where: { direction: "INBOUND", body: "confirm" } })).toBe(1);
   });
 
   it("adds a repeated report to the open ticket instead of creating another", async () => {

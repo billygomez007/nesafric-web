@@ -8,6 +8,7 @@ import { NonRetryableJobError } from "@/platform/jobs/errors";
 import { assistantChannelConfigSchema, assistantStateSchema, initialState } from "./schemas";
 import { advanceConversation } from "./engine";
 import { advanceOfficialConversation } from "./router";
+import type { WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { activeWhatsAppAssignment, lockWhatsAppChannelShared, trustedWhatsAppConfig, withWhatsAppProcessingGuard } from "@/modules/conversations/channels/whatsapp-numbers";
 import { isOfficialWhatsAppOrganisation, isWhatsAppOptedOut, recordInboundIdentity, setWhatsAppOptOut, whatsappSessionKey } from "./identity";
 
@@ -91,9 +92,15 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
 }
 
 type Tx = Prisma.TransactionClient;
-/** `assignmentId`: the assignment the inbound arrived under, already re-checked by the caller under a shared channel lock. */
-async function queueReply(tx: Tx, organisationId: string, assignmentId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply", metadata?: Record<string, unknown>) {
+/**
+ * `assignmentId`: the assignment the inbound arrived under, already re-checked by the caller under a shared channel lock.
+ * `interactive`: a list or reply buttons for the WhatsApp send. `body` stays the stored plain-text
+ * fallback, so the transcript and staff inbox read the same either way. It is a session message,
+ * held to the customer-service window like any free-form reply.
+ */
+async function queueReply(tx: Tx, organisationId: string, assignmentId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply", replyMetadata?: Record<string, unknown>, interactive?: WhatsAppInteractive) {
   const externalMessageId = `assistant:${inboundId}:${suffix}`;
+  const metadata = interactive ? { ...replyMetadata, whatsappInteractive: interactive } : replyMetadata;
   const existing = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId, channel: "WHATSAPP", externalMessageId } } });
   if (existing) return;
   const message = await tx.message.create({ data: { organisationId, conversationId, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body, externalMessageId, ...(metadata ? { metadata: json(metadata), containsSensitiveData: Boolean(metadata.redactAfterSend) } : {}) } });
@@ -118,7 +125,7 @@ const jobSchema = z.object({ organisationId: z.string().uuid(), conversationId: 
 
 type Outcome =
   | { kind: "skip" }
-  | { kind: "reply"; state: unknown; reply: string; status: ConversationStatus; handoff: boolean; redactInbound: boolean; optOut?: boolean; workflow: string; step: string; replyMetadata?: Record<string, unknown> };
+  | { kind: "reply"; state: unknown; reply: string; status: ConversationStatus; handoff: boolean; redactInbound: boolean; optOut?: boolean; workflow: string; step: string; replyMetadata?: Record<string, unknown>; interactive?: WhatsAppInteractive };
 
 const ENDED_STATUSES = ["CLOSED", "RESOLVED"];
 
@@ -158,7 +165,7 @@ async function decide(organisationId: string, conversation: { id: string; status
     ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined })
     : await advanceConversation(input);
   if (result.reply.length > 4096) throw new Error("Assistant reply exceeds WhatsApp text limit.");
-  return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step, replyMetadata: "replyMetadata" in result ? result.replyMetadata as Record<string, unknown> | undefined : undefined };
+  return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step, replyMetadata: "replyMetadata" in result ? result.replyMetadata as Record<string, unknown> | undefined : undefined, interactive: result.interactive };
 }
 
 const sameSnapshot = (a: { status: string; assignedMemberId: string | null; assistantState: unknown }, b: typeof a) =>
@@ -233,7 +240,7 @@ export async function processAssistantMessage(payload: Record<string, unknown>) 
           }
           if (outcome.redactInbound) await tx.message.update({ where: { id: message.id }, data: { body: "[verification code removed]", containsSensitiveData: true } });
           if (outcome.optOut !== undefined) await setWhatsAppOptOut(tx, conversation.channelAddress!, outcome.optOut);
-          await queueReply(tx, job.organisationId, stampOf(still.metadata)!, conversation.id, conversation.channelAddress!, message.id, outcome.reply, "reply", outcome.replyMetadata);
+          await queueReply(tx, job.organisationId, stampOf(still.metadata)!, conversation.id, conversation.channelAddress!, message.id, outcome.reply, "reply", outcome.replyMetadata, outcome.interactive);
           await tx.conversation.update({ where: { id: conversation.id }, data: { assistantState: json(outcome.state), status: outcome.status } });
           if (outcome.handoff) await tx.conversationAssignment.create({ data: { organisationId: job.organisationId, conversationId: conversation.id, assigneeType: "UNASSIGNED", reason: "WhatsApp customer requested human support." } });
           await tx.message.update({ where: { id: message.id }, data: { processedAt: new Date() } });

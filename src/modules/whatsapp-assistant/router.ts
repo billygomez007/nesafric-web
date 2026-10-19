@@ -2,7 +2,8 @@ import { absoluteUrl } from "@/platform/brand";
 import { AppError } from "@/platform/errors";
 import { maskPhone } from "@/platform/identity/phone";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
-import { advanceConversation, MAIN_MENU, type EngineInput } from "./engine";
+import { advanceConversation, MAIN_MENU, mainMenuList, type EngineInput } from "./engine";
+import type { WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { assistantStateSchema, initialState, type AssistantState } from "./schemas";
 import { linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
 import { formatAccountSummary, resolveAccountRoles } from "./account";
@@ -15,7 +16,7 @@ import { advanceJobs } from "./jobs";
 import { answerLandlord } from "./landlord";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
-export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown> };
+export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
 
 export const OFFICIAL_MENU_SUFFIX = "\n\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
 const START_ONBOARDING = /^(4|register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
@@ -126,14 +127,19 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   }
 
   const result = await dependencies.engine(input);
-  return { ...result, reply: result.reply.includes(MAIN_MENU) ? result.reply.replace(MAIN_MENU, MAIN_MENU + OFFICIAL_MENU_SUFFIX) : result.reply };
+  if (!result.reply.includes(MAIN_MENU)) return result;
+  const reply = result.reply.replace(MAIN_MENU, MAIN_MENU + OFFICIAL_MENU_SUFFIX);
+  return { ...result, reply, interactive: mainMenuList(reply, true) };
 }
 
 async function continueLink(input: OfficialInput, state: AssistantState, reset: () => AssistantState, dependencies: Dependencies): Promise<OfficialResult> {
   const body = input.body.trim();
   const command = body.toLowerCase();
   const redactInbound = state.step === "link_code";
-  if (command === "cancel" || command === "menu") return { state: reset(), reply: "Account linking cancelled. Nothing was changed.\n\n" + MAIN_MENU + OFFICIAL_MENU_SUFFIX, redactInbound };
+  if (command === "cancel" || command === "menu") {
+    const reply = "Account linking cancelled. Nothing was changed.\n\n" + MAIN_MENU + OFFICIAL_MENU_SUFFIX;
+    return { state: reset(), reply, redactInbound, interactive: mainMenuList(reply, true) };
+  }
   if (input.kind !== "text") return { state, reply: "Please reply with text to continue linking, or cancel.", redactInbound };
 
   if (state.step === "link_method") {
