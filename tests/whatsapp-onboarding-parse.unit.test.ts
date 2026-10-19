@@ -14,6 +14,30 @@ describe("WhatsApp onboarding parsers", () => {
     expect(parseUnits("A1\nA1", "Unit ").errors[0].reason).toContain("twice");
   });
 
+  it("reads a comma-separated list of unit names as separate units", () => {
+    // Sent by a landlord in the live test on 2026-10-19; each was rejected before.
+    expect(parseUnits("A1, A2, A3", "A")).toEqual({ units: [{ name: "A1" }, { name: "A2" }, { name: "A3" }], errors: [], autoNamed: false });
+    expect(parseUnits("A5, A6, A7", "A").units.map((unit) => unit.name)).toEqual(["A5", "A6", "A7"]);
+    expect(parseUnits("Flat 1, Flat 2\nShop 3", "Unit ").units.map((unit) => unit.name)).toEqual(["Flat 1", "Flat 2", "Shop 3"]);
+    expect(parseUnits("A1, A2, A1", "A").errors[0].reason).toContain("twice");
+    // A word that is neither a unit name nor a type is still reported, never guessed.
+    expect(parseUnits("A1, castle", "A").errors).toHaveLength(1);
+  });
+
+  it("reads natural type phrases with bedrooms", () => {
+    expect(parseUnits("A1, 3 bedrooms apartment\nA2, studio", "A")).toEqual({ units: [{ name: "A1", unitType: "apartment", bedrooms: 3 }, { name: "A2", unitType: "studio" }], errors: [], autoNamed: false });
+    expect(parseUnits("B1, 2-bedroom flat\nB2, 1 bed apartment\nB3, two bedroom house\nB4, single room\nB5, chamber & hall\nB6, apartment, 3 bedrooms", "B").units).toEqual([
+      { name: "B1", unitType: "apartment", bedrooms: 2 },
+      { name: "B2", unitType: "apartment", bedrooms: 1 },
+      { name: "B3", unitType: "house", bedrooms: 2 },
+      { name: "B4", unitType: "room" },
+      { name: "B5", unitType: "chamber and hall" },
+      { name: "B6", unitType: "apartment", bedrooms: 3 },
+    ]);
+    expect(parseUnits("C1, 4 bedroom", "C").units).toEqual([{ name: "C1", bedrooms: 4 }]);
+    expect(parseUnits("C1, 3 bedroom apartment, 2", "C").errors[0].reason).toContain("bedrooms");
+  });
+
   it("converts amounts to minor units without floating point", () => {
     expect(parseAmountMinor("1,500")).toBe("150000");
     expect(parseAmountMinor("GHS 99.5")).toBe("9950");
