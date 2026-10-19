@@ -1,4 +1,5 @@
 import type { ConversationChannel } from "@/platform/database/generated/client";
+import type { WhatsAppInteractive } from "./whatsapp-interactive";
 
 export type OutboundMessageRequest = {
   organisationId: string;
@@ -22,6 +23,9 @@ export type OutboundMessageRequest = {
   lastInboundAt?: Date | null;
   /** Explicit approved template, supplied by trusted application code. */
   whatsappTemplate?: { name: string; language: string; bodyParameters?: string[] };
+  /** WhatsApp-only list or reply buttons for a free-form reply; `body` is the plain-text fallback.
+   * Ignored when a template is set, and by every other channel adapter. */
+  whatsappInteractive?: WhatsAppInteractive;
 };
 
 export type OutboundDeliveryResult = {

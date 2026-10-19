@@ -11,6 +11,7 @@ import { createMarketplaceLead, createViewingRequest, PUBLIC_LISTING_WHERE } fro
 import { createAIEmployeeHandoff, receptionistMaintenanceIntake, selectReceptionistForProperty } from "@/modules/ai-employees/service";
 import { canAccessPrivateData, resolveTenantIdentity } from "./identity";
 import { getChannelAdapter, type ChannelAdapters } from "./channels/registry";
+import { parseWhatsAppInteractive } from "./channels/whatsapp-interactive";
 import { assertOperational } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import {
@@ -524,6 +525,10 @@ function storedWhatsAppTemplate(metadata: unknown) {
   return { name: template.name, language: template.language, bodyParameters };
 }
 
+function storedWhatsAppInteractive(metadata: unknown) {
+  return parseWhatsAppInteractive((metadata as { whatsappInteractive?: unknown } | null)?.whatsappInteractive);
+}
+
 export async function deliverConversationMessage(organisationId: string, deliveryId: string, adapters: ChannelAdapters | undefined = undefined) {
   const delivery = await db.messageDelivery.findFirst({ where: { id: deliveryId, organisationId }, include: { message: true } });
   if (!delivery) throw notFound();
@@ -555,6 +560,8 @@ export async function deliverConversationMessage(organisationId: string, deliver
       lastInboundAt: conversation.lastInboundAt,
       // Business-initiated messages (invitations, work orders) carry their approved template.
       whatsappTemplate: template,
+      // Assistant replies may carry a list or reply buttons; the stored body is their text fallback.
+      whatsappInteractive: delivery.channel === "WHATSAPP" ? storedWhatsAppInteractive(delivery.message.metadata) : undefined,
       externalReferenceId: delivery.message.externalReferenceId,
       providerKey: channelConfig?.providerKey,
     };

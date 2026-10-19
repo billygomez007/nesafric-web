@@ -1,12 +1,45 @@
 import { absoluteUrl } from "@/platform/brand";
 import { AppError } from "@/platform/errors";
+import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { assistantStateSchema, initialState, type AssistantState, type Interpretation } from "./schemas";
 import { interpretMessage } from "./interpret";
 import { marketplaceTools, type MarketplaceTools } from "./tools";
 
 export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
 
-type Result = { state: AssistantState; reply: string; handoff?: boolean };
+/** Replaces the numbered lines of MAIN_MENU in an interactive list body: the rows carry them. */
+const MENU_INTRO = "Welcome to NesAfric! 🏡\nTap \"Choose an option\" below, or tell me what you need. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.";
+const MENU_ROWS = [
+  { id: "1", title: "Find a property" },
+  { id: "2", title: "Find a service provider" },
+  { id: "3", title: "Real estate business", description: "Register a real estate business" },
+  { id: "4", title: "Agent or landlord", description: "Register as an agent or landlord" },
+  { id: "5", title: "List a property" },
+  { id: "6", title: "Service business", description: "Register a service business" },
+  { id: "7", title: "Check my request" },
+  { id: "8", title: "Talk to support" },
+];
+const OFFICIAL_MENU_ROWS = [
+  { id: "link", title: "Link my account", description: "Connect this WhatsApp number to your NesAfric account" },
+  { id: "account", title: "My account", description: "Your properties, tenancies and jobs" },
+];
+
+/**
+ * The main menu as a WhatsApp list. Each row id is the number or command the assistant already
+ * handles, so a tap and a typed reply take the same path. `reply`, which contains MAIN_MENU, stays
+ * the stored plain-text fallback. Undefined when the list body would exceed WhatsApp's limits.
+ */
+export function mainMenuList(reply: string, official = false): WhatsAppInteractive | undefined {
+  if (!reply.includes(MAIN_MENU)) return undefined;
+  const rows = official ? [...MENU_ROWS, ...OFFICIAL_MENU_ROWS] : MENU_ROWS;
+  const list = { type: "list" as const, body: reply.replace(MAIN_MENU, MENU_INTRO), button: "Choose an option", sections: [{ title: "How can we help?", rows }] };
+  return list.body.length <= 1024 ? list : undefined;
+}
+
+const confirmButtons = (text: string) => replyButtons(text, [{ id: "confirm", title: "Confirm" }, { id: "cancel", title: "Cancel" }]);
+const resumeButtons = (text: string) => replyButtons(text, [{ id: "resume", title: "Resume" }, { id: "cancel", title: "Cancel" }]);
+
+type Result = { state: AssistantState; reply: string; handoff?: boolean; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
 export type EngineInput = { state: unknown; body: string; kind: string; phone: string; conversationId: string; messageId: string; defaultCountry: string; defaultCurrency: string };
 type Dependencies = { tools: MarketplaceTools; interpret: typeof interpretMessage };
 
@@ -21,6 +54,11 @@ function promptFor(state: AssistantState) {
 }
 
 export async function advanceConversation(input: EngineInput, dependencies: Dependencies = { tools: marketplaceTools, interpret: interpretMessage }): Promise<Result> {
+  const result = await advance(input, dependencies);
+  return result.interactive || !result.reply.includes(MAIN_MENU) ? result : { ...result, interactive: mainMenuList(result.reply) };
+}
+
+async function advance(input: EngineInput, dependencies: Dependencies): Promise<Result> {
   const parsed = assistantStateSchema.safeParse(input.state ?? {});
   const state = parsed.success ? structuredClone(parsed.data) : initialState();
   const body = input.body.trim();
@@ -31,9 +69,9 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
     state.paused = state.workflow !== "idle";
     return reply(MAIN_MENU + (state.paused ? "\n\nYour previous workflow is saved. Reply resume to continue or cancel before starting another." : ""));
   }
-  if (command === "resume") { state.paused = false; return reply(promptFor(state)); }
+  if (command === "resume") { state.paused = false; return state.step === "confirm" ? { ...reply(promptFor(state)), interactive: confirmButtons(promptFor(state)) } : reply(promptFor(state)); }
   if (/^(support|human|8)$/.test(command)) return { ...reply("Your conversation has been added to the support queue. A team member will need to respond; no response time is guaranteed. Reply menu to go back to the assistant."), handoff: true };
-  if (state.paused) return reply("Your unfinished workflow is saved. Reply resume to continue, or cancel to start another.");
+  if (state.paused) { const text = "Your unfinished workflow is saved. Reply resume to continue, or cancel to start another."; return { ...reply(text), interactive: resumeButtons(text) }; }
   if (input.kind !== "text") return reply("I received your message, but WhatsApp media uploads and map locations are not supported by this assistant yet. No file has been attached to a listing. Use the secure website to upload files, or reply support for help.");
 
   // Only exact, user-authored confirmation can write a business record. No model call here.
@@ -50,7 +88,7 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
       if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(body) || !Number.isFinite(Date.parse(body)) || Date.parse(body) <= Date.now()) return reply("Please send a valid future date and time including its UTC offset.\n" + promptFor(state));
       state.startsAt = new Date(body).toISOString(); state.step = "confirm";
     } else if (state.step === "confirm") {
-      if (command !== "confirm") return reply("Nothing has been submitted. Reply confirm to submit, or cancel to start again.");
+      if (command !== "confirm") { const text = "Nothing has been submitted. Reply confirm to submit, or cancel to start again."; return { ...reply(text), interactive: confirmButtons(text) }; }
       try {
         const request = await dependencies.tools.submitCustomerRequest({ state, phone: input.phone, messageId: input.messageId, conversationId: input.conversationId });
         return { state: { ...initialState(), lastRequest: request }, reply: request.viewingId ? `Viewing request saved. Reference: ${request.viewingId}. The appointment is not confirmed. Reply status to check it.` : `Inquiry saved. Reference: ${request.leadId}. Reply status to check it.` };
@@ -61,7 +99,9 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
       }
     }
     const details = await dependencies.tools.propertyDetails(state.selectedListingId!);
-    return reply(`Review your ${state.workflow === "viewing" ? "viewing request" : "inquiry"}:\nProperty: ${details.title}\nName: ${state.name}\nPhone shared with the listing team: +${input.phone.replace(/^\+/, "")}\n${state.startsAt ? `Preferred one-hour slot starts: ${state.startsAt}` : `Question: ${state.message}`}\n\nReply confirm to submit and share these details, or cancel.`);
+    const review = `Review your ${state.workflow === "viewing" ? "viewing request" : "inquiry"}:\nProperty: ${details.title}\nName: ${state.name}\nPhone shared with the listing team: +${input.phone.replace(/^\+/, "")}\n${state.startsAt ? `Preferred one-hour slot starts: ${state.startsAt}` : `Question: ${state.message}`}\n\nReply confirm to submit and share these details, or cancel.`;
+    // A long question cannot fit a button message; it then goes out as plain text.
+    return { ...reply(review), interactive: confirmButtons(review) };
   }
 
   const selection = command.match(/^(details|inquire|view)\s+([1-3])$/);
@@ -88,7 +128,7 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
     if (interpretation.intent === "registration" || interpretation.intent === "listing") return reply(`Continue securely in your NesAfric account: ${absoluteUrl(interpretation.intent === "registration" ? "/onboarding" : "/pro")}\nWhatsApp business onboarding and listing editing are not enabled yet. Your WhatsApp number alone cannot grant access to a business or its listings. Reply support if you need help.`);
     if (interpretation.intent === "status") return reply(state.lastRequest ? await dependencies.tools.customerRequestStatus(state.lastRequest, input.phone) : `There is no submitted customer request in this conversation. For your business applications and listings, sign in: ${absoluteUrl("/pro")}`);
     if (interpretation.intent === "unknown") return reply("Would you like to find a property, find a service provider, or talk to support? Please choose one task first.");
-    if (state.workflow !== "idle" && state.workflow !== interpretation.intent) { state.paused = true; return reply("You have a saved search. Reply resume to continue it, or cancel and send your new request again."); }
+    if (state.workflow !== "idle" && state.workflow !== interpretation.intent) { state.paused = true; const text = "You have a saved search. Reply resume to continue it, or cancel and send your new request again."; return { ...reply(text), interactive: resumeButtons(text) }; }
     state.workflow = interpretation.intent; state.page = 1;
     if (interpretation.intent === "property_search") state.property = { country: input.defaultCountry, currencyCode: input.defaultCurrency, ...state.property, ...interpretation.property };
     else state.service = { country: input.defaultCountry, ...state.service, ...interpretation.service };
