@@ -31,8 +31,24 @@ const stampOf = (metadata: unknown) => {
  * `assignmentId` is the number assignment the webhook checked; each receipt re-checks it under a
  * shared channel lock and records it, so later work can tell if the number has moved since.
  */
+/**
+ * Optional test allowlist (`WHATSAPP_INBOUND_ALLOWLIST`, comma-separated numbers). When set, only
+ * events from or to those numbers are kept; everything else is acknowledged and discarded without
+ * storing content or creating jobs. For live tests on a real number; unset in normal operation.
+ */
+export function whatsappInboundAllowlist(env: Record<string, string | undefined> = process.env) {
+  const raw = env.WHATSAPP_INBOUND_ALLOWLIST?.trim();
+  if (!raw) return null;
+  return new Set(raw.split(",").map((entry) => entry.replace(/[^\d]/g, "")).filter(Boolean));
+}
+
 export async function acceptWhatsAppEvents(organisationId: string, config: ChannelConfig, payload: unknown, assignmentId: string) {
-  const events = parseWhatsAppEvents(payload, config.phoneNumberId, config.businessAccountId);
+  const parsed = parseWhatsAppEvents(payload, config.phoneNumberId, config.businessAccountId);
+  const allowlist = whatsappInboundAllowlist();
+  const allowed = (address: string) => !allowlist || allowlist.has(address.replace(/[^\d]/g, ""));
+  const events = { ...parsed, messages: parsed.messages.filter((inbound) => allowed(inbound.channelAddress)), statuses: parsed.statuses.filter((status) => allowed(status.recipient)) };
+  const discarded = parsed.messages.length - events.messages.length + parsed.statuses.length - events.statuses.length;
+  if (discarded) console.warn(JSON.stringify({ event: "whatsapp.webhook.not_allowlisted", organisationId, discarded }));
   // Unrecognised items are acknowledged, not rejected: a non-2xx makes Meta redeliver the batch.
   if (events.skipped) console.warn(JSON.stringify({ event: "whatsapp.webhook.items_skipped", organisationId, skipped: events.skipped }));
   for (const inbound of events.messages) {
