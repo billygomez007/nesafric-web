@@ -1,3 +1,4 @@
+import { MAX_LISTING_MEDIA_ITEMS, MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
 import type { z } from "zod";
 import { ensureListingCover, lockListingMedia } from "./cover";
 import { isBookableCategory } from "@/lib/listing-categories";
@@ -254,6 +255,7 @@ export async function createListing(userId: string, organisationId: string, inpu
   // Representative entitlement check (item 2): published/active listing count is capped per plan.
   await assertOperational(organisationId, ENTITLEMENTS.listingsMax.key);
   const data = createListingSchema.parse(input);
+  assertPhotoLimit(data.media);
   if (!data.propertyId || data.marketplaceAssetId) throw new AppError("PROPERTYOS_LISTING_SOURCE_REQUIRED", 422, "This endpoint requires a NesAfric property source.");
   const propertyId = data.propertyId;
   return db.$transaction(async (tx) => {
@@ -319,7 +321,18 @@ function nativeListingInput(data: NativeListingInput, marketplaceAssetId: string
 /** Same editable states as `updateListing`: anything in review, live, let/sold or archived goes
  * through the moderation lifecycle (pause → edit → resubmit), never a direct edit. */
 export const EDITABLE_LISTING_STATUSES = ["DRAFT", "REJECTED", "PAUSED"] as const;
-export const MAX_LISTING_MEDIA = 12;
+export const MAX_LISTING_MEDIA = MAX_LISTING_MEDIA_ITEMS;
+
+const photoCount = (media: ReadonlyArray<{ type?: string | null }>) => media.filter((item) => (item.type ?? "PHOTO") === "PHOTO").length;
+
+/** At most MAX_LISTING_PHOTOS photos. A listing saved before the limit may keep the photos it
+ * already has, but a write may never add photos beyond the limit. */
+function assertPhotoLimit(media: ReadonlyArray<{ type?: string | null }>, existingPhotos = 0) {
+  const photos = photoCount(media);
+  if (photos > MAX_LISTING_PHOTOS && photos > existingPhotos) {
+    throw new AppError("LISTING_MEDIA_LIMIT_REACHED", 422, `A property listing can contain up to ${MAX_LISTING_PHOTOS} photos.`);
+  }
+}
 
 export function isListingEditable(status: string) {
   return (EDITABLE_LISTING_STATUSES as readonly string[]).includes(status);
@@ -387,6 +400,8 @@ export async function updateMarketplaceNativeListing(userId: string, marketplace
   listingId = listingIdSchema.parse(listingId);
   const data = createMarketplaceNativeListingSchema.parse(input);
   return db.$transaction(async (tx) => {
+    // Serialised with submission and photo changes: an edit never lands on a listing in review.
+    await lockListingMedia(tx, listingId);
     const current = await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, include: listingInclude });
     if (!current) throw notFound();
     if (!current.marketplaceAssetId || !current.marketplaceAsset) {
@@ -441,7 +456,9 @@ export async function updateMarketplaceNativeListing(userId: string, marketplace
   });
 }
 
+/** Locks the listing row first, then checks it is still editable (no read-then-lock race). */
 async function editableProfessionalListing(tx: Tx, marketplaceProfessionalId: string, listingId: string) {
+  await lockListingMedia(tx, listingId);
   const listing = await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, select: { id: true, status: true, organisationId: true } });
   if (!listing) throw notFound();
   if (!isListingEditable(listing.status)) throw listingNotEditable();
@@ -457,7 +474,6 @@ export async function removeMarketplaceListingMedia(userId: string, marketplaceP
   mediaId = listingIdSchema.parse(mediaId);
   const removed = await db.$transaction(async (tx) => {
     const listing = await editableProfessionalListing(tx, marketplaceProfessionalId, listingId);
-    await lockListingMedia(tx, listing.id);
     const media = await tx.listingMedia.findFirst({ where: { id: mediaId, listingId: listing.id } });
     if (!media) throw notFound();
     await tx.listingMedia.delete({ where: { id: media.id } });
@@ -481,7 +497,6 @@ export async function setMarketplaceListingCoverMedia(userId: string, marketplac
   mediaId = listingIdSchema.parse(mediaId);
   await db.$transaction(async (tx) => {
     const listing = await editableProfessionalListing(tx, marketplaceProfessionalId, listingId);
-    await lockListingMedia(tx, listing.id);
     const media = await tx.listingMedia.findMany({ where: { listingId: listing.id }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, type: true } });
     const chosen = media.find((item) => item.id === mediaId);
     if (!chosen) throw notFound();
@@ -493,6 +508,54 @@ export async function setMarketplaceListingCoverMedia(userId: string, marketplac
     await record(tx, listing.organisationId, userId, "marketplace_listing.cover_changed", "listing", listing.id, { mediaId, marketplaceProfessionalId });
   });
   return getMarketplaceProfessionalListing(userId, marketplaceProfessionalId, listingId);
+}
+
+/** A PropertyOS organisation's editable listing, locked first (no read-then-lock race). */
+async function editableOrganisationListing(tx: Tx, organisationId: string, listingId: string) {
+  await lockListingMedia(tx, listingId);
+  const listing = await tx.listing.findFirst({ where: { id: listingId, organisationId, marketplaceProfessionalId: null }, select: { id: true, status: true, organisationId: true } });
+  if (!listing) throw notFound();
+  if (!isListingEditable(listing.status)) throw listingNotEditable();
+  return listing;
+}
+
+/** Remove one photo from an organisation's editable listing (same rules as the marketplace one). */
+export async function removeOrganisationListingMedia(userId: string, organisationId: string, listingId: string, mediaId: string) {
+  await requirePermission(userId, organisationId, PERMISSIONS.listingManage);
+  listingId = listingIdSchema.parse(listingId);
+  mediaId = listingIdSchema.parse(mediaId);
+  const removed = await db.$transaction(async (tx) => {
+    const listing = await editableOrganisationListing(tx, organisationId, listingId);
+    const media = await tx.listingMedia.findFirst({ where: { id: mediaId, listingId: listing.id } });
+    if (!media) throw notFound();
+    await tx.listingMedia.delete({ where: { id: media.id } });
+    await ensureListingCover(tx, listing.id);
+    if (media.storageKey) {
+      await tx.storageObject.updateMany({ where: { storageKey: media.storageKey, targetType: "LISTING_MEDIA", targetId: listing.id, archivedAt: null }, data: { archivedAt: new Date() } });
+    }
+    await record(tx, organisationId, userId, "listing.media_removed", "listing", listing.id, { mediaId: media.id });
+    return media;
+  });
+  if (removed.storageKey) await getObjectStorageAdapter().deleteObject(removed.storageKey, removed.classification).catch(() => undefined);
+  return { id: removed.id };
+}
+
+/** Make one photo of an organisation's editable listing the cover. */
+export async function setOrganisationListingCover(userId: string, organisationId: string, listingId: string, mediaId: string) {
+  await requirePermission(userId, organisationId, PERMISSIONS.listingManage);
+  listingId = listingIdSchema.parse(listingId);
+  mediaId = listingIdSchema.parse(mediaId);
+  await db.$transaction(async (tx) => {
+    const listing = await editableOrganisationListing(tx, organisationId, listingId);
+    const media = await tx.listingMedia.findMany({ where: { listingId: listing.id }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, type: true } });
+    const chosen = media.find((item) => item.id === mediaId);
+    if (!chosen) throw notFound();
+    if (chosen.type !== "PHOTO") throw new AppError("COVER_MUST_BE_PHOTO", 422, "Only a photo can be the cover image.");
+    const ordered = [chosen, ...media.filter((item) => item.id !== mediaId)];
+    for (const [index, item] of ordered.entries()) await tx.listingMedia.update({ where: { id: item.id }, data: { sortOrder: index, isCover: item.id === mediaId } });
+    await record(tx, organisationId, userId, "listing.cover_changed", "listing", listing.id, { mediaId });
+  });
+  return { id: mediaId };
 }
 
 /**
@@ -667,8 +730,38 @@ export async function submitMarketplaceListingForReview(userId: string, marketpl
   listingId = listingIdSchema.parse(listingId);
   const data = submitListingForReviewSchema.parse(input ?? {});
   return db.$transaction(async (tx) => {
-    const listing = await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, include: listingInclude });
-    if (!listing) throw notFound();
+    if (!await tx.listing.findFirst({ where: { id: listingId, marketplaceProfessionalId }, select: { id: true } })) throw notFound();
+    return submitLockedListingForReview(tx, userId, listingId, data);
+  }, REVIEW_TRANSACTION_OPTIONS);
+}
+
+/**
+ * Submits a PropertyOS listing (for example a landlord's) for NesAfric review. Review is the only
+ * path to publication: this never verifies or publishes. Needs `listing.manage` on the
+ * organisation that owns the listing; marketplace-professional listings use their own route.
+ */
+export async function submitOrganisationListingForReview(userId: string, organisationId: string, listingId: string, input: unknown) {
+  await requirePermission(userId, organisationId, PERMISSIONS.listingManage);
+  listingId = listingIdSchema.parse(listingId);
+  const data = submitListingForReviewSchema.parse(input ?? {});
+  return db.$transaction(async (tx) => {
+    if (!await tx.listing.findFirst({ where: { id: listingId, organisationId, marketplaceProfessionalId: null }, select: { id: true } })) throw notFound();
+    return submitLockedListingForReview(tx, userId, listingId, data);
+  }, REVIEW_TRANSACTION_OPTIONS);
+}
+
+/**
+ * The submission itself. The listing row is locked first, so a concurrent edit, photo upload or
+ * cover change either finishes before the revision is compared or waits until this commits (and
+ * then finds the listing no longer editable). A stale `expectedRevision` is refused.
+ */
+async function submitLockedListingForReview(tx: Tx, userId: string, listingId: string, data: z.infer<typeof submitListingForReviewSchema>) {
+  {
+    await lockListingMedia(tx, listingId);
+    const listing = await tx.listing.findUniqueOrThrow({ where: { id: listingId }, include: listingInclude });
+    if (data.expectedRevision !== undefined && listing.revision !== data.expectedRevision) {
+      throw new AppError("LISTING_CHANGED_SINCE_REVIEW", 409, "This listing changed after it was reviewed. Review it again before submitting.");
+    }
     if (!SUBMITTABLE_STATUSES.includes(listing.status)) {
       throw new AppError("LISTING_NOT_SUBMITTABLE", 409, "Only draft or returned listings can be submitted for review.");
     }
@@ -691,7 +784,7 @@ export async function submitMarketplaceListingForReview(userId: string, marketpl
       await applyListingTransition(tx, userId, organisationId, listing.id, { status: "DRAFT", note: "Resubmitted by the professional." }, { via: "submit_for_review" });
     }
     return applyListingTransition(tx, userId, organisationId, listing.id, { status: "PENDING_REVIEW", note: data.note }, { via: "submit_for_review" });
-  }, REVIEW_TRANSACTION_OPTIONS);
+  }
 }
 
 export async function submitMarketplaceProfessionalListingVerification(userId: string, marketplaceProfessionalId: string, listingId: string, input: unknown) {
@@ -796,12 +889,15 @@ export async function updateListing(userId: string, organisationId: string, list
   const patch = updateListingSchema.parse(input);
   const definedPatch = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
   return db.$transaction(async (tx) => {
+    // Serialised with submission and photo changes: an edit never lands on a listing in review.
+    await lockListingMedia(tx, listingId);
     const current = await tx.listing.findFirst({ where: { id: listingId, organisationId }, include: listingInclude });
     if (!current) throw notFound();
     if (!["DRAFT", "REJECTED", "PAUSED"].includes(current.status)) {
       throw new AppError("LISTING_NOT_EDITABLE", 409, "Only draft, rejected, or paused listings can be edited.");
     }
     const data = createListingSchema.parse({ ...editableListingInput(current), ...definedPatch });
+    assertPhotoLimit(data.media, photoCount(current.media));
     if (data.propertyId !== current.propertyId || data.marketplaceAssetId !== current.marketplaceAssetId || data.unitId !== current.unitId) {
       throw new AppError("LISTING_SOURCE_IMMUTABLE", 409, "A listing's inventory source cannot be changed.");
     }

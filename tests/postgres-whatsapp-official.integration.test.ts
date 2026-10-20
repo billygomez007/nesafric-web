@@ -20,7 +20,7 @@ import { createTenant } from "@/modules/tenants/service";
 import { defaultChannelAdapters, type ChannelAdapters } from "@/modules/conversations/channels/registry";
 import type { OutboundMessageRequest } from "@/modules/conversations/channels/types";
 import { recordWhatsAppDeliveryStatus } from "@/modules/whatsapp-assistant/service";
-import { MAIN_MENU } from "@/modules/whatsapp-assistant/engine";
+import { OFFICIAL_MAIN_MENU } from "@/modules/whatsapp-assistant/engine";
 import { OFFICIAL_MENU_SUFFIX } from "@/modules/whatsapp-assistant/router";
 import { deliverNotification } from "@/modules/notifications/service";
 import { createJobHandlers } from "@/platform/jobs/handlers";
@@ -153,14 +153,14 @@ describe("PostgreSQL official WhatsApp number", () => {
     await work(adapters);
     const conversation = await conversationFor(official.id);
     const reply = await db.message.findFirstOrThrow({ where: { conversationId: conversation.id, direction: "OUTBOUND" } });
-    expect(reply.body).toBe(MAIN_MENU + OFFICIAL_MENU_SUFFIX);
+    expect(reply.body).toBe(OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);
     const interactive = (reply.metadata as { whatsappInteractive: { type: string; body: string; button: string; sections: Array<{ rows: Array<{ id: string; title: string }> }> } }).whatsappInteractive;
     expect(interactive).toMatchObject({ type: "list", button: "Choose an option" });
     expect(interactive.body).not.toContain("1. Find a property");
     const rows = interactive.sections.flatMap((section) => section.rows);
     expect(rows.map((row) => row.id)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "link", "account"]);
     expect(rows.every((row) => row.title.length <= 24)).toBe(true);
-    expect(sent).toEqual([expect.objectContaining({ body: MAIN_MENU + OFFICIAL_MENU_SUFFIX, whatsappInteractive: interactive })]);
+    expect(sent).toEqual([expect.objectContaining({ body: OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX, whatsappInteractive: interactive })]);
     expect(sent[0].whatsappTemplate).toBeUndefined();
 
     // A tapped row arrives as list_reply; its id becomes the message body and follows the typed path.

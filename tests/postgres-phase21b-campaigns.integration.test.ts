@@ -25,8 +25,9 @@ import {
   recordCampaignClick,
 } from "@/modules/campaigns/service";
 import { requirePlatformPrincipal } from "@/platform/platform-admin/auth";
+import { VALID_JPEG } from "./helpers/images";
 
-const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01]);
+const JPEG_BYTES = VALID_JPEG;
 function base64(buffer: Buffer) {
   return buffer.toString("base64");
 }

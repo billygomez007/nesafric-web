@@ -25,7 +25,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -100,6 +100,8 @@ export const assistantStateSchema = z.object({
     classification: z.object({ category: z.string().max(40), priority: z.enum(["EMERGENCY", "URGENT", "NORMAL", "LOW"]), safetyHazard: z.boolean(), title: z.string().max(120), source: z.enum(["model", "rules"]) }).optional(),
     duplicate: z.object({ id: z.string().uuid(), referenceNumber: z.string().max(40), title: z.string().max(200) }).optional(),
   }).optional(),
+  /** A business registration or listing draft being worked on; images are bound to it. */
+  business: z.object({ draftId: z.string().uuid() }).optional(),
   /** Account linking in progress. Holds the challenge reference only, never the code. */
   link: z.object({
     channel: z.enum(["sms", "email"]),

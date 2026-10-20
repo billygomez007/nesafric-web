@@ -1281,6 +1281,9 @@ export async function reviewProviderIdentity(
       result.historyId,
       data.reason,
     );
+    // The same decision on WhatsApp, for providers who linked a number (best effort).
+    const { notifyProviderDecision } = await import("@/modules/whatsapp-assistant/notify");
+    await notifyProviderDecision(providerId, data.status === "VERIFIED" ? "VERIFIED" : data.status, result.historyId).catch(() => undefined);
   }
   return result.updated;
 }

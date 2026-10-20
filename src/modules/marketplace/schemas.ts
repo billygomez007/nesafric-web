@@ -39,7 +39,11 @@ export const updateMarketplaceProfileSchema = z.object({
   responseTimeHours: z.number().int().min(1).max(8_760).nullable().optional(),
   categoryIds: z.array(id).max(50).optional(),
   serviceAreas: z.array(marketplaceServiceAreaSchema).max(100).optional(),
-}).strict().refine((value) => Object.keys(value).length > 0, "At least one field is required.");
+  /** FIXED or STARTING_FROM use `startingRateMinor` as the price; QUOTE publishes no price. */
+  pricingModel: z.enum(["FIXED", "STARTING_FROM", "QUOTE"]).nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "At least one field is required.")
+  .refine((value) => !(value.pricingModel === "QUOTE" && value.startingRateMinor), { path: ["startingRateMinor"], message: "A service priced on quote has no published rate." })
+  .refine((value) => !((value.pricingModel === "FIXED" || value.pricingModel === "STARTING_FROM") && value.startingRateMinor === null), { path: ["startingRateMinor"], message: "A fixed or starting price needs a rate." });
 
 /** Free text: whitespace-only means "no search"; longer input is refused rather than truncated. */
 const searchText = z.string().max(200).transform((value) => value.trim().replace(/\s+/g, " ")).transform((value) => value || undefined);

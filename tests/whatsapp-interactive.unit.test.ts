@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WhatsAppChannelAdapter } from "@/modules/conversations/channels/whatsapp";
 import { parseWhatsAppInteractive, replyButtons } from "@/modules/conversations/channels/whatsapp-interactive";
-import { advanceConversation, MAIN_MENU, mainMenuList } from "@/modules/whatsapp-assistant/engine";
+import { advanceConversation, MAIN_MENU, mainMenuList, OFFICIAL_MAIN_MENU } from "@/modules/whatsapp-assistant/engine";
 import { advanceOfficialConversation, OFFICIAL_MENU_SUFFIX } from "@/modules/whatsapp-assistant/router";
 
 const MENU_INTRO = "Welcome to NesAfric! 🏡\nTap \"Choose an option\" below, or tell me what you need. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.";
@@ -137,10 +137,11 @@ describe("assistant replies carry the menu list and plain-text fallback", () => 
 
   it("adds the official rows on the official number", async () => {
     const result = await advanceOfficialConversation({ ...input("menu"), organisationId: "11111111-1111-4111-8111-111111111111" }, {
-      engine: advanceConversation, providerMessage: vi.fn(async () => null), network: vi.fn(async () => null), report: vi.fn(async () => null), rules: vi.fn(async () => null), jobs: vi.fn(async () => null), landlord: vi.fn(async () => null), linkedUser: vi.fn(async () => null),
+      engine: advanceConversation, providerMessage: vi.fn(async () => null), network: vi.fn(async () => null), report: vi.fn(async () => null), rules: vi.fn(async () => null), jobs: vi.fn(async () => null), landlord: vi.fn(async () => null), linkedUser: vi.fn(async () => null), business: vi.fn(async () => null),
     } as never);
-    expect(result.reply).toBe(MAIN_MENU + OFFICIAL_MENU_SUFFIX);
-    expect(result.interactive?.body).toBe(MENU_INTRO + OFFICIAL_MENU_SUFFIX);
+    // On the official number registration and listing happen in the conversation.
+    expect(result.reply).toBe(OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);
+    expect(result.interactive?.body).toBe(MENU_INTRO.replace(" Business registration and listing currently continue securely on the website.", "") + OFFICIAL_MENU_SUFFIX);
     expect(result.interactive?.type === "list" && result.interactive.sections[0].rows.map((row) => row.id)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "link", "account"]);
   });
 });
