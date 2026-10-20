@@ -3,7 +3,7 @@ import { AppError } from "@/platform/errors";
 import { maskPhone } from "@/platform/identity/phone";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
 import { advanceConversation, MAIN_MENU, mainMenuList, OFFICIAL_MAIN_MENU, type EngineInput } from "./engine";
-import type { WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
+import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { assistantStateSchema, initialState, type AssistantState } from "./schemas";
 import { linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
 import { formatAccountSummary, resolveAccountRoles } from "./account";
@@ -66,8 +66,9 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
     return { state: result.exit ? reset() : { ...reset(), workflow: "onboarding" }, reply: result.reply, redactInbound: result.redactInbound };
   }
 
-  // Business registration and listings: exact commands, menu numbers, or the active draft.
-  if (state.workflow === "idle" || state.workflow === "business") {
+  // Business registration and listings: exact commands, menu numbers, or the active draft. Also
+  // reachable from a search, where bare numbers are menu choices (results use "details 2").
+  if (["idle", "business", "property_search", "service_search"].includes(state.workflow)) {
     const business = await dependencies.business({ address: whatsappAddress(input.phone), messageId: input.messageId, body: input.body, kind: input.kind, media: input.media, linked: await dependencies.linkedUser(input.phone), state, reset });
     if (business) return business;
   }
@@ -135,6 +136,11 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   }
 
   const result = await dependencies.engine(input);
+  // On the official number registration and listing happen here, not only on the website.
+  if (result.reply.startsWith("Continue securely in your NesAfric account")) {
+    const reply = "You can register or list right here on WhatsApp. Reply register agency, register agent, register services, or register (landlords). To list a property, reply list a property.";
+    return { ...result, state: reset(), reply, interactive: replyButtons(reply, [{ id: "register agency", title: "Register agency" }, { id: "register services", title: "Register provider" }, { id: "list a property", title: "List a property" }]) };
+  }
   if (!result.reply.includes(MAIN_MENU)) return result;
   // On the official number registration and listing happen here, not only on the website.
   const reply = result.reply.replace(MAIN_MENU, OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);

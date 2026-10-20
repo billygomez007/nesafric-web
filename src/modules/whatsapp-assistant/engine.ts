@@ -16,10 +16,10 @@ const MENU_INTRO = "Welcome to NesAfric! 🏡\nTap \"Choose an option\" below, o
 const MENU_ROWS = [
   { id: "1", title: "Find a property" },
   { id: "2", title: "Find a service provider" },
-  { id: "3", title: "Real estate business", description: "Register a real estate business" },
-  { id: "4", title: "Agent or landlord", description: "Register as an agent or landlord" },
+  { id: "3", title: "Register agency", description: "Register a real estate business or agency" },
+  { id: "4", title: "Register agent/landlord", description: "Register as an agent or landlord" },
   { id: "5", title: "List a property" },
-  { id: "6", title: "Service business", description: "Register a service business" },
+  { id: "6", title: "Register as provider", description: "Register a service business" },
   { id: "7", title: "Check my request" },
   { id: "8", title: "Talk to support" },
 ];

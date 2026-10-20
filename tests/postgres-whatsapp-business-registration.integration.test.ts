@@ -93,6 +93,22 @@ describe("PostgreSQL WhatsApp business registration", () => {
     expect((await chat.send("my applications")).reply).toContain("Accra Prime Realty: submitted for review");
   });
 
+  it("starts registration from the menu even in the middle of a search (found in the live test)", async () => {
+    const { chat } = await linkedUser();
+    await chat.say("2", "Cleaning");
+    expect((await chat.send("Dzorwulu")).reply).toContain("No verified providers");
+    expect((await chat.send("3")).reply).toContain("What kind of business is it?");
+    expect(chat.state.workflow).toBe("business");
+  });
+
+  it("offers WhatsApp registration, not only the website, when someone asks in their own words", async () => {
+    const { chat } = await linkedUser();
+    const reply = await chat.send("I want to register my business");
+    expect(reply.reply).toContain("register agency");
+    expect(reply.reply).not.toContain("Continue securely in your NesAfric account");
+    expect(reply.interactive?.type === "button" && reply.interactive.buttons.map((button) => button.id)).toEqual(["register agency", "register services", "list a property"]);
+  });
+
   it("supports back, help, pause and resume, and cancel only after confirmation", async () => {
     const { chat } = await linkedUser();
     await chat.say("register agent", "Kofi Mensah Realty");
