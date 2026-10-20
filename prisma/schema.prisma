@@ -815,6 +815,7 @@ model User {
   sessions                           Session[]
   channelIdentities                  ChannelIdentity[]
   onboardingDrafts                   OnboardingDraft[]
+  whatsAppFlowDrafts                 WhatsAppFlowDraft[]
   portfolioVerificationClaims        PortfolioVerification[]
   providerInvitationsSent            ProviderNetworkInvitation[]
   routingRulesCreated                MaintenanceRoutingRule[]
@@ -3073,6 +3074,7 @@ model ServiceProvider {
   assignments                ProviderAssignment[]
   ratings                    ProviderRating[]
   marketplaceCustomerRatings MarketplaceProviderRating[]
+  portfolioImages            ProviderPortfolioImage[]
   marketplaceProfile         ProviderMarketplaceProfile?
   marketplaceEnquiries       MarketplaceEnquiry[]
   conversations              Conversation[]
@@ -3451,6 +3453,8 @@ model ProviderMarketplaceProfile {
   showContactPhone  Boolean                             @default(false)
   startingRateMinor Decimal?                            @db.Decimal(19, 0)
   currencyCode      String?                             @db.Char(3)
+  /// How the service is priced: a fixed price, a "from" price (startingRateMinor), or on quote.
+  pricingModel      ProviderPricingModel?
   responseTimeHours Int?
   listedAt          DateTime?
   unlistedAt        DateTime?
@@ -3555,6 +3559,9 @@ model MarketplaceEnquiryStatusHistory {
 
 model Listing {
   id                 String            @id @default(uuid()) @db.Uuid
+  /// Incremented by every change to the listing's details or media, so a confirmation made
+  /// against an older version (for example on WhatsApp) can be detected and refused.
+  revision           Int               @default(0)
   organisationId     String            @db.Uuid
   propertyId         String?           @db.Uuid
   marketplaceAssetId String?           @db.Uuid
@@ -3762,8 +3769,12 @@ model ListingMedia {
   checksum        String?
   metadata        Json?
   createdAt       DateTime              @default(now())
+  /// External media this photo came from (for example `whatsapp:<media id>`): a redelivered or
+  /// retried message attaches it once.
+  sourceMediaId   String?
   listing         Listing               @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
+  @@unique([listingId, sourceMediaId])
   @@index([listingId, sortOrder, createdAt])
   @@index([type, listingId])
 }
@@ -6477,4 +6488,74 @@ model AccommodationBooking {
   @@index([organisationId, status, createdAt])
   @@index([listingId, createdAt])
   @@index([userId, createdAt])
+}
+
+enum ProviderPricingModel {
+  FIXED
+  STARTING_FROM
+  QUOTE
+}
+
+/// Portfolio images shown on a service provider's public marketplace profile (at most 10 per
+/// provider, enforced under a provider row lock). Separate from the provider's logo.
+model ProviderPortfolioImage {
+  id              String          @id @default(uuid()) @db.Uuid
+  providerId      String          @db.Uuid
+  storageObjectId String          @unique @db.Uuid
+  storageKey      String
+  publicUrl       String
+  mimeType        String
+  sortOrder       Int             @default(0)
+  caption         String?
+  /// External media this image came from (for example `whatsapp:<media id>`).
+  sourceMediaId   String?
+  createdAt       DateTime        @default(now())
+  provider        ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, sourceMediaId])
+  @@index([providerId, sortOrder])
+}
+
+enum WhatsAppFlowKind {
+  BUSINESS_APPLICATION
+  PROPERTY_LISTING
+  SERVICE_LISTING
+}
+
+enum WhatsAppFlowStatus {
+  OPEN
+  SUBMITTED
+  CANCELLED
+  EXPIRED
+}
+
+/// A business application or listing being prepared over WhatsApp, one question at a time. The
+/// canonical records (professional, provider, listing) are created through the platform's own
+/// services; this row only holds the conversation's progress and which record it targets.
+model WhatsAppFlowDraft {
+  id                        String             @id @default(uuid()) @db.Uuid
+  /// E.164 with a leading "+".
+  address                   String
+  userId                    String             @db.Uuid
+  kind                      WhatsAppFlowKind
+  status                    WhatsAppFlowStatus @default(OPEN)
+  step                      String
+  data                      Json
+  /// Incremented on every change; a confirmation must name the revision it reviewed.
+  revision                  Int                @default(0)
+  /// The inbound message last applied. A redelivered message changes nothing.
+  lastMessageId             String?
+  marketplaceProfessionalId String?            @db.Uuid
+  serviceProviderId         String?            @db.Uuid
+  organisationId            String?            @db.Uuid
+  listingId                 String?            @db.Uuid
+  expiresAt                 DateTime
+  submittedAt               DateTime?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+  user                      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([address, status])
+  @@index([userId, kind, status])
+  @@index([status, expiresAt])
 }

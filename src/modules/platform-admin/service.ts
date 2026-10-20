@@ -2516,7 +2516,7 @@ async function recordListingDecision(tx: ListingReviewTx, principal: PlatformPri
 export async function verifyAndPublishListingForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
   const data = listingPublishDecisionSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  const published = await db.$transaction(async (tx) => {
     const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
     if (listing.verificationStatus !== "PENDING" && listing.verificationStatus !== "VERIFIED") {
       throw new AppError("LISTING_VERIFICATION_NOT_SUBMITTED", 409, "This listing's authority verification has not been submitted.");
@@ -2534,6 +2534,14 @@ export async function verifyAndPublishListingForPlatform(principal: PlatformPrin
     await recordListingDecision(tx, principal, "platform_admin.listing_verified_and_published", listing, { verifiedNow, note: data.note ?? null });
     return published;
   }, REVIEW_TRANSACTION_OPTIONS);
+  await notifyDecision(listingId, "PUBLISHED", published?.updatedAt);
+  return published;
+}
+
+/** WhatsApp note of a listing decision, after it commits (best effort; email and website are unchanged). */
+async function notifyDecision(listingId: string, decision: "PUBLISHED" | "CHANGES_REQUESTED" | "REJECTED", at: Date | null | undefined) {
+  const { notifyListingDecision } = await import("@/modules/whatsapp-assistant/notify");
+  await notifyListingDecision(listingId, decision, `${listingId}:${decision}:${(at ?? new Date()).getTime()}`).catch(() => undefined);
 }
 
 /**
@@ -2544,12 +2552,14 @@ export async function verifyAndPublishListingForPlatform(principal: PlatformPrin
 export async function requestListingChangesForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
   const data = listingReturnDecisionSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  const returned = await db.$transaction(async (tx) => {
     const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
     const returned = await applyListingTransition(tx, principal.userId, listing.organisationId, listing.id, { status: "DRAFT", note: data.note }, { authority: "PLATFORM", via: "request_changes" });
     await recordListingDecision(tx, principal, "platform_admin.listing_changes_requested", listing, { note: data.note });
     return returned;
   }, REVIEW_TRANSACTION_OPTIONS);
+  await notifyDecision(listingId, "CHANGES_REQUESTED", returned?.updatedAt);
+  return returned;
 }
 
 /**
@@ -2560,7 +2570,7 @@ export async function requestListingChangesForPlatform(principal: PlatformPrinci
 export async function rejectListingForPlatform(principal: PlatformPrincipal, listingId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.listingsVerify);
   const data = listingReturnDecisionSchema.parse(input);
-  return db.$transaction(async (tx) => {
+  const rejected = await db.$transaction(async (tx) => {
     const listing = await lockListingForReview(tx, listingId, data.expectedUpdatedAt);
     const via = { authority: "PLATFORM", via: "reject" };
     if (listing.verificationStatus === "PENDING") {
@@ -2570,6 +2580,8 @@ export async function rejectListingForPlatform(principal: PlatformPrincipal, lis
     await recordListingDecision(tx, principal, "platform_admin.listing_rejected", listing, { note: data.note });
     return rejected;
   }, REVIEW_TRANSACTION_OPTIONS);
+  await notifyDecision(listingId, "REJECTED", rejected?.updatedAt);
+  return rejected;
 }
 
 // ---------------------------------------------------------------------------

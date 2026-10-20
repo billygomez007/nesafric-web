@@ -7,6 +7,10 @@ import { marketplaceTools, type MarketplaceTools } from "./tools";
 
 export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
 
+const WEBSITE_ONLY = " Business registration and listing currently continue securely on the website.";
+/** The official number's menu: registration and listing happen in the conversation there. */
+export const OFFICIAL_MAIN_MENU = MAIN_MENU.replace(WEBSITE_ONLY, "");
+
 /** Replaces the numbered lines of MAIN_MENU in an interactive list body: the rows carry them. */
 const MENU_INTRO = "Welcome to NesAfric! 🏡\nTap \"Choose an option\" below, or tell me what you need. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.";
 const MENU_ROWS = [
@@ -30,9 +34,11 @@ const OFFICIAL_MENU_ROWS = [
  * the stored plain-text fallback. Undefined when the list body would exceed WhatsApp's limits.
  */
 export function mainMenuList(reply: string, official = false): WhatsAppInteractive | undefined {
-  if (!reply.includes(MAIN_MENU)) return undefined;
+  const menu = official && reply.includes(OFFICIAL_MAIN_MENU) ? OFFICIAL_MAIN_MENU : MAIN_MENU;
+  if (!reply.includes(menu)) return undefined;
   const rows = official ? [...MENU_ROWS, ...OFFICIAL_MENU_ROWS] : MENU_ROWS;
-  const list = { type: "list" as const, body: reply.replace(MAIN_MENU, MENU_INTRO), button: "Choose an option", sections: [{ title: "How can we help?", rows }] };
+  const intro = menu === OFFICIAL_MAIN_MENU ? MENU_INTRO.replace(WEBSITE_ONLY, "") : MENU_INTRO;
+  const list = { type: "list" as const, body: reply.replace(menu, intro), button: "Choose an option", sections: [{ title: "How can we help?", rows }] };
   return list.body.length <= 1024 ? list : undefined;
 }
 

@@ -15,6 +15,7 @@ import { runDueJobs } from "@/platform/jobs/runner";
 import { db } from "@/platform/database/client";
 import { connectWhatsAppChannel } from "./helpers/whatsapp-channel";
 import { createLease } from "./helpers/lease";
+import { VALID_JPEG } from "./helpers/images";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -22,7 +23,7 @@ const SECRET = "test-app-secret";
 const PHONE_NUMBER_ID = "100200300";
 const TENANT = "233245550001";
 // A minimal JPEG (SOI + JFIF header) so the upload pipeline's content sniffing accepts it.
-const JPEG = Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=", "base64");
+const JPEG = VALID_JPEG;
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner", "BackgroundJob", "ChannelIdentity", "AuthOtpChallenge", "StorageObject" CASCADE');

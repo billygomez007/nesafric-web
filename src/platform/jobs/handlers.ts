@@ -13,6 +13,7 @@ import type { WhatsAppStatusEvent } from "@/modules/conversations/channels/whats
 import { NonRetryableJobError } from "./errors";
 import { handleDispatchTimeout, routeMaintenanceRequest } from "@/modules/maintenance-routing/dispatch";
 import { deliverDigest, deliverEscalation } from "@/modules/staff-notifications/service";
+import { runUploadAndDraftCleanup } from "@/modules/documents/cleanup";
 
 export function createJobHandlers(notificationProviders: NotificationProviders = defaultNotificationProviders, channelAdapters: ChannelAdapters = defaultChannelAdapters) {
   return {
@@ -43,6 +44,9 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   },
   "whatsapp-assistant-message": processAssistantMessage,
   "whatsapp-legacy-inbound": processLegacyWhatsAppMessage,
+  "upload-and-draft-cleanup": async () => {
+    await runUploadAndDraftCleanup();
+  },
   "whatsapp-delivery-status": async (payload: Record<string, unknown>) => {
     await recordWhatsAppDeliveryStatus(String(payload.organisationId), payload.status as WhatsAppStatusEvent);
   },

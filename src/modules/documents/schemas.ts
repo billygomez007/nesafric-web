@@ -15,6 +15,7 @@ export const uploadTargetTypeSchema = z.enum([
   "ORGANISATION_LOGO",
   "MARKETPLACE_PROFESSIONAL_LOGO",
   "SERVICE_PROVIDER_LOGO",
+  "PROVIDER_PORTFOLIO_IMAGE",
 ]);
 export type UploadTargetType = z.infer<typeof uploadTargetTypeSchema>;
 
@@ -38,7 +39,8 @@ export const uploadDocumentSchema = z.object({
   evidenceExpiresAt: z.coerce.date().optional(),
   areaId: id.optional(),
   mediaSlot: z.enum(["desktop", "mobile", "nativeApp"]).optional(),
-  /** MAINTENANCE_ATTACHMENT only: the external media the file came from; one attachment per source. */
+  /** MAINTENANCE_ATTACHMENT, LISTING_MEDIA and PROVIDER_PORTFOLIO_IMAGE: the external media the
+   * file came from (for example a WhatsApp media id); one attachment per source. */
   sourceMediaId: z.string().regex(/^[a-z][a-z-]{0,30}:[A-Za-z0-9._:=-]{1,160}$/).optional(),
 }).strict().superRefine((value, context) => {
   if (value.targetType === "LISTING_MEDIA" && !value.mediaType) {

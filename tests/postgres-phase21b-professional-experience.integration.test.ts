@@ -21,6 +21,7 @@ import {
   getMarketplaceDashboardMetrics,
   assignMarketplaceLead,
 } from "@/modules/marketplace-professionals/service";
+import { VALID_PNG_BASE64 } from "./helpers/images";
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner" CASCADE');
@@ -138,7 +139,7 @@ describe("PostgreSQL Phase 21B professional experience", () => {
     // Improving the profile increases completeness. The logo is uploaded to NesAfric storage (the
     // profile PATCH no longer accepts an external logo URL).
     const { uploadMarketplaceProfessionalLogo } = await import("@/modules/documents/service");
-    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const png = VALID_PNG_BASE64;
     await uploadMarketplaceProfessionalLogo(owner.id, professional.id, { fileName: "logo.png", contentType: "image/png", dataBase64: png });
     await updateMarketplaceProfessional(owner.id, professional.id, {
       description: "A full-service brokerage.", websiteUrl: "https://metrics-brokerage.example",
