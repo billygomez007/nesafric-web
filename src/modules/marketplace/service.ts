@@ -1,3 +1,4 @@
+import { replaceCoverage } from "@/modules/geography/locations";
 import {
   MarketplaceEnquiryStatus,
   Prisma,
@@ -32,7 +33,11 @@ export const PUBLIC_MARKETPLACE_RATE_LIMIT = {
 } as const;
 
 const profileInclude = {
-  provider: { include: { logo: { select: { storageKey: true, classification: true, archivedAt: true } } } },
+  provider: { include: {
+    logo: { select: { storageKey: true, classification: true, archivedAt: true } },
+    // Coverage the provider chose to publish (area names only; the base address is never selected).
+    geoCoverage: { select: { nationwide: true, countryCode: true, categoryId: true, area: { select: { id: true, name: true, type: true } }, locality: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" as const } },
+  } },
   categories: { include: { category: true }, orderBy: { category: { name: "asc" as const } } },
   serviceAreas: { orderBy: [{ countryCode: "asc" as const }, { region: "asc" as const }, { city: "asc" as const }] },
 } satisfies Prisma.ProviderMarketplaceProfileInclude;
@@ -289,7 +294,8 @@ export async function updateMarketplaceProfile(userId: string, providerId: strin
       throw new AppError("RATE_CURRENCY_REQUIRED", 422, "Remove the starting rate before removing its currency.");
     }
     const categoryCount = data.categoryIds?.length ?? current?.categories.length ?? 0;
-    const areaCount = data.serviceAreas?.length ?? current?.serviceAreas.length ?? 0;
+    const structuredCoverage = data.coverage ? data.coverage.items.length : await tx.geoCoverageArea.count({ where: { serviceProviderId: providerId } });
+    const areaCount = (data.serviceAreas?.length ?? current?.serviceAreas.length ?? 0) + structuredCoverage;
     if (data.listed && (!categoryCount || !areaCount)) {
       throw new AppError("INCOMPLETE_MARKETPLACE_PROFILE", 409, "At least one explicit public category and service area are required to list.");
     }
@@ -310,7 +316,8 @@ export async function updateMarketplaceProfile(userId: string, providerId: strin
 
     const now = new Date();
     const listed = data.listed ?? current?.listed ?? false;
-    const { categoryIds, serviceAreas, ...fields } = data;
+    const { categoryIds, serviceAreas, coverage, ...fields } = data;
+    if (coverage) await replaceCoverage(tx, { serviceProviderId: providerId }, coverage, "USER");
     await tx.providerMarketplaceProfile.upsert({
       where: { providerId },
       create: {
@@ -475,6 +482,15 @@ const publicProfile = (
     longitude: area.longitude?.toString() ?? null,
     radiusKm: area.radiusKm?.toString() ?? null,
   })),
+  /** Structured coverage (stable ids). Empty means not stated, never nationwide. */
+  coverage: profile.provider.geoCoverage.map((item) => ({
+    countryCode: item.countryCode,
+    nationwide: item.nationwide,
+    area: item.area,
+    locality: item.locality,
+    categoryId: item.categoryId,
+    label: item.nationwide ? "Nationwide" : item.locality?.name ?? item.area?.name ?? "",
+  })),
   contact: {
     email:
       profile.provider.verificationStatus === "VERIFIED"
@@ -516,8 +532,54 @@ type RankingScope = {
   providerIds?: string[];
 };
 
+/**
+ * How well one coverage row (`gc`) covers the requested place: 40 for the exact locality, 30 for
+ * its district, 20 for its region, 10 for explicit nationwide coverage, 0 for no match. Locality
+ * to district relationships come from recorded links. A provider with no coverage rows never
+ * matches: unknown coverage is not nationwide.
+ */
+function coverageScoreSql(filters: { regionId?: string; districtId?: string; localityId?: string }) {
+  if (filters.localityId) {
+    const id = filters.localityId;
+    return Prisma.sql`CASE
+      WHEN gc."localityId" = ${id} THEN 40
+      WHEN gc."areaId" IN (SELECT la."areaId" FROM "GeoLocalityArea" la JOIN "GeoArea" a ON a."id" = la."areaId" WHERE la."localityId" = ${id} AND a."type" = 'DISTRICT') THEN 30
+      WHEN gc."areaId" IN (SELECT a."parentId" FROM "GeoLocalityArea" la JOIN "GeoArea" a ON a."id" = la."areaId" WHERE la."localityId" = ${id} AND a."type" = 'DISTRICT') THEN 20
+      WHEN gc."nationwide" AND gc."countryCode" = (SELECT "countryCode" FROM "GeoLocality" WHERE "id" = ${id}) THEN 10
+      ELSE 0 END`;
+  }
+  if (filters.districtId) {
+    const id = filters.districtId;
+    return Prisma.sql`CASE
+      WHEN gc."areaId" = ${id} THEN 30
+      WHEN gc."localityId" IN (SELECT la."localityId" FROM "GeoLocalityArea" la WHERE la."areaId" = ${id}) THEN 30
+      WHEN gc."areaId" = (SELECT "parentId" FROM "GeoArea" WHERE "id" = ${id}) THEN 20
+      WHEN gc."nationwide" AND gc."countryCode" = (SELECT "countryCode" FROM "GeoArea" WHERE "id" = ${id}) THEN 10
+      ELSE 0 END`;
+  }
+  if (filters.regionId) {
+    const id = filters.regionId;
+    return Prisma.sql`CASE
+      WHEN gc."areaId" = ${id} THEN 20
+      WHEN gc."areaId" IN (SELECT "id" FROM "GeoArea" WHERE "parentId" = ${id}) THEN 20
+      WHEN gc."localityId" IN (SELECT la."localityId" FROM "GeoLocalityArea" la JOIN "GeoArea" a ON a."id" = la."areaId" WHERE a."parentId" = ${id}) THEN 20
+      WHEN gc."nationwide" AND gc."countryCode" = (SELECT "countryCode" FROM "GeoArea" WHERE "id" = ${id}) THEN 10
+      ELSE 0 END`;
+  }
+  return null;
+}
+
+/** Coverage rows that apply to the requested category (unscoped rows apply to every category). */
+function coverageCategorySql(filters: { category?: string; categoryId?: string }) {
+  if (filters.category) return Prisma.sql`AND (gc."categoryId" IS NULL OR gc."categoryId" = (SELECT "id" FROM "ServiceCategory" WHERE "key" = ${filters.category}))`;
+  if (filters.categoryId) return Prisma.sql`AND (gc."categoryId" IS NULL OR gc."categoryId" = ${filters.categoryId}::uuid)`;
+  return Prisma.empty;
+}
+
 function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchema.parse>, page: boolean, scope: RankingScope = {}) {
   const region = filters.region ?? filters.state;
+  const coverageScore = coverageScoreSql(filters);
+  const coverageCategory = coverageCategorySql(filters);
   const conditions: Prisma.Sql[] = [
     Prisma.sql`mp."listed" = true`,
     Prisma.sql`p."archivedAt" IS NULL`,
@@ -546,6 +608,12 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
         ${region ? Prisma.sql`AND (msa."region" IS NULL OR lower(msa."region") = lower(${region}))` : Prisma.empty}
         ${filters.city ? Prisma.sql`AND (msa."city" IS NULL OR lower(msa."city") = lower(${filters.city}))` : Prisma.empty}
         ${filters.district ? Prisma.sql`AND (msa."district" IS NULL OR lower(msa."district") = lower(${filters.district}))` : Prisma.empty}
+    )`);
+  }
+  if (coverageScore) {
+    conditions.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM "GeoCoverageArea" gc
+      WHERE gc."serviceProviderId" = p."id" ${coverageCategory} AND (${coverageScore}) > 0
     )`);
   }
   if (filters.availability) conditions.push(Prisma.sql`p."availabilityStatus" = ${filters.availability}::"ProviderAvailabilityStatus"`);
@@ -583,7 +651,8 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
           )
           FROM "ProviderMarketplaceServiceArea" msa
           WHERE msa."providerId" = p."id" AND msa."countryCode" = ${filters.country}
-        ), 0)` : 0}::int AS area_score,
+        ), 0)` : 0}::int AS legacy_area_score,
+        ${coverageScore ? Prisma.sql`COALESCE((SELECT max(${coverageScore}) FROM "GeoCoverageArea" gc WHERE gc."serviceProviderId" = p."id" ${coverageCategory}), 0)` : 0}::int AS coverage_score,
         CASE p."verificationStatus" WHEN 'VERIFIED' THEN 15 WHEN 'PENDING' THEN 5 ELSE 0 END::int AS verification_score,
         CASE p."availabilityStatus" WHEN 'AVAILABLE' THEN 10 WHEN 'LIMITED' THEN 5 ELSE 0 END::int AS availability_score,
         round(COALESCE((
@@ -635,12 +704,15 @@ function rankingQuery(filters: ReturnType<typeof publicMarketplaceDiscoverySchem
       JOIN "ProviderMarketplaceProfile" mp ON mp."providerId" = p."id"
       WHERE ${Prisma.join(conditions, " AND ")}
     ),
+    scored AS (
+      SELECT *, LEAST(GREATEST(legacy_area_score, coverage_score), 40)::int AS area_score FROM signals
+    ),
     ranked AS (
       SELECT *, (
         category_score + area_score + verification_score + availability_score
         + rating_score + completed_score + readiness_score
       )::int AS score
-      FROM signals
+      FROM scored
     )
     SELECT *, count(*) OVER() AS total
     FROM ranked

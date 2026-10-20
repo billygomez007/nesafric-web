@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { safeHttpUrl } from "@/platform/validation/url";
+import { coverageSchema, structuredLocationSchema } from "@/modules/geography/schemas";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const id = z.string().uuid();
@@ -17,6 +18,10 @@ export const createMarketplaceProfessionalSchema = z.object({
   specialities: z.array(text(80)).max(50).default([]),
   servicesOffered: z.array(text(80)).max(50).default([]),
   serviceAreas: z.array(text(120)).max(50).default([]),
+  /** Office address (private detail). It never limits where the business may list. */
+  officeLocation: structuredLocationSchema.nullable().optional(),
+  /** Operating areas, asked separately from the office. */
+  coverage: coverageSchema.optional(),
 });
 
 export const updateMarketplaceProfessionalSchema = z.object({
@@ -32,6 +37,8 @@ export const updateMarketplaceProfessionalSchema = z.object({
   specialities: z.array(text(80)).max(50).optional(),
   servicesOffered: z.array(text(80)).max(50).optional(),
   serviceAreas: z.array(text(120)).max(50).optional(),
+  officeLocation: structuredLocationSchema.nullable().optional(),
+  coverage: coverageSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
 export const addMarketplaceMemberSchema = z.object({

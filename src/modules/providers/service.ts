@@ -1,3 +1,5 @@
+import { GHANA } from "@/modules/geography/config";
+import { clearLocation, prepareLocation, replaceCoverage, saveLocation, type CoverageInput, type StructuredLocationInput } from "@/modules/geography/locations";
 import { randomBytes } from "crypto";
 import {
   Prisma,
@@ -575,7 +577,7 @@ export async function createServiceProvider(userId: string, input: unknown) {
       const contactReady = Boolean(data.contactEmail || data.contactPhone);
       const slug = await uniqueProviderSlug(tx, data.displayName);
       try {
-        return await tx.serviceProvider.create({
+        const provider = await tx.serviceProvider.create({
           data: {
             type: data.type,
             slug,
@@ -596,6 +598,8 @@ export async function createServiceProvider(userId: string, input: unknown) {
           },
           include: providerInclude,
         });
+        await saveProviderGeography(tx, provider.id, data);
+        return provider;
       } catch (error) {
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -616,6 +620,13 @@ export async function createServiceProvider(userId: string, input: unknown) {
     });
 }
 
+/** A provider's private base address and structured coverage (each only when sent). */
+async function saveProviderGeography(tx: Prisma.TransactionClient, serviceProviderId: string, data: { baseLocation?: StructuredLocationInput | null; coverage?: CoverageInput }) {
+  if (data.baseLocation === null) await clearLocation(tx, { purpose: "PROVIDER_BASE", serviceProviderId });
+  else if (data.baseLocation) await saveLocation(tx, { purpose: "PROVIDER_BASE", serviceProviderId }, await prepareLocation(tx, data.coverage?.countryCode ?? GHANA.code, data.baseLocation), "USER_SELECTED");
+  if (data.coverage) await replaceCoverage(tx, { serviceProviderId }, data.coverage, "USER");
+}
+
 export async function updateServiceProvider(
   userId: string,
   providerId: string,
@@ -625,7 +636,8 @@ export async function updateServiceProvider(
   return db.$transaction(async (tx) => {
     const current = await requireProviderOwner(userId, providerId, tx);
     if (data.categoryIds) await validateCategories(tx, data.categoryIds);
-    const { categoryIds, serviceAreas, ...fields } = data;
+    const { categoryIds, serviceAreas, baseLocation, coverage, ...fields } = data;
+    await saveProviderGeography(tx, providerId, { baseLocation, coverage });
     const contactEmail =
       fields.contactEmail === undefined
         ? current.contactEmail

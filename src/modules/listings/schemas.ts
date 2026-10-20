@@ -3,6 +3,7 @@ import { safeHttpUrl } from "@/platform/validation/url";
 import { isSalePriceUnit, LISTING_PRICE_UNITS, type ListingPriceUnit } from "@/lib/price-units";
 import { isBookableCategory, MAX_GUESTS, MAX_STAY_NIGHTS } from "@/lib/listing-categories";
 import { MAX_LISTING_MEDIA_ITEMS, MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
+import { geoIdSchema, structuredLocationSchema } from "@/modules/geography/schemas";
 
 const id = z.string().uuid();
 const optionalText = (max: number) => z.string().trim().min(1).max(max).nullable().optional();
@@ -86,6 +87,10 @@ const listingFields = {
   mapLatitude: z.number().min(-90).max(90).nullable().optional(),
   mapLongitude: z.number().min(-180).max(180).nullable().optional(),
   mapPrecision: z.enum(["APPROXIMATE", "DISTRICT", "CITY", "REGION"]).nullable().optional(),
+  /// Structured location (region/district/locality ids, landmark, optional private pin). Omitted
+  /// leaves the saved one unchanged; null removes it. The text fields above stay for display and
+  /// for clients that do not send it.
+  location: structuredLocationSchema.nullable().optional(),
   contactName: optionalText(160),
   contactEmail: z.string().trim().email().max(320).nullable().optional(),
   contactPhone: optionalText(50),
@@ -288,6 +293,15 @@ export const publicListingSearchSchema = z.object({
   state: z.string().trim().min(1).max(150).optional(),
   city: z.string().trim().min(1).max(150).optional(),
   district: z.string().trim().min(1).max(150).optional(),
+  /// Structured area filters (stable ids from /api/geography). They match listings whose saved
+  /// structured location is in that area; listings with only free-text locations are not guessed.
+  regionId: geoIdSchema.optional(),
+  districtId: geoIdSchema.optional(),
+  localityId: geoIdSchema.optional(),
+  /// "Around a place": listings whose locality centre is within `radiusKm` (straight line, between
+  /// locality centres, never private pins) of this locality's centre.
+  nearLocalityId: geoIdSchema.optional(),
+  radiusKm: z.coerce.number().positive().max(50).optional(),
   amenities: commaSeparated(amenityKey).optional(),
   mediaTypes: commaSeparated(z.enum(["PHOTO", "VIDEO", "FLOOR_PLAN"])).optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
@@ -296,6 +310,9 @@ export const publicListingSearchSchema = z.object({
   if (filters.region && filters.state) context.addIssue({ code: "custom", path: ["state"], message: "Use either region or state, not both." });
   if ((filters.region || filters.state || filters.city || filters.district) && !filters.country) {
     context.addIssue({ code: "custom", path: ["country"], message: "Country is required for narrower location filters." });
+  }
+  if ((filters.nearLocalityId === undefined) !== (filters.radiusKm === undefined)) {
+    context.addIssue({ code: "custom", path: ["radiusKm"], message: "Use nearLocalityId and radiusKm together." });
   }
   if (filters.minPriceMinor && filters.maxPriceMinor && BigInt(filters.minPriceMinor) > BigInt(filters.maxPriceMinor)) {
     context.addIssue({ code: "custom", path: ["maxPriceMinor"], message: "Maximum price must be at least the minimum price." });

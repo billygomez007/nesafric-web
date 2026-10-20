@@ -1,3 +1,4 @@
+import { clearLocation, geoLocationInclude, prepareLocation, publicLocationView, saveLocation, type PreparedLocation } from "@/modules/geography/locations";
 import { MAX_LISTING_MEDIA_ITEMS, MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
 import type { z } from "zod";
 import { ensureListingCover, lockListingMedia } from "./cover";
@@ -73,6 +74,7 @@ const listingInclude = {
   statusHistory: { orderBy: { createdAt: "asc" as const }, take: 200 },
   verificationHistory: { orderBy: { createdAt: "asc" as const }, take: 200 },
   verificationEvidence: { orderBy: { createdAt: "asc" as const } },
+  geoLocation: { include: geoLocationInclude },
 } satisfies Prisma.ListingInclude;
 
 const publicListingInclude = {
@@ -81,6 +83,8 @@ const publicListingInclude = {
   // Item 13 (public attribution): only the marketplace professional's already-public directory
   // fields are selected here — never the private backing organisation or landlord relationship.
   marketplaceProfessional: { select: { displayName: true, slug: true, type: true, verificationStatus: true } },
+  // Area names and ids only: the private pin, street, landmark and access notes are never selected.
+  geoLocation: { select: { resolutionStatus: true, region: { select: { id: true, name: true } }, district: { select: { id: true, name: true, assemblyKind: true } }, locality: { select: { id: true, name: true } } } },
 } satisfies Prisma.ListingInclude;
 
 const LISTED_BY_LABEL: Record<string, string> = {
@@ -114,7 +118,7 @@ function decimal(value: string | number | null | undefined) {
 }
 
 function listingWriteData(data: ReturnType<typeof createListingSchema.parse>) {
-  const { amenities, media, ...fields } = data;
+  const { amenities, media, location: _location, ...fields } = data;
   return {
     ...fields,
     propertyId: fields.propertyId ?? null,
@@ -147,6 +151,27 @@ function listingWriteData(data: ReturnType<typeof createListingSchema.parse>) {
       })),
     },
   };
+}
+
+/**
+ * Validates a listing's structured location (if sent) before the listing is written, so the text
+ * columns can carry the canonical names of what was selected. `undefined` = unchanged.
+ */
+async function prepareListingLocation(tx: Tx, data: ReturnType<typeof createListingSchema.parse>) {
+  if (!data.location) return data.location === null ? null : undefined;
+  return prepareLocation(tx, data.countryCode, data.location, { region: data.region, district: data.district, city: data.city, locality: data.locality });
+}
+
+/** The text columns, with the canonical names of a selected location taking precedence. */
+function withLocationText<T extends { region?: string | null; district?: string | null; locality?: string | null }>(fields: T, prepared: PreparedLocation | null | undefined): T {
+  if (!prepared) return fields;
+  return { ...fields, region: prepared.text.region ?? fields.region ?? null, district: prepared.text.district ?? fields.district ?? null, locality: prepared.text.locality ?? fields.locality ?? null };
+}
+
+async function storeListingLocation(tx: Tx, listingId: string, prepared: PreparedLocation | null | undefined) {
+  if (prepared === undefined) return;
+  if (prepared === null) await clearLocation(tx, { purpose: "LISTING", listingId });
+  else await saveLocation(tx, { purpose: "LISTING", listingId }, prepared, "USER_SELECTED");
 }
 
 async function validateAsset(
@@ -263,15 +288,20 @@ export async function createListing(userId: string, organisationId: string, inpu
     // No stored file belongs to a listing that does not exist yet.
     await assertOwnStorageKeys(tx, null, data.media);
     await validateMarketplaceAttribution(tx, userId, data);
-    const listing = await tx.listing.create({
+    const location = await prepareListingLocation(tx, data);
+    let listing = await tx.listing.create({
       data: {
         organisationId,
         createdByUserId: userId,
-        ...listingWriteData(data),
+        ...withLocationText(listingWriteData(data), location),
         statusHistory: { create: { actorUserId: userId, toStatus: "DRAFT" } },
       },
       include: listingInclude,
     });
+    if (location) {
+      await storeListingLocation(tx, listing.id, location);
+      listing = await tx.listing.findUniqueOrThrow({ where: { id: listing.id }, include: listingInclude });
+    }
     await record(tx, organisationId, userId, "listing.created", "listing", listing.id, {
       propertyId: listing.propertyId,
       unitId: listing.unitId,
@@ -396,16 +426,21 @@ export async function createMarketplaceNativeListing(userId: string, marketplace
       },
     });
     const parsedListing = createListingSchema.parse(nativeListingInput(data, asset.id, marketplaceProfessionalId, developmentId));
-    const listing = await tx.listing.create({
+    const location = await prepareListingLocation(tx, parsedListing);
+    let listing = await tx.listing.create({
       data: {
         organisationId: professional.backingOrganisationId,
         createdByUserId: userId,
-        ...listingWriteData(parsedListing),
+        ...withLocationText(listingWriteData(parsedListing), location),
         statusHistory: { create: { actorUserId: userId, toStatus: "DRAFT" } },
         attributionHistory: { create: { actorUserId: userId, toMarketplaceProfessionalId: marketplaceProfessionalId, toRepresentativeUserId: data.listingRepresentativeUserId, toAuthority: data.listingAuthority, reason: "Initial attribution" } },
       },
       include: listingInclude,
     });
+    if (location) {
+      await storeListingLocation(tx, listing.id, location);
+      listing = await tx.listing.findUniqueOrThrow({ where: { id: listing.id }, include: listingInclude });
+    }
     await record(tx, professional.backingOrganisationId, userId, "marketplace_listing.created", "listing", listing.id, { marketplaceAssetId: asset.id, marketplaceProfessionalId, developmentUnitId: data.asset.developmentUnitId ?? null });
     return listing;
   });
@@ -455,7 +490,8 @@ export async function updateMarketplaceNativeListing(userId: string, marketplace
       ...nativeListingInput({ ...data, listingRepresentativeUserId: representativeUserId, asset: { ...data.asset, developmentUnitId: current.developmentUnitId } }, current.marketplaceAssetId, marketplaceProfessionalId, current.developmentId),
       media: [],
     });
-    const { amenities, media: _media, ...fields } = listingWriteData(parsedListing);
+    const location = await prepareListingLocation(tx, parsedListing);
+    const { amenities, media: _media, ...fields } = withLocationText(listingWriteData(parsedListing), location);
     const authorityChanged = parsedListing.listingAuthority !== current.listingAuthority || representativeUserId !== current.listingRepresentativeUserId;
     await tx.listingAmenity.deleteMany({ where: { listingId } });
     const listing = await tx.listing.update({
@@ -473,8 +509,9 @@ export async function updateMarketplaceNativeListing(userId: string, marketplace
       },
       include: listingInclude,
     });
-    await record(tx, current.organisationId, userId, "marketplace_listing.updated", "listing", listing.id, { marketplaceProfessionalId, authorityChanged });
-    return listing;
+    await storeListingLocation(tx, listingId, location);
+    await record(tx, current.organisationId, userId, "marketplace_listing.updated", "listing", listing.id, { marketplaceProfessionalId, authorityChanged, locationChanged: location !== undefined });
+    return location === undefined ? listing : tx.listing.findUniqueOrThrow({ where: { id: listingId }, include: listingInclude });
   });
 }
 
@@ -925,14 +962,19 @@ export async function updateListing(userId: string, organisationId: string, list
       throw new AppError("LISTING_SOURCE_IMMUTABLE", 409, "A listing's inventory source cannot be changed.");
     }
     if (data.propertyId) await validateAsset(tx, organisationId, data.propertyId, data.unitId, data.countryCode, data.currencyCode);
-    const { amenities, media, ...fields } = listingWriteData(data);
+    const location = await prepareListingLocation(tx, data);
+    const { amenities, media, ...fields } = withLocationText(listingWriteData(data), location);
     await tx.listingAmenity.deleteMany({ where: { listingId } });
     await tx.listingMedia.deleteMany({ where: { listingId } });
-    const listing = await tx.listing.update({
+    let listing = await tx.listing.update({
       where: { id: listingId },
       data: { ...fields, amenities, media },
       include: listingInclude,
     });
+    if (location !== undefined) {
+      await storeListingLocation(tx, listingId, location);
+      listing = await tx.listing.findUniqueOrThrow({ where: { id: listingId }, include: listingInclude });
+    }
     await record(tx, organisationId, userId, "listing.updated", "listing", listing.id, {
       changedFields: Object.keys(definedPatch).sort(),
     });
@@ -1333,6 +1375,27 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   if (region) conditions.push(Prisma.sql`lower(l."region") = lower(${region})`);
   if (filters.city) conditions.push(Prisma.sql`lower(l."city") = lower(${filters.city})`);
   if (filters.district) conditions.push(Prisma.sql`lower(l."district") = lower(${filters.district})`);
+  // Structured areas. The country of a listing and of the area always agree (enforced when the
+  // location is saved), so an id never matches a same-named place in another country.
+  if (filters.regionId) conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "GeoLocation" gl WHERE gl."listingId" = l."id" AND gl."regionId" = ${filters.regionId})`);
+  if (filters.districtId) conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "GeoLocation" gl WHERE gl."listingId" = l."id" AND gl."districtId" = ${filters.districtId})`);
+  if (filters.localityId) conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "GeoLocation" gl WHERE gl."listingId" = l."id" AND gl."localityId" = ${filters.localityId})`);
+  if (filters.nearLocalityId && filters.radiusKm) {
+    conditions.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM "GeoLocation" gl
+      JOIN "GeoLocality" lc ON lc."id" = gl."localityId"
+      JOIN "GeoLocality" target ON target."id" = ${filters.nearLocalityId}
+      WHERE gl."listingId" = l."id" AND lc."countryCode" = target."countryCode"
+        AND (lc."id" = target."id" OR (
+          lc."centroidLatitude" IS NOT NULL AND target."centroidLatitude" IS NOT NULL
+          AND 2 * 6371 * asin(sqrt(
+            power(sin(radians((lc."centroidLatitude" - target."centroidLatitude")::float8) / 2), 2)
+            + cos(radians(target."centroidLatitude"::float8)) * cos(radians(lc."centroidLatitude"::float8))
+              * power(sin(radians((lc."centroidLongitude" - target."centroidLongitude")::float8) / 2), 2)
+          )) <= ${filters.radiusKm}
+        ))
+    )`);
+  }
   for (const amenity of [...new Set(filters.amenities ?? [])]) {
     conditions.push(Prisma.sql`EXISTS (
       SELECT 1 FROM "ListingAmenity" amenity
@@ -1436,6 +1499,8 @@ function publicProjection(listing: Prisma.ListingGetPayload<{ include: typeof pu
       district: listing.district,
       locality: listing.locality,
       label: listing.publicLocationLabel,
+      /** Structured areas (ids for filtering and links); null when the location is unresolved. */
+      areas: publicLocationView(listing.geoLocation),
       map: {
         latitude: listing.mapLatitude?.toString() ?? null,
         longitude: listing.mapLongitude?.toString() ?? null,
@@ -1511,6 +1576,7 @@ export async function searchPublicListings(query: unknown = {}) {
       amenityMatching: "intersection",
       availability: "managed-asset-and-active-lease-linked",
       map: { provider: getActiveGeocodingAdapter().key, credentialsRequired: !isRealGeocodingProviderConfigured(), countryNeutral: true },
+      ...(filters.nearLocalityId ? { distance: { method: "straight-line", between: "locality-centres", radiusKm: filters.radiusKm } } : {}),
     },
   };
 }

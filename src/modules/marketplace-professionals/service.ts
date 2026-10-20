@@ -1,3 +1,5 @@
+import type { Prisma } from "@/platform/database/generated/client";
+import { clearLocation, prepareLocation, replaceCoverage, saveLocation, type CoverageInput, type StructuredLocationInput } from "@/modules/geography/locations";
 import { randomBytes } from "crypto";
 import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
@@ -101,6 +103,7 @@ export async function createMarketplaceProfessional(userId: string, input: unkno
       },
     });
     await tx.marketplaceProfessionalMember.create({ data: { marketplaceProfessionalId: professional.id, userId, role: "OWNER" } });
+    await saveProfessionalGeography(tx, professional.id, data.countryCode, data);
     const now = new Date();
     const oneYearOut = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 365);
     await tx.marketplaceSubscription.create({
@@ -159,17 +162,29 @@ export async function getMarketplaceProfessional(userId: string, marketplaceProf
 /** Business self-service profile edit (OWNER/ADMIN only). Only the fields sent are changed;
  * professional type and country are not editable here. `logoUrl: null` removes the logo through
  * the same path as the logo endpoint, so the stored object is archived and the removal audited. */
+/**
+ * A professional's office (private detail) and operating areas, each only when sent. The office
+ * is never used to restrict where the business may list, and selecting a place proves nothing
+ * about ownership or authority.
+ */
+async function saveProfessionalGeography(tx: Prisma.TransactionClient, marketplaceProfessionalId: string, countryCode: string, data: { officeLocation?: StructuredLocationInput | null; coverage?: CoverageInput }) {
+  if (data.officeLocation === null) await clearLocation(tx, { purpose: "BUSINESS_OFFICE", marketplaceProfessionalId });
+  else if (data.officeLocation) await saveLocation(tx, { purpose: "BUSINESS_OFFICE", marketplaceProfessionalId }, await prepareLocation(tx, countryCode, data.officeLocation), "USER_SELECTED");
+  if (data.coverage) await replaceCoverage(tx, { marketplaceProfessionalId }, data.coverage, "USER");
+}
+
 export async function updateMarketplaceProfessional(userId: string, marketplaceProfessionalId: string, input: unknown) {
   await requireMarketplaceRole(userId, marketplaceProfessionalId, "ADMIN");
-  const { logoUrl, ...fields } = updateMarketplaceProfessionalSchema.parse(input);
+  const { logoUrl, officeLocation, coverage, ...fields } = updateMarketplaceProfessionalSchema.parse(input);
   const existing = await db.marketplaceProfessional.findFirst({
     where: { id: marketplaceProfessionalId, archivedAt: null },
-    select: { id: true, backingOrganisationId: true, logoUrl: true },
+    select: { id: true, backingOrganisationId: true, logoUrl: true, countryCode: true },
   });
   if (!existing) throw notFound();
   return db.$transaction(async (tx) => {
     if (logoUrl === null) await clearMarketplaceProfessionalLogo(tx, existing, userId);
-    const changedFields = Object.keys(fields);
+    await saveProfessionalGeography(tx, marketplaceProfessionalId, existing.countryCode, { officeLocation, coverage });
+    const changedFields = [...Object.keys(fields), ...(officeLocation !== undefined ? ["officeLocation"] : []), ...(coverage ? ["coverage"] : [])];
     const professional = changedFields.length
       ? await tx.marketplaceProfessional.update({ where: { id: marketplaceProfessionalId }, data: fields })
       : await tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });

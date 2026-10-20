@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { coverageSchema, geoIdSchema } from "@/modules/geography/schemas";
 
 const id = z.string().uuid();
 export const marketplaceProviderIdSchema = id;
@@ -39,6 +40,8 @@ export const updateMarketplaceProfileSchema = z.object({
   responseTimeHours: z.number().int().min(1).max(8_760).nullable().optional(),
   categoryIds: z.array(id).max(50).optional(),
   serviceAreas: z.array(marketplaceServiceAreaSchema).max(100).optional(),
+  /** Structured coverage (stable area/locality ids). Unknown coverage never counts as nationwide. */
+  coverage: coverageSchema.optional(),
   /** FIXED or STARTING_FROM use `startingRateMinor` as the price; QUOTE publishes no price. */
   pricingModel: z.enum(["FIXED", "STARTING_FROM", "QUOTE"]).nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "At least one field is required.")
@@ -64,6 +67,10 @@ export const publicMarketplaceDiscoverySchema = z.object({
   availability: z.enum(["AVAILABLE", "LIMITED", "UNAVAILABLE"]).optional(),
   verification: z.enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED", "SUSPENDED"]).optional(),
   minimumRating: z.coerce.number().min(0).max(5).optional(),
+  /** Structured coverage filters: providers whose saved coverage includes this place. */
+  regionId: geoIdSchema.optional(),
+  districtId: geoIdSchema.optional(),
+  localityId: geoIdSchema.optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 }).strict().superRefine((value, context) => {

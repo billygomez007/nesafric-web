@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { coverageSchema, structuredLocationSchema } from "@/modules/geography/schemas";
 
 const id = z.string().uuid();
 const text = (max: number) => z.string().trim().min(1).max(max);
@@ -108,6 +109,10 @@ export const createProviderSchema = z.object({
   biography: z.string().trim().max(5000).optional(),
   categoryIds: z.array(id).max(50).default([]),
   serviceAreas: z.array(serviceAreaSchema).max(100).default([]),
+  /** Where the provider is based (private). Never limits where they may work. */
+  baseLocation: structuredLocationSchema.nullable().optional(),
+  /** Structured areas the provider covers. Unknown coverage is never treated as nationwide. */
+  coverage: coverageSchema.optional(),
 }).superRefine((value, context) => {
   if (value.type === "COMPANY" && !value.companyOrganisationId) {
     context.addIssue({ code: "custom", path: ["companyOrganisationId"], message: "A company organisation is required." });
@@ -127,6 +132,8 @@ export const updateProviderSchema = z.object({
   acceptingWork: z.boolean().optional(),
   categoryIds: z.array(id).max(50).optional(),
   serviceAreas: z.array(serviceAreaSchema).max(100).optional(),
+  baseLocation: structuredLocationSchema.nullable().optional(),
+  coverage: coverageSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
 export const PROVIDER_VERIFICATION_STATUSES = [
