@@ -12,13 +12,15 @@
  *   WHATSAPP_LOCAL_VERIFY_TOKEN         the verify token typed into Meta's webhook settings
  *
  * Usage:
- *   npx tsx scripts/setup-local-whatsapp.ts --database <name> [--landlord <phone>] [--tenant <phone>]
+ *   npx tsx scripts/setup-local-whatsapp.ts --database <name> [--landlord <phone>] [--tenant <phone>] [--business <phone>]
  *
  * --database must equal the database name in DATABASE_URL, so the operator states which database
  *   is changed.
  * --landlord creates a fixture landlord account with no organisations
  *   (whatsapp-landlord-<number>@nesafric.test) and links that WhatsApp number to it, so "register"
  *   starts landlord onboarding without an SMS code (Arkesel is not needed locally).
+ * --business links that number to a fixture account with no business
+ *   (whatsapp-business-<number>@nesafric.test), for testing agency, agent and provider registration.
  * --tenant creates a fixture tenant account, a property in "Local Test Homes" and an active lease
  *   for it, and links that number to the tenant, so the number can report repairs straight away.
  *
@@ -66,6 +68,7 @@ async function main() {
   const webhookVerifyToken = required("WHATSAPP_LOCAL_VERIFY_TOKEN");
   const landlordPhone = argument("landlord");
   const tenantPhone = argument("tenant");
+  const businessPhone = argument("business");
   const configuredOfficial = process.env.WHATSAPP_OFFICIAL_ORGANISATION_ID?.trim();
 
   // Imported after the environment is loaded: the database client reads DATABASE_URL on import.
@@ -78,7 +81,8 @@ async function main() {
   const { normalizeBusinessWhatsAppNumber } = await import("@/modules/business-whatsapp/phone");
 
   const waId = (phone: string) => normalizeBusinessWhatsAppNumber(phone).replace(/^\+/, "");
-  if (landlordPhone && tenantPhone && waId(landlordPhone) === waId(tenantPhone)) throw new Error("Use different phones for --landlord and --tenant.");
+  const phones = [landlordPhone, tenantPhone, businessPhone].filter((phone): phone is string => Boolean(phone)).map(waId);
+  if (new Set(phones).size !== phones.length) throw new Error("Use a different phone for each of --landlord, --tenant and --business.");
   const user = async (email: string, displayName: string) =>
     (await db.user.findUnique({ where: { email } })) ?? registerUser({ displayName, email, password: `local-${crypto.randomUUID()}` });
   const organisationOwnedBy = async (ownerId: string, name: string, create: () => Promise<{ id: string }>) =>
@@ -96,7 +100,8 @@ async function main() {
     // Each phone may only already be linked to the fixture account this script makes for it.
     const landlordEmail = landlordPhone ? `whatsapp-landlord-${waId(landlordPhone)}@nesafric.test` : null;
     const tenantEmail = tenantPhone ? `tenant-${waId(tenantPhone)}@nesafric.test` : null;
-    for (const [phone, email] of [[landlordPhone, landlordEmail], [tenantPhone, tenantEmail]] as const) {
+    const businessEmail = businessPhone ? `whatsapp-business-${waId(businessPhone)}@nesafric.test` : null;
+    for (const [phone, email] of [[landlordPhone, landlordEmail], [tenantPhone, tenantEmail], [businessPhone, businessEmail]] as const) {
       if (!phone || !email) continue;
       const identity = await db.channelIdentity.findUnique({ where: { channel_address: { channel: "WHATSAPP", address: `+${waId(phone)}` } }, include: { user: { select: { email: true } } } });
       if (identity?.userId && identity.user?.email !== email) throw new Error(`${phone} is already linked to another account; unlink it there first. Nothing was changed.`);
@@ -127,6 +132,13 @@ async function main() {
       const landlord = await user(landlordEmail!, "Local Test Landlord");
       await link(landlordPhone, landlord.id, official.id);
       console.log(`Linked ${landlordPhone} to ${landlordEmail}: send "register" to start landlord onboarding.`);
+    }
+
+    if (businessPhone) {
+      // An account with no business yet: for registering an agency, agent or service provider.
+      const account = await user(businessEmail!, "Local Test Business Owner");
+      await link(businessPhone, account.id, official.id);
+      console.log(`Linked ${businessPhone} to ${businessEmail}: send "register agency", "register agent" or "register services".`);
     }
 
     if (tenantPhone) {

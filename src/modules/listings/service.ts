@@ -256,6 +256,7 @@ export async function createListing(userId: string, organisationId: string, inpu
   await assertOperational(organisationId, ENTITLEMENTS.listingsMax.key);
   const data = createListingSchema.parse(input);
   assertPhotoLimit(data.media);
+  if (data.media.some((item) => item.storageKey)) throw new AppError("INVALID_LISTING_MEDIA", 422, "Upload photos after the listing is created.");
   if (!data.propertyId || data.marketplaceAssetId) throw new AppError("PROPERTYOS_LISTING_SOURCE_REQUIRED", 422, "This endpoint requires a NesAfric property source.");
   const propertyId = data.propertyId;
   return db.$transaction(async (tx) => {
@@ -324,6 +325,26 @@ export const EDITABLE_LISTING_STATUSES = ["DRAFT", "REJECTED", "PAUSED"] as cons
 export const MAX_LISTING_MEDIA = MAX_LISTING_MEDIA_ITEMS;
 
 const photoCount = (media: ReadonlyArray<{ type?: string | null }>) => media.filter((item) => (item.type ?? "PHOTO") === "PHOTO").length;
+
+/**
+ * Media written in bulk may only name stored files this listing already shows, or files uploaded
+ * to this listing (LISTING_MEDIA, target = this listing) that cleanup has not removed. Anything
+ * else is refused: a request cannot point a listing at another organisation's file (which a later
+ * photo removal would then delete), nor revive a file the daily cleanup is deleting. The files are
+ * locked FOR SHARE, so cleanup (which locks FOR UPDATE) waits or is waited for.
+ */
+async function assertOwnStorageKeys(tx: Tx, listingId: string | null, media: ReadonlyArray<{ storageKey?: string | null }>, alreadyShown: ReadonlyArray<string | null> = []) {
+  const shown = new Set(alreadyShown.filter((key): key is string => Boolean(key)));
+  const requested = [...new Set(media.map((item) => item.storageKey).filter((key): key is string => Boolean(key) && !shown.has(key!)))];
+  if (!requested.length) return;
+  if (!listingId) throw new AppError("INVALID_LISTING_MEDIA", 422, "Upload photos after the listing is created.");
+  const owned = await tx.$queryRaw<Array<{ storageKey: string }>>`
+    SELECT "storageKey" FROM "StorageObject"
+    WHERE "storageKey" = ANY(${requested}::text[]) AND "targetType" = 'LISTING_MEDIA' AND "targetId" = ${listingId}::uuid
+      AND ("metadata" IS NULL OR NOT ("metadata" ? 'storageDeletedAt'))
+    FOR SHARE`;
+  if (owned.length !== requested.length) throw new AppError("INVALID_LISTING_MEDIA", 422, "A listing can only show photos uploaded to it.");
+}
 
 /** At most MAX_LISTING_PHOTOS photos. A listing saved before the limit may keep the photos it
  * already has, but a write may never add photos beyond the limit. */
@@ -478,13 +499,13 @@ export async function removeMarketplaceListingMedia(userId: string, marketplaceP
     if (!media) throw notFound();
     await tx.listingMedia.delete({ where: { id: media.id } });
     await ensureListingCover(tx, listing.id);
-    if (media.storageKey) {
-      await tx.storageObject.updateMany({ where: { storageKey: media.storageKey, targetType: "LISTING_MEDIA", targetId: listing.id, archivedAt: null }, data: { archivedAt: new Date() } });
-    }
+    // Only a file uploaded to this listing is ever deleted with it.
+    const owned = media.storageKey ? await tx.storageObject.findFirst({ where: { storageKey: media.storageKey, targetType: "LISTING_MEDIA", targetId: listing.id }, select: { id: true } }) : null;
+    if (owned) await tx.storageObject.updateMany({ where: { id: owned.id, archivedAt: null }, data: { archivedAt: new Date() } });
     await record(tx, listing.organisationId, userId, "marketplace_listing.media_removed", "listing", listing.id, { mediaId: media.id, marketplaceProfessionalId });
-    return media;
+    return { ...media, ownedFile: Boolean(owned) };
   });
-  if (removed.storageKey) {
+  if (removed.storageKey && removed.ownedFile) {
     await getObjectStorageAdapter().deleteObject(removed.storageKey, removed.classification).catch(() => undefined);
   }
   return getMarketplaceProfessionalListing(userId, marketplaceProfessionalId, listingId);
@@ -530,13 +551,13 @@ export async function removeOrganisationListingMedia(userId: string, organisatio
     if (!media) throw notFound();
     await tx.listingMedia.delete({ where: { id: media.id } });
     await ensureListingCover(tx, listing.id);
-    if (media.storageKey) {
-      await tx.storageObject.updateMany({ where: { storageKey: media.storageKey, targetType: "LISTING_MEDIA", targetId: listing.id, archivedAt: null }, data: { archivedAt: new Date() } });
-    }
+    // Only a file uploaded to this listing is ever deleted with it.
+    const owned = media.storageKey ? await tx.storageObject.findFirst({ where: { storageKey: media.storageKey, targetType: "LISTING_MEDIA", targetId: listing.id }, select: { id: true } }) : null;
+    if (owned) await tx.storageObject.updateMany({ where: { id: owned.id, archivedAt: null }, data: { archivedAt: new Date() } });
     await record(tx, organisationId, userId, "listing.media_removed", "listing", listing.id, { mediaId: media.id });
-    return media;
+    return { ...media, ownedFile: Boolean(owned) };
   });
-  if (removed.storageKey) await getObjectStorageAdapter().deleteObject(removed.storageKey, removed.classification).catch(() => undefined);
+  if (removed.storageKey && removed.ownedFile) await getObjectStorageAdapter().deleteObject(removed.storageKey, removed.classification).catch(() => undefined);
   return { id: removed.id };
 }
 
@@ -898,6 +919,7 @@ export async function updateListing(userId: string, organisationId: string, list
     }
     const data = createListingSchema.parse({ ...editableListingInput(current), ...definedPatch });
     assertPhotoLimit(data.media, photoCount(current.media));
+    await assertOwnStorageKeys(tx, listingId, data.media, current.media.map((item) => item.storageKey));
     if (data.propertyId !== current.propertyId || data.marketplaceAssetId !== current.marketplaceAssetId || data.unitId !== current.unitId) {
       throw new AppError("LISTING_SOURCE_IMMUTABLE", 409, "A listing's inventory source cannot be changed.");
     }
