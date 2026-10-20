@@ -52,6 +52,14 @@ export const PLATFORM_PERMISSIONS = {
   /// Assigning or moving a WhatsApp phone number ID to an organisation. Every number sends with one
   /// Meta system-user token, so this decides who can send as which number: SUPER_ADMIN only.
   whatsappNumbersManage: "whatsapp_numbers.manage",
+  /// Shared geography: viewing areas, localities, aliases, imports and unresolved locations.
+  geographyRead: "geography.read",
+  /// Resolving unresolved or ambiguous locations and adding aliases. Separate from business
+  /// approval and listing moderation: fixing where something is approves nothing.
+  geographyReview: "geography.review",
+  /// Running and reviewing geographic imports, deactivating records and merging duplicates.
+  /// Reference data for every location, so SUPER_ADMIN only.
+  geographyManage: "geography.manage",
 } as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
@@ -62,8 +70,8 @@ const ALL_PERMISSIONS = Object.values(PLATFORM_PERMISSIONS);
 const ROLE_PERMISSIONS: Record<PlatformRoleValue, readonly PlatformPermission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   BILLING_ADMIN: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.orgsManage, PLATFORM_PERMISSIONS.plansManage, PLATFORM_PERMISSIONS.entitlementsOverride, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.campaignReview],
-  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify, PLATFORM_PERMISSIONS.providerIdentityReview, PLATFORM_PERMISSIONS.portfolioVerify, PLATFORM_PERMISSIONS.maintenanceRead, PLATFORM_PERMISSIONS.communicationsRead, PLATFORM_PERMISSIONS.aiOperationsRead],
-  READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.maintenanceRead, PLATFORM_PERMISSIONS.communicationsRead, PLATFORM_PERMISSIONS.aiOperationsRead],
+  SUPPORT_AGENT: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.supportSessionCreate, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.marketplaceVerify, PLATFORM_PERMISSIONS.providerIdentityReview, PLATFORM_PERMISSIONS.portfolioVerify, PLATFORM_PERMISSIONS.maintenanceRead, PLATFORM_PERMISSIONS.communicationsRead, PLATFORM_PERMISSIONS.aiOperationsRead, PLATFORM_PERMISSIONS.geographyRead, PLATFORM_PERMISSIONS.geographyReview],
+  READ_ONLY: [PLATFORM_PERMISSIONS.orgsRead, PLATFORM_PERMISSIONS.usersRead, PLATFORM_PERMISSIONS.marketplaceRead, PLATFORM_PERMISSIONS.listingsRead, PLATFORM_PERMISSIONS.subscriptionsRead, PLATFORM_PERMISSIONS.paymentsRead, PLATFORM_PERMISSIONS.analyticsRead, PLATFORM_PERMISSIONS.auditRead, PLATFORM_PERMISSIONS.maintenanceRead, PLATFORM_PERMISSIONS.communicationsRead, PLATFORM_PERMISSIONS.aiOperationsRead, PLATFORM_PERMISSIONS.geographyRead],
 };
 
 export function platformRoleHasPermission(role: PlatformRoleValue, permission: PlatformPermission) {

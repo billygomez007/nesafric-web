@@ -988,6 +988,11 @@ model Country {
   phonePrefix         String
   isActive            Boolean        @default(true)
   organisations       Organisation[]
+  /// Whether this country's geography is configured (reference data imported) and may be used
+  /// by selectors, resolution and geographic search. Unconfigured countries are never offered.
+  geographyEnabled    Boolean        @default(false)
+  geoAreas            GeoArea[]
+  geoLocalities       GeoLocality[]
 }
 
 model Currency {
@@ -1272,6 +1277,7 @@ model Property {
   conversations              Conversation[]
   geocodeLookups             GeocodeLookup[]
   generatedDocuments         GeneratedDocument[]
+  geoLocation                GeoLocation?
 
   @@unique([organisationId, referenceNumber])
   @@index([organisationId, archivedAt, status])
@@ -3083,6 +3089,8 @@ model ServiceProvider {
   savedBy                    SavedServiceProvider[]
   businessWhatsAppConfig     BusinessWhatsAppConfig?
   networkInvitations         ProviderNetworkInvitation[]
+  baseLocation               GeoLocation?
+  geoCoverage                GeoCoverageArea[]
 
   @@index([verificationStatus, availabilityStatus, archivedAt])
   @@index([identityVerifiedAt])
@@ -3130,6 +3138,7 @@ model ServiceCategory {
   marketplaceProfiles  ProviderMarketplaceCategory[]
   marketplaceEnquiries MarketplaceEnquiry[]
   documentRequirements ProviderDocumentRequirement[]
+  geoCoverage          GeoCoverageArea[]
 
   @@index([active, name])
   @@index([group, sortOrder])
@@ -3657,6 +3666,7 @@ model Listing {
   attributionHistory          ListingAttributionHistory[]
   topAd                       MarketplaceTopAd?
   accommodationBookings       AccommodationBooking[]
+  geoLocation                 GeoLocation?
 
   @@index([organisationId, status, createdAt])
   @@index([propertyId, createdAt])
@@ -5514,6 +5524,8 @@ model MarketplaceProfessional {
   aiEmployeeHandoffs   AIEmployeeHandoff[]
   campaigns            Campaign[]
   homepageCompanyLogos HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoProfessional")
+  officeLocation       GeoLocation?
+  geoCoverage          GeoCoverageArea[]
 
   @@index([type, status])
   @@index([verificationStatus])
@@ -6558,4 +6570,383 @@ model WhatsAppFlowDraft {
   @@index([address, status])
   @@index([userId, kind, status])
   @@index([status, expiresAt])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shared geography (see docs/geography.md). Administrative areas, electoral constituencies and
+// localities are reference data imported from recorded sources with provenance; structured
+// locations and coverage areas point at them by stable id and always keep the original text.
+// ---------------------------------------------------------------------------------------------
+
+/// The level of a `GeoArea`. Regions and districts form the administrative hierarchy;
+/// constituencies are electoral geography and are never the parent of a district or locality.
+enum GeoAreaType {
+  REGION
+  DISTRICT
+  CONSTITUENCY
+}
+
+/// Ghana's assembly types (Metropolitan, Municipal or District Assembly). Null when unknown.
+enum GeoAssemblyKind {
+  METROPOLITAN
+  MUNICIPAL
+  DISTRICT
+}
+
+/// How far a geographic record (or a relationship between two) has been checked.
+/// OFFICIAL: published by the responsible government body. SOURCE_ASSERTED: stated by a recorded
+/// open dataset but not checked against an official list. UNVERIFIED: entered by a person or an
+/// import without a source for the claim. TEST_FIXTURE: labelled test data, never shown publicly.
+enum GeoVerificationStatus {
+  OFFICIAL
+  SOURCE_ASSERTED
+  UNVERIFIED
+  TEST_FIXTURE
+}
+
+enum GeoLocalityKind {
+  CITY
+  TOWN
+  NEIGHBOURHOOD
+  ESTATE
+  VILLAGE
+  OTHER
+}
+
+/// How a locality relates to an area: wholly inside it, or only partly (it spans a boundary).
+enum GeoLinkRelation {
+  WITHIN
+  PARTLY_WITHIN
+}
+
+enum GeoAliasKind {
+  ALTERNATE_NAME
+  FORMER_NAME
+  SPELLING
+  ABBREVIATION
+}
+
+enum GeoImportMode {
+  DRY_RUN
+  APPLY
+}
+
+enum GeoImportRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum GeoImportChangeAction {
+  CREATE_AREA
+  CREATE_LOCALITY
+  ADD_ALIAS
+  ADD_LINK
+  RENAME
+  REPARENT
+  RECODE
+  DEACTIVATE
+}
+
+/// Safe changes (new records, aliases, links) are APPLIED by an import; renames, re-parenting,
+/// re-coding and deactivation wait as PENDING_REVIEW for a platform reviewer.
+enum GeoImportChangeStatus {
+  APPLIED
+  PENDING_REVIEW
+  REJECTED
+  SKIPPED
+}
+
+/// Which location concept a `GeoLocation` holds. Each is separate: a business office never
+/// restricts where it may list, and a provider's base is not its coverage.
+enum GeoLocationPurpose {
+  PROPERTY
+  LISTING
+  BUSINESS_OFFICE
+  PROVIDER_BASE
+}
+
+/// RESOLVED: every selected id exists, is active and consistent. PARTIAL: resolved only down to
+/// a region or district. AMBIGUOUS: the text matched several places; `candidates` lists them.
+/// UNRESOLVED: "I can't find my area" or text nothing matched; never treated as verified.
+/// NEEDS_REVIEW: flagged (for example a pin conflicting with the selection, or a backfill doubt).
+enum GeoResolutionStatus {
+  RESOLVED
+  PARTIAL
+  AMBIGUOUS
+  UNRESOLVED
+  NEEDS_REVIEW
+}
+
+enum GeoResolutionSource {
+  USER_SELECTED
+  WHATSAPP
+  BACKFILL
+  ADMIN
+}
+
+enum GeoCoordinateSource {
+  USER_PIN
+  WHATSAPP_PIN
+  GEOCODER
+  LEGACY
+}
+
+enum GeoCoverageSource {
+  USER
+  WHATSAPP
+  BACKFILL
+  ADMIN
+}
+
+/// A dataset geographic records were imported from, with its provenance and licence.
+model GeoDataSource {
+  id                 String                @id
+  name               String
+  publisher          String
+  url                String
+  version            String?
+  retrievedAt        DateTime?
+  licence            String
+  licenceUrl         String?
+  /// What the dataset covers (for example "16 regions, 261 districts, no localities").
+  coverage           String
+  verificationStatus GeoVerificationStatus
+  notes              String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  areas              GeoArea[]
+  localities         GeoLocality[]
+  links              GeoLocalityArea[]
+  aliases            GeoAlias[]
+  importRuns         GeoImportRun[]
+}
+
+/// A region, district (assembly) or electoral constituency. `id` is a stable key that never
+/// changes when the name or source code changes; history keeps pointing at it after deactivation.
+model GeoArea {
+  id                 String                @id
+  countryCode        String                @db.Char(2)
+  type               GeoAreaType
+  assemblyKind       GeoAssemblyKind?
+  name               String
+  /// Lower-cased, accent- and punctuation-free name used for matching.
+  normalizedName     String
+  /// The code used by the source (for example an OCHA P-code); unique per country and type.
+  code               String?
+  parentId           String?
+  /// Optional public centroid. A centroid is not anyone's location.
+  centroidLatitude   Decimal?              @db.Decimal(10, 7)
+  centroidLongitude  Decimal?              @db.Decimal(10, 7)
+  verificationStatus GeoVerificationStatus
+  sourceId           String?
+  sourceRecordRef    String?
+  active             Boolean               @default(true)
+  deactivatedAt      DateTime?
+  deactivationReason String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  country            Country               @relation(fields: [countryCode], references: [code], onDelete: Restrict)
+  parent             GeoArea?              @relation("GeoAreaHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children           GeoArea[]             @relation("GeoAreaHierarchy")
+  source             GeoDataSource?        @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  aliases            GeoAlias[]
+  localityLinks      GeoLocalityArea[]
+  regionLocations    GeoLocation[]         @relation("GeoLocationRegion")
+  districtLocations  GeoLocation[]         @relation("GeoLocationDistrict")
+  coverage           GeoCoverageArea[]
+
+  @@unique([countryCode, type, code])
+  @@index([countryCode, type, active, normalizedName])
+  @@index([parentId, active])
+}
+
+/// A town, neighbourhood, estate or village. Localities can share names and can span district
+/// boundaries, so they relate to areas only through `GeoLocalityArea` links.
+model GeoLocality {
+  id                 String                @id
+  countryCode        String                @db.Char(2)
+  kind               GeoLocalityKind
+  name               String
+  normalizedName     String
+  /// Optional approximate centre. Never presented as an exact location.
+  centroidLatitude   Decimal?              @db.Decimal(10, 7)
+  centroidLongitude  Decimal?              @db.Decimal(10, 7)
+  centroidSource     String?
+  verificationStatus GeoVerificationStatus
+  sourceId           String?
+  sourceRecordRef    String?
+  active             Boolean               @default(true)
+  deactivatedAt      DateTime?
+  deactivationReason String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  country            Country               @relation(fields: [countryCode], references: [code], onDelete: Restrict)
+  source             GeoDataSource?        @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  areaLinks          GeoLocalityArea[]
+  aliases            GeoAlias[]
+  locations          GeoLocation[]
+  coverage           GeoCoverageArea[]
+
+  @@index([countryCode, active, normalizedName])
+}
+
+/// A locality's relationship to a district, region or constituency, with how it is known.
+/// Unverified links are kept but never used to assert anything publicly.
+model GeoLocalityArea {
+  id                 String                @id @default(uuid()) @db.Uuid
+  localityId         String
+  areaId             String
+  relation           GeoLinkRelation       @default(WITHIN)
+  verificationStatus GeoVerificationStatus
+  sourceId           String?
+  note               String?
+  createdAt          DateTime              @default(now())
+  locality           GeoLocality           @relation(fields: [localityId], references: [id], onDelete: Restrict)
+  area               GeoArea               @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  source             GeoDataSource?        @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([localityId, areaId])
+  @@index([areaId])
+}
+
+/// Another name for an area or a locality (spelling, former or local name). Exactly one target.
+model GeoAlias {
+  id              String         @id @default(uuid()) @db.Uuid
+  areaId          String?
+  localityId      String?
+  alias           String
+  normalizedAlias String
+  kind            GeoAliasKind   @default(ALTERNATE_NAME)
+  sourceId        String?
+  createdByUserId String?        @db.Uuid
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  area            GeoArea?       @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  locality        GeoLocality?   @relation(fields: [localityId], references: [id], onDelete: Restrict)
+  source          GeoDataSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([areaId, normalizedAlias])
+  @@unique([localityId, normalizedAlias])
+  @@index([normalizedAlias])
+}
+
+/// One run of a geographic import (dry run or apply), with its summary.
+model GeoImportRun {
+  id            String             @id @default(uuid()) @db.Uuid
+  sourceId      String
+  mode          GeoImportMode
+  status        GeoImportRunStatus @default(RUNNING)
+  /// SHA-256 of the input file, so an identical re-run is recognisable.
+  inputChecksum String
+  actorUserId   String?            @db.Uuid
+  summary       Json?
+  error         String?
+  startedAt     DateTime           @default(now())
+  finishedAt    DateTime?
+  source        GeoDataSource      @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  changes       GeoImportChange[]
+
+  @@index([sourceId, startedAt])
+}
+
+/// One change an import found. Destructive or uncertain changes wait here for review.
+model GeoImportChange {
+  id               String                @id @default(uuid()) @db.Uuid
+  runId            String                @db.Uuid
+  action           GeoImportChangeAction
+  status           GeoImportChangeStatus
+  entityType       String
+  entityId         String?
+  payload          Json
+  reason           String?
+  reviewedByUserId String?               @db.Uuid
+  reviewedAt       DateTime?
+  createdAt        DateTime              @default(now())
+  run              GeoImportRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([runId])
+}
+
+/// A structured location: stable area/locality ids plus the original text, optional landmark,
+/// private access notes and optional coordinates (with their source and accuracy). Exactly one
+/// owner, matching `purpose`. Exact coordinates and access notes are private; only the owning
+/// account and platform reviewers see them.
+model GeoLocation {
+  id                        String                    @id @default(uuid()) @db.Uuid
+  purpose                   GeoLocationPurpose
+  countryCode               String                    @db.Char(2)
+  regionId                  String?
+  districtId                String?
+  localityId                String?
+  /// What the person typed or selected, kept verbatim ({ region, district, city, locality, text }).
+  originalText              Json?
+  streetOrEstate            String?
+  landmark                  String?
+  /// Private directions (gate colour, house number). Never public, never logged.
+  accessNotes               String?
+  latitude                  Decimal?                  @db.Decimal(10, 7)
+  longitude                 Decimal?                  @db.Decimal(10, 7)
+  coordinateSource          GeoCoordinateSource?
+  coordinateAccuracyM       Int?
+  coordinateCapturedAt      DateTime?
+  /// Geocoder confidence, separate from official verification and from user confirmation.
+  geocoderProvider          String?
+  geocoderPrecision         String?
+  resolutionStatus          GeoResolutionStatus
+  resolutionSource          GeoResolutionSource
+  resolutionNote            String?
+  /// For AMBIGUOUS: the candidate locality/area ids offered (never auto-picked).
+  candidates                Json?
+  /// When the person confirmed this location in a review step.
+  userConfirmedAt           DateTime?
+  reviewedByUserId          String?                   @db.Uuid
+  reviewedAt                DateTime?
+  publicPrecision           ListingLocationPrecision?
+  listingId                 String?                   @unique @db.Uuid
+  propertyId                String?                   @unique @db.Uuid
+  marketplaceProfessionalId String?                   @unique @db.Uuid
+  serviceProviderId         String?                   @unique @db.Uuid
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  region                    GeoArea?                  @relation("GeoLocationRegion", fields: [regionId], references: [id], onDelete: Restrict)
+  district                  GeoArea?                  @relation("GeoLocationDistrict", fields: [districtId], references: [id], onDelete: Restrict)
+  locality                  GeoLocality?              @relation(fields: [localityId], references: [id], onDelete: Restrict)
+  listing                   Listing?                  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  property                  Property?                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  marketplaceProfessional   MarketplaceProfessional?  @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Cascade)
+  serviceProvider           ServiceProvider?          @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+
+  @@index([countryCode, regionId])
+  @@index([districtId])
+  @@index([localityId])
+  @@index([resolutionStatus, updatedAt])
+}
+
+/// Where a provider or professional works: an area, a locality, or (explicitly) a whole country.
+/// Unknown coverage is simply no row, and never counts as nationwide. `categoryId` optionally
+/// limits the coverage to one service category.
+model GeoCoverageArea {
+  id                        String                   @id @default(uuid()) @db.Uuid
+  countryCode               String                   @db.Char(2)
+  serviceProviderId         String?                  @db.Uuid
+  marketplaceProfessionalId String?                  @db.Uuid
+  areaId                    String?
+  localityId                String?
+  nationwide                Boolean                  @default(false)
+  categoryId                String?                  @db.Uuid
+  originalText              String?
+  source                    GeoCoverageSource
+  createdAt                 DateTime                 @default(now())
+  area                      GeoArea?                 @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  locality                  GeoLocality?             @relation(fields: [localityId], references: [id], onDelete: Restrict)
+  serviceProvider           ServiceProvider?         @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  marketplaceProfessional   MarketplaceProfessional? @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Cascade)
+  category                  ServiceCategory?         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([serviceProviderId])
+  @@index([marketplaceProfessionalId])
+  @@index([areaId])
+  @@index([localityId])
 }
