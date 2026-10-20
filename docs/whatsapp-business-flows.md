@@ -13,8 +13,8 @@ listings. Operations and number routing: `docs/whatsapp-operations.md`. Live tes
 | Business application drafts are WhatsApp-only | An agency, agent or provider registration in progress lives in `WhatsAppFlowDraft` and is not visible on the website. The profile appears on the website (and to Super Admins) only when submitted. |
 | Property listing drafts continue on the website | Before photos, the flow creates the canonical DRAFT listing. It can be edited on the website (`/pro/<id>/listings/<listingId>/edit` or `/listings/<listingId>/edit`). Changes made there are never overwritten from WhatsApp; the person is asked to reply `reload`. |
 | Hotels and short stays are website-only | Nightly prices, guest limits and house rules are not asked on WhatsApp. |
-| WhatsApp never verifies or publishes a listing | Confirmation submits it to the existing Super Admin review (`PENDING_REVIEW`). |
-| Service listings go live only for approved, unsuspended providers | Otherwise the profile is saved with `listed = false`. Accepting work also requires approval (existing rule). |
+| Property listings need the existing admin review before publication | Confirming a property listing on WhatsApp submits it for review (`PENDING_REVIEW`). It is published only when a Super Admin verifies and publishes it; WhatsApp never verifies or publishes a property listing. |
+| Service listings publish only for approved, unsuspended providers | Confirming a service listing publishes the provider's marketplace profile immediately (`listed = true`) only when the provider is `VERIFIED` and not suspended at that moment. Otherwise it is saved with `listed = false` and goes live once approved. Accepting work also requires approval (existing rule). |
 | Landlords keep the existing onboarding | `register` on WhatsApp. Landlords list their own properties. Like every listing, they must give an authority reference. |
 
 ## Limits and rules

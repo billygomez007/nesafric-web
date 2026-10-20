@@ -21,6 +21,23 @@
 
 To test the agent and the provider separately from the agency, relink the business-owner phone to a second fixture account between rounds. One account holds one agency or agent profile and one provider.
 
+## Preflight status (read-only, 2026-10-20)
+
+| Item | Status |
+|---|---|
+| Release candidate | `release/whatsapp-business-rc`; automated suite green |
+| Webhook routing | Number 1304923409378538 (+233 50 282 0002) in WABA 1104581892174096 sends to the Tap & Order app callback `api.koraafric.com`. There is no phone or WABA override. **A temporary per-number override is needed for each window.** |
+| Kora dependency | Its production endpoint only acknowledges and drops these events (see the audit). Owner and Kora approval of the routing plan is **pending**. |
+| Display name and quality | `NesAfric` approved; quality GREEN; account LIVE |
+| Token | Valid system-user token on the Tap & Order app, no expiry. Its scopes are broader than needed (`business_management`, all assets). Acceptable for a local test; narrow it before production. |
+| Templates | **None** on the NesAfric WABA, so decision notices on WhatsApp cannot be sent (step 10 expects no message) |
+| Test environment | Throwaway database `nesafric_live_rc_test` built from all migrations with no drift. Landlord and tenant fixtures linked. Nothing queued to send. The business-owner fixture needs a third phone number. |
+| Tunnel | ngrok installed and authenticated; webhook-only policy in `scripts/ngrok-whatsapp-webhook-only.yml` |
+| Vercel | **Blocked**: every URL on `nesafric.com` returns HTTP 402 |
+| GitHub Actions | **Blocked**: recent runs end in `startup_failure` (account level) |
+| Worker and cron | `vercel.json` runs `/api/jobs/run` every 5 minutes, which needs a paid Vercel plan (Hobby runs once a day). For the local test, run `scripts/run-worker.ts`. |
+| Migrations | The local test database has all of them. Production has **not** been migrated: `20261019150000`, `20261019180000` (already merged to `main`) and `20261020090000` are pending there. Production status cannot be read from here. |
+
 ## Prerequisites
 
 - **Code:** the release candidate branch (`release/whatsapp-business-rc`) checked out, `npm ci`.
@@ -93,24 +110,127 @@ Record the printed official organisation ID.
 4. Run the checks below. Watch `Message`, `MessageDelivery` (status and `providerReference`), `WhatsAppFlowDraft` and the domain tables.
 5. Remove the override if it is still in place. Read it back: only `application` (Kora) may remain.
 
-## Checks and expected results
+## Phone-test script (all NOT RUN)
 
-Record three kinds of evidence separately: Meta accepted the message (`providerReference` set), Meta's delivery callbacks (`DELIVERED`/`READ`), and the tester confirming it on the phone.
+Every step is **NOT RUN** until performed in an approved window. Record three kinds of evidence separately for each reply:
+- **(a)** Meta accepted it: `MessageDelivery.providerReference` is set and the status is `SENT`.
+- **(b)** Meta's callbacks: `DELIVERED` and `READ`.
+- **(c)** The tester confirms what appeared on the phone.
 
-| # | Phone | Send | Expected reply | Expected database and admin state |
-|---|---|---|---|---|
-| T1 | Tenant | `hi`, then tap a row in "Choose an option" | Welcome list; the tapped row's answer | Outbound has `whatsappInteractive`; inbound body is the row id |
-| T2 | Tenant | `The kitchen sink pipe is leaking`, then a photo, `done`, Confirm | Photo saved; request NM-xxxx | One `MaintenanceRequest` with `intakeReference` `whatsapp:<id>`; one `MaintenanceAttachment` (`sourceMediaId` `whatsapp:<media id>`); the stored image has no EXIF |
-| T3 | Tenant | `STOP`, then `START` | Unsubscribed, then subscribed | `ChannelIdentity.optedOutAt` set, then cleared; drafts untouched |
-| L1 | Landlord | `register`, `1`, name, property, area, `skip`, blocks `A, B`, units `A1, A2, A3`, then `B1, 3 bedroom apartment` and `B2, studio` on separate lines | "Saved … 2 buildings, 5 units" | `OnboardingDraft` holds the units with the parsed types and bedrooms |
-| L2 | Landlord | `pause`, then `register` | Continues at the same question | Same draft, same step |
-| L3 | Landlord (after onboarding) | `list a property`, follow it with an authority reference, 1 photo, `done`, Confirm | "Submitted for review … not yet published" | `Listing` `PENDING_REVIEW`, verification `PENDING`, 1 photo with a cover; it appears in the Super Admin listing review queue |
-| B1 | Business owner | `register agency`, answers, logo image, `edit` → Logo → another image, Confirm | Submitted for review; logo saved | `MarketplaceProfessional` `PENDING` with an evidence reference and `logoUrl` set; it appears in the Super Admin professionals queue; the draft is `SUBMITTED` |
-| B2 | Super Admin (web) | Approve the professional | — | `VERIFIED`; WhatsApp notice queued only if the template is configured (otherwise none, and the email path is unchanged) |
-| B3 | Business owner | `list a property`, answers, 10 photos, 11th photo, `remove 2`, a new photo, `cover 3`, `done`, Confirm | Photo n of 10; 11th refused; removed; cover set; submitted | `Listing` `PENDING_REVIEW` with 10 photos and exactly one cover; nothing `PUBLISHED` |
-| B4 | Business owner + web | Start a second listing, reach the review, edit its title on the website, then press Confirm on WhatsApp | "Changed after you reviewed it"; `done`, then `reload` | Listing stays `DRAFT` until re-reviewed |
-| P1 | Business owner (relinked to a fresh account) | `register services`, answers, Confirm; Super Admin approves; `list my services`, pricing, 3 images, `done`, Confirm | Submitted; then "published" | `ServiceProvider` `PENDING`, then `VERIFIED`; `ProviderMarketplaceProfile.listed` true with `pricingModel` set; 3 `ProviderPortfolioImage` rows |
-| X1 | Any | A photo with no draft active | "Isn't clear which draft …" | Nothing attached |
+Phones: **T** = tenant 0206655012, **L** = landlord 0231582898, **B** = business owner (a third phone, linked with `--business`), **A** = Super Admin on the local website.
+
+**Window 1: tenant, STOP/START, landlord**
+
+1. **Tenant menu.** T sends `hi`, then taps "Choose an option" and picks *Check my request*.
+   - **WhatsApp:** the welcome list with a button; then the request status reply.
+   - **Database:**
+     - The outbound `Message.metadata.whatsappInteractive` is present.
+     - The inbound body is the tapped row id (`7`).
+   - **Cleanup:** none.
+2. **Tenant repair report.** T sends `The kitchen sink pipe is leaking`, then one photo, then `done`, then taps **Confirm**.
+   - **WhatsApp:** "Send up to 5 photos…", a photo acknowledgement, the summary, then "Request NM-xxxx is logged with Local Test Homes".
+   - **Database:**
+     - One `MaintenanceRequest` with `intakeReference` = `whatsapp:<message id>`, the tenant's property and unit, and `intakeChannel` WHATSAPP.
+     - One `MaintenanceAttachment` whose `sourceMediaId` = `whatsapp:<media id>`.
+     - The stored image has no EXIF.
+   - **Cleanup:** the database is dropped at the end.
+3. **STOP and START.** T sends `STOP`, then `START`.
+   - **WhatsApp:** "You have unsubscribed…", then "You are subscribed … again".
+   - **Database:** `ChannelIdentity(+233206655012).optedOutAt` is set, then cleared. No business-initiated message is queued while opted out.
+   - **Cleanup:** none (ends subscribed).
+4. **Landlord onboarding with unit lists.** L sends:
+   - `register` → `1` → `Owusu Homes` → `Palm Court` → `East Legon` → `skip`;
+   - `A, B` (blocks);
+   - `A1, A2, A3` (units in A);
+   - `B1, 3 bedroom apartment` and `B2, studio` on separate lines (units in B).
+
+   - **WhatsApp:** one question per step; after block B, "Saved Palm Court: 2 buildings, 5 units".
+   - **Database:** `OnboardingDraft` has A1–A3 with no type, B1 apartment with 3 bedrooms, and B2 studio.
+   - **Cleanup:** none.
+5. **Pause and resume.** L sends `pause`, then `register`.
+   - **WhatsApp:** "Your onboarding is saved…", then the same next question.
+   - **Database:** same draft, same `step`.
+   - **Cleanup:** none.
+6. **Landlord completes onboarding.** L replies `no` (no more properties) and `later` (no tenants), then answers the reminder, professionals, approval-limit and emergency-contact questions, and confirms the summary.
+   - **WhatsApp:** "Saved. Owusu Homes: 1 property, 5 units, 0 tenants…".
+   - **Database:** an `Organisation` (INDIVIDUAL_LANDLORD) with the property and its 5 units; the draft is `COMMITTED`.
+   - **Cleanup:** none.
+7. **Landlord property listing.** L sends:
+   - `list a property`;
+   - the property and unit number, `1` (rent), `1` (apartment), a title, `1` (Greater Accra), `Accra`, `skip`, `3000`, `2` (monthly), `2`, `1`, `skip`, `skip`;
+   - a description, then `next`;
+   - `1` (I own the property), `4` (ownership reference), `Land title GA-12345`;
+   - one photo, `done`, then **Confirm**.
+
+   - **WhatsApp:** "Photo 1 of 10 added.", the review with "not published until NesAfric approves it", then "Submitted for review. Status: submitted for review (not yet published)".
+   - **Database:**
+     - `Listing` is `PENDING_REVIEW` with verification `PENDING`, 1 photo and a cover.
+     - It appears in the Super Admin listing review queue.
+     - It is **not** `PUBLISHED`.
+   - **Cleanup:** none.
+
+**Window 2: agency registration, approval, listing rules**
+
+8. **Agency registration with a logo and replacement.** B sends:
+   - `register agency`, `1`, `Accra Prime Realty`, `skip`, an email, `1`, `Osu`, a description, `Osu, Labone`, `BN-552211`;
+   - logo image 1;
+   - at review: `edit` → the Logo number → logo image 2;
+   - then **Confirm**.
+
+   - **WhatsApp:** one question per step; "Logo received." twice; then "Accra Prime Realty is submitted for review… Your logo is saved."
+   - **Database:**
+     - `MarketplaceProfessional` is `PENDING`, with the reference in `verificationEvidenceReferences`.
+     - `logoUrl` is the second image.
+     - The `WhatsAppFlowDraft` is `SUBMITTED`.
+     - It appears in the Super Admin professionals queue.
+   - **Cleanup:** none.
+9. **Listing before approval.** B sends `list a property`, answers through photos (1 photo), `done`, then **Confirm**.
+   - **WhatsApp:** "Accra Prime Realty isn't approved by NesAfric yet… Your listing is saved as a draft."
+   - **Database:** `Listing` stays `DRAFT`, and the draft returns to review.
+   - **Cleanup:** keep it; it is reused in step 11.
+10. **Super Admin approval.** A verifies Accra Prime Realty in the platform admin.
+    - **WhatsApp:** a decision notice **only if** `WHATSAPP_TEMPLATE_NOTIFICATION` names an approved template. Today no template exists, so expect no WhatsApp message.
+    - **Database:** `verificationStatus` is `VERIFIED`; the email job is queued as today; no `decision:` WhatsApp message without the template.
+    - **Cleanup:** none.
+11. **10-photo enforcement, removal and cover.** B sends `resume`, then photos 2 to 10, then an 11th photo, then `remove 2`, a new photo, `cover 3`, `photos`, `done`, and **Confirm**.
+    - **WhatsApp:**
+      - "Photo n of 10 added." for each photo up to 10.
+      - For the 11th: "This listing already has 10 photos, so that one wasn't added…".
+      - "Photo 2 removed. 9 of 10 left.", "Photo 10 of 10 added.", "Photo 3 is now the cover."
+      - The review shows "Photos: 10 of 10, cover: photo 1." (the chosen cover moves to the front).
+      - Then "Submitted for review".
+    - **Database:**
+      - `Listing` is `PENDING_REVIEW` with exactly 10 `PHOTO` rows and exactly one cover.
+      - Every `sourceMediaId` is unique.
+      - Nothing is `PUBLISHED`.
+    - **Cleanup:** none.
+12. **Stale confirmation.** B starts a second listing (`list a property`) and answers through to the review. A then edits that listing's title on the website. B taps **Confirm**.
+    - **WhatsApp:** "The listing changed after you reviewed it… Reply done to review the current version." Then `done` gives "changed somewhere else… Reply reload". Then `reload` gives "Loaded the latest version".
+    - **Database:** `Listing` stays `DRAFT` until B confirms the re-reviewed version.
+    - **Cleanup:** none.
+13. **Image with no active draft.** B sends `menu` (which leaves the flow) and then a photo, while the second listing's draft is still open at its photo step.
+    - **WhatsApp:** "I didn't save that image because it isn't clear which draft it belongs to…"
+    - **Database:** no new `ListingMedia`.
+    - **Cleanup:** none.
+
+**Window 3: provider registration and service publication** (relink B to a fresh fixture account first: `--business` with a new account, or another phone)
+
+14. **Provider registration.** B sends `register services`, `1`, `Kwame Plumbing Services`, `skip`, `1`, `Tema`, a description, `1, 2`, `Tema, Ashaiman`, `1`, `BN-778899`, `skip`, then **Confirm**.
+    - **WhatsApp:** "Kwame Plumbing Services is submitted for review".
+    - **Database:** `ServiceProvider` is `PENDING` with `contactReady` set, 2 categories, 2 areas and one evidence item (BUSINESS_REGISTRATION).
+    - **Cleanup:** none.
+15. **Service listing before approval.** B sends `list my services`, `1`, `1`, `Tema`, a description, `2`, `150`, `1`, two images, `done`, then **Confirm**.
+    - **WhatsApp:** "…goes live once NesAfric approves Kwame Plumbing Services".
+    - **Database:**
+      - `ProviderMarketplaceProfile.listed` is false, `pricingModel` STARTING_FROM, `startingRateMinor` 15000.
+      - Two `ProviderPortfolioImage` rows.
+    - **Cleanup:** none.
+16. **Approval, then publication.** A approves the provider. B repeats step 15 and confirms.
+    - **WhatsApp:** "Your service listing is published."
+    - **Database:** `listed` is true; the provider appears on the public marketplace.
+    - **Cleanup:** none.
+
+**After the last window:** see Cleanup below. Everything was created in the throwaway database `nesafric_live_rc_test`, so dropping it removes every test record.
 
 ## Cleanup
 
