@@ -256,11 +256,12 @@ export async function createListing(userId: string, organisationId: string, inpu
   await assertOperational(organisationId, ENTITLEMENTS.listingsMax.key);
   const data = createListingSchema.parse(input);
   assertPhotoLimit(data.media);
-  if (data.media.some((item) => item.storageKey)) throw new AppError("INVALID_LISTING_MEDIA", 422, "Upload photos after the listing is created.");
   if (!data.propertyId || data.marketplaceAssetId) throw new AppError("PROPERTYOS_LISTING_SOURCE_REQUIRED", 422, "This endpoint requires a NesAfric property source.");
   const propertyId = data.propertyId;
   return db.$transaction(async (tx) => {
     await validateAsset(tx, organisationId, propertyId, data.unitId, data.countryCode, data.currencyCode);
+    // No stored file belongs to a listing that does not exist yet.
+    await assertOwnStorageKeys(tx, null, data.media);
     await validateMarketplaceAttribution(tx, userId, data);
     const listing = await tx.listing.create({
       data: {
@@ -327,23 +328,23 @@ export const MAX_LISTING_MEDIA = MAX_LISTING_MEDIA_ITEMS;
 const photoCount = (media: ReadonlyArray<{ type?: string | null }>) => media.filter((item) => (item.type ?? "PHOTO") === "PHOTO").length;
 
 /**
- * Media written in bulk may only name stored files this listing already shows, or files uploaded
- * to this listing (LISTING_MEDIA, target = this listing) that cleanup has not removed. Anything
- * else is refused: a request cannot point a listing at another organisation's file (which a later
- * photo removal would then delete), nor revive a file the daily cleanup is deleting. The files are
- * locked FOR SHARE, so cleanup (which locks FOR UPDATE) waits or is waited for.
+ * A storage key in bulk-written media that names a stored file must be a file of this listing:
+ * one it already shows, or one uploaded to it (LISTING_MEDIA, target = this listing) that cleanup
+ * has not removed. A request therefore cannot point a listing at another organisation's file, nor
+ * revive a file the daily cleanup is deleting. Keys naming no stored file (legacy pasted media)
+ * are inert labels and stay allowed. Matching files are locked FOR SHARE, so the cleanup (which
+ * locks FOR UPDATE) waits for this write or this write waits for it.
  */
 async function assertOwnStorageKeys(tx: Tx, listingId: string | null, media: ReadonlyArray<{ storageKey?: string | null }>, alreadyShown: ReadonlyArray<string | null> = []) {
   const shown = new Set(alreadyShown.filter((key): key is string => Boolean(key)));
   const requested = [...new Set(media.map((item) => item.storageKey).filter((key): key is string => Boolean(key) && !shown.has(key!)))];
   if (!requested.length) return;
-  if (!listingId) throw new AppError("INVALID_LISTING_MEDIA", 422, "Upload photos after the listing is created.");
-  const owned = await tx.$queryRaw<Array<{ storageKey: string }>>`
-    SELECT "storageKey" FROM "StorageObject"
-    WHERE "storageKey" = ANY(${requested}::text[]) AND "targetType" = 'LISTING_MEDIA' AND "targetId" = ${listingId}::uuid
-      AND ("metadata" IS NULL OR NOT ("metadata" ? 'storageDeletedAt'))
+  const stored = await tx.$queryRaw<Array<{ storageKey: string; targetType: string; targetId: string; deleted: boolean }>>`
+    SELECT "storageKey", "targetType", "targetId"::text AS "targetId", COALESCE("metadata" ? 'storageDeletedAt', false) AS "deleted"
+    FROM "StorageObject" WHERE "storageKey" = ANY(${requested}::text[])
     FOR SHARE`;
-  if (owned.length !== requested.length) throw new AppError("INVALID_LISTING_MEDIA", 422, "A listing can only show photos uploaded to it.");
+  const foreign = stored.some((file) => file.deleted || file.targetType !== "LISTING_MEDIA" || file.targetId !== listingId);
+  if (foreign) throw new AppError("INVALID_LISTING_MEDIA", 422, "A listing can only show photos uploaded to it.");
 }
 
 /** At most MAX_LISTING_PHOTOS photos. A listing saved before the limit may keep the photos it
