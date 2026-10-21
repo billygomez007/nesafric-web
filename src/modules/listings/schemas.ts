@@ -322,6 +322,8 @@ export const createMarketplaceLeadSchema = z.object({
   phone: z.string().trim().min(5).max(50).optional(),
   message: z.string().trim().max(5_000).optional(),
   marketingConsent: z.boolean().default(false),
+  /** Updates about this enquiry on WhatsApp (Utility templates only, never marketing). */
+  whatsappUpdatesConsent: z.boolean().default(false),
   source: z.string().trim().min(1).max(100).optional(),
 }).strict().refine((lead) => lead.email || lead.phone, {
   path: ["email"],

@@ -305,6 +305,7 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
         metadata: { fromStatus: from, toStatus: data.status, reason: data.reason ?? null, actorUserId: principal.userId },
       },
     });
+    await tx.domainEvent.create({ data: { organisationId: professional.backingOrganisationId, name: "marketplace_professional.verification_reviewed", aggregateType: "marketplace_professional", aggregateId: marketplaceProfessionalId, payload: { fromStatus: from, toStatus: data.status, reason: data.reason ?? null } } });
     return tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
   });
 }

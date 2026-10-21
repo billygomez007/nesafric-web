@@ -71,7 +71,13 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
     const key = `whatsapp-status:${organisationId}:${hash(JSON.stringify(status))}`;
     await db.backgroundJob.upsert({ where: { idempotencyKey: key }, update: {}, create: { organisationId, type: "whatsapp-delivery-status", idempotencyKey: key, payload: json({ organisationId, status }), maxAttempts: 8 } });
   }
-  return { accepted: events.messages.length, statuses: events.statuses.length };
+  // Template reviews concern the official number's WABA only; Meta redelivers, so the key dedupes.
+  const templates = isOfficialWhatsAppOrganisation(organisationId) ? events.templates : [];
+  for (const template of templates) {
+    const key = `whatsapp-template:${hash(JSON.stringify(template))}`;
+    await db.backgroundJob.upsert({ where: { idempotencyKey: key }, update: {}, create: { organisationId, type: "whatsapp-template-status", idempotencyKey: key, payload: json({ organisationId, template }), maxAttempts: 8 } });
+  }
+  return { accepted: events.messages.length, statuses: events.statuses.length, ...(templates.length ? { templates: templates.length } : {}) };
 }
 
 type Tx = Prisma.TransactionClient;

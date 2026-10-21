@@ -2627,6 +2627,7 @@ export async function reviewPortfolioVerificationForPlatform(principal: Platform
     if (!decided.count) throw new AppError("ALREADY_REVIEWED", 409, "This claim has already been reviewed.");
     await tx.platformAuditEvent.create({ data: { platformPrincipalId: principal.id, action: `platform_admin.portfolio_${data.status.toLowerCase()}`, entityType: "portfolio_verification", entityId: verificationId, organisationId: current.organisationId, metadata: { propertyId: current.propertyId } } });
     await tx.auditEvent.create({ data: { organisationId: current.organisationId, action: `portfolio_verification.${data.status.toLowerCase()}`, entityType: "portfolio_verification", entityId: verificationId, metadata: { propertyId: current.propertyId } } });
+    await tx.domainEvent.create({ data: { organisationId: current.organisationId, name: `portfolio_verification.${data.status.toLowerCase()}`, aggregateType: "portfolio_verification", aggregateId: verificationId, payload: { propertyId: current.propertyId } } });
     return current;
   });
 }

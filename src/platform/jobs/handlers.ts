@@ -9,7 +9,8 @@ import { defaultChannelAdapters, ChannelAdapters } from "@/modules/conversations
 import { syncCalendarEventJob } from "@/modules/calendar/service";
 import { sendAccountEmail, type AccountEmailPayload } from "@/modules/account-emails/service";
 import { processAssistantMessage, processLegacyWhatsAppMessage, recordWhatsAppDeliveryStatus } from "@/modules/whatsapp-assistant/service";
-import type { WhatsAppStatusEvent } from "@/modules/conversations/channels/whatsapp-payload";
+import type { WhatsAppStatusEvent, WhatsAppTemplateEvent } from "@/modules/conversations/channels/whatsapp-payload";
+import { recordTemplateWebhookEvent } from "@/modules/whatsapp-templates/state";
 import { NonRetryableJobError } from "./errors";
 import { handleDispatchTimeout, routeMaintenanceRequest } from "@/modules/maintenance-routing/dispatch";
 import { deliverDigest, deliverEscalation } from "@/modules/staff-notifications/service";
@@ -45,6 +46,9 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   "whatsapp-legacy-inbound": processLegacyWhatsAppMessage,
   "whatsapp-delivery-status": async (payload: Record<string, unknown>) => {
     await recordWhatsAppDeliveryStatus(String(payload.organisationId), payload.status as WhatsAppStatusEvent);
+  },
+  "whatsapp-template-status": async (payload: Record<string, unknown>) => {
+    await recordTemplateWebhookEvent(payload.template as WhatsAppTemplateEvent);
   },
   "maintenance-route": async (payload: Record<string, unknown>) => {
     await routeMaintenanceRequest(String(payload.organisationId), String(payload.maintenanceRequestId));

@@ -46,22 +46,46 @@ export const whatsappEnvelopeSchema = z.object({
   }).passthrough()).max(100).default([]),
 }).passthrough();
 
+/** Template review webhooks (`message_template_status_update`, `template_category_update`, quality). */
+const templateId = z.union([z.string().regex(/^\d{1,32}$/), z.number().int().nonnegative()]).transform(String);
+const templateBase = { message_template_id: templateId, message_template_name: z.string().regex(/^[a-z0-9_]{1,512}$/), message_template_language: z.string().regex(/^[A-Za-z_]{2,15}$/) };
+const templateStatus = z.object({ ...templateBase, event: z.string().regex(/^[A-Z_]{2,40}$/), reason: z.string().max(500).nullish() }).passthrough();
+const templateCategory = z.object({ ...templateBase, new_category: z.string().regex(/^[A-Z_]{2,40}$/), previous_category: z.string().max(40).optional() }).passthrough();
+const templateQuality = z.object({ ...templateBase, new_quality_score: z.string().regex(/^[A-Z_]{2,40}$/) }).passthrough();
+export const WHATSAPP_TEMPLATE_FIELDS = ["message_template_status_update", "template_category_update", "message_template_quality_update"];
+
+export type WhatsAppTemplateEvent =
+  | { kind: "status"; wabaId: string; metaTemplateId: string; name: string; language: string; event: string; reason?: string }
+  | { kind: "category"; wabaId: string; metaTemplateId: string; name: string; language: string; newCategory: string; previousCategory?: string }
+  | { kind: "quality"; wabaId: string; metaTemplateId: string; name: string; language: string; newScore: string };
+
 export type WhatsAppStatusEvent = {
   id: string; recipient: string; status: "sent" | "delivered" | "read" | "failed";
   timestamp: string; errorCodes: number[];
 };
 
-/** Only the configured receiving number may route events into this organisation. */
+/**
+ * Only the configured receiving number may route events into this organisation. Template events
+ * name no number, only the WABA (`entry.id`), so they are accepted only when the number's WABA is
+ * known and matches.
+ */
 export function parseWhatsAppEvents(payload: unknown, phoneNumberId: string, businessAccountId?: string) {
   const messages: NormalizedInboundMessage[] = [];
   const statuses: WhatsAppStatusEvent[] = [];
+  const templates: WhatsAppTemplateEvent[] = [];
   let skipped = 0;
   const parsed = whatsappEnvelopeSchema.safeParse(payload);
-  if (!parsed.success || parsed.data.object !== "whatsapp_business_account") return { messages, statuses, skipped: 1 };
+  if (!parsed.success || parsed.data.object !== "whatsapp_business_account") return { messages, statuses, templates, skipped: 1 };
   const envelope = parsed.data;
   for (const entry of envelope.entry) {
     if (businessAccountId && entry.id !== businessAccountId) continue;
     for (const change of entry.changes) {
+      if (change.field && WHATSAPP_TEMPLATE_FIELDS.includes(change.field)) {
+        if (!businessAccountId || entry.id !== businessAccountId) continue;
+        const template = parseTemplateChange(change.field, change.value, businessAccountId);
+        if (template) templates.push(template); else skipped += 1;
+        continue;
+      }
       if (change.field && change.field !== "messages") continue;
       const value = change.value;
       if (!value || value.metadata?.phone_number_id !== phoneNumberId) continue;
@@ -88,5 +112,18 @@ export function parseWhatsAppEvents(payload: unknown, phoneNumberId: string, bus
       }
     }
   }
-  return { messages, statuses, skipped };
+  return { messages, statuses, templates, skipped };
+}
+
+function parseTemplateChange(field: string, value: unknown, wabaId: string): WhatsAppTemplateEvent | null {
+  if (field === "message_template_status_update") {
+    const item = templateStatus.safeParse(value);
+    return item.success ? { kind: "status", wabaId, metaTemplateId: item.data.message_template_id, name: item.data.message_template_name, language: item.data.message_template_language, event: item.data.event, ...(item.data.reason ? { reason: item.data.reason } : {}) } : null;
+  }
+  if (field === "template_category_update") {
+    const item = templateCategory.safeParse(value);
+    return item.success ? { kind: "category", wabaId, metaTemplateId: item.data.message_template_id, name: item.data.message_template_name, language: item.data.message_template_language, newCategory: item.data.new_category, ...(item.data.previous_category ? { previousCategory: item.data.previous_category } : {}) } : null;
+  }
+  const item = templateQuality.safeParse(value);
+  return item.success ? { kind: "quality", wabaId, metaTemplateId: item.data.message_template_id, name: item.data.message_template_name, language: item.data.message_template_language, newScore: item.data.new_quality_score } : null;
 }

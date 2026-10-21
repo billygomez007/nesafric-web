@@ -3821,6 +3821,8 @@ model MarketplaceLead {
   phone                  String?
   message                String?
   marketingConsent       Boolean                        @default(false)
+  /// The enquirer asked for updates about this enquiry on WhatsApp (Utility templates U01-U05).
+  whatsappUpdatesConsent Boolean                        @default(false)
   source                 String?
   status                 MarketplaceLeadStatus          @default(NEW)
   privateNotes           String?
@@ -4122,6 +4124,7 @@ model DomainEvent {
 
   @@index([organisationId, occurredAt])
   @@index([processedAt, occurredAt])
+  @@index([name, occurredAt])
 }
 
 model AISession {
@@ -6477,4 +6480,53 @@ model AccommodationBooking {
   @@index([organisationId, status, createdAt])
   @@index([listingId, createdAt])
   @@index([userId, createdAt])
+}
+
+/// Meta's view of one registry template (src/modules/whatsapp-templates/registry.ts) on one WABA.
+/// Written only by template sync, submission and the template webhooks; a template is sent only
+/// while this row says APPROVED, UTILITY and the same content the registry would render.
+model WhatsAppTemplateState {
+  id             String    @id @default(uuid()) @db.Uuid
+  /// Registry key, U01-U30.
+  templateKey    String
+  wabaId         String
+  metaName       String
+  language       String
+  version        Int
+  /// SHA-256 of the submitted components; a registry edit without resubmission blocks sending.
+  contentHash    String
+  /// NOT_SUBMITTED, or Meta's status (APPROVED, PENDING, REJECTED, PAUSED, DISABLED, ...).
+  status         String    @default("NOT_SUBMITTED")
+  metaTemplateId String?
+  /// The category Meta assigned, which can differ from the one submitted (recategorisation).
+  metaCategory   String?
+  rejectedReason String?
+  qualityScore   String?
+  submittedAt    DateTime?
+  lastStatusAt   DateTime?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([wabaId, metaName, language])
+  @@index([templateKey])
+}
+
+/// One decision per business event, template and recipient: queued, or skipped with the reason.
+/// The unique key is what stops a second notification for the same event.
+model WhatsAppUtilityDispatch {
+  id             String   @id @default(uuid()) @db.Uuid
+  domainEventId  String   @db.Uuid
+  organisationId String   @db.Uuid
+  templateKey    String
+  /// SHA-256 of the recipient's E.164 number, or "none" when nobody was eligible.
+  recipientKey   String
+  outcome        String
+  reason         String?
+  messageId      String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  @@unique([domainEventId, templateKey, recipientKey])
+  @@index([domainEventId])
+  @@index([organisationId, createdAt])
 }

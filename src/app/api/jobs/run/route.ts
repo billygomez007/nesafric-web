@@ -5,6 +5,7 @@ import { runDueJobs } from "@/platform/jobs/runner";
 import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
 import { scheduleDueDigests } from "@/modules/staff-notifications/service";
+import { dispatchUtilityEvents } from "@/modules/whatsapp-templates/dispatch";
 
 /**
  * Drains due jobs and prunes expired guest-write rate-limit / idempotency rows. The sweep runs even
@@ -12,6 +13,7 @@ import { scheduleDueDigests } from "@/modules/staff-notifications/service";
  */
 async function runScheduledWork() {
   await scheduleDueDigests().catch(() => console.error("Digest scheduling failed."));
+  await dispatchUtilityEvents().catch(() => console.error("WhatsApp utility dispatch failed."));
   try {
     await runDueJobs(jobHandlers);
   } finally {

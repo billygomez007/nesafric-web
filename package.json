@@ -18,6 +18,7 @@
     "seed:demo": "tsx scripts/seed-demo.ts",
     "platform-admin:bootstrap": "tsx scripts/bootstrap-platform-admin.ts",
     "worker": "tsx scripts/run-worker.ts",
+    "whatsapp:templates": "tsx scripts/whatsapp-templates.ts",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:bootstrap:fresh": "bash scripts/bootstrap-fresh-database.sh"
   },
