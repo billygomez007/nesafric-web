@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialUpdateSchema } from "@/lib/partial-update-schema";
 
 const date = z.coerce.date();
 const money = z.coerce.string().regex(/^\d+$/, "Money must be a non-negative integer in minor units.");
@@ -28,10 +29,10 @@ export const createLeaseSchema = z.object(leaseFields).superRefine((input, conte
   if (input.rentFrequency === "CUSTOM" && !input.customFrequency) context.addIssue({ code: "custom", path: ["customFrequency"], message: "A custom rent frequency description is required." });
 });
 
-export const updateLeaseSchema = z.object(leaseFields).pick({
+export const updateLeaseSchema = partialUpdateSchema(z.object(leaseFields).pick({
   startDate: true, endDate: true, rentAmountMinor: true, currencyCode: true, rentFrequency: true, customFrequency: true,
   depositAmountMinor: true, renewalStatus: true, moveStatus: true, notes: true,
-}).partial().superRefine((input, context) => {
+})).superRefine((input, context) => {
   if (input.endDate && input.startDate && input.endDate < input.startDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Lease end date cannot precede start date." });
   if (input.rentFrequency === "CUSTOM" && !input.customFrequency) context.addIssue({ code: "custom", path: ["customFrequency"], message: "A custom rent frequency description is required." });
 });
