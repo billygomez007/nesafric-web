@@ -38,8 +38,13 @@ async function main() {
     return;
   }
   if (command === "payloads") {
-    const payloads = UTILITY_TEMPLATES.map((template) => ({ key: template.key, payload: templateCreationPayload(template) }));
-    const output = JSON.stringify(payloads, null, 2);
+    // Only FINAL templates that pass validation are submittable; the rest are listed with their reasons.
+    const eligible = UTILITY_TEMPLATES.filter((template) => template.content === "FINAL" && !validateUtilityTemplate(template).errors.length);
+    const output = JSON.stringify({
+      note: "POST each payload to https://graph.facebook.com/<version>/<NesAfric WABA ID>/message_templates. The WABA is the official NesAfric assignment's; never Tap & Order's. Not submitted.",
+      eligible: eligible.map((template) => ({ key: template.key, payload: templateCreationPayload(template) })),
+      needsReview: UTILITY_TEMPLATES.filter((template) => !eligible.includes(template)).map((template) => ({ key: template.key, name: template.name, content: template.content, errors: validateUtilityTemplate(template).errors, payload: templateCreationPayload(template) })),
+    }, null, 2);
     if (rest[0]) writeFileSync(rest[0], `${output}\n`); else console.log(output);
     return;
   }

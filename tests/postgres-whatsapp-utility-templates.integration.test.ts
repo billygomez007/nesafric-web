@@ -4,7 +4,7 @@ import { POST as officialPost } from "@/app/api/webhooks/whatsapp/route";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
 import { createProperty } from "@/modules/assets/service";
-import { createListing, createMarketplaceLead, createViewingRequest, transitionListing, updateListingVerification, updateViewingRequest } from "@/modules/listings/service";
+import { createListing, createMarketplaceLead, createViewingRequest, transitionListing, updateListingVerification, updateMarketplaceLead, updateViewingRequest } from "@/modules/listings/service";
 import { createMaintenanceRequest } from "@/modules/maintenance/service";
 import { createTenant } from "@/modules/tenants/service";
 import { createTenantAccessInvitation, redeemTenantAccessCode, revokeTenantAccessInvitation } from "@/modules/tenants/access-invitations";
@@ -21,6 +21,7 @@ import { createJobHandlers } from "@/platform/jobs/handlers";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { db } from "@/platform/database/client";
 import { createLease } from "./helpers/lease";
+import { amendLease, transitionLease } from "@/modules/lifecycle/service";
 import { createPlatformAdmin, connectWhatsAppChannel } from "./helpers/whatsapp-channel";
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 60_000 });
@@ -31,6 +32,7 @@ const WABA = "555";
 const SEEKER = "233241110001";
 const AGENT = "233241110002";
 const TENANT = "233241110003";
+const LANDLORD = "233241110004";
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner", "BackgroundJob", "ChannelIdentity", "AuthOtpChallenge", "WhatsAppTemplateState", "WhatsAppUtilityDispatch" CASCADE');
@@ -99,6 +101,14 @@ async function publishedListing() {
   return { owner, organisation, property, listing };
 }
 
+/** A text from `from` to the official number; returns the plain-text replies it got. */
+async function inbound(from: string, body: string) {
+  const before = sent.length;
+  await webhook({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "messages", value: { metadata: { phone_number_id: PHONE_NUMBER_ID }, messages: [{ from, id: `wamid.in.${++counter}`, timestamp: String(Math.floor(Date.now() / 1000)), type: "text", text: { body } }] } }] }] });
+  await work();
+  return sent.slice(before).filter((request) => request.recipientAddress === from && !request.whatsappTemplate).map(({ body: text }) => text).join("\n");
+}
+
 /** Marks the setup's own events as decided, so each test sees only the events it causes. */
 async function settle() {
   await dispatchUtilityEvents();
@@ -131,7 +141,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     expect(result.states.find(({ templateKey }) => templateKey === "U02")).toMatchObject({ status: "REJECTED", rejectedReason: "INVALID_FORMAT" });
     expect(result.states.find(({ templateKey }) => templateKey === "U03")).toMatchObject({ status: "NOT_SUBMITTED" });
     expect(result.unmanaged).toEqual([{ name: "nesafric_notification", language: "en", status: "APPROVED", category: "UTILITY" }]);
-    expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: true, name: "nesafric_enquiry_received" });
+    expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: true, name: "nes_property_enquiry_received" });
     expect(await db.auditEvent.count({ where: { organisationId: officialOrg.id, action: "whatsapp_template.status_synced" } })).toBeGreaterThan(0);
 
     // A different WABA in the deployment settings stops everything before Meta is called.
@@ -148,36 +158,37 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     vi.stubEnv("WHATSAPP_TEMPLATE_SUBMISSION_ENABLED", "true");
     await expect(submitTemplates({ keys: ["U05"], confirmWabaId: "777", client: fakeClient(remote) })).rejects.toThrow(/not the official one/);
 
-    const drafts = fakeClient(remote);
-    const draftRun = await submitTemplates({ keys: ["U05"], confirmWabaId: WABA, client: drafts });
-    expect(draftRun.outcomes).toEqual([expect.objectContaining({ key: "U05", result: "SKIPPED", reason: expect.stringMatching(/draft/) })]);
-    expect(drafts.create).not.toHaveBeenCalled();
+    // Catalogue text that failed a check is never submitted.
+    const review = fakeClient(remote);
+    const reviewRun = await submitTemplates({ keys: ["U10"], confirmWabaId: WABA, client: review });
+    expect(reviewRun.outcomes).toEqual([expect.objectContaining({ key: "U10", result: "SKIPPED", reason: expect.stringMatching(/Invalid: Body must not end with a placeholder/) })]);
+    expect(review.create).not.toHaveBeenCalled();
 
-    const finals = ["U01", "U02", "U05", "U17"].map((key) => utilityTemplate(key) as { content: string });
-    for (const template of finals) template.content = "FINAL";
+    const client = fakeClient(remote);
+    const { outcomes } = await submitTemplates({ keys: ["U01", "U02", "U05"], confirmWabaId: WABA, client });
+    expect(outcomes.map(({ key, result }) => `${key}:${result}`)).toEqual(["U01:SKIPPED", "U02:SKIPPED", "U05:SUBMITTED"]);
+    expect(outcomes[0].reason).toMatch(/Already on Meta as APPROVED; not overwritten/);
+    expect(outcomes[1].reason).toMatch(/Rejected by Meta \(TAG_CONTENT_MISMATCH\).*not resubmitted automatically/);
+    expect(client.create).toHaveBeenCalledTimes(1);
+    expect(client.create).toHaveBeenCalledWith(WABA, templateCreationPayload(utilityTemplate("U05")));
+    expect(await db.whatsAppTemplateState.findFirstOrThrow({ where: { templateKey: "U05" } })).toMatchObject({ status: "PENDING", metaTemplateId: "meta-new", submittedAt: expect.any(Date) });
+    expect(await db.auditEvent.count({ where: { action: "whatsapp_template.submitted", entityId: "U05" } })).toBe(1);
+
+    // A flagged template is submitted only once a person acknowledges the flag.
+    const flagged = utilityTemplate("U13") as { reviewFlag?: string };
+    flagged.reviewFlag = "Check the workspace wording.";
     try {
-      const client = fakeClient(remote);
-      const { outcomes } = await submitTemplates({ keys: ["U01", "U02", "U05", "U17"], confirmWabaId: WABA, client });
-      expect(outcomes.map(({ key, result }) => `${key}:${result}`)).toEqual(["U01:SKIPPED", "U02:SKIPPED", "U05:SUBMITTED", "U17:SKIPPED"]);
-      expect(outcomes[0].reason).toMatch(/Already on Meta as APPROVED; not overwritten/);
-      expect(outcomes[1].reason).toMatch(/Rejected by Meta \(TAG_CONTENT_MISMATCH\).*not resubmitted automatically/);
-      expect(outcomes[3].reason).toMatch(/Needs review/);
-      expect(client.create).toHaveBeenCalledTimes(1);
-      expect(client.create).toHaveBeenCalledWith(WABA, templateCreationPayload(utilityTemplate("U05")));
-      expect(await db.whatsAppTemplateState.findFirstOrThrow({ where: { templateKey: "U05" } })).toMatchObject({ status: "PENDING", metaTemplateId: "meta-new", submittedAt: expect.any(Date) });
-      expect(await db.auditEvent.count({ where: { action: "whatsapp_template.submitted", entityId: "U05" } })).toBe(1);
-      // Flags are submitted only once a person acknowledges them.
-      const acknowledged = await submitTemplates({ keys: ["U17"], confirmWabaId: WABA, client, acknowledgeFlags: ["U17"] });
-      expect(acknowledged.outcomes[0].result).toBe("SUBMITTED");
+      expect((await submitTemplates({ keys: ["U13"], confirmWabaId: WABA, client })).outcomes[0]).toMatchObject({ result: "SKIPPED", reason: expect.stringMatching(/Needs review/) });
+      expect((await submitTemplates({ keys: ["U13"], confirmWabaId: WABA, client, acknowledgeFlags: ["U13"] })).outcomes[0].result).toBe("SUBMITTED");
     } finally {
-      for (const template of finals) template.content = "DRAFT";
+      delete flagged.reviewFlag;
     }
   });
 
   it("records template review webhooks, and stops sending a template Meta moves to Marketing", async () => {
     await official();
     await approve("U01");
-    const status = (event: string, reason?: string) => ({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "message_template_status_update", value: { event, message_template_id: 42, message_template_name: "nesafric_enquiry_received", message_template_language: "en", ...(reason ? { reason } : {}) } }] }] });
+    const status = (event: string, reason?: string) => ({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "message_template_status_update", value: { event, message_template_id: 42, message_template_name: "nes_property_enquiry_received", message_template_language: "en", ...(reason ? { reason } : {}) } }] }] });
     expect((await webhook(status("PAUSED"), "wrong-secret")).status).toBe(401);
     expect((await webhook(status("PAUSED"))).status).toBe(200);
     expect((await webhook(status("PAUSED"))).status).toBe(200);
@@ -187,7 +198,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: false, reason: expect.stringMatching(/PAUSED/) });
 
     await webhook(status("APPROVED"));
-    await webhook({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "template_category_update", value: { message_template_id: 42, message_template_name: "nesafric_enquiry_received", message_template_language: "en", previous_category: "UTILITY", new_category: "MARKETING" } }] }] });
+    await webhook({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "template_category_update", value: { message_template_id: 42, message_template_name: "nes_property_enquiry_received", message_template_language: "en", previous_category: "UTILITY", new_category: "MARKETING" } }] }] });
     await work();
     expect(await db.whatsAppTemplateState.findFirstOrThrow({ where: { templateKey: "U01" } })).toMatchObject({ status: "APPROVED", metaCategory: "MARKETING" });
     expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: false, reason: expect.stringMatching(/MARKETING, not UTILITY/) });
@@ -201,7 +212,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
 
   it("sends an enquiry acknowledgement only to an enquirer who opted in, once, after approval, and tracks its delivery", async () => {
     await official();
-    const { listing } = await publishedListing();
+    const { owner, organisation, listing } = await publishedListing();
     await settle();
     const unapproved = await createMarketplaceLead(listing.id, undefined, { name: "Ama Mensah", phone: "0241110001", whatsappUpdatesConsent: true });
     await dispatchUtilityEvents();
@@ -220,8 +231,9 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await work();
     const [message] = templatesTo(SEEKER);
     expect(templatesTo(SEEKER)).toHaveLength(1);
-    expect(message.whatsappTemplate).toEqual({ name: "nesafric_enquiry_received", language: "en", bodyParameters: ["Ama", "3-bedroom house in Spintex", `EQ-${lead.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`] });
-    expect(message.body).toContain("we have received your enquiry about 3-bedroom house in Spintex");
+    const reference = `EQ-${lead.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    expect(message.whatsappTemplate).toEqual({ name: "nes_property_enquiry_received", language: "en", bodyParameters: ["Ama", "3-bedroom house in Spintex", reference] });
+    expect(message.body).toBe(`Hello Ama, your enquiry about property 3-bedroom house in Spintex has been received by NesAfric. Reference: ${reference}. We will update you when the agent responds.`);
     expect(sent.filter(({ recipientAddress }) => recipientAddress === "233241110009")).toHaveLength(0);
     expect((await dispatches("U01")).map(({ outcome, reason }) => `${outcome}:${reason}`)).toEqual([
       "SKIPPED:Template U01 is NOT_SUBMITTED, not APPROVED.", "QUEUED:null", "SKIPPED:The enquirer did not ask for WhatsApp updates.",
@@ -236,35 +248,46 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await webhook(receipt("read"));
     await work();
     expect(await db.messageDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).toMatchObject({ status: "READ", deliveredAt: expect.any(Date), readAt: expect.any(Date) });
+
+    // The agent responding is the update U01 promised (U05); internal sales stages are not.
+    await approve("U05");
+    await updateMarketplaceLead(owner.id, organisation.id, lead.id, { status: "CONTACTED" });
+    await updateMarketplaceLead(owner.id, organisation.id, lead.id, { status: "QUALIFIED" });
+    await dispatchUtilityEvents();
+    await work();
+    expect(templatesTo(SEEKER).slice(1).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([
+      ["nes_property_enquiry_response", ["Ama", "3-bedroom house in Spintex", "the agent has responded", reference]],
+    ]);
   });
 
   it("keeps viewing seekers updated: confirmed, rescheduled and cancelled", async () => {
     await official();
     const { owner, organisation, listing } = await publishedListing();
-    await approve("U02", "U03", "U04", "U05");
+    await approve("U02", "U04", "U06");
     await settle();
     const lead = await createMarketplaceLead(listing.id, undefined, { name: "Kwame Asante", phone: "+233241110001", whatsappUpdatesConsent: true });
     const viewing = await createViewingRequest(listing.id, undefined, { leadId: lead.id, preferredTimes: [{ startsAt: "2026-10-24T10:00:00.000Z", endsAt: "2026-10-24T11:00:00.000Z", timezone: "Africa/Accra" }] });
     await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "CONFIRMED", confirmedStartsAt: "2026-10-24T10:00:00.000Z", confirmedEndsAt: "2026-10-24T11:00:00.000Z" });
     await dispatchUtilityEvents();
     await work();
-    expect(templatesTo(SEEKER).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nesafric_viewing_request_received", "nesafric_viewing_confirmed"]);
-    expect(templatesTo(SEEKER)[1].whatsappTemplate?.bodyParameters).toEqual(["Kwame", "3-bedroom house in Spintex", "Sat, 24 Oct 2026, 10:00 GMT", "Spintex, Accra"]);
+    // A viewing request has no catalogue template; the confirmation names the agent.
+    expect(templatesTo(SEEKER).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nes_property_viewing_confirmed"]);
+    expect(templatesTo(SEEKER)[0].whatsappTemplate?.bodyParameters).toEqual(["Kwame", "3-bedroom house in Spintex", "Sat, 24 Oct 2026", "10:00 GMT", "Abena Agyei"]);
 
     await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "RESCHEDULED", confirmedStartsAt: "2026-10-26T15:30:00.000Z", confirmedEndsAt: "2026-10-26T16:30:00.000Z" });
     await dispatchUtilityEvents();
     await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "CANCELLED", note: "The house has been let" });
     await dispatchUtilityEvents();
     await work();
-    expect(templatesTo(SEEKER).slice(2).map(({ whatsappTemplate }) => whatsappTemplate?.bodyParameters)).toEqual([
-      ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2026, 15:30 GMT"],
-      ["Kwame", "3-bedroom house in Spintex", "The house has been let"],
+    expect(templatesTo(SEEKER).slice(1).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([
+      ["nes_property_viewing_rescheduled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2026", "15:30 GMT"]],
+      ["nes_property_viewing_cancelled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2026, 15:30 GMT", `VW-${viewing.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`]],
     ]);
   });
 
   it("invites a tenant on WhatsApp only with recorded consent, without the access code, and confirms the connection", async () => {
     const officialOrg = await official();
-    await approve("U17", "U18");
+    await approve("U17", "U18", "U19");
     const landlord = await registerUser({ displayName: "Akosua Mensah", email: "akosua@utility.test", password: "secure-password-123" });
     const organisation = await createOrganisation(landlord.id, { name: "Mensah Properties", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
     const property = await createProperty(landlord.id, organisation.id, { name: "Adenta Court", referenceNumber: "AC-1", category: "Residential", countryCode: "GH", currencyCode: "GHS", units: [{ name: "4B" }] });
@@ -283,26 +306,42 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await db.tenantOrganisation.update({ where: { id: relationship.id }, data: { communicationWhatsappAllowed: true } });
     const revoked = await createTenantAccessInvitation(landlord.id, organisation.id, relationship.id, lease.id);
     await revokeTenantAccessInvitation(landlord.id, organisation.id, relationship.id, revoked.invitation.id);
-    const { code } = await createTenantAccessInvitation(landlord.id, organisation.id, relationship.id, lease.id);
+    const { code, invitation } = await createTenantAccessInvitation(landlord.id, organisation.id, relationship.id, lease.id);
+    const reference = `TI-${invitation.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
     await dispatchUtilityEvents();
     await work();
     expect(templatesTo(TENANT)).toHaveLength(1);
-    expect(templatesTo(TENANT)[0].whatsappTemplate?.bodyParameters).toEqual(["Kojo", "Mensah Properties", "Adenta Court"]);
+    expect(templatesTo(TENANT)[0].whatsappTemplate?.bodyParameters).toEqual(["Kojo", "Mensah Properties", "Adenta Court", reference]);
     expect(JSON.stringify(templatesTo(TENANT)[0])).not.toContain(code.replace(/^NT-/, "").slice(0, 5));
     expect((await dispatches("U17")).map(({ outcome }) => outcome)).toEqual(["SKIPPED", "SKIPPED", "QUEUED"]);
+
+    // Replying explains how to verify, once; it links nothing and never repeats the code.
+    const reply = await inbound(TENANT, "Hello, I got your message");
+    expect(reply).toMatch(/tenant invitation from Mensah Properties/);
+    expect(reply).toMatch(/Reply link/);
+    expect(reply).not.toContain(code);
+    expect(await db.tenantOrganisation.findUniqueOrThrow({ where: { id: relationship.id } })).toMatchObject({ userId: null });
+    expect(await inbound(TENANT, "Hello again")).not.toMatch(/tenant invitation/);
+    // Another number never hears about this invitation.
+    expect(await inbound("233241110007", "Hello")).not.toMatch(/tenant invitation/);
 
     // Connecting still needs an account that proved the number, and the code.
     const tenantUser = await registerUser({ displayName: "Kojo Owusu", email: "kojo@utility.test", password: "secure-password-123" });
     await linkWhatsAppIdentity(TENANT, tenantUser.id, "SMS_OTP", officialOrg.id);
+    await linkWhatsAppIdentity(LANDLORD, landlord.id, "SMS_OTP", officialOrg.id);
+    // The tenant's last chat was days ago, so the confirmation is not left to the chat.
+    await db.channelIdentity.updateMany({ where: { userId: tenantUser.id }, data: { lastInboundAt: new Date(Date.now() - 3 * 24 * 60 * 60_000) } });
     await redeemTenantAccessCode(tenantUser.id, code);
     await dispatchUtilityEvents();
     await work();
-    expect(templatesTo(TENANT).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nesafric_tenant_invitation", "nesafric_tenancy_connected"]);
+    expect(templatesTo(TENANT).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nes_tenant_invitation", "nes_tenant_link_confirmed"]);
+    expect(templatesTo(TENANT)[1].whatsappTemplate?.bodyParameters).toEqual(["Kojo", "Adenta Court", "Mensah Properties"]);
+    expect(templatesTo(LANDLORD).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([["nes_tenant_invitation_accepted", ["Akosua", "Kojo Owusu", "Adenta Court", reference]]]);
   });
 
   it("tells a linked tenant about web repair requests, but not WhatsApp ones, not after STOP, and never across workspaces", async () => {
     const officialOrg = await official();
-    await approve("U23", "U24");
+    await approve("U23", "U25");
     const landlord = await registerUser({ displayName: "Ama Owusu", email: "ama@utility.test", password: "secure-password-123" });
     const organisation = await createOrganisation(landlord.id, { name: "Owusu Homes", type: "INDIVIDUAL_LANDLORD", countryCode: "GH" });
     const property = await createProperty(landlord.id, organisation.id, { name: "Palm Court", referenceNumber: "PC-1", category: "Residential", countryCode: "GH", currencyCode: "GHS", units: [{ name: "A1" }] });
@@ -323,7 +362,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await dispatchUtilityEvents();
     await work();
     expect(templatesTo(TENANT)).toHaveLength(1);
-    expect(templatesTo(TENANT)[0].whatsappTemplate?.bodyParameters).toEqual(["Kojo", request.referenceNumber, "Palm Court, A1", "Leaking kitchen tap"]);
+    expect(templatesTo(TENANT)[0].whatsappTemplate?.bodyParameters).toEqual(["Kojo", "Palm Court, A1", request.referenceNumber, "received"]);
     expect((await dispatches("U23")).map(({ outcome, reason }) => `${outcome}:${reason}`).sort()).toEqual([
       "QUEUED:null", "SKIPPED:Reported on WhatsApp; answered in the chat.", "SKIPPED:The request does not belong to the event's workspace.",
     ]);
@@ -348,10 +387,105 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await reviewMarketplaceVerification(reviewer, professional.id, { status: "VERIFIED" });
     await dispatchUtilityEvents();
     await work();
-    expect(templatesTo(AGENT).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nesafric_business_profile_created", "nesafric_business_verification_approved"]);
+    expect(templatesTo(AGENT).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nes_agent_registration_received", "nes_agent_verification_approved"]);
+    expect(templatesTo(AGENT)[0].whatsappTemplate?.bodyParameters).toEqual(["Kofi", "agent", "Golden Key Realty", `RG-${professional.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`]);
     expect(templatesTo(AGENT)[1].whatsappTemplate?.bodyParameters).toEqual(["Kofi", "Golden Key Realty"]);
     // The profile's hidden backing organisation is not announced as a workspace.
     expect(await db.whatsAppUtilityDispatch.count({ where: { templateKey: "U13" } })).toBe(0);
+  });
+
+  it("sends a verification decision once: the generic notification steps aside only while the Utility template is live", async () => {
+    vi.stubEnv("WHATSAPP_TEMPLATE_NOTIFICATION", "nesafric_notification:en");
+    const officialOrg = await official();
+    const principal = await createPlatformAdmin();
+    const reviewer = await db.user.findUniqueOrThrow({ where: { id: principal.userId } });
+    const agent = await registerUser({ displayName: "Kofi Ansah", email: "kofi@utility.test", password: "secure-password-123" });
+    await linkWhatsAppIdentity(AGENT, agent.id, "SMS_OTP", officialOrg.id);
+
+    // U08 not approved yet: only the generic NOTIFICATION message reports the decision.
+    const first = await createMarketplaceProfessional(agent.id, { type: "INDIVIDUAL_AGENT", displayName: "Golden Key Realty", countryCode: "GH" });
+    await settle();
+    await reviewMarketplaceVerification(reviewer, first.id, { status: "VERIFIED" });
+    await dispatchUtilityEvents();
+    await work();
+    expect(templatesTo(AGENT).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nesafric_notification"]);
+
+    // U08 approved: the Utility template is the only message.
+    await approve("U08");
+    const second = await createMarketplaceProfessional(agent.id, { type: "INDIVIDUAL_AGENT", displayName: "Ansah Homes", countryCode: "GH" });
+    await settle();
+    await reviewMarketplaceVerification(reviewer, second.id, { status: "VERIFIED" });
+    await dispatchUtilityEvents();
+    await work();
+    expect(templatesTo(AGENT).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nes_agent_verification_approved"]);
+  });
+
+  it("confirms properties once per batch, tells connected tenants about lease changes, and reports suspensions", async () => {
+    const officialOrg = await official();
+    await approve("U15", "U20", "U30", "U09");
+    const landlord = await registerUser({ displayName: "Akosua Mensah", email: "akosua2@utility.test", password: "secure-password-123" });
+    await linkWhatsAppIdentity(LANDLORD, landlord.id, "SMS_OTP", officialOrg.id);
+    const organisation = await createOrganisation(landlord.id, { name: "Mensah Properties", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
+    await settle();
+
+    // Two properties added together: one confirmation, naming the first.
+    const property = await createProperty(landlord.id, organisation.id, { name: "Adenta Court", referenceNumber: "AC-1", category: "Residential", countryCode: "GH", currencyCode: "GHS", units: [{ name: "4B" }] });
+    await createProperty(landlord.id, organisation.id, { name: "Palm Court", referenceNumber: "PC-1", category: "Residential", countryCode: "GH", currencyCode: "GHS" });
+    await dispatchUtilityEvents();
+    await work();
+    expect(templatesTo(LANDLORD).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([["nes_property_added", ["Akosua", "Adenta Court", "Mensah Properties", "AC-1"]]]);
+    expect((await dispatches("U15")).map(({ reason }) => reason)).toEqual([null, "Another property added moments ago was already confirmed."]);
+
+    // Lease amendments reach the tenant only once their own account is connected, and never for drafts.
+    const unit = await db.unit.findFirstOrThrow({ where: { propertyId: property.id } });
+    const { relationship } = await createTenant(landlord.id, organisation.id, { legalName: "Kojo Owusu", countryCode: "GH" });
+    const draft = await createLease(landlord.id, organisation.id, { referenceNumber: "AC-D1", propertyId: property.id, unitId: unit.id, tenantOrganisationIds: [relationship.id], startDate: "2026-01-01", endDate: "2026-12-31", rentAmountMinor: "150000", depositAmountMinor: "150000", currencyCode: "GHS", rentFrequency: "MONTHLY" });
+    const lease = await createLease(landlord.id, organisation.id, { referenceNumber: "AC-L1", propertyId: property.id, unitId: unit.id, tenantOrganisationIds: [relationship.id], startDate: "2026-01-01", endDate: "2026-12-31", rentAmountMinor: "150000", depositAmountMinor: "150000", currencyCode: "GHS", rentFrequency: "MONTHLY", status: "ACTIVE" });
+    await amendLease(landlord.id, organisation.id, lease.id, "Rent review", { rentAmountMinor: "160000" });
+    await dispatchUtilityEvents();
+    expect((await dispatches("U20")).map(({ reason }) => reason)).toEqual(["No tenant on the lease has connected an account."]);
+
+    const tenantUser = await registerUser({ displayName: "Kojo Owusu", email: "kojo3@utility.test", password: "secure-password-123" });
+    await db.tenantOrganisation.update({ where: { id: relationship.id }, data: { userId: tenantUser.id } });
+    await linkWhatsAppIdentity(TENANT, tenantUser.id, "SMS_OTP", officialOrg.id);
+    await amendLease(landlord.id, organisation.id, draft.id, "Draft wording", { notes: "x" });
+    await amendLease(landlord.id, organisation.id, lease.id, "Parking added", { parking: "Bay 4" });
+    await dispatchUtilityEvents();
+    await work();
+    const event = await db.domainEvent.findFirstOrThrow({ where: { name: "lease.amended", aggregateId: lease.id }, orderBy: { occurredAt: "desc" } });
+    expect(templatesTo(TENANT).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([
+      ["nes_tenancy_details_updated", ["Kojo", "Adenta Court, 4B", "Mensah Properties", `TU-${event.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`]],
+    ]);
+    expect((await dispatches("U20")).map(({ reason }) => reason)).toContain("The lease is still a draft.");
+
+    // The lease ending ends the tenant's association (U22).
+    await approve("U22");
+    await transitionLease(landlord.id, organisation.id, lease.id, "TERMINATED");
+    await dispatchUtilityEvents();
+    await work();
+    expect(templatesTo(TENANT).at(-1)?.whatsappTemplate).toMatchObject({ name: "nes_tenant_link_removed", bodyParameters: ["Kojo", "Adenta Court, 4B", expect.stringMatching(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/), "Mensah Properties"] });
+
+    // A reviewer's decisions on a business profile: more information needed (U09), then suspension (U30).
+    const agent = await registerUser({ displayName: "Kofi Ansah", email: "kofi2@utility.test", password: "secure-password-123" });
+    await linkWhatsAppIdentity(AGENT, agent.id, "SMS_OTP", officialOrg.id);
+    const professional = await createMarketplaceProfessional(agent.id, { type: "BROKER", displayName: "Golden Key Realty", countryCode: "GH" });
+    await settle();
+    const reviewer = await db.user.findUniqueOrThrow({ where: { id: (await createPlatformAdmin()).userId } });
+    await reviewMarketplaceVerification(reviewer, professional.id, { status: "REJECTED", reason: "a readable business registration certificate" });
+    await dispatchUtilityEvents();
+    await work();
+    const decisions = templatesTo(AGENT).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters?.slice(0, 3)]);
+    const second = await createMarketplaceProfessional(agent.id, { type: "BROKER", displayName: "Ansah Brokers", countryCode: "GH" });
+    await reviewMarketplaceVerification(reviewer, second.id, { status: "VERIFIED" });
+    await settle();
+    await reviewMarketplaceVerification(reviewer, second.id, { status: "SUSPENDED", reason: "Complaint under review" });
+    await dispatchUtilityEvents();
+    await work();
+    decisions.push(...templatesTo(AGENT).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters?.slice(0, 3)]));
+    expect(decisions).toEqual([
+      ["nes_agent_verification_action_required", ["Kofi", "Golden Key Realty", "a readable business registration certificate"]],
+      ["nes_account_status_updated", ["Kofi", "Ansah Brokers", "suspended"]],
+    ]);
   });
 
   it("is off until enabled, and never sends for events before the start time or older than 48 hours", async () => {

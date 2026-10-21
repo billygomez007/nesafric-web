@@ -104,7 +104,7 @@ export async function submitTemplates(input: { keys: string[]; confirmWabaId: st
     const skip = (reason: string) => outcomes.push({ key, metaName, result: "SKIPPED", status: state?.status, reason });
     const { errors, flags } = validateUtilityTemplate(template);
     if (errors.length) { skip(`Invalid: ${errors.join(" ")}`); continue; }
-    if (template.content !== "FINAL") { skip("The body is a draft; replace it with the catalogue text and mark it FINAL."); continue; }
+    if (template.content !== "FINAL") { skip(template.content === "NEEDS_REVIEW" ? "The catalogue text failed a check and needs an approved catalogue change first." : "The body is a draft; replace it with the catalogue text and mark it FINAL."); continue; }
     if (flags.length && !input.acknowledgeFlags?.includes(key)) { skip(`Needs review: ${flags.join(" ")}`); continue; }
     if (state?.status === "REJECTED") { skip(`Rejected by Meta (${state.rejectedReason ?? "no reason given"}). Fix the text and bump the version; it is not resubmitted automatically.`); continue; }
     if (state && ON_META.has(state.status)) { skip(`Already on Meta as ${state.status}; not overwritten.`); continue; }

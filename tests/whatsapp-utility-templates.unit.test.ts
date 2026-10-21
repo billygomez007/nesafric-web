@@ -3,12 +3,14 @@ import { parseWhatsAppEvents } from "@/modules/conversations/channels/whatsapp-p
 import { metaContentHash, renderTemplate, templateContentHash, templateCreationPayload, templateParameters, validateUtilityTemplate } from "@/modules/whatsapp-templates/format";
 import { metaTemplateClient, MetaTemplateApiError } from "@/modules/whatsapp-templates/meta-client";
 import { metaTemplateName, UTILITY_TEMPLATES, utilityTemplate, type UtilityTemplate } from "@/modules/whatsapp-templates/registry";
+import CATALOGUE from "./fixtures/whatsapp-utility-catalogue.json";
 
 const GROUPS: Array<[string, number, number]> = [
   ["CUSTOMER_ENQUIRIES", 1, 6], ["AGENT_ONBOARDING", 7, 11], ["LANDLORD_ONBOARDING", 12, 16],
   ["TENANT_MANAGEMENT", 17, 22], ["PROPERTY_OPERATIONS", 23, 27], ["ACCOUNT_ACTIVITY", 28, 30],
 ];
-const withBody = (body: string, params = utilityTemplate("U03").params): UtilityTemplate => ({ ...utilityTemplate("U03"), body, params, reviewFlag: undefined });
+const withBody = (body: string, params = utilityTemplate("U19").params): UtilityTemplate => ({ ...utilityTemplate("U19"), body, params, reviewFlag: undefined });
+const NEEDS_REVIEW = ["U03", "U10", "U12", "U14", "U15", "U17", "U18", "U21", "U23", "U24", "U25", "U27", "U28", "U29"];
 
 describe("Utility template registry", () => {
   it("defines U01-U30 once each, in their six categories, as English Utility templates", () => {
@@ -19,24 +21,31 @@ describe("Utility template registry", () => {
     }
     for (const template of UTILITY_TEMPLATES) {
       expect(template).toMatchObject({ category: "UTILITY", language: "en", version: 1 });
-      expect(metaTemplateName(template)).toMatch(/^nesafric_[a-z0-9_]+$/);
+      expect(metaTemplateName(template)).toMatch(/^nes_[a-z0-9_]+$/);
+      expect(template.buttons ?? []).toEqual([]);
       expect(template.trigger.event).toBeTruthy();
       expect(template.optIn.length).toBeGreaterThan(0);
       if (template.wiring.status === "NOT_WIRED") expect(template.wiring.reason.length).toBeGreaterThan(10);
     }
   });
 
-  it.each(UTILITY_TEMPLATES.map((template) => [template.key, template] as const))("%s passes Meta's format rules with realistic samples", (_, template) => {
+  it("holds the approved catalogue's names and bodies exactly", () => {
+    expect(UTILITY_TEMPLATES.map(({ key, name, body }) => ({ key, name, body }))).toEqual(CATALOGUE);
+  });
+
+  it.each(UTILITY_TEMPLATES.map((template) => [template.key, template] as const))("%s is FINAL only if it passes Meta's format rules with realistic samples", (_, template) => {
     const { errors, flags } = validateUtilityTemplate(template);
-    expect(errors).toEqual([]);
     expect(flags.filter((flag) => /promotional|link|emoji|not realistic/.test(flag))).toEqual([]);
     const parameters = templateParameters(template, Object.fromEntries(template.params.map(({ name, sample }) => [name, sample])));
     expect(renderTemplate(template, parameters)).not.toMatch(/\{\{\d+\}\}/);
-  });
-
-  it("marks every body as a draft until the catalogue text replaces it", () => {
-    expect(UTILITY_TEMPLATES.every(({ content }) => content === "DRAFT")).toBe(true);
-    expect(validateUtilityTemplate(utilityTemplate("U01")).flags).toContain("Body is a draft, not the approved catalogue text.");
+    if (NEEDS_REVIEW.includes(template.key)) {
+      expect(template.content).toBe("NEEDS_REVIEW");
+      expect(errors).toContain("Body must not end with a placeholder.");
+      expect(template.reviewFlag).toMatch(/ends with a variable/);
+    } else {
+      expect(template.content).toBe("FINAL");
+      expect(errors).toEqual([]);
+    }
   });
 
   it("adds a version suffix to the Meta name from version 2", () => {
@@ -46,6 +55,8 @@ describe("Utility template registry", () => {
 
   it("never puts the tenant access code in the invitation", () => {
     expect(utilityTemplate("U17").params.map(({ name }) => name)).not.toContain("access_code");
+    expect(utilityTemplate("U17").params.find(({ name }) => name === "invitation_reference")?.sample).toMatch(/^TI-/);
+    expect(utilityTemplate("U21").optIn).toEqual(["TENANT_CONSENT_RECORDED"]);
     expect(utilityTemplate("U17").optIn).toEqual(["TENANT_CONSENT_RECORDED"]);
   });
 });
@@ -62,45 +73,42 @@ describe("Template format validation", () => {
 
   it("flags promotional wording and unrealistic samples for review", () => {
     expect(validateUtilityTemplate(withBody("Hello {{1}}, get a discount on {{2}} when you book before {{3}}. Reply to this message to claim it today.")).flags.join(" ")).toMatch(/promotional wording \("discount"\)/);
-    const unrealistic = utilityTemplate("U03").params.map((param, index) => (index === 0 ? { ...param, sample: "test" } : param));
-    expect(validateUtilityTemplate(withBody(utilityTemplate("U03").body, unrealistic)).flags).toContain("Sample for recipient_name is not realistic.");
+    const unrealistic = utilityTemplate("U19").params.map((param, index) => (index === 0 ? { ...param, sample: "test" } : param));
+    expect(validateUtilityTemplate(withBody(utilityTemplate("U19").body, unrealistic)).flags).toContain("Sample for recipient_name is not realistic.");
   });
 });
 
 describe("Parameters and payloads", () => {
-  const template = utilityTemplate("U04");
+  const template = utilityTemplate("U09");
 
   it("substitutes parameters in placeholder order", () => {
-    const parameters = templateParameters(template, { reason: "the property has been let", listing_title: "3-bedroom house in Spintex", recipient_name: "Kwame" });
-    expect(parameters).toEqual(["Kwame", "3-bedroom house in Spintex", "the property has been let"]);
-    expect(renderTemplate(template, parameters)).toBe("Hello Kwame, your viewing of 3-bedroom house in Spintex has been cancelled. Reason: the property has been let. Reply to this message if you would like to arrange another time.");
+    const parameters = templateParameters(template, { required_information: "a readable business registration certificate", business_name: "Golden Key Realty", recipient_name: "Kofi" });
+    expect(parameters).toEqual(["Kofi", "Golden Key Realty", "a readable business registration certificate"]);
+    expect(renderTemplate(template, parameters)).toBe("Hello Kofi, your verification for Golden Key Realty requires additional information: a readable business registration certificate. Reply to this message to continue the verification process.");
   });
 
   it("strips links, phone numbers and newlines from typed values and caps their length", () => {
-    const [name, title, reason] = templateParameters(template, { recipient_name: "Kwame\nAsante", listing_title: "Call 024 123 4567 or visit https://spam.example.com now", reason: "x".repeat(500) });
+    const [name, title, reason] = templateParameters(template, { recipient_name: "Kwame\nAsante", business_name: "Call 024 123 4567 or visit https://spam.example.com now", required_information: "x".repeat(500) });
     expect(name).toBe("Kwame Asante");
     expect(title).not.toMatch(/024|https|spam/);
-    expect(reason).toHaveLength(120);
+    expect(reason).toHaveLength(160);
   });
 
   it("refuses missing or unknown parameters", () => {
-    expect(() => templateParameters(template, { recipient_name: "Kwame", listing_title: "House" })).toThrow(/missing reason/);
-    expect(() => templateParameters(template, { recipient_name: "Kwame", listing_title: "House", reason: "let", extra: "x" })).toThrow(/no parameter extra/);
+    expect(() => templateParameters(template, { recipient_name: "Kofi", business_name: "Golden Key Realty" })).toThrow(/missing required_information/);
+    expect(() => templateParameters(template, { recipient_name: "Kofi", business_name: "Golden Key Realty", required_information: "a licence", extra: "x" })).toThrow(/no parameter extra/);
   });
 
-  it("builds the Meta creation payload with samples, buttons and no silent recategorisation", () => {
-    expect(templateCreationPayload(utilityTemplate("U17"))).toEqual({
-      name: "nesafric_tenant_invitation", language: "en", category: "UTILITY", allow_category_change: false,
-      components: [
-        { type: "BODY", text: utilityTemplate("U17").body, example: { body_text: [["Kojo", "Mensah Properties", "Adenta Court, Unit 4B"]] } },
-        { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Link account" }] },
-      ],
+  it("builds the Meta creation payload: body only, samples, no buttons and no silent recategorisation", () => {
+    expect(templateCreationPayload(utilityTemplate("U19"))).toEqual({
+      name: "nes_tenant_link_confirmed", language: "en", category: "UTILITY", allow_category_change: false,
+      components: [{ type: "BODY", text: utilityTemplate("U19").body, example: { body_text: [["Kojo", "Adenta Court, Unit 4B", "Mensah Properties"]] } }],
     });
   });
 
   it("hashes content the same way for the registry and Meta, and differently after an edit", () => {
-    const registry = utilityTemplate("U17");
-    const remote = { name: "nesafric_tenant_invitation", language: "en", components: [{ type: "BODY", text: registry.body }, { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Link account" }] }] };
+    const registry = utilityTemplate("U19");
+    const remote = { name: "nes_tenant_link_confirmed", language: "en", components: [{ type: "BODY", text: registry.body }] };
     expect(metaContentHash(remote)).toBe(templateContentHash(registry));
     expect(metaContentHash({ ...remote, components: [{ type: "BODY", text: `${registry.body} ` }] })).not.toBe(templateContentHash(registry));
   });

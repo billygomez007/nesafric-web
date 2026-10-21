@@ -1,5 +1,7 @@
 import { db } from "@/platform/database/client";
 import { queueOfficialTemplate } from "./outbound";
+import { utilityTemplate } from "@/modules/whatsapp-templates/registry";
+import { approvedTemplate } from "@/modules/whatsapp-templates/state";
 
 /**
  * Tells applicants on WhatsApp about a decision on their application or listing, in addition to
@@ -25,6 +27,18 @@ export async function notifyOnWhatsApp(userIds: string[], text: string, idempote
   return outcomes;
 }
 
+/**
+ * Decisions that also have a dedicated Utility template (U08, U09, U30 and U11). Once that template is
+ * live (utility dispatch switched on and Meta approved the registry text), the dispatcher sends it
+ * from the decision's domain event and this generic message stays quiet, so nobody hears twice.
+ */
+const UTILITY_COVERAGE = { professional: { VERIFIED: "U08", REJECTED: "U09", SUSPENDED: "U30" }, listing: { PUBLISHED: "U11", REJECTED: "U11" } } as const satisfies Record<string, Record<string, string>>;
+
+export async function utilityTemplateCovers(key: string | undefined, env: Record<string, string | undefined> = process.env) {
+  if (!key || !env.WHATSAPP_UTILITY_EVENTS_SINCE?.trim()) return false;
+  return (await approvedTemplate(db, utilityTemplate(key)).catch(() => ({ approved: false }))).approved;
+}
+
 const PROFESSIONAL_TEXT: Record<string, (name: string, reason?: string | null) => string> = {
   VERIFIED: (name) => `${name} is approved on NesAfric. You can now submit property listings for review. Reply list a property to start.`,
   REJECTED: (name, reason) => `${name} was not approved on NesAfric.${reason ? ` Reason: ${reason}` : ""} Reply my applications for details.`,
@@ -35,6 +49,7 @@ export async function notifyProfessionalDecision(marketplaceProfessionalId: stri
   const professional = await db.marketplaceProfessional.findUnique({ where: { id: marketplaceProfessionalId }, select: { displayName: true, members: { where: { status: "ACTIVE", role: { in: ["OWNER", "ADMIN"] } }, select: { userId: true } } } });
   const text = PROFESSIONAL_TEXT[status];
   if (!professional || !text) return [];
+  if (await utilityTemplateCovers((UTILITY_COVERAGE.professional as Record<string, string>)[status])) return [];
   return notifyOnWhatsApp(professional.members.map((member) => member.userId), text(professional.displayName, reason), `professional:${eventId}`);
 }
 
@@ -60,5 +75,6 @@ const LISTING_TEXT: Record<string, (title: string) => string> = {
 export async function notifyListingDecision(listingId: string, decision: "PUBLISHED" | "CHANGES_REQUESTED" | "REJECTED", eventId: string) {
   const listing = await db.listing.findUnique({ where: { id: listingId }, select: { title: true, createdByUserId: true, listingRepresentativeUserId: true } });
   if (!listing) return [];
+  if (await utilityTemplateCovers((UTILITY_COVERAGE.listing as Record<string, string>)[decision])) return [];
   return notifyOnWhatsApp([listing.createdByUserId, listing.listingRepresentativeUserId].filter((id): id is string => Boolean(id)), LISTING_TEXT[decision](listing.title), `listing:${eventId}`);
 }

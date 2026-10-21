@@ -22,11 +22,15 @@ type Handler = (tx: Tx, event: DomainEvent) => Promise<Plan[]>;
 
 const MAX_AGE_MS = 48 * 60 * 60_000;
 const ACTIVE_CHAT_MS = 24 * 60 * 60_000;
+const BATCH_WINDOW_MS = 10 * 60_000;
 const short = (prefix: string, id: string) => `${prefix}-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 const payloadOf = (event: DomainEvent) => (event.payload && typeof event.payload === "object" ? event.payload : {}) as Record<string, unknown>;
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 const accraTime = (at: Date) => `${new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Accra" }).format(at).replace(" at ", ", ")} GMT`;
+const accraDay = (at: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Accra" }).format(at);
+const accraDate = (at: Date) => new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Accra" }).format(at);
+const accraClock = (at: Date) => `${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Accra" }).format(at)} GMT`;
 
 /**
  * The verified WhatsApp number linked to this account. With `selfInitiated`, nobody is returned
@@ -52,68 +56,88 @@ const plan = (templateKey: string, recipient: UtilityRecipient | string, values:
   typeof recipient === "string" ? { templateKey, skip: recipient } : { templateKey, recipient, values: values() };
 
 async function viewingContext(tx: Tx, viewingId: string) {
-  return tx.viewingRequest.findUnique({ where: { id: viewingId }, include: { lead: true, listing: { select: { title: true, locality: true, city: true } } } });
+  return tx.viewingRequest.findUnique({ where: { id: viewingId }, include: { lead: true, listing: { select: { title: true, createdByUserId: true, listingRepresentativeUserId: true } }, preferredTimes: { orderBy: { startsAt: "asc" }, take: 1 } } });
 }
 
+/** The person showing the property: the listing's representative, else whoever listed it. */
+async function agentName(tx: Tx, listing: { createdByUserId: string; listingRepresentativeUserId: string | null }) {
+  const user = await tx.user.findUnique({ where: { id: listing.listingRepresentativeUserId ?? listing.createdByUserId }, select: { displayName: true } });
+  return user?.displayName;
+}
+
+/** Enquiry stages the customer hears about; viewings and applications have their own messages. */
+const LEAD_STATUS: Record<string, string> = { CONTACTED: "the agent has responded", CLOSED: "closed", LOST: "closed" };
+const ASSIGNMENT_STATUS: Record<string, string> = { PENDING: "waiting for the provider to accept", ACCEPTED: "accepted by the provider" };
+const REGISTRATION_TYPE: Record<string, string> = { INDIVIDUAL_AGENT: "agent", BROKER: "broker", BROKERAGE: "broker" };
+
 const handlers: Record<string, Handler> = {
+  // Category A: customer property enquiries
   "marketplace.lead_created": async (tx, event) => {
     const lead = await tx.marketplaceLead.findUnique({ where: { id: event.aggregateId }, include: { listing: { select: { title: true } } } });
     if (!lead) return [{ templateKey: "U01", skip: "The enquiry no longer exists." }];
     if (lead.source === "WHATSAPP") return [{ templateKey: "U01", skip: "Made on WhatsApp; answered in the chat." }];
-    return [plan("U01", enquiryRecipient(lead), () => ({ recipient_name: firstName(lead.name), listing_title: lead.listing.title, enquiry_reference: short("EQ", lead.id) }))];
-  },
-  "viewing.requested": async (tx, event) => {
-    const viewing = await viewingContext(tx, event.aggregateId);
-    if (!viewing) return [{ templateKey: "U05", skip: "The viewing no longer exists." }];
-    if (viewing.lead.source === "WHATSAPP") return [{ templateKey: "U05", skip: "Made on WhatsApp; answered in the chat." }];
-    return [plan("U05", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), listing_title: viewing.listing.title, viewing_reference: short("VW", viewing.id) }))];
+    return [plan("U01", enquiryRecipient(lead), () => ({ recipient_name: firstName(lead.name), property_name: lead.listing.title, reference: short("EQ", lead.id) }))];
   },
   "viewing.confirmed": async (tx, event) => {
     const viewing = await viewingContext(tx, event.aggregateId);
     if (viewing?.status !== "CONFIRMED" || !viewing.confirmedStartsAt) return [{ templateKey: "U02", skip: "The viewing is no longer confirmed." }];
-    const area = [viewing.listing.locality, viewing.listing.city].filter(Boolean).join(", ");
-    if (!area) return [{ templateKey: "U02", skip: "The listing has no area to name." }];
-    return [plan("U02", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), listing_title: viewing.listing.title, viewing_time: accraTime(viewing.confirmedStartsAt!), area }))];
+    const agent = await agentName(tx, viewing.listing);
+    if (!agent) return [{ templateKey: "U02", skip: "The listing has no agent to name." }];
+    return [plan("U02", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), property_name: viewing.listing.title, date: accraDate(viewing.confirmedStartsAt!), time: accraClock(viewing.confirmedStartsAt!), agent_name: agent }))];
   },
   "viewing.rescheduled": async (tx, event) => {
     const viewing = await viewingContext(tx, event.aggregateId);
-    if (viewing?.status !== "RESCHEDULED") return [{ templateKey: "U03", skip: "The viewing changed again." }];
-    return [plan("U03", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), listing_title: viewing.listing.title, viewing_time: viewing.confirmedStartsAt ? accraTime(viewing.confirmedStartsAt) : "a time the lister will confirm with you" }))];
+    if (viewing?.status !== "RESCHEDULED") return [{ templateKey: "U04", skip: "The viewing changed again." }];
+    if (!viewing.confirmedStartsAt) return [{ templateKey: "U04", skip: "No new time is set yet; the lister confirms it with the customer." }];
+    return [plan("U04", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), property_name: viewing.listing.title, date: accraDate(viewing.confirmedStartsAt!), time: accraClock(viewing.confirmedStartsAt!) }))];
+  },
+  "listing.lead_status_changed": async (tx, event) => {
+    const status = LEAD_STATUS[String(payloadOf(event).toStatus)];
+    if (!status) return [];
+    const lead = await tx.marketplaceLead.findFirst({ where: { id: event.aggregateId, organisationId: event.organisationId }, include: { listing: { select: { title: true } } } });
+    if (!lead) return [{ templateKey: "U05", skip: "The enquiry does not belong to the event's workspace." }];
+    // A later stage does not cancel "the agent has responded"; a reopened enquiry cancels "closed".
+    const closed = (value: string) => value === "CLOSED" || value === "LOST";
+    if (closed(String(payloadOf(event).toStatus)) !== closed(lead.status)) return [{ templateKey: "U05", skip: "The enquiry changed again." }];
+    return [plan("U05", enquiryRecipient(lead), () => ({ recipient_name: firstName(lead.name), property_name: lead.listing.title, status, reference: short("EQ", lead.id) }))];
   },
   "listing.viewing_status_changed": async (tx, event) => {
     if (payloadOf(event).toStatus !== "CANCELLED") return [];
     const viewing = await viewingContext(tx, event.aggregateId);
-    if (viewing?.status !== "CANCELLED") return [{ templateKey: "U04", skip: "The viewing is no longer cancelled." }];
-    const history = await tx.viewingRequestStatusHistory.findFirst({ where: { viewingRequestId: viewing.id, toStatus: "CANCELLED" }, orderBy: { createdAt: "desc" }, select: { note: true } });
-    return [plan("U04", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), listing_title: viewing.listing.title, reason: text(history?.note) ?? "the lister cancelled it" }))];
+    if (viewing?.status !== "CANCELLED") return [{ templateKey: "U06", skip: "The viewing is no longer cancelled." }];
+    const scheduled = viewing.confirmedStartsAt ?? viewing.preferredTimes[0]?.startsAt;
+    if (!scheduled) return [{ templateKey: "U06", skip: "The viewing had no time to name." }];
+    return [plan("U06", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), property_name: viewing.listing.title, scheduled_for: accraTime(scheduled), reference: short("VW", viewing.id) }))];
   },
 
+  // Category B: agent and broker onboarding
   "marketplace_professional.created": async (tx, event, now = new Date()) => {
     const professional = await tx.marketplaceProfessional.findUnique({ where: { id: event.aggregateId }, include: { createdBy: { select: { displayName: true } } } });
     if (!professional) return [{ templateKey: "U07", skip: "The profile no longer exists." }];
     const recipient = await linkedRecipient(tx, professional.createdByUserId, { selfInitiated: true, now });
-    return [plan("U07", recipient, () => ({ recipient_name: firstName(professional.createdBy.displayName), business_name: professional.displayName }))];
+    return [plan("U07", recipient, () => ({ recipient_name: firstName(professional.createdBy.displayName), registration_type: REGISTRATION_TYPE[professional.type] ?? "business", business_name: professional.displayName, reference: short("RG", professional.id) }))];
   },
   "marketplace_professional.verification_reviewed": async (tx, event) => {
     const { toStatus, reason } = payloadOf(event);
-    const templateKey = toStatus === "VERIFIED" ? "U08" : toStatus === "REJECTED" ? "U09" : null;
+    const templateKey = toStatus === "VERIFIED" ? "U08" : toStatus === "REJECTED" ? "U09" : toStatus === "SUSPENDED" ? "U30" : null;
     if (!templateKey) return [];
     const professional = await tx.marketplaceProfessional.findUnique({ where: { id: event.aggregateId }, include: { members: { where: { status: "ACTIVE", role: { in: ["OWNER", "ADMIN"] } }, include: { user: { select: { displayName: true } } } } } });
     if (!professional?.members.length) return [{ templateKey, skip: "The profile has no active owner or admin." }];
+    const extra: Record<string, string> = templateKey === "U09" ? { required_information: text(reason) ?? "updated verification details" }
+      : templateKey === "U30" ? { status: "suspended", reference: short("AS", event.id) } : {};
     return Promise.all(professional.members.map(async (member) => plan(templateKey, await linkedRecipient(tx, member.userId, { now: new Date() }), () => ({
-      recipient_name: firstName(member.user.displayName), business_name: professional.displayName, ...(templateKey === "U09" ? { reason: text(reason) ?? "the documents did not meet the requirements" } : {}),
+      recipient_name: firstName(member.user.displayName), [templateKey === "U30" ? "profile_name" : "business_name"]: professional.displayName, ...extra,
     }))));
   },
   "listing.pending_review": async (tx, event) => {
     const listing = await tx.listing.findUnique({ where: { id: event.aggregateId }, include: { createdBy: { select: { displayName: true } } } });
     if (listing?.status !== "PENDING_REVIEW") return [{ templateKey: "U10", skip: "The listing is no longer pending review." }];
-    return [plan("U10", await linkedRecipient(tx, listing.createdByUserId, { selfInitiated: true, now: new Date() }), () => ({ recipient_name: firstName(listing.createdBy.displayName), listing_title: listing.title, listing_reference: short("LS", listing.id) }))];
+    return [plan("U10", await linkedRecipient(tx, listing.createdByUserId, { selfInitiated: true, now: new Date() }), () => ({ recipient_name: firstName(listing.createdBy.displayName), property_title: listing.title, reference: short("LS", listing.id), status: "pending review" }))];
   },
   "listing.published": async (tx, event) => listingReviewed(tx, event, "PUBLISHED"),
   "listing.rejected": async (tx, event) => listingReviewed(tx, event, "REJECTED"),
-  "listing.verification_verified": async (tx, event) => listingEvidenceReviewed(tx, event, true),
-  "listing.verification_rejected": async (tx, event) => listingEvidenceReviewed(tx, event, false),
 
+  // Category C: landlord and property manager onboarding
   "organisation.created": async (tx, event) => {
     if (event.organisationId === officialWhatsAppOrganisationId()) return [];
     // A marketplace profile's hidden backing organisation is not a workspace (U07 covers it).
@@ -123,9 +147,29 @@ const handlers: Record<string, Handler> = {
     if (!organisation || !owner) return [{ templateKey: "U13", skip: "The workspace has no active owner." }];
     return [plan("U13", await linkedRecipient(tx, owner.userId, { selfInitiated: true, now: new Date() }), () => ({ recipient_name: firstName(owner.user.displayName), workspace_name: organisation.name }))];
   },
-  "portfolio_verification.verified": async (tx, event) => ownershipReviewed(tx, event, true),
-  "portfolio_verification.rejected": async (tx, event) => ownershipReviewed(tx, event, false),
+  "property.created": async (tx, event) => {
+    if (event.organisationId === officialWhatsAppOrganisationId()) return [];
+    if (await tx.marketplaceProfessional.findUnique({ where: { backingOrganisationId: event.organisationId }, select: { id: true } })) return [];
+    const property = await tx.property.findFirst({ where: { id: event.aggregateId, organisationId: event.organisationId } });
+    const workspace = await tx.organisation.findUnique({ where: { id: event.organisationId }, select: { name: true } });
+    if (!property || !workspace) return [{ templateKey: "U15", skip: "The property does not belong to the event's workspace." }];
+    // Whoever added it (from the audit record written in the same transaction).
+    const added = await tx.auditEvent.findFirst({ where: { organisationId: event.organisationId, action: "property.created", entityId: property.id }, orderBy: { createdAt: "desc" }, select: { actor: { select: { id: true, displayName: true } } } });
+    if (!added?.actor) return [{ templateKey: "U15", skip: "No one is recorded as adding the property." }];
+    // A bulk import or onboarding adds many properties at once: one message, not one per property.
+    if (await tx.whatsAppUtilityDispatch.count({ where: { organisationId: event.organisationId, templateKey: "U15", outcome: "QUEUED", createdAt: { gte: new Date(Date.now() - BATCH_WINDOW_MS) } } })) return [{ templateKey: "U15", skip: "Another property added moments ago was already confirmed." }];
+    const actor = added.actor;
+    return [plan("U15", await linkedRecipient(tx, actor.id, { selfInitiated: true, now: new Date() }), () => ({ recipient_name: firstName(actor.displayName), property_name: property.name, workspace_name: workspace.name, property_reference: property.referenceNumber ?? short("PR", property.id) }))];
+  },
+  "portfolio_verification.rejected": async (tx, event) => {
+    const claim = await tx.portfolioVerification.findUnique({ where: { id: event.aggregateId }, include: { property: { select: { name: true } }, organisation: { select: { name: true } }, claimedBy: { select: { displayName: true } } } });
+    if (claim?.status !== "REJECTED") return [{ templateKey: "U16", skip: "The claim's decision changed." }];
+    return [plan("U16", await linkedRecipient(tx, claim.claimedByUserId, { now: new Date() }), () => ({
+      recipient_name: firstName(claim.claimedBy.displayName), property_name: claim.property?.name ?? claim.organisation.name, required_information: text(claim.reviewNote) ?? "more details about your ownership or authority",
+    }))];
+  },
 
+  // Category D: tenant management
   "tenant.access_invitation_created": async (tx, event, now = new Date()) => {
     const invitationId = text(payloadOf(event).invitationId);
     const invitation = invitationId ? await tx.tenantAccessInvitation.findUnique({ where: { id: invitationId }, include: { tenantOrganisation: { include: { tenant: { select: { legalName: true } }, organisation: { select: { name: true } } } }, lease: { select: { property: { select: { name: true } } } } } }) : null;
@@ -136,84 +180,150 @@ const handlers: Record<string, Handler> = {
     if (relationship.userId) return [{ templateKey: "U17", skip: "The tenancy is already connected to an account." }];
     if (!relationship.communicationWhatsappAllowed) return [{ templateKey: "U17", skip: "The landlord has not recorded the tenant's consent to WhatsApp messages." }];
     if (!relationship.phone || !whatsappRecipientE164(relationship.phone)) return [{ templateKey: "U17", skip: "The tenancy has no WhatsApp number." }];
-    const property = invitation.lease?.property.name ?? (await tx.leaseParty.findFirst({ where: { tenantOrganisationId: relationship.id }, orderBy: { createdAt: "desc" }, select: { lease: { select: { property: { select: { name: true } } } } } }))?.lease.property.name;
+    const property = await invitationProperty(tx, invitation);
     if (!property) return [{ templateKey: "U17", skip: "The tenancy has no property to name." }];
-    return [{ templateKey: "U17", recipient: { phone: relationship.phone, displayName: relationship.tenant.legalName, basis: "TENANT_CONSENT_RECORDED" }, values: { recipient_name: firstName(relationship.tenant.legalName), landlord_name: relationship.organisation.name, property_name: property } }];
+    // The reference names the invitation; the access code itself never leaves the landlord's screen.
+    return [{ templateKey: "U17", recipient: { phone: relationship.phone, displayName: relationship.tenant.legalName, basis: "TENANT_CONSENT_RECORDED" }, values: { recipient_name: firstName(relationship.tenant.legalName), landlord_name: relationship.organisation.name, property_name: property, invitation_reference: invitationReference(invitation.id) } }];
   },
   "tenant.access_invitation_redeemed": async (tx, event) => {
-    const userId = text(payloadOf(event).userId);
-    const relationship = await tx.tenantOrganisation.findUnique({ where: { id: event.aggregateId }, include: { organisation: { select: { name: true } }, user: { select: { displayName: true } } } });
-    if (!relationship || relationship.userId !== userId) return [{ templateKey: "U18", skip: "The tenancy is not connected to this account." }];
-    return [plan("U18", await linkedRecipient(tx, userId, { selfInitiated: true, now: new Date() }), () => ({ recipient_name: firstName(relationship.user?.displayName ?? "there"), landlord_name: relationship.organisation.name }))];
+    const { userId: rawUserId, invitationId: rawInvitationId } = payloadOf(event);
+    const userId = text(rawUserId);
+    const invitationId = text(rawInvitationId);
+    const relationship = await tx.tenantOrganisation.findUnique({ where: { id: event.aggregateId }, include: { organisation: { select: { name: true } }, user: { select: { displayName: true } }, tenant: { select: { legalName: true } } } });
+    if (!relationship || relationship.organisationId !== event.organisationId || relationship.userId !== userId) return [{ templateKey: "U19", skip: "The tenancy is not connected to this account." }];
+    const invitation = invitationId ? await tx.tenantAccessInvitation.findFirst({ where: { id: invitationId, tenantOrganisationId: relationship.id, redeemedByUserId: userId }, include: { createdBy: { select: { id: true, displayName: true } }, lease: { select: { property: { select: { name: true } } } } } }) : null;
+    const property = invitation ? await invitationProperty(tx, invitation) : null;
+    if (!invitation || !property) return [{ templateKey: "U19", skip: "The redeemed invitation or its property is missing." }];
+    const tenant = await linkedRecipient(tx, userId, { selfInitiated: true, now: new Date() });
+    const landlord = await linkedRecipient(tx, invitation.createdBy.id, { now: new Date() });
+    return [
+      plan("U19", tenant, () => ({ recipient_name: firstName(relationship.user?.displayName ?? relationship.tenant.legalName), property_name: property, manager_name: relationship.organisation.name })),
+      plan("U18", landlord, () => ({ recipient_name: firstName(invitation.createdBy.displayName), tenant_name: relationship.tenant.legalName, property_name: property, invitation_reference: invitationReference(invitation.id) })),
+    ];
   },
+  "lease.amended": async (tx, event) => tenancyUpdated(tx, event),
+  "lease.terminated": async (tx, event) => tenancyEnded(tx, event),
+  "lease.expired": async (tx, event) => tenancyEnded(tx, event),
 
+  // Category E: property operations
   "maintenance.requested": async (tx, event) => {
     if (payloadOf(event).intakeChannel === "WHATSAPP") return [{ templateKey: "U23", skip: "Reported on WhatsApp; answered in the chat." }];
-    const request = await maintenanceContext(tx, event);
+    const request = await maintenanceContext(tx, event.aggregateId, event.organisationId);
     if (!request) return [{ templateKey: "U23", skip: NOT_IN_WORKSPACE }];
     if (!request.tenantOrganisation) return [{ templateKey: "U23", skip: "The request is not linked to a tenancy." }];
-    return [plan("U23", await linkedRecipient(tx, request.tenantOrganisation.userId, { now: new Date() }), () => ({ recipient_name: firstName(request.tenantOrganisation!.user?.displayName ?? "there"), request_reference: request.referenceNumber ?? short("MR", request.id), property_name: placeName(request), issue: request.title }))];
+    return [plan("U23", await linkedRecipient(tx, request.tenantOrganisation.userId, { now: new Date() }), () => ({ recipient_name: requesterName(request), property_name: placeName(request), ticket: ticket(request), status: "received" }))];
+  },
+  "workorder.assigned": async (tx, event) => {
+    // Assigning the landlord's own staff is internal; the tenant hears when a provider is assigned.
+    const assignmentId = text(payloadOf(event).providerAssignmentId);
+    if (!assignmentId) return [];
+    const workOrder = await tx.workOrder.findFirst({ where: { id: event.aggregateId, organisationId: event.organisationId }, select: { maintenanceRequestId: true, routingRuleId: true } });
+    if (!workOrder) return [{ templateKey: "U24", skip: "The work order does not belong to the event's workspace." }];
+    if (workOrder.routingRuleId) return [{ templateKey: "U24", skip: "Handled by the provider network, which messages the tenant itself." }];
+    const request = await maintenanceContext(tx, workOrder.maintenanceRequestId, event.organisationId);
+    if (!request?.tenantOrganisation) return [{ templateKey: "U24", skip: "The request is not linked to a tenancy." }];
+    const assignment = await tx.providerAssignment.findFirst({ where: { id: assignmentId, workOrderId: event.aggregateId }, select: { status: true, provider: { select: { displayName: true } } } });
+    const status = assignment && ASSIGNMENT_STATUS[assignment.status];
+    if (!assignment || !status) return [{ templateKey: "U24", skip: "The provider assignment is no longer active." }];
+    return [plan("U24", await linkedRecipient(tx, request.tenantOrganisation.userId, { now: new Date() }), () => ({ recipient_name: requesterName(request), ticket: ticket(request), provider_name: assignment.provider.displayName, status }))];
   },
   "maintenance.started": async (tx, event) => maintenanceUpdate(tx, event, "work has started"),
   "maintenance.rejected": async (tx, event) => maintenanceUpdate(tx, event, "not approved by your landlord"),
   "maintenance.cancelled": async (tx, event) => maintenanceUpdate(tx, event, "cancelled"),
   "maintenance.completed": async (tx, event) => {
-    const request = await maintenanceContext(tx, event);
-    if (!request) return [{ templateKey: "U25", skip: NOT_IN_WORKSPACE }];
-    if (!request.tenantOrganisation) return [{ templateKey: "U25", skip: "The request is not linked to a tenancy." }];
-    if (await automated(tx, request.id)) return [{ templateKey: "U25", skip: "Handled by the provider network, which messages the tenant itself." }];
-    return [plan("U25", await linkedRecipient(tx, request.tenantOrganisation.userId, { now: new Date() }), () => ({ recipient_name: firstName(request.tenantOrganisation!.user?.displayName ?? "there"), request_reference: request.referenceNumber ?? short("MR", request.id), property_name: placeName(request) }))];
+    const request = await maintenanceContext(tx, event.aggregateId, event.organisationId);
+    if (!request) return [{ templateKey: "U26", skip: NOT_IN_WORKSPACE }];
+    if (!request.tenantOrganisation) return [{ templateKey: "U26", skip: "The request is not linked to a tenancy." }];
+    if (await automated(tx, request.id)) return [{ templateKey: "U26", skip: "Handled by the provider network, which messages the tenant itself." }];
+    return [plan("U26", await linkedRecipient(tx, request.tenantOrganisation.userId, { now: new Date() }), () => ({ recipient_name: requesterName(request), ticket: ticket(request), property_name: placeName(request) }))];
   },
+
+  // Category F: account and document activity
+  "listing.verification_submitted": async (tx, event) => {
+    const listing = await tx.listing.findFirst({ where: { id: event.aggregateId, organisationId: event.organisationId }, include: { createdBy: { select: { displayName: true } } } });
+    if (!listing) return [{ templateKey: "U28", skip: "The listing does not belong to the event's workspace." }];
+    return [plan("U28", await linkedRecipient(tx, listing.createdByUserId, { selfInitiated: true, now: new Date() }), () => ({ recipient_name: firstName(listing.createdBy.displayName), document_purpose: `verification of ${listing.title}`, reference: short("DC", listing.id), status: "under review" }))];
+  },
+  "listing.verification_verified": async (tx, event) => listingEvidenceReviewed(tx, event, true),
+  "listing.verification_rejected": async (tx, event) => listingEvidenceReviewed(tx, event, false),
 };
+
+const invitationReference = (invitationId: string) => short("TI", invitationId);
+async function invitationProperty(tx: Tx, invitation: { tenantOrganisationId: string; lease: { property: { name: string } } | null }) {
+  return invitation.lease?.property.name ?? (await tx.leaseParty.findFirst({ where: { tenantOrganisationId: invitation.tenantOrganisationId }, orderBy: { createdAt: "desc" }, select: { lease: { select: { property: { select: { name: true } } } } } }))?.lease.property.name;
+}
+
+/** The lease in the event's own workspace, with the tenants whose own accounts are connected to it. */
+async function leaseTenants(tx: Tx, event: DomainEvent) {
+  const lease = await tx.lease.findFirst({ where: { id: event.aggregateId, organisationId: event.organisationId }, include: { organisation: { select: { name: true } }, property: { select: { name: true } }, unit: { select: { name: true } }, parties: { include: { tenantOrganisation: { select: { userId: true, user: { select: { displayName: true } } } } } } } });
+  return lease && { lease, tenants: lease.parties.map(({ tenantOrganisation }) => tenantOrganisation).filter((tenant) => tenant.userId) };
+}
+
+/** An amendment to a lease that is not a draft (draft terms change freely while being prepared). */
+async function tenancyUpdated(tx: Tx, event: DomainEvent): Promise<Plan[]> {
+  const found = await leaseTenants(tx, event);
+  if (!found) return [{ templateKey: "U20", skip: "The lease does not belong to the event's workspace." }];
+  const { lease, tenants } = found;
+  if (lease.status === "DRAFT") return [{ templateKey: "U20", skip: "The lease is still a draft." }];
+  if (!tenants.length) return [{ templateKey: "U20", skip: "No tenant on the lease has connected an account." }];
+  return Promise.all(tenants.map(async (tenant) => plan("U20", await linkedRecipient(tx, tenant.userId, { now: new Date() }), () => ({
+    recipient_name: firstName(tenant.user?.displayName ?? "there"), property_name: placeName(lease), manager_name: lease.organisation.name, reference: short("TU", event.id),
+  }))));
+}
+
+/** A lease that ended (terminated, or expired at its end date): the tenancy on it is over. */
+async function tenancyEnded(tx: Tx, event: DomainEvent): Promise<Plan[]> {
+  const found = await leaseTenants(tx, event);
+  if (!found) return [{ templateKey: "U22", skip: "The lease does not belong to the event's workspace." }];
+  const { lease, tenants } = found;
+  if (lease.status !== "TERMINATED" && lease.status !== "EXPIRED") return [{ templateKey: "U22", skip: "The lease is no longer ended." }];
+  if (!tenants.length) return [{ templateKey: "U22", skip: "No tenant on the lease has connected an account." }];
+  const effective = lease.status === "EXPIRED" && lease.endDate ? lease.endDate : event.occurredAt;
+  return Promise.all(tenants.map(async (tenant) => plan("U22", await linkedRecipient(tx, tenant.userId, { now: new Date() }), () => ({
+    recipient_name: firstName(tenant.user?.displayName ?? "there"), property_name: placeName(lease), date: accraDay(effective), contact: lease.organisation.name,
+  }))));
+}
 
 async function listingReviewed(tx: Tx, event: DomainEvent, toStatus: "PUBLISHED" | "REJECTED"): Promise<Plan[]> {
   if (payloadOf(event).fromStatus !== "PENDING_REVIEW") return [];
   const listing = await tx.listing.findUnique({ where: { id: event.aggregateId }, include: { createdBy: { select: { displayName: true } } } });
   if (!listing) return [{ templateKey: "U11", skip: "The listing no longer exists." }];
-  const decision = await tx.listingStatusHistory.findFirst({ where: { listingId: listing.id, toStatus }, orderBy: { createdAt: "desc" }, select: { actorUserId: true, note: true } });
+  const decision = await tx.listingStatusHistory.findFirst({ where: { listingId: listing.id, toStatus }, orderBy: { createdAt: "desc" }, select: { actorUserId: true } });
   if (decision?.actorUserId === listing.createdByUserId) return [{ templateKey: "U11", skip: "Decided by the listing's own creator." }];
-  const note = text(payloadOf(event).note) ?? text(decision?.note);
-  const outcome = toStatus === "PUBLISHED" ? "approved and published" : `not approved${note ? ` (${note})` : ""}`;
-  return [plan("U11", await linkedRecipient(tx, listing.createdByUserId, { now: new Date() }), () => ({ recipient_name: firstName(listing.createdBy.displayName), listing_title: listing.title, outcome }))];
+  return [plan("U11", await linkedRecipient(tx, listing.createdByUserId, { now: new Date() }), () => ({ recipient_name: firstName(listing.createdBy.displayName), property_title: listing.title, status: toStatus === "PUBLISHED" ? "published" : "not approved", reference: short("LS", listing.id) }))];
 }
 
 async function listingEvidenceReviewed(tx: Tx, event: DomainEvent, verified: boolean): Promise<Plan[]> {
   const listing = await tx.listing.findUnique({ where: { id: event.aggregateId }, include: { createdBy: { select: { displayName: true } } } });
   if (!listing) return [{ templateKey: "U29", skip: "The listing no longer exists." }];
   const note = text(payloadOf(event).note);
-  return [plan("U29", await linkedRecipient(tx, listing.createdByUserId, { now: new Date() }), () => ({ recipient_name: firstName(listing.createdBy.displayName), subject: listing.title, result: verified ? "verified" : `not verified${note ? ` (${note})` : ""}` }))];
-}
-
-async function ownershipReviewed(tx: Tx, event: DomainEvent, verified: boolean): Promise<Plan[]> {
-  const templateKey = verified ? "U14" : "U15";
-  const claim = await tx.portfolioVerification.findUnique({ where: { id: event.aggregateId }, include: { property: { select: { name: true } }, organisation: { select: { name: true } }, claimedBy: { select: { displayName: true } } } });
-  if (!claim || claim.status !== (verified ? "VERIFIED" : "REJECTED")) return [{ templateKey, skip: "The claim's decision changed." }];
-  return [plan(templateKey, await linkedRecipient(tx, claim.claimedByUserId, { now: new Date() }), () => ({
-    recipient_name: firstName(claim.claimedBy.displayName), property_name: claim.property?.name ?? claim.organisation.name,
-    ...(verified ? {} : { reason: text(claim.reviewNote) ?? "more information is needed" }),
-  }))];
+  return [plan("U29", await linkedRecipient(tx, listing.createdByUserId, { now: new Date() }), () => ({ recipient_name: firstName(listing.createdBy.displayName), document_purpose: `verification of ${listing.title}`, result: verified ? "verified" : `not verified${note ? ` (${note})` : ""}`, reference: short("DC", listing.id) }))];
 }
 
 const NOT_IN_WORKSPACE = "The request does not belong to the event's workspace.";
 /** Scoped to the event's own workspace: an event can never reach another workspace's request or tenant. */
-async function maintenanceContext(tx: Tx, event: DomainEvent) {
-  return tx.maintenanceRequest.findFirst({ where: { id: event.aggregateId, organisationId: event.organisationId }, include: { property: { select: { name: true } }, unit: { select: { name: true } }, tenantOrganisation: { select: { userId: true, user: { select: { displayName: true } } } } } });
+async function maintenanceContext(tx: Tx, requestId: string, organisationId: string) {
+  return tx.maintenanceRequest.findFirst({ where: { id: requestId, organisationId }, include: { property: { select: { name: true } }, unit: { select: { name: true } }, tenantOrganisation: { select: { userId: true, user: { select: { displayName: true } } } } } });
 }
-const placeName = (request: { property: { name: string }; unit: { name: string } | null }) => request.unit ? `${request.property.name}, ${request.unit.name}` : request.property.name;
+type MaintenanceContext = NonNullable<Awaited<ReturnType<typeof maintenanceContext>>>;
+const placeName = (place: { property: { name: string }; unit: { name: string } | null }) => place.unit ? `${place.property.name}, ${place.unit.name}` : place.property.name;
+const ticket = (request: MaintenanceContext) => request.referenceNumber ?? short("MR", request.id);
+const requesterName = (request: MaintenanceContext) => firstName(request.tenantOrganisation?.user?.displayName ?? "there");
 /** Requests the routing rules dispatched: the provider-network messages already keep the tenant informed. */
 const automated = async (tx: Tx, requestId: string) => (await tx.workOrder.count({ where: { maintenanceRequestId: requestId, routingRuleId: { not: null } } })) > 0;
 
 async function maintenanceUpdate(tx: Tx, event: DomainEvent, status: string): Promise<Plan[]> {
-  const request = await maintenanceContext(tx, event);
-  if (!request) return [{ templateKey: "U24", skip: NOT_IN_WORKSPACE }];
-  if (!request.tenantOrganisation) return [{ templateKey: "U24", skip: "The request is not linked to a tenancy." }];
-  if (await automated(tx, request.id)) return [{ templateKey: "U24", skip: "Handled by the provider network, which messages the tenant itself." }];
-  return [plan("U24", await linkedRecipient(tx, request.tenantOrganisation.userId, { now: new Date() }), () => ({ recipient_name: firstName(request.tenantOrganisation!.user?.displayName ?? "there"), request_reference: request.referenceNumber ?? short("MR", request.id), property_name: placeName(request), status }))];
+  const request = await maintenanceContext(tx, event.aggregateId, event.organisationId);
+  if (!request) return [{ templateKey: "U25", skip: NOT_IN_WORKSPACE }];
+  if (!request.tenantOrganisation) return [{ templateKey: "U25", skip: "The request is not linked to a tenancy." }];
+  if (await automated(tx, request.id)) return [{ templateKey: "U25", skip: "Handled by the provider network, which messages the tenant itself." }];
+  return [plan("U25", await linkedRecipient(tx, request.tenantOrganisation.userId, { now: new Date() }), () => ({ recipient_name: requesterName(request), ticket: ticket(request), property_name: placeName(request), status }))];
 }
 
 export const UTILITY_EVENT_NAMES = Object.keys(handlers);
 
-const recipientKey = (phone: string) => createHash("sha256").update(whatsappRecipientE164(phone) ?? phone).digest("hex");
+/** The dispatch ledger's key for a recipient: a hash, never the number itself. */
+export const recipientKey = (phone: string) => createHash("sha256").update(whatsappRecipientE164(phone) ?? phone).digest("hex");
 
 /** Decides one event exactly once (advisory lock + the dispatch ledger's unique key). */
 export async function dispatchUtilityEvent(eventId: string) {

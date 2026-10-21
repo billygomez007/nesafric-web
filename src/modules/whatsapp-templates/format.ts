@@ -50,6 +50,7 @@ export function validateUtilityTemplate(template: UtilityTemplate) {
   if (/[\u{1F300}-\u{1FAFF}]/u.test(template.body)) flags.push("Body contains emoji.");
   if (template.reviewFlag) flags.push(template.reviewFlag);
   if (template.content === "DRAFT") flags.push("Body is a draft, not the approved catalogue text.");
+  if (template.content === "NEEDS_REVIEW") flags.push("Catalogue text that failed a check; it is not submitted until the catalogue changes.");
   return { errors, flags };
 }
 

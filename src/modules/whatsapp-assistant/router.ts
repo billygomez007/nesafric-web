@@ -15,6 +15,7 @@ import { advanceRules, isRuleCommand } from "./rules";
 import { advanceJobs } from "./jobs";
 import { answerLandlord } from "./landlord";
 import { advanceBusiness } from "./business";
+import { invitationReply } from "@/modules/whatsapp-templates/invitation-reply";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
@@ -41,8 +42,9 @@ type Dependencies = {
   jobs: typeof advanceJobs;
   landlord: typeof answerLandlord;
   business: typeof advanceBusiness;
+  invitationReply: typeof invitationReply;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord, business: advanceBusiness };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord, business: advanceBusiness, invitationReply };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -133,6 +135,12 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   if (input.kind === "text" && command === "unlink") {
     const removed = await dependencies.unlink(input.phone, input.organisationId);
     return { state, reply: removed ? "This WhatsApp number is no longer linked to your NesAfric account. Reply link to connect it again." : "This WhatsApp number is not linked to a NesAfric account." };
+  }
+
+  // The first reply to a tenant invitation (U17) explains how to verify it; it links nothing itself.
+  if (input.kind === "text" && state.workflow === "idle") {
+    const guidance = await dependencies.invitationReply({ address: whatsappAddress(input.phone), conversationId: input.conversationId, linked: Boolean(await dependencies.linkedUser(input.phone)) });
+    if (guidance) return { state, reply: guidance };
   }
 
   const result = await dependencies.engine(input);

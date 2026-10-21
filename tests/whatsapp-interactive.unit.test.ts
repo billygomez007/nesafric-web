@@ -137,7 +137,7 @@ describe("assistant replies carry the menu list and plain-text fallback", () => 
 
   it("adds the official rows on the official number", async () => {
     const result = await advanceOfficialConversation({ ...input("menu"), organisationId: "11111111-1111-4111-8111-111111111111" }, {
-      engine: advanceConversation, providerMessage: vi.fn(async () => null), network: vi.fn(async () => null), report: vi.fn(async () => null), rules: vi.fn(async () => null), jobs: vi.fn(async () => null), landlord: vi.fn(async () => null), linkedUser: vi.fn(async () => null), business: vi.fn(async () => null),
+      engine: advanceConversation, providerMessage: vi.fn(async () => null), network: vi.fn(async () => null), report: vi.fn(async () => null), rules: vi.fn(async () => null), jobs: vi.fn(async () => null), landlord: vi.fn(async () => null), linkedUser: vi.fn(async () => null), business: vi.fn(async () => null), invitationReply: vi.fn(async () => null),
     } as never);
     // On the official number registration and listing happen in the conversation.
     expect(result.reply).toBe(OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);
