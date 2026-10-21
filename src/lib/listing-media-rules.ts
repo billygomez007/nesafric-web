@@ -3,8 +3,12 @@
  * authoritative checks). Kept dependency-free so both sides import the same numbers.
  */
 
-/** Most photos/media items one listing can hold. */
-export const MAX_LISTING_PHOTOS = 12;
+/** Most photos one listing can hold, on every path (website, API, WhatsApp). Listings created
+ * before this limit keep any extra photos they already have, but cannot add more. */
+export const MAX_LISTING_PHOTOS = 10;
+
+/** Most media items of any type (photos, videos, floor plans) one listing can hold. */
+export const MAX_LISTING_MEDIA_ITEMS = 12;
 
 /** Formats a browser can pick and the server accepts (sniffed by content, not by name). */
 export const LISTING_PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -26,3 +30,6 @@ export const LISTING_PHOTO_MAX_EDGE = 2560;
 export function formatMegabytes(bytes: number) {
   return `${Math.round((bytes / (1024 * 1024)) * 10) / 10}MB`;
 }
+
+/** Most portfolio images a service provider's public profile can show (the logo is separate). */
+export const MAX_PROVIDER_PORTFOLIO_IMAGES = 10;

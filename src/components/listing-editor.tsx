@@ -59,7 +59,7 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
       MAX_LISTING_IMAGES - existingPhotoCount - images.length;
 
     if (remaining <= 0) {
-      setError("A property can contain up to 12 images.");
+      setError(`A property can contain up to ${MAX_LISTING_IMAGES} photos.`);
       event.target.value = "";
       return;
     }
@@ -173,7 +173,7 @@ export function ListingEditor({ listingId }: { listingId?: string }) {
   <div className="mb-4 flex items-start justify-between gap-4">
     <div>
       <p className="text-sm font-semibold text-ink">
-        Upload up to 12 property images
+        Upload up to {MAX_LISTING_IMAGES} property photos
       </p>
 
       <p className="mt-1 text-xs text-muted">

@@ -15,6 +15,7 @@ import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
 import { scheduleDueDigests } from "@/modules/staff-notifications/service";
 import { dispatchUtilityEvents } from "@/modules/whatsapp-templates/dispatch";
+import { scheduleUploadAndDraftCleanup } from "@/modules/documents/cleanup";
 
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 15_000);
 let stopping = false;
@@ -26,6 +27,8 @@ async function tick() {
   await scheduleDueDigests().catch((error) => console.error("Digest scheduling failed:", error instanceof Error ? error.message : error));
   // Business events to WhatsApp Utility templates; off unless WHATSAPP_UTILITY_EVENTS_SINCE is set.
   await dispatchUtilityEvents().catch((error) => console.error("WhatsApp utility dispatch failed:", error instanceof Error ? error.message : error));
+  // Once a day: lapsed WhatsApp drafts expire and abandoned uploads are removed (idempotent).
+  await scheduleUploadAndDraftCleanup().catch((error) => console.error("Cleanup scheduling failed:", error instanceof Error ? error.message : error));
   try {
     await runDueJobs(jobHandlers);
   } catch (error) {

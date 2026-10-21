@@ -2,7 +2,8 @@ import { absoluteUrl } from "@/platform/brand";
 import { AppError } from "@/platform/errors";
 import { maskPhone } from "@/platform/identity/phone";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
-import { advanceConversation, MAIN_MENU, type EngineInput } from "./engine";
+import { advanceConversation, MAIN_MENU, mainMenuList, OFFICIAL_MAIN_MENU, type EngineInput } from "./engine";
+import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { assistantStateSchema, initialState, type AssistantState } from "./schemas";
 import { linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
 import { formatAccountSummary, resolveAccountRoles } from "./account";
@@ -13,12 +14,13 @@ import { advanceReport } from "./maintenance/report";
 import { advanceRules, isRuleCommand } from "./rules";
 import { advanceJobs } from "./jobs";
 import { answerLandlord } from "./landlord";
+import { advanceBusiness } from "./business";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
-export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown> };
+export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
 
-export const OFFICIAL_MENU_SUFFIX = "\n\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
-const START_ONBOARDING = /^(4|register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
+export const OFFICIAL_MENU_SUFFIX = "\n\nRegister an agency, agent profile or service business, or list a property, right here: choose 3, 4, 5 or 6. Reply my applications to see their status.\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
+const START_ONBOARDING = /^(register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
 const MAX_CODE_FAILURES = 5;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,63}$/;
 
@@ -38,8 +40,9 @@ type Dependencies = {
   rules: typeof advanceRules;
   jobs: typeof advanceJobs;
   landlord: typeof answerLandlord;
+  business: typeof advanceBusiness;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord, business: advanceBusiness };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -61,6 +64,13 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   if (state.workflow === "onboarding" || startsOnboarding) {
     const result = await dependencies.onboarding({ phone: input.phone, messageId: input.messageId, body: input.body, kind: input.kind, organisationId: input.organisationId, defaultCountry: input.defaultCountry, defaultCurrency: input.defaultCurrency });
     return { state: result.exit ? reset() : { ...reset(), workflow: "onboarding" }, reply: result.reply, redactInbound: result.redactInbound };
+  }
+
+  // Business registration and listings: exact commands, menu numbers, or the active draft. Also
+  // reachable from a search, where bare numbers are menu choices (results use "details 2").
+  if (["idle", "business", "property_search", "service_search"].includes(state.workflow)) {
+    const business = await dependencies.business({ address: whatsappAddress(input.phone), messageId: input.messageId, body: input.body, kind: input.kind, media: input.media, linked: await dependencies.linkedUser(input.phone), state, reset });
+    if (business) return business;
   }
 
   // Work orders: provider answers and progress, landlord quote decisions, tenant confirmation.
@@ -126,14 +136,25 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   }
 
   const result = await dependencies.engine(input);
-  return { ...result, reply: result.reply.includes(MAIN_MENU) ? result.reply.replace(MAIN_MENU, MAIN_MENU + OFFICIAL_MENU_SUFFIX) : result.reply };
+  // On the official number registration and listing happen here, not only on the website.
+  if (result.reply.startsWith("Continue securely in your NesAfric account")) {
+    const reply = "You can register or list right here on WhatsApp. Reply register agency, register agent, register services, or register (landlords). To list a property, reply list a property.";
+    return { ...result, state: reset(), reply, interactive: replyButtons(reply, [{ id: "register agency", title: "Register agency" }, { id: "register services", title: "Register provider" }, { id: "list a property", title: "List a property" }]) };
+  }
+  if (!result.reply.includes(MAIN_MENU)) return result;
+  // On the official number registration and listing happen here, not only on the website.
+  const reply = result.reply.replace(MAIN_MENU, OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);
+  return { ...result, reply, interactive: mainMenuList(reply, true) };
 }
 
 async function continueLink(input: OfficialInput, state: AssistantState, reset: () => AssistantState, dependencies: Dependencies): Promise<OfficialResult> {
   const body = input.body.trim();
   const command = body.toLowerCase();
   const redactInbound = state.step === "link_code";
-  if (command === "cancel" || command === "menu") return { state: reset(), reply: "Account linking cancelled. Nothing was changed.\n\n" + MAIN_MENU + OFFICIAL_MENU_SUFFIX, redactInbound };
+  if (command === "cancel" || command === "menu") {
+    const reply = "Account linking cancelled. Nothing was changed.\n\n" + OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX;
+    return { state: reset(), reply, redactInbound, interactive: mainMenuList(reply, true) };
+  }
   if (input.kind !== "text") return { state, reply: "Please reply with text to continue linking, or cancel.", redactInbound };
 
   if (state.step === "link_method") {

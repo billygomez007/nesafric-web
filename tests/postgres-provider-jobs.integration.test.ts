@@ -16,6 +16,7 @@ import { runDueJobs } from "@/platform/jobs/runner";
 import { db } from "@/platform/database/client";
 import { connectWhatsAppChannel } from "./helpers/whatsapp-channel";
 import { createLease } from "./helpers/lease";
+import { VALID_JPEG } from "./helpers/images";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -25,7 +26,7 @@ const LANDLORD = "233241234567";
 const TENANT = "233245550001";
 const KWAME = "233201234567";
 const YAW = "233241112223";
-const JPEG = Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=", "base64");
+const JPEG = VALID_JPEG;
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner", "BackgroundJob", "ChannelIdentity", "AuthOtpChallenge", "StorageObject" CASCADE');

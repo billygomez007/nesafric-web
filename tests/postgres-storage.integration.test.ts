@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import http from "node:http";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/platform/database/client";
@@ -18,8 +19,9 @@ import {
   uploadOrganisationDocument,
 } from "@/modules/documents/service";
 import { getObjectStorageAdapter, verifyLocalObjectToken } from "@/platform/storage";
+import { VALID_JPEG } from "./helpers/images";
 
-const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01]);
+const JPEG_BYTES = VALID_JPEG;
 const PLAIN_TEXT_BYTES = Buffer.from("This is not an image, pdf, or any recognised file signature.");
 
 function base64(buffer: Buffer) {
@@ -124,7 +126,9 @@ describe("PostgreSQL Phase 19 provider-neutral object storage", () => {
     expect(verifyLocalObjectToken(privateUpload.storageObject.storageKey, token, expires).verified).toBe(true);
     expect(verifyLocalObjectToken(privateUpload.storageObject.storageKey, "wrong-token", expires).verified).toBe(false);
     const stored = await getObjectStorageAdapter().getObject(privateUpload.storageObject.storageKey, "PRIVATE");
-    expect(stored?.body.equals(JPEG_BYTES)).toBe(true);
+    // Stored re-encoded (decoded, upright, no metadata): a valid JPEG of the same size, not the same bytes.
+    const storedImage = await sharp(stored!.body).metadata();
+    expect([storedImage.format, storedImage.width, storedImage.height, storedImage.exif]).toEqual(["jpeg", 320, 240, undefined]);
 
     // Cross-organisation members cannot resolve a signed URL for someone else's object.
     await expect(getSignedStorageAccess(outsider.id, otherOrganisation.id, privateUpload.storageObject.id)).rejects.toMatchObject({ code: "FORBIDDEN" });

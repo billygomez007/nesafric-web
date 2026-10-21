@@ -294,7 +294,7 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
   if (verificationReasonRequired(data.status) && !data.reason) {
     throw new AppError("REASON_REQUIRED", 422, data.status === "REJECTED" ? "Enter a reason for rejecting this verification." : "Enter a reason for suspending this verification.");
   }
-  return db.$transaction(async (tx) => {
+  const decided = await db.$transaction(async (tx) => {
     const changed = await tx.marketplaceProfessional.updateMany({ where: { id: marketplaceProfessionalId, verificationStatus: from }, data: { verificationStatus: data.status } });
     if (changed.count !== 1) throw verificationChanged();
     await tx.marketplaceProfessionalVerificationEvent.create({ data: { marketplaceProfessionalId, fromStatus: from, toStatus: data.status, actorUserId: principal.userId, reason: data.reason } });
@@ -308,6 +308,10 @@ export async function reviewMarketplaceVerification(platformUser: User, marketpl
     await tx.domainEvent.create({ data: { organisationId: professional.backingOrganisationId, name: "marketplace_professional.verification_reviewed", aggregateType: "marketplace_professional", aggregateId: marketplaceProfessionalId, payload: { fromStatus: from, toStatus: data.status, reason: data.reason ?? null } } });
     return tx.marketplaceProfessional.findUniqueOrThrow({ where: { id: marketplaceProfessionalId } });
   });
+  // After the decision commits; best effort (a notification never undoes a decision).
+  const { notifyProfessionalDecision } = await import("@/modules/whatsapp-assistant/notify");
+  await notifyProfessionalDecision(marketplaceProfessionalId, data.status, data.reason, `${marketplaceProfessionalId}:${from}:${data.status}:${decided.updatedAt.getTime()}`).catch(() => undefined);
+  return decided;
 }
 
 const verificationChanged = () =>

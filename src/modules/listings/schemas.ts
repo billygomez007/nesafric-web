@@ -2,6 +2,7 @@ import { z } from "zod";
 import { safeHttpUrl } from "@/platform/validation/url";
 import { isSalePriceUnit, LISTING_PRICE_UNITS, type ListingPriceUnit } from "@/lib/price-units";
 import { isBookableCategory, MAX_GUESTS, MAX_STAY_NIGHTS } from "@/lib/listing-categories";
+import { MAX_LISTING_MEDIA_ITEMS, MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
 
 const id = z.string().uuid();
 const optionalText = (max: number) => z.string().trim().min(1).max(max).nullable().optional();
@@ -93,7 +94,7 @@ const listingFields = {
   enquiryEnabled: z.boolean().default(true),
   privateNotes: optionalText(10_000),
   amenities: z.array(listingAmenitySchema).max(200).default([]),
-  media: z.array(listingMediaSchema).max(12, "A property listing can contain up to 12 media items.").default([]),
+  media: z.array(listingMediaSchema).max(MAX_LISTING_MEDIA_ITEMS, `A property listing can contain up to ${MAX_LISTING_MEDIA_ITEMS} media items.`).default([]),
   /// Phase 21A item 5 — optional marketplace-professional attribution. Every existing caller
   /// that omits these behaves byte-identical to before this phase.
   listingAuthority: z.enum(["OWNER_SELF", "PROPERTY_MANAGER", "MANAGING_AGENT", "BROKERAGE_AUTHORIZED", "DEVELOPER", "THIRD_PARTY_AUTHORIZED"]).nullable().optional(),
@@ -195,7 +196,7 @@ export const createMarketplaceAssetSchema = z.object({
   mapLongitude: z.number().min(-180).max(180).nullable().optional(),
   amenities: z.array(z.string().trim().min(1).max(120)).max(200).default([]),
   furnishing: optionalText(100),
-  mediaUrls: z.array(safeHttpUrl(2_000)).max(12, "A property listing can contain up to 12 images.").default([]),
+  mediaUrls: z.array(safeHttpUrl(2_000)).max(MAX_LISTING_PHOTOS, `A property listing can contain up to ${MAX_LISTING_PHOTOS} photos.`).default([]),
   availableFrom: z.coerce.date(),
   authorityEvidenceReady: z.boolean().default(false),
 }).strict().superRefine((asset, context) => {
@@ -222,7 +223,7 @@ const updateListingFields = {
   showContactPhone: z.boolean(),
   enquiryEnabled: z.boolean(),
   amenities: z.array(listingAmenitySchema).max(200),
-  media: z.array(listingMediaSchema).max(12, "A property listing can contain up to 12 media items."),
+  media: z.array(listingMediaSchema).max(MAX_LISTING_MEDIA_ITEMS, `A property listing can contain up to ${MAX_LISTING_MEDIA_ITEMS} media items.`),
 };
 
 export const updateListingSchema = z.object({
@@ -251,6 +252,9 @@ export const LISTING_AUTHORITY_EVIDENCE_TYPES = ["owner_mandate", "listing_autho
 
 export const submitListingForReviewSchema = z.object({
   note: z.string().trim().min(1).max(2_000).optional(),
+  /** The listing revision the submitter reviewed. When given, the submission fails if the
+   * listing's details, photos or amenities changed since (see "Listing"."revision"). */
+  expectedRevision: z.number().int().min(0).optional(),
   evidence: z.object({
     type: z.enum(LISTING_AUTHORITY_EVIDENCE_TYPES),
     reference: z.string().trim().min(3).max(1_000),
