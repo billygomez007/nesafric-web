@@ -192,7 +192,7 @@ Run locally against PostgreSQL 16 with the CI bootstrap, the real webhook route,
   - Agent profile and verification. The backing organisation is not announced.
   - Enable switch and the 48-hour cut-off.
   - Retry on 503, and an unconfirmed send never resent.
-- Full suite: FULL_SUITE_RESULT
+- Full suite on the final code (fresh CI-style database): 176 files, 1303 tests, all passing.
 - Typecheck and lint on the changed files: clean.
 
 **Not done:** staging tests with authorised test numbers against real Meta. They need the NesAfric staging WABA credentials, and templates approved after the catalogue text is in. See checklist items 4–9.
