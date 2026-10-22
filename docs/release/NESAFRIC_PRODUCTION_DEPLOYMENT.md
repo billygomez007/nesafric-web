@@ -64,7 +64,35 @@ Not tested: sign-in, uploads, any workspace flow, email/SMS/WhatsApp sends, mobi
 
 ## 5. Cutover (needs approval)
 
-1. Map `www.nesafric.com` and `nesafric.com` to the service (Cloud Run domain mapping or a load balancer), then change the Cloudflare records.
+### Load balancer (created 22 October 2026)
+
+Cloud Run domain mapping was refused (the account is a delegated, not verified, Search Console owner), so a global external Application Load Balancer fronts the service.
+
+| Resource | Name / value |
+|---|---|
+| Global IPv4 | `nesafric-web-ipv4` = `35.186.238.70` |
+| Global IPv6 | `nesafric-web-ipv6` = `2600:1901:0:e861::` |
+| Serverless NEG | `nesafric-web-neg` (europe-west1 → `nesafric-web`) |
+| Backend service | `nesafric-web-be` (EXTERNAL_MANAGED) |
+| URL maps | `nesafric-web-urlmap` (HTTPS), `nesafric-web-http-redirect` (HTTP → HTTPS, 301) |
+| Certificate | `nesafric-web-cert`, Google-managed, `nesafric.com` + `www.nesafric.com`; provisions after DNS points at the IPs |
+| Forwarding rules | `nesafric-web-https-ipv4/ipv6` (443), `nesafric-web-http-ipv4/ipv6` (80) |
+| Cost | ~USD 18 / month (forwarding rules) + USD 0.008 / GB processed |
+
+Verified before DNS: HTTP on the IPv4 address returns 301 to HTTPS; with a temporary self-signed certificate (removed afterwards), `/`, `/api/health`, `/marketplace/properties` and `/api/public/listings` returned 200 through the load balancer.
+
+### Cloudflare records
+
+| Name | Type | Value | Proxy |
+|---|---|---|---|
+| `@` | A | `35.186.238.70` | DNS only |
+| `@` | AAAA | `2600:1901:0:e861::` | DNS only |
+| `www` | A | `35.186.238.70` | DNS only |
+| `www` | AAAA | `2600:1901:0:e861::` | DNS only |
+
+Remove the existing `@` and `www` A/AAAA/CNAME records first. Keep MX and TXT.
+
+1. Change the Cloudflare records above.
 2. Point the mobile app at the same domain (no change needed if DNS moves).
 3. Meta: NesAfric-owned app and system user, then the webhook `https://www.nesafric.com/api/webhooks/whatsapp`.
 
