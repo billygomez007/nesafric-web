@@ -81,16 +81,16 @@ Cloud Run domain mapping was refused (the account is a delegated, not verified, 
 
 Verified before DNS: HTTP on the IPv4 address returns 301 to HTTPS; with a temporary self-signed certificate (removed afterwards), `/`, `/api/health`, `/marketplace/properties` and `/api/public/listings` returned 200 through the load balancer.
 
-### Cloudflare records
+### Cloudflare records (applied 22 October 2026)
 
-| Name | Type | Value | Proxy |
+Zone `nesafric.com` (`c8434787f1eaf2dee642dabecf914d8d`) in account "Billynganyunfor@outlook.com's Account" (`3760725eeab45e7e7f6dd9049fc04652`), nameservers `arely`/`cleo`.
+
+| Name | Type | Before (rollback) | After |
 |---|---|---|---|
-| `@` | A | `35.186.238.70` | DNS only |
-| `@` | AAAA | `2600:1901:0:e861::` | DNS only |
-| `www` | A | `35.186.238.70` | DNS only |
-| `www` | AAAA | `2600:1901:0:e861::` | DNS only |
+| `@` | A | `76.76.21.21`, proxied (Vercel) | `35.186.238.70`, DNS only |
+| `www` | CNAME → A | `6da7f8f3eb8ee1e8.vercel-dns-016.com`, proxied (Vercel) | A `35.186.238.70`, DNS only |
 
-Remove the existing `@` and `www` A/AAAA/CNAME records first. Keep MX and TXT.
+AAAA records (`2600:1901:0:e861::`) are not added yet; IPv6 through the load balancer has not been tested. Unchanged: `api` A `138.68.144.187` (proxied), `images` R2 bucket, MX, TXT (SPF, DMARC, DKIM, Google and Vercel verification).
 
 1. Change the Cloudflare records above.
 2. Point the mobile app at the same domain (no change needed if DNS moves).
