@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialUpdateSchema } from "@/lib/partial-update-schema";
 
 const id = z.string().uuid();
 const jsonObject = z.record(z.string(), z.unknown());
@@ -35,7 +36,7 @@ const validateEmployee = (value: z.infer<typeof aiEmployeeBaseSchema>, context: 
 
 export const aiEmployeeSchema = aiEmployeeBaseSchema.superRefine(validateEmployee);
 
-export const aiEmployeeUpdateSchema = aiEmployeeBaseSchema.partial().extend({
+export const aiEmployeeUpdateSchema = partialUpdateSchema(aiEmployeeBaseSchema).extend({
   status: z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]).optional(),
 }).strict();
 

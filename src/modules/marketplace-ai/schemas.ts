@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialUpdateSchema } from "@/lib/partial-update-schema";
 
 const id = z.string().uuid();
 const jsonObject = z.record(z.string(), z.unknown());
@@ -13,7 +14,7 @@ export const marketplaceAIEmployeeSchema = z.object({
   timezone: z.string().trim().min(1).max(100).default("UTC"),
 }).strict();
 
-export const marketplaceAIEmployeeUpdateSchema = marketplaceAIEmployeeSchema.partial().extend({
+export const marketplaceAIEmployeeUpdateSchema = partialUpdateSchema(marketplaceAIEmployeeSchema).extend({
   status: z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]).optional(),
 }).strict();
 
