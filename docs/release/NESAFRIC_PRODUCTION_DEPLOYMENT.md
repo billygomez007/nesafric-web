@@ -90,6 +90,8 @@ Zone `nesafric.com` (`c8434787f1eaf2dee642dabecf914d8d`) in account "Billynganyu
 | `@` | A | `76.76.21.21`, proxied (Vercel) | `35.186.238.70`, DNS only |
 | `www` | CNAME → A | `6da7f8f3eb8ee1e8.vercel-dns-016.com`, proxied (Vercel) | A `35.186.238.70`, DNS only |
 
+**Cutover verified 22 October 2026, 21:10 UTC.** Certificate `nesafric-web-cert` ACTIVE at 21:07 (Google Trust Services WR3, SAN `nesafric.com` + `www.nesafric.com`, expires 20 Jan 2027, auto-renews). On both hosts, `/`, `/api/health` (HEALTHY), `/marketplace/properties`, `/api/public/listings` (19), `/login`, `/register`, `/sitemap.xml` (55 URLs) and `/robots.txt` return 200 through Google Frontend with HSTS; HTTP returns 301 to HTTPS. In a browser, the marketplace shows 19 listings with 11 of 11 images loaded and a listing detail page renders. Only error since cutover: `GET /api/auth/google/start` 503 (Google OAuth keys not configured).
+
 AAAA records (`2600:1901:0:e861::`) are not added yet; IPv6 through the load balancer has not been tested. Unchanged: `api` A `138.68.144.187` (proxied), `images` R2 bucket, MX, TXT (SPF, DMARC, DKIM, Google and Vercel verification).
 
 1. Change the Cloudflare records above.
