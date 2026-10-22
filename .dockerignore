@@ -1,0 +1,17 @@
+.git
+.next
+node_modules
+mobile
+docs
+tests
+var
+.vercel
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.claude
+.kilo
+.agents
+dataconnect

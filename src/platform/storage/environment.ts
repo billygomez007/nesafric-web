@@ -8,5 +8,7 @@
  * S3 adapter (legacy single-bucket fallback eligibility).
  */
 export function isCloudRuntime() {
+  // Cloud Run sets K_SERVICE on every service revision; its container disk is just as ephemeral.
+  if (process.env.K_SERVICE) return true;
   return process.env.VERCEL === "1" && process.env.VERCEL_ENV !== "development";
 }
