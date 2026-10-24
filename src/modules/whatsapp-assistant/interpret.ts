@@ -43,9 +43,10 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
   }
   // How the price is quoted, not how long the stay is: "for 1 year" says nothing about the price unit.
   const units = input
-    .replace(/\b(?:for\s+)?\d+\s*(?:years?|yrs?|months?|weeks?|days?|nights?)\b/g, " ")
-    // "for one year", "for a month": a stay. "3000 a year" (no "for") stays a price unit.
-    .replace(/\bfor\s+(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|a few|several)\s+(?:years?|months?|weeks?|days?|nights?)\b/g, " ");
+    // "12 months", "a 12-month lease", "one-year", "for one year": a stay.
+    .replace(/\b(?:for\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*-?\s*(?:years?|yrs?|months?|weeks?|days?|nights?)\b/g, " ")
+    // "for a month", "for a few weeks": a stay too. "3000 a year" (no "for") stays a price unit.
+    .replace(/\bfor\s+(?:a|an|a few|several)\s+(?:years?|months?|weeks?|days?|nights?)\b/g, " ");
   if (/\b(month|monthly)\b/.test(units)) property.frequency = "MONTHLY";
   if (/\b(quarter|quarterly)\b/.test(units)) property.frequency = "QUARTERLY";
   if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(units)) property.frequency = "ANNUAL";

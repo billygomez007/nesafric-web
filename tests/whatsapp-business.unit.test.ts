@@ -33,6 +33,7 @@ function deps(overrides: Partial<Record<keyof BusinessDependencies, unknown>> = 
     listProvider: vi.fn(),
     uploadProviderLogo: vi.fn(),
     ownedProviders: vi.fn(async () => []),
+    existingProvider: vi.fn(async () => null),
     lock: vi.fn(async () => undefined),
     recover: { professional: vi.fn(async () => null), listing: vi.fn(async () => null), company: vi.fn(async () => null), provider: vi.fn(async () => null), file: vi.fn(async () => false) },
     ...overrides,
@@ -68,6 +69,8 @@ describe("WhatsApp business: starting a flow", () => {
     expect(businessTrigger("3", searching)).toBeNull();
     expect(businessTrigger("5", searching)).toEqual({ kind: "listing" });
     expect(businessTrigger("5", { ...initialState(), paused: true })).toBeNull();
+    // A phrase keeps a paused search too; the engine then asks to resume or cancel.
+    expect(businessTrigger("register my agency", { ...initialState(), workflow: "property_search", paused: true })).toBeNull();
   });
 
   it("is reached from the official number, and the landlord setup keeps its own command", async () => {
@@ -244,5 +247,29 @@ describe("WhatsApp business: answers the website would refuse", () => {
     const { replies, state } = await run(["rent", "1", "Two bedroom flat", "Osu", "4000", "1", "2", "1", "A bright flat close to Oxford Street, newly painted.", "1", "confirm"], deps({ createListing }));
     expect(replies.at(-1)).toContain("Some details were not accepted (city:");
     expect(state.business?.step).toBe("listing_review");
+  });
+});
+
+describe("WhatsApp business: one provider per person and company", () => {
+  it("points to the existing service business instead of a confirm that can never succeed", async () => {
+    const dependencies = deps({ existingProvider: vi.fn(async () => ({ id: "00000001-0000-4000-8000-000000000009", displayName: "Kofi Plumbing" })) });
+    const { replies, state } = await run(["1"], dependencies, "6");
+    expect(replies.at(-1)).toContain("Kofi Plumbing is already registered as your service business");
+    expect(state.workflow).toBe("idle");
+    expect(dependencies.existingProvider).toHaveBeenCalledWith(userId, { type: "INDIVIDUAL" });
+  });
+
+  it("checks the chosen company, and handles a conflict that appears before confirm", async () => {
+    const companyId = "00000001-0000-4000-8000-000000000010";
+    const companies = vi.fn(async () => [{ id: companyId, name: "Boateng Ltd" }]);
+    const existing = deps({ companies, existingProvider: vi.fn(async () => ({ id: companyId, displayName: "Boateng Services" })) });
+    expect((await run(["2", "1"], existing, "6")).replies.at(-1)).toContain("Boateng Services is already registered");
+
+    const categories = [{ id: "00000001-0000-4000-8000-000000000001", name: "Plumbing Repairs" }];
+    const createProvider = vi.fn(async () => { throw new AppError("PROVIDER_IDENTITY_EXISTS", 409, "This user or company already has a provider identity."); });
+    const raced = deps({ categories: vi.fn(async () => categories), createProvider });
+    const { replies, state } = await run(["1", "Kofi Plumbing", "plumber", "Accra", "skip", "confirm"], raced, "6");
+    expect(replies.at(-1)).toContain("Kofi Plumbing is already registered");
+    expect(state.workflow).toBe("idle");
   });
 });

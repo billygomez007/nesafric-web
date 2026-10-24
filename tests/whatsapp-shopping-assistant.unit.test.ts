@@ -83,6 +83,9 @@ describe("WhatsApp shopping: reading requests without a model", () => {
   it("never takes a stay written in words for the price unit", () => {
     expect(read("house to rent in accra for one year").property?.frequency).toBeUndefined();
     expect(read("flat to rent in osu for a month").property?.frequency).toBeUndefined();
+    expect(read("house to rent in accra for a 12-month lease").property?.frequency).toBeUndefined();
+    expect(read("house to rent in accra on a one-year lease").property?.frequency).toBeUndefined();
+    expect(read("house to rent in accra 2 years").property?.frequency).toBeUndefined();
     expect(read("flat to rent in osu 3000 cedis a year").property?.frequency).toBe("ANNUAL");
   });
 

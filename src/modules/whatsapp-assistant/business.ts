@@ -64,6 +64,8 @@ export type BusinessDependencies = {
   listProvider: (userId: string, providerId: string, input: unknown) => Promise<unknown>;
   uploadProviderLogo: (userId: string, providerId: string, file: File) => Promise<unknown>;
   ownedProviders: (userId: string) => Promise<Array<{ id: string; displayName: string }>>;
+  /** The provider this person, or this company, already is: one each, as `createServiceProvider` enforces. */
+  existingProvider: (userId: string, identity: { type: "INDIVIDUAL" } | { type: "COMPANY"; companyOrganisationId: string }) => Promise<{ id: string; displayName: string } | null>;
   /** Serialises one side effect until this processing pass commits (see `once`). */
   lock: (key: string) => Promise<void>;
   /** What an earlier or concurrent pass of the same flow already created, if anything. */
@@ -96,6 +98,7 @@ const defaults: BusinessDependencies = {
   listProvider: updateMarketplaceProfile,
   uploadProviderLogo: uploadServiceProviderLogo,
   ownedProviders: listOwnedProviders,
+  existingProvider: (userId, identity) => db.serviceProvider.findFirst({ where: { archivedAt: null, ...(identity.type === "INDIVIDUAL" ? { individualUserId: userId } : { companyOrganisationId: identity.companyOrganisationId }) }, select: { id: true, displayName: true } }),
   // Inside the processing guard this is held until the pass's transaction commits or rolls back.
   lock: async (key) => { await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`; },
   recover: {
@@ -133,8 +136,10 @@ const TRIGGERS: Array<[RegExp, BusinessKind, BusinessState["professionalType"]?]
 export function businessTrigger(command: string, state: AssistantState): { kind: BusinessKind; professionalType?: BusinessState["professionalType"] } | null {
   for (const [pattern, kind, professionalType] of TRIGGERS) {
     if (!pattern.test(command)) continue;
+    // A paused workflow is resumed or cancelled first, whatever starts the new one ("3" or a phrase).
+    if (state.paused) return null;
     // Result picks accept 1 to 3 whatever the result count, so all three stay with the search.
-    if (/^\d$/.test(command) && (state.paused || (state.results.length > 0 && Number(command) <= 3))) return null;
+    if (/^\d$/.test(command) && state.results.length > 0 && Number(command) <= 3) return null;
     return { kind, professionalType };
   }
   return null;
@@ -643,6 +648,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     // ---- Service businesses -------------------------------------------------------------------
     case "service_type": {
       if (/^(1|individual|me|myself|freelancer|self employed|self-employed)$/.test(command)) {
+        const existing = await dependencies.existingProvider(userId, { type: "INDIVIDUAL" });
+        if (existing) return { state: reset(), reply: alreadyProvider(existing.displayName) };
         business.providerType = "INDIVIDUAL";
         business.step = "service_name";
         return say();
@@ -658,7 +665,11 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     case "service_company": {
       const index = /^\d$/.test(command) ? Number(command) - 1 : -1;
       const picked = business.choices[index];
-      if (picked) { business.companyOrganisationId = picked.id; business.companyName = picked.name; }
+      if (picked) {
+        const existing = await dependencies.existingProvider(userId, { type: "COMPANY", companyOrganisationId: picked.id });
+        if (existing) return { state: reset(), reply: alreadyProvider(existing.displayName) };
+        business.companyOrganisationId = picked.id; business.companyName = picked.name;
+      }
       else if (index === business.choices.length) return say("What is the new company called?");
       else {
         if (body.length < 2 || body.length > 160) return say("Please send a company name between 2 and 160 characters.");
@@ -743,6 +754,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
           business.committed.profileListed = true;
         }
       } catch (error) {
+        // Registered meanwhile (on the website, say): continuing would only repeat the conflict.
+        if (error instanceof AppError && error.code === "PROVIDER_IDENTITY_EXISTS") return { state: reset(), reply: alreadyProvider(business.displayName ?? "This business") };
         return say(`Not finished: ${failure(error)}\nReply confirm to try again, or cancel.`);
       }
       business.target = { kind: "provider", id: business.committed.providerId, name: business.displayName ?? "your business" };
@@ -766,6 +779,9 @@ async function sendCode(business: BusinessState, input: BusinessInput, dependenc
     return error.status === 429 ? `${error.message}` : "Text-message codes are unavailable right now. Your answers are saved; reply resend in a few minutes.";
   }
 }
+
+/** One provider per person and per company: an existing one is managed, not registered again. */
+const alreadyProvider = (name: string) => `${name} is already registered as your service business on NesAfric. Reply logo to change its logo, or manage its services, areas and verification at ${absoluteUrl("/providers")}.`;
 
 function agencyDone(business: BusinessState) {
   const profile = business.committed.slug ? absoluteUrl(`/marketplace/professionals/${business.committed.slug}`) : absoluteUrl("/pro");
