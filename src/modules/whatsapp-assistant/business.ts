@@ -775,7 +775,7 @@ async function sendCode(business: BusinessState, input: BusinessInput, dependenc
     return `To confirm this number I sent a 6-digit code by text message to ${sent.destination}. NesAfric staff will never ask you for it.`;
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
-    business.account.challengeId = undefined;
+    // The code already sent stays valid: a refused resend (too soon, SMS down) must not discard it.
     return error.status === 429 ? `${error.message}` : "Text-message codes are unavailable right now. Your answers are saved; reply resend in a few minutes.";
   }
 }

@@ -273,3 +273,28 @@ describe("WhatsApp business: one provider per person and company", () => {
     expect(state.workflow).toBe("idle");
   });
 });
+
+describe("WhatsApp business: codes and links", () => {
+  it("keeps the code already sent when a resend is refused", async () => {
+    const challengeId = "4f1a7d2c-5b8e-4c3a-9d6f-1e2b3c4d5e6f";
+    const requestOtp = vi.fn()
+      .mockResolvedValueOnce({ challengeId, destination: "+233 24 *** 4567" })
+      .mockRejectedValueOnce(new AppError("OTP_RATE_LIMITED", 429, "Please wait a minute before asking for another code."));
+    const verifyOtp = vi.fn(async () => ({ user: linked.user }));
+    const dependencies = deps({ linkedUser: vi.fn(async () => null), requestOtp, verifyOtp });
+    const started = await startBusiness(businessTrigger("3", initialState())!, input("3"), reset, dependencies);
+    const named = await advanceBusiness(input("Ama Owusu"), started.state, reset, dependencies);
+    const refused = await advanceBusiness(input("resend"), named.state, reset, dependencies);
+    expect(refused.reply).toContain("Please wait a minute");
+    expect(refused.state.business?.account.challengeId).toBe(challengeId);
+    await advanceBusiness(input("123456"), refused.state, reset, dependencies);
+    expect(verifyOtp).toHaveBeenCalledWith(expect.objectContaining({ challengeId, code: "123456" }));
+  });
+
+  it("sends registrations from other numbers to the official menu, where the person chooses", async () => {
+    const { advanceConversation } = await import("@/modules/whatsapp-assistant/engine");
+    const result = await advanceConversation({ state: {}, body: "register as a service provider", kind: "text", phone: "233241234567", conversationId: "c", messageId: "m", defaultCountry: "GH", defaultCurrency: "GHS" }, { tools: {} as never, interpret: async () => ({ intent: "registration" }) });
+    expect(result.reply).toContain("https://wa.me/233502820002?text=menu");
+    expect(businessTrigger("menu", initialState())).toBeNull();
+  });
+});
