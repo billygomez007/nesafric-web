@@ -252,7 +252,7 @@ describe("WhatsApp business: answers the website would refuse", () => {
 
 describe("WhatsApp business: one provider per person and company", () => {
   it("points to the existing service business instead of a confirm that can never succeed", async () => {
-    const dependencies = deps({ existingProvider: vi.fn(async () => ({ id: "00000001-0000-4000-8000-000000000009", displayName: "Kofi Plumbing" })) });
+    const dependencies = deps({ existingProvider: vi.fn(async () => ({ id: "00000001-0000-4000-8000-000000000009", displayName: "Kofi Plumbing", archivedAt: null })) });
     const { replies, state } = await run(["1"], dependencies, "6");
     expect(replies.at(-1)).toContain("Kofi Plumbing is already registered as your service business");
     expect(state.workflow).toBe("idle");
@@ -262,7 +262,7 @@ describe("WhatsApp business: one provider per person and company", () => {
   it("checks the chosen company, and handles a conflict that appears before confirm", async () => {
     const companyId = "00000001-0000-4000-8000-000000000010";
     const companies = vi.fn(async () => [{ id: companyId, name: "Boateng Ltd" }]);
-    const existing = deps({ companies, existingProvider: vi.fn(async () => ({ id: companyId, displayName: "Boateng Services" })) });
+    const existing = deps({ companies, existingProvider: vi.fn(async () => ({ id: companyId, displayName: "Boateng Services", archivedAt: null })) });
     expect((await run(["2", "1"], existing, "6")).replies.at(-1)).toContain("Boateng Services is already registered");
 
     const categories = [{ id: "00000001-0000-4000-8000-000000000001", name: "Plumbing Repairs" }];
@@ -296,5 +296,15 @@ describe("WhatsApp business: codes and links", () => {
     const result = await advanceConversation({ state: {}, body: "register as a service provider", kind: "text", phone: "233241234567", conversationId: "c", messageId: "m", defaultCountry: "GH", defaultCurrency: "GHS" }, { tools: {} as never, interpret: async () => ({ intent: "registration" }) });
     expect(result.reply).toContain("https://wa.me/233502820002?text=menu");
     expect(businessTrigger("menu", initialState())).toBeNull();
+  });
+});
+
+describe("WhatsApp business: archived service businesses", () => {
+  it("sends the person to support instead of to a business they cannot manage", async () => {
+    const dependencies = deps({ existingProvider: vi.fn(async () => ({ id: "00000001-0000-4000-8000-000000000009", displayName: "Kofi Plumbing", archivedAt: new Date("2026-01-01") })) });
+    const { replies } = await run(["1"], dependencies, "6");
+    expect(replies.at(-1)).toContain("is now archived");
+    expect(replies.at(-1)).toContain("support@nesafric.com");
+    expect(replies.at(-1)).not.toContain("Reply logo");
   });
 });

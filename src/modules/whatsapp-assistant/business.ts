@@ -1,4 +1,4 @@
-import { absoluteUrl } from "@/platform/brand";
+import { absoluteUrl, BRAND } from "@/platform/brand";
 import { ZodError } from "zod";
 import { AppError } from "@/platform/errors";
 import { db } from "@/platform/database/client";
@@ -65,7 +65,8 @@ export type BusinessDependencies = {
   uploadProviderLogo: (userId: string, providerId: string, file: File) => Promise<unknown>;
   ownedProviders: (userId: string) => Promise<Array<{ id: string; displayName: string }>>;
   /** The provider this person, or this company, already is: one each, as `createServiceProvider` enforces. */
-  existingProvider: (userId: string, identity: { type: "INDIVIDUAL" } | { type: "COMPANY"; companyOrganisationId: string }) => Promise<{ id: string; displayName: string } | null>;
+  /** Archived ones included: the database still holds their identity, so they block a new one. */
+  existingProvider: (userId: string, identity: { type: "INDIVIDUAL" } | { type: "COMPANY"; companyOrganisationId: string }) => Promise<{ id: string; displayName: string; archivedAt: Date | null } | null>;
   /** Serialises one side effect until this processing pass commits (see `once`). */
   lock: (key: string) => Promise<void>;
   /** What an earlier or concurrent pass of the same flow already created, if anything. */
@@ -98,7 +99,7 @@ const defaults: BusinessDependencies = {
   listProvider: updateMarketplaceProfile,
   uploadProviderLogo: uploadServiceProviderLogo,
   ownedProviders: listOwnedProviders,
-  existingProvider: (userId, identity) => db.serviceProvider.findFirst({ where: { archivedAt: null, ...(identity.type === "INDIVIDUAL" ? { individualUserId: userId } : { companyOrganisationId: identity.companyOrganisationId }) }, select: { id: true, displayName: true } }),
+  existingProvider: (userId, identity) => db.serviceProvider.findFirst({ where: identity.type === "INDIVIDUAL" ? { individualUserId: userId } : { companyOrganisationId: identity.companyOrganisationId }, select: { id: true, displayName: true, archivedAt: true } }),
   // Inside the processing guard this is held until the pass's transaction commits or rolls back.
   lock: async (key) => { await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`; },
   recover: {
@@ -649,7 +650,7 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     case "service_type": {
       if (/^(1|individual|me|myself|freelancer|self employed|self-employed)$/.test(command)) {
         const existing = await dependencies.existingProvider(userId, { type: "INDIVIDUAL" });
-        if (existing) return { state: reset(), reply: alreadyProvider(existing.displayName) };
+        if (existing) return { state: reset(), reply: alreadyProvider(existing) };
         business.providerType = "INDIVIDUAL";
         business.step = "service_name";
         return say();
@@ -667,7 +668,7 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       const picked = business.choices[index];
       if (picked) {
         const existing = await dependencies.existingProvider(userId, { type: "COMPANY", companyOrganisationId: picked.id });
-        if (existing) return { state: reset(), reply: alreadyProvider(existing.displayName) };
+        if (existing) return { state: reset(), reply: alreadyProvider(existing) };
         business.companyOrganisationId = picked.id; business.companyName = picked.name;
       }
       else if (index === business.choices.length) return say("What is the new company called?");
@@ -755,7 +756,10 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
         }
       } catch (error) {
         // Registered meanwhile (on the website, say): continuing would only repeat the conflict.
-        if (error instanceof AppError && error.code === "PROVIDER_IDENTITY_EXISTS") return { state: reset(), reply: alreadyProvider(business.displayName ?? "This business") };
+        if (error instanceof AppError && error.code === "PROVIDER_IDENTITY_EXISTS") {
+          const existing = await dependencies.existingProvider(userId, business.providerType === "COMPANY" && business.companyOrganisationId ? { type: "COMPANY", companyOrganisationId: business.companyOrganisationId } : { type: "INDIVIDUAL" });
+          return { state: reset(), reply: alreadyProvider(existing ?? { displayName: business.displayName ?? "This business", archivedAt: null }) };
+        }
         return say(`Not finished: ${failure(error)}\nReply confirm to try again, or cancel.`);
       }
       business.target = { kind: "provider", id: business.committed.providerId, name: business.displayName ?? "your business" };
@@ -781,7 +785,9 @@ async function sendCode(business: BusinessState, input: BusinessInput, dependenc
 }
 
 /** One provider per person and per company: an existing one is managed, not registered again. */
-const alreadyProvider = (name: string) => `${name} is already registered as your service business on NesAfric. Reply logo to change its logo, or manage its services, areas and verification at ${absoluteUrl("/providers")}.`;
+const alreadyProvider = (provider: { displayName: string; archivedAt: Date | null }) => provider.archivedAt
+  ? `${provider.displayName} was registered as your service business before and is now archived, so a new one cannot be created. Contact ${BRAND.contact.support} to restore it.`
+  : `${provider.displayName} is already registered as your service business on NesAfric. Reply logo to change its logo, or manage its services, areas and verification at ${absoluteUrl("/providers")}.`;
 
 function agencyDone(business: BusinessState) {
   const profile = business.committed.slug ? absoluteUrl(`/marketplace/professionals/${business.committed.slug}`) : absoluteUrl("/pro");
