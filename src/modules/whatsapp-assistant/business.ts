@@ -1,4 +1,5 @@
 import { absoluteUrl } from "@/platform/brand";
+import { ZodError } from "zod";
 import { AppError } from "@/platform/errors";
 import { db } from "@/platform/database/client";
 import { maskPhone } from "@/platform/identity/phone";
@@ -279,9 +280,18 @@ const fileFor = (mediaId: string, file: { body: Buffer; contentType: string }): 
   contentType: file.contentType,
   dataBase64: file.body.toString("base64"),
 });
-const splitList = (body: string) => body.split(/[,;\n]/).map((item) => item.trim()).filter(Boolean);
+/** Items separated by commas, semicolons or lines; repeats (any case) kept once, as the domain requires. */
+const splitList = (body: string) => {
+  const seen = new Set<string>();
+  return body.split(/[,;\n]/).map((item) => item.trim()).filter((item) => item && !seen.has(item.toLowerCase()) && seen.add(item.toLowerCase()));
+};
+/**
+ * A refusal the person can act on becomes the reply. A domain validation error is one too: retrying
+ * the same answer can never succeed, so it must not become a job retried forever.
+ */
 const failure = (error: unknown) => {
   if (error instanceof AppError && error.status < 500) return error.message;
+  if (error instanceof ZodError) return `Some details were not accepted (${error.issues.slice(0, 3).map(({ path, message }) => `${path.join(".") || "value"}: ${message}`).join("; ")}). Reply cancel and start again with shorter or corrected answers, or contact support.`;
   throw error;
 };
 
@@ -519,6 +529,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     }
     case "listing_location": {
       if (body.length < 2 || body.length > 250) return say("Please send the area and town (2 to 250 characters).");
+      // Each part becomes the listing's locality or city, which hold 150 characters each.
+      if (body.split(",").some((part) => part.trim().length > 150)) return say("Please keep the area and the town under 150 characters each, for example: East Legon, Accra.");
       listing.location = body;
       business.step = "listing_price";
       return say();

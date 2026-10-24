@@ -221,3 +221,28 @@ describe("WhatsApp business: service review size", () => {
     expect(Math.max(...replies.map((reply) => reply.length))).toBeLessThan(4096);
   });
 });
+
+describe("WhatsApp business: answers the website would refuse", () => {
+  it("asks again for an over-long area instead of failing at confirm", async () => {
+    const { replies, state } = await run(["rent", "1", "Two bedroom flat", "x".repeat(200)], deps());
+    expect(replies.at(-1)).toContain("under 150 characters each");
+    expect(state.business?.step).toBe("listing_location");
+  });
+
+  it("keeps each service area once, whatever its case", async () => {
+    const categories = [{ id: "00000001-0000-4000-8000-000000000001", name: "Plumbing Repairs" }];
+    const createProvider = vi.fn(async () => ({ id: "00000001-0000-4000-8000-000000000009", slug: null, displayName: "Kofi" }));
+    const dependencies = deps({ categories: vi.fn(async () => categories), createProvider });
+    await run(["1", "Kofi Plumbing", "plumber", "Accra, accra, Tema", "skip", "confirm"], dependencies, "6");
+    expect(createProvider).toHaveBeenCalledWith(userId, expect.objectContaining({ serviceAreas: [{ areaType: "CITY", name: "Accra" }, { areaType: "CITY", name: "Tema" }] }));
+  });
+
+  it("replies with a domain validation error rather than retrying it forever", async () => {
+    const { z } = await import("zod");
+    const invalid = z.object({ city: z.string().max(150) }).safeParse({ city: "x".repeat(151) });
+    const createListing = vi.fn(async () => { throw invalid.error; });
+    const { replies, state } = await run(["rent", "1", "Two bedroom flat", "Osu", "4000", "1", "2", "1", "A bright flat close to Oxford Street, newly painted.", "1", "confirm"], deps({ createListing }));
+    expect(replies.at(-1)).toContain("Some details were not accepted (city:");
+    expect(state.business?.step).toBe("listing_review");
+  });
+});
