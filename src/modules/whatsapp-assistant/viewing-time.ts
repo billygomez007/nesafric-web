@@ -65,6 +65,9 @@ function calendarDate(text: string, now: Date): { year: number; month: number; d
 export function parseViewingTime(body: string, now = new Date()): Date | null {
   const raw = body.trim();
   if (ISO.test(raw)) {
+    // JavaScript rolls 31 February over into March; the date as written must exist.
+    const [year, month, day] = raw.slice(0, 10).split("-").map(Number);
+    if (!utc(year, month - 1, day, { hour: 0, minute: 0 })) return null;
     const value = new Date(raw);
     return Number.isFinite(value.getTime()) && value > now && value.getTime() - now.getTime() <= MAX_AHEAD_MS ? value : null;
   }

@@ -33,7 +33,7 @@ describe("WhatsApp shopping: viewing times", () => {
 
   it.each([
     "sometime next week", "tomorrow", "tomorrow evening", "maybe 2pm", "next month 2pm", "yesterday 2pm",
-    "today 8am", "31/02 10am", "13pm tomorrow", "2025-01-01T10:00:00Z", "2028-12-20 14:00",
+    "today 8am", "31/02 10am", "2027-02-31T10:00:00Z", "2026-11-31T10:00:00+00:00", "13pm tomorrow", "2025-01-01T10:00:00Z", "2028-12-20 14:00",
   ])("refuses %s", (text) => {
     expect(parseViewingTime(text, now)).toBeNull();
   });
