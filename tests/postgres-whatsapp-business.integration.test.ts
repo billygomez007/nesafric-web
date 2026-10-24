@@ -99,7 +99,17 @@ describe("PostgreSQL WhatsApp business sign-up and listing", () => {
     expect(review).toContain("Type: Individual agent");
     expect(review).toContain("Areas: East Legon, Tema");
     expect(await db.marketplaceProfessional.count()).toBe(0);
+    const conversation = await db.conversation.findFirstOrThrow({ where: { channelAddress: { contains: WA_ID } } });
+    const beforeConfirm = conversation.assistantState;
     expect(await say("confirm")).toContain("send your logo as a photo");
+    // A second pass that decided the same confirm (its conversation update lost the race) finds
+    // the profile the first one created instead of creating another.
+    const afterConfirm = (await db.conversation.findUniqueOrThrow({ where: { id: conversation.id } })).assistantState;
+    await db.conversation.update({ where: { id: conversation.id }, data: { assistantState: beforeConfirm ?? {} } });
+    expect(await say("confirm")).toContain("send your logo as a photo");
+    expect(await db.marketplaceProfessional.count()).toBe(1);
+    expect(await db.organisation.count({ where: { marketplaceProfessional: { isNot: null } } })).toBe(1);
+    await db.conversation.update({ where: { id: conversation.id }, data: { assistantState: afterConfirm ?? {} } });
     const logo = await photo("700001");
     expect(logo).toContain("Logo saved");
     expect(logo).toContain("Reply 5 to list a property");
@@ -130,7 +140,12 @@ describe("PostgreSQL WhatsApp business sign-up and listing", () => {
     expect(draft).toMatchObject({ status: "DRAFT", listingType: "RENT", category: "APARTMENT", marketplaceProfessionalId: professional.id, city: "Accra", locality: "East Legon", frequency: "MONTHLY", bedrooms: 2, listingAuthority: "MANAGING_AGENT" });
     expect(draft.rentAmountMinor?.toString()).toBe("450000");
 
+    const beforePhoto = (await db.conversation.findFirstOrThrow({ where: { channelAddress: { contains: WA_ID } } })).assistantState;
     expect(await photo("800001")).toContain("Photo 1 saved");
+    // The same photo decided again from the earlier state is recognised, not stored twice.
+    await db.conversation.updateMany({ where: { channelAddress: { contains: WA_ID } }, data: { assistantState: beforePhoto ?? {} } });
+    expect(await photo("800001")).toContain("Photo 1 saved");
+    expect(await db.listingMedia.count()).toBe(1);
     expect(await photo("800002")).toContain("Photo 2 saved");
     expect(await say("done")).toContain("Send the reference of the owner's mandate");
     const submitted = await say("Owner's mandate from Mr Ofori, signed 1 October 2026");

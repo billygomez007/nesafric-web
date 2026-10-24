@@ -33,6 +33,8 @@ function deps(overrides: Partial<Record<keyof BusinessDependencies, unknown>> = 
     listProvider: vi.fn(),
     uploadProviderLogo: vi.fn(),
     ownedProviders: vi.fn(async () => []),
+    lock: vi.fn(async () => undefined),
+    recover: { professional: vi.fn(async () => null), listing: vi.fn(async () => null), company: vi.fn(async () => null), provider: vi.fn(async () => null), file: vi.fn(async () => false) },
     ...overrides,
   } as unknown as BusinessDependencies & Record<string, ReturnType<typeof vi.fn>>;
 }
@@ -61,7 +63,8 @@ describe("WhatsApp business: starting a flow", () => {
   });
 
   it("keeps a bare number a result pick while results are on screen", () => {
-    const searching = { ...initialState(), workflow: "property_search" as const, results: ["4f1a7d2c-5b8e-4c3a-9d6f-1e2b3c4d5e63", "4f1a7d2c-5b8e-4c3a-9d6f-1e2b3c4d5e64", "4f1a7d2c-5b8e-4c3a-9d6f-1e2b3c4d5e65"] };
+    const searching = { ...initialState(), workflow: "property_search" as const, results: ["4f1a7d2c-5b8e-4c3a-9d6f-1e2b3c4d5e63"] };
+    // Even with one result, 3 is answered by the search ("choose a number from the results").
     expect(businessTrigger("3", searching)).toBeNull();
     expect(businessTrigger("5", searching)).toEqual({ kind: "listing" });
     expect(businessTrigger("5", { ...initialState(), paused: true })).toBeNull();
@@ -129,6 +132,26 @@ describe("WhatsApp business: listing a property", () => {
     expect(replies.at(-1)).toContain("Not saved: Your plan allows 5 active listings.");
     expect(state.business?.step).toBe("listing_review");
     expect((await advanceBusiness(input("confirm"), state, reset, dependencies)).reply).toContain("Send photos");
+  });
+
+  it("recovers what an earlier pass of the same message created instead of creating it again", async () => {
+    const recover = { professional: vi.fn(async () => null), listing: vi.fn(async () => ({ id: listingId, status: "DRAFT" })), company: vi.fn(async () => null), provider: vi.fn(async () => null), file: vi.fn(async () => true) };
+    const dependencies = deps({ recover });
+    let { state } = await run(details, dependencies);
+    expect(dependencies.createListing).not.toHaveBeenCalled();
+    expect(dependencies.lock).toHaveBeenCalledWith(expect.stringMatching(/^whatsapp-business:\+233241234567:.+:listing$/));
+    expect(state.business?.committed.listingId).toBe(listingId);
+    // The photo is already stored: counted, not downloaded or uploaded again.
+    ({ state } = await advanceBusiness(input("[image received]", { kind: "image", messageId: "m-p", media: { id: "333", mimeType: "image/jpeg" } }), state, reset, dependencies));
+    expect(recover.file).toHaveBeenCalledWith("LISTING_MEDIA", listingId, "whatsapp-333.jpg");
+    expect(dependencies.download).not.toHaveBeenCalled();
+    expect(state.business?.committed.media).toEqual(["333"]);
+    // Already submitted by a pass whose conversation update was lost: reported, not resubmitted.
+    ({ state } = await advanceBusiness(input("done"), state, reset, dependencies));
+    recover.listing.mockResolvedValue({ id: listingId, status: "PENDING_REVIEW" });
+    const done = await advanceBusiness(input("Indenture LC/1234/2019"), state, reset, dependencies);
+    expect(dependencies.submitListing).not.toHaveBeenCalled();
+    expect(done.reply).toContain("Submitted for NesAfric review");
   });
 
   it("asks which profile when the account has several, and needs one to start", async () => {

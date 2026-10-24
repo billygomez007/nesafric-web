@@ -35,7 +35,8 @@ type Linked = Awaited<ReturnType<typeof linkedWhatsAppUser>>;
 
 async function manageableCompanies(userId: string) {
   const memberships = await db.organisationMember.findMany({
-    where: { userId, status: "ACTIVE", archivedAt: null, organisation: { archivedAt: null }, roles: { some: { role: { key: { in: ["organisation_owner", "administrator"] } } } } },
+    // Not the hidden organisations behind marketplace profiles (as `listUserOrganisations`).
+    where: { userId, status: "ACTIVE", archivedAt: null, organisation: { archivedAt: null, marketplaceProfessional: null }, roles: { some: { role: { key: { in: ["organisation_owner", "administrator"] } } } } },
     select: { organisation: { select: { id: true, name: true } } },
     orderBy: { createdAt: "asc" },
     take: 8,
@@ -62,6 +63,16 @@ export type BusinessDependencies = {
   listProvider: (userId: string, providerId: string, input: unknown) => Promise<unknown>;
   uploadProviderLogo: (userId: string, providerId: string, file: File) => Promise<unknown>;
   ownedProviders: (userId: string) => Promise<Array<{ id: string; displayName: string }>>;
+  /** Serialises one side effect until this processing pass commits (see `once`). */
+  lock: (key: string) => Promise<void>;
+  /** What an earlier or concurrent pass of the same flow already created, if anything. */
+  recover: {
+    professional: (userId: string, displayName: string, since: Date) => Promise<{ id: string; slug: string | null } | null>;
+    listing: (userId: string, professionalId: string, title: string, since: Date) => Promise<{ id: string; status: string } | null>;
+    company: (userId: string, name: string, since: Date) => Promise<{ id: string } | null>;
+    provider: (userId: string, displayName: string, since: Date) => Promise<{ id: string; slug: string | null } | null>;
+    file: (targetType: string, targetId: string, fileName: string) => Promise<boolean>;
+  };
 };
 
 const defaults: BusinessDependencies = {
@@ -84,7 +95,27 @@ const defaults: BusinessDependencies = {
   listProvider: updateMarketplaceProfile,
   uploadProviderLogo: uploadServiceProviderLogo,
   ownedProviders: listOwnedProviders,
+  // Inside the processing guard this is held until the pass's transaction commits or rolls back.
+  lock: async (key) => { await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`; },
+  recover: {
+    professional: (userId, displayName, since) => db.marketplaceProfessional.findFirst({ where: { createdByUserId: userId, displayName, archivedAt: null, createdAt: { gte: since } }, select: { id: true, slug: true }, orderBy: { createdAt: "asc" } }),
+    listing: (userId, professionalId, title, since) => db.listing.findFirst({ where: { createdByUserId: userId, marketplaceProfessionalId: professionalId, title, createdAt: { gte: since } }, select: { id: true, status: true }, orderBy: { createdAt: "asc" } }),
+    company: (userId, name, since) => db.organisation.findFirst({ where: { name, archivedAt: null, createdAt: { gte: since }, marketplaceProfessional: null, members: { some: { userId } } }, select: { id: true }, orderBy: { createdAt: "asc" } }),
+    provider: (userId, displayName, since) => db.serviceProvider.findFirst({ where: { administratorUserId: userId, displayName, createdAt: { gte: since } }, select: { id: true, slug: true }, orderBy: { createdAt: "asc" } }),
+    file: async (targetType, targetId, fileName) => Boolean(await db.storageObject.findFirst({ where: { targetType, targetId, originalFileName: fileName, archivedAt: null }, select: { id: true } })),
+  },
 };
+
+/**
+ * Each side effect runs at most once per flow, however many passes handle the same message: two
+ * workers can decide one message at once (a burst of photos, a retried job), and a pass's writes
+ * can commit even when its conversation update loses the race. The lock makes a concurrent pass
+ * wait for this one to commit; the lookup then finds what it created instead of repeating it.
+ */
+async function once<T>(dependencies: BusinessDependencies, key: string, recover: () => Promise<T | null>, create: () => Promise<T>): Promise<T> {
+  await dependencies.lock(key);
+  return (await recover()) ?? create();
+}
 
 // ---------------------------------------------------------------------------------------------
 // Starting a flow
@@ -101,7 +132,8 @@ const TRIGGERS: Array<[RegExp, BusinessKind, BusinessState["professionalType"]?]
 export function businessTrigger(command: string, state: AssistantState): { kind: BusinessKind; professionalType?: BusinessState["professionalType"] } | null {
   for (const [pattern, kind, professionalType] of TRIGGERS) {
     if (!pattern.test(command)) continue;
-    if (/^\d$/.test(command) && (state.paused || Number(command) <= state.results.length)) return null;
+    // Result picks accept 1 to 3 whatever the result count, so all three stay with the search.
+    if (/^\d$/.test(command) && (state.paused || (state.results.length > 0 && Number(command) <= 3))) return null;
     return { kind, professionalType };
   }
   return null;
@@ -240,8 +272,10 @@ export function matchServiceCategories(phrase: string, categories: ReadonlyArray
 // ---------------------------------------------------------------------------------------------
 // The flow
 
+/** The stored name of a WhatsApp file, also how a repeated pass recognises it was stored. */
+const fileName = (mediaId: string, contentType = "image/jpeg") => `whatsapp-${mediaId}.${contentType.split(";")[0].split("/")[1]?.trim().replace("jpeg", "jpg") || "jpg"}`;
 const fileFor = (mediaId: string, file: { body: Buffer; contentType: string }): File => ({
-  fileName: `whatsapp-${mediaId}.${file.contentType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg"}`,
+  fileName: fileName(mediaId, file.contentType),
   contentType: file.contentType,
   dataBase64: file.body.toString("base64"),
 });
@@ -253,7 +287,7 @@ const failure = (error: unknown) => {
 
 /** Start a flow from the menu or a phrase. The caller has checked `businessTrigger`. */
 export async function startBusiness(trigger: { kind: BusinessKind; professionalType?: BusinessState["professionalType"] }, input: BusinessInput, reset: () => AssistantState, dependencies: BusinessDependencies = defaults): Promise<BusinessResult> {
-  const business = businessStateSchema.parse({ kind: trigger.kind, step: "account_name", professionalType: trigger.professionalType });
+  const business = businessStateSchema.parse({ kind: trigger.kind, step: "account_name", professionalType: trigger.professionalType, startedAt: new Date().toISOString() });
   const linked = await dependencies.linkedUser(input.phone);
   const next: AssistantState = { ...reset(), workflow: "business", business };
   if (!linked) return reply(next, business, input, INTRO[trigger.kind]);
@@ -366,6 +400,9 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
   const userId = linked.user.id;
   const currency = input.defaultCurrency;
   const listing = business.listing;
+  // Flows saved before `startedAt` existed recover only what was created in the last day.
+  const since = business.startedAt ? new Date(business.startedAt) : new Date(Date.now() - 24 * 60 * 60_000);
+  const key = (effect: string) => `whatsapp-business:${whatsappAddress(input.phone)}:${business.startedAt ?? "legacy"}:${effect}`;
 
   switch (business.step) {
     // ---- Agents, agencies and companies -------------------------------------------------------
@@ -406,10 +443,10 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       if (command !== "confirm") return say();
       if (!business.committed.professionalId) {
         try {
-          const professional = await dependencies.createProfessional(userId, {
+          const professional = await once(dependencies, key("professional"), () => dependencies.recover.professional(userId, business.displayName!, since), () => dependencies.createProfessional(userId, {
             type: business.professionalType, displayName: business.displayName, description: business.description, contactEmail: business.email,
             contactPhone: whatsappAddress(input.phone), countryCode: input.defaultCountry, serviceAreas: business.areas,
-          });
+          }));
           business.committed.professionalId = professional.id;
           business.committed.slug = professional.slug ?? undefined;
         } catch (error) {
@@ -427,12 +464,16 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       if (input.kind === "text") return { state: reset(), reply: business.kind === "logo" ? "The logo is unchanged. Reply menu for other options." : finish() };
       const media = input.media;
       if (input.kind !== "image" || !media || !(LOGO_MIME_TYPES as readonly string[]).includes((media.mimeType ?? "").split(";")[0])) return say("Please send the logo as a JPG, PNG or WebP photo.");
-      const file = await dependencies.download(media.id);
-      if (!file) return say("I could not fetch that image from WhatsApp. Please send it again.");
       const target = business.target!;
+      const logoTarget = target.kind === "professional" ? "MARKETPLACE_PROFESSIONAL_LOGO" : "SERVICE_PROVIDER_LOGO";
       try {
-        if (target.kind === "professional") await dependencies.uploadProfessionalLogo(userId, target.id, fileFor(media.id, file));
-        else await dependencies.uploadProviderLogo(userId, target.id, fileFor(media.id, file));
+        await dependencies.lock(key(`logo:${media.id}`));
+        if (!await dependencies.recover.file(logoTarget, target.id, fileName(media.id, media.mimeType))) {
+          const file = await dependencies.download(media.id);
+          if (!file) return say("I could not fetch that image from WhatsApp. Please send it again.");
+          if (target.kind === "professional") await dependencies.uploadProfessionalLogo(userId, target.id, fileFor(media.id, file));
+          else await dependencies.uploadProviderLogo(userId, target.id, fileFor(media.id, file));
+        }
       } catch (error) {
         return say(`The logo was not saved: ${failure(error)}`);
       }
@@ -527,7 +568,7 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
         const [locality, ...rest] = (listing.location ?? "").split(",").map((part) => part.trim()).filter(Boolean);
         const city = rest.at(-1) ?? locality;
         try {
-          const created = await dependencies.createListing(userId, business.professionalId!, {
+          const created = await once(dependencies, key("listing"), () => dependencies.recover.listing(userId, business.professionalId!, listing.title!, since), () => dependencies.createListing(userId, business.professionalId!, {
             asset: {
               name: listing.title, category: listing.category, purpose: listing.purpose, currencyCode: currency, priceMinor: listing.priceMinor,
               countryCode: input.defaultCountry, city, locality: rest.length ? locality : null, publicLocationLabel: listing.location,
@@ -540,7 +581,7 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
               contactPhone: whatsappAddress(input.phone), enquiryEnabled: true,
             },
             listingAuthority: listing.authority,
-          });
+          }));
           business.committed.listingId = created.id;
         } catch (error) {
           return say(`Not saved: ${failure(error)}`);
@@ -559,10 +600,13 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       if (input.kind !== "image" || !media || !(LISTING_PHOTO_MIME_TYPES as readonly string[]).includes((media.mimeType ?? "").split(";")[0])) return say("That file was not added. Please send photos as JPG, PNG or WebP images.");
       if (business.committed.media.includes(media.id)) return { state: { ...state, business }, reply: "That photo is already saved." };
       if (business.committed.media.length >= MAX_LISTING_PHOTOS) return say(`A listing can have up to ${MAX_LISTING_PHOTOS} photos. Reply done to continue.`);
-      const file = await dependencies.download(media.id);
-      if (!file) return say("I could not fetch that photo from WhatsApp. Please send it again.");
       try {
-        await dependencies.uploadListingPhoto(userId, business.professionalId!, business.committed.listingId!, { ...fileFor(media.id, file), mediaType: "PHOTO" });
+        await dependencies.lock(key(`photo:${media.id}`));
+        if (!await dependencies.recover.file("LISTING_MEDIA", business.committed.listingId!, fileName(media.id, media.mimeType))) {
+          const file = await dependencies.download(media.id);
+          if (!file) return say("I could not fetch that photo from WhatsApp. Please send it again.");
+          await dependencies.uploadListingPhoto(userId, business.professionalId!, business.committed.listingId!, { ...fileFor(media.id, file), mediaType: "PHOTO" });
+        }
       } catch (error) {
         return say(`That photo was not saved: ${failure(error)}`);
       }
@@ -574,7 +618,10 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       if (body.length < 3 || body.length > 1000) return say("Please send the document reference (3 to 1,000 characters).");
       const type = AUTHORITIES.find(([key]) => key === listing.authority)?.[2] ?? "listing_authority";
       try {
-        await dependencies.submitListing(userId, business.professionalId!, business.committed.listingId!, { evidence: { type: (EVIDENCE_TYPES as readonly string[]).includes(type) ? type : "listing_authority", reference: body }, note: "Submitted on WhatsApp." });
+        await dependencies.lock(key("submit"));
+        const current = await dependencies.recover.listing(userId, business.professionalId!, listing.title!, since);
+        // Already sent by an earlier pass of this message: report it, do not submit twice.
+        if (current?.id !== business.committed.listingId || current?.status === "DRAFT" || current?.status === "REJECTED") await dependencies.submitListing(userId, business.professionalId!, business.committed.listingId!, { evidence: { type: (EVIDENCE_TYPES as readonly string[]).includes(type) ? type : "listing_authority", reference: body }, note: "Submitted on WhatsApp." });
       } catch (error) {
         return say(`Not submitted yet: ${failure(error)}`);
       }
@@ -664,15 +711,15 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       if (command !== "confirm") return say();
       try {
         if (business.providerType === "COMPANY" && !business.companyOrganisationId) {
-          business.companyOrganisationId = business.committed.organisationId ?? (await dependencies.createCompany(userId, business.companyName!, input.defaultCountry)).id;
+          business.companyOrganisationId = business.committed.organisationId ?? (await once(dependencies, key("company"), () => dependencies.recover.company(userId, business.companyName!, since), () => dependencies.createCompany(userId, business.companyName!, input.defaultCountry))).id;
           business.committed.organisationId = business.companyOrganisationId;
         }
         if (!business.committed.providerId) {
-          const provider = await dependencies.createProvider(userId, {
+          const provider = await once(dependencies, key("provider"), () => dependencies.recover.provider(userId, business.displayName!, since), () => dependencies.createProvider(userId, {
             type: business.providerType, companyOrganisationId: business.providerType === "COMPANY" ? business.companyOrganisationId : undefined,
             displayName: business.displayName, contactPhone: whatsappAddress(input.phone), biography: business.description,
             categoryIds: business.categories.map(({ id }) => id), serviceAreas: business.areas.map((name) => ({ areaType: "CITY", name })),
-          });
+          }));
           business.committed.providerId = provider.id;
           business.committed.slug = provider.slug ?? undefined;
         }

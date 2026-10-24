@@ -37,6 +37,8 @@ export const BUSINESS_STEPS = [
 export const businessStateSchema = z.object({
   kind: z.enum(["agency", "listing", "service", "logo"]),
   step: z.enum(BUSINESS_STEPS),
+  /** When the flow began: the lower bound for recovering what it created, and part of its lock keys. */
+  startedAt: z.string().datetime().optional(),
   /** Account creation on this number: the challenge reference only, never the code. */
   account: z.object({ displayName: z.string().max(100).optional(), challengeId: z.string().uuid().optional(), failures: z.number().int().min(0).max(10).default(0) }).default({ failures: 0 }),
   professionalType: z.enum(["INDIVIDUAL_AGENT", "BROKER", "BROKERAGE", "REAL_ESTATE_COMPANY", "DEVELOPER", "PROPERTY_MARKETING_COMPANY", "OTHER"]).optional(),
