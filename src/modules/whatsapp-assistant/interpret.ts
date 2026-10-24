@@ -32,7 +32,10 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
   // Before a number: a currency or a ceiling word. After it: a currency. A count of bedrooms,
   // bathrooms or plots, or a length of stay, is never a price ("for 2 bedrooms", "for 1 year").
   const amount = "([\\d,]+(?:\\.\\d{1,2})?)\\s*(million|thousand|k|m)?\\b(?!\\s*-?\\s*(?:bed|br\\b|bd\\b|room|bath|plot|acre|storey|stor(?:y|ey)|years?\\b|yrs?\\b|months?\\b|mos?\\b|weeks?\\b|days?\\b|nights?\\b))";
-  const budget = input.match(new RegExp(`(?:ghs|ghc|gh₵|₵|cedis|under|below|budget(?: of| is)?|around|max(?:imum)?|up to|less than|not more than|for)\\s*${amount}`)) ?? input.match(new RegExp(`${amount}\\s*(?:ghs|ghc|gh₵|cedis|cedi)\\b`));
+  // A bare "for" says nothing about money ("for 2 people", "for 1 year"): after it, a number is a
+  // budget only with a magnitude ("for 5k") or a price unit ("for 3000 a month").
+  const forMoney = input.match(new RegExp(`\\bfor\\s+([\\d,]+(?:\\.\\d{1,2})?)\\s*(?:(million|thousand|k|m)\\b|(?=\\s*(?:a\\s+month|a\\s+year|per\\b|monthly|yearly|annually|p\\.?a\\b|\\/)))`));
+  const budget = input.match(new RegExp(`(?:ghs|ghc|gh₵|₵|cedis|under|below|budget(?: of| is)?|around|max(?:imum)?|up to|less than|not more than)\\s*${amount}`)) ?? input.match(new RegExp(`${amount}\\s*(?:ghs|ghc|gh₵|cedis|cedi)\\b`)) ?? forMoney;
   if (budget) {
     const units = Number(budget[1].replaceAll(",", "")) * (/^(million|m)$/.test(budget[2] ?? "") ? 1_000_000 : /^(thousand|k)$/.test(budget[2] ?? "") ? 1000 : 1);
     if (units > 0 && Number.isSafeInteger(Math.round(units * 100))) property.maxPriceMinor = String(Math.round(units * 100));

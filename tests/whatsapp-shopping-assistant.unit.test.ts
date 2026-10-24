@@ -80,6 +80,10 @@ describe("WhatsApp shopping: reading requests without a model", () => {
     expect(read("apartment to rent in osu for 6 months").property?.maxPriceMinor).toBeUndefined();
   });
 
+  it.each([["apartment to rent in accra for 2 people", undefined], ["room to rent in osu for 3 adults", undefined], ["flat to rent in osu for 5k", "500000"], ["flat to rent in osu for 3000 a month", "300000"], ["flat to rent in osu for 3000 per month", "300000"], ["house for sale in tema for 1.2 million", "120000000"]])("reads a budget after for only when it is money: %s", (text, minor) => {
+    expect(read(text).property?.maxPriceMinor).toBe(minor);
+  });
+
   it.each(["rent in osu 2000 per annum", "rent in osu 2000 cedis monthly", "rent in osu 2000 cedis quarterly", "rent in osu 300 cedis daily", "rent in osu 300 cedis a night"])("produces filters the listing search accepts: %s", (text) => {
     const parsed = read(text);
     expect(publicListingSearchSchema.safeParse({ ...parsed.property, page: 1, pageSize: 3 }).success).toBe(true);

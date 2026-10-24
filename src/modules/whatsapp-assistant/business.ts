@@ -166,7 +166,7 @@ const AUTHORITIES = [
 const EVIDENCE_TYPES = ["ownership_reference", "owner_mandate", "listing_authority", "developer_authority"] as const;
 /** Summaries stay well inside WhatsApp's 4,096-character message limit. */
 const clip = (text: string | undefined, limit = 400) => !text ? text : text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
-const numbered = (items: ReadonlyArray<string>) => items.map((item, index) => `${index + 1}. ${item}`).join("\n");
+const numbered = (items: ReadonlyArray<string>) => items.map((item, index) => `${index + 1}. ${clip(item, 120)}`).join("\n");
 const optional = "Reply skip to leave it out.";
 
 function promptFor(business: BusinessState, phone: string, currency: string): string {
@@ -183,7 +183,7 @@ function promptFor(business: BusinessState, phone: string, currency: string): st
       "Please check your profile:",
       `Name: ${business.displayName}`,
       `Type: ${PROFESSIONAL_TYPES.find(([key]) => key === business.professionalType)?.[1]}`,
-      `Areas: ${business.areas.join(", ")}`,
+      `Areas: ${clip(business.areas.join(", "), 600)}`,
       `About: ${clip(business.description) ?? "not given"}`,
       `Email: ${business.email ?? "not given"}`,
       `Phone: ${whatsappAddress(phone)} (this WhatsApp number)`,
@@ -223,7 +223,7 @@ function promptFor(business: BusinessState, phone: string, currency: string): st
       : "What is the company called?";
     case "service_name": return "What name should customers see? For example: Kwame Plumbing Services. Reply me to use your own name.";
     case "service_categories": return business.choices.length
-      ? `${business.categories.length ? `Added: ${business.categories.map(({ name }) => name).join(", ")}.\n` : ""}Which of these do you offer? Reply the numbers separated by commas, for example 1, 3:\n${numbered(business.choices.map(({ name }) => name))}`
+      ? `${business.categories.length ? `Added: ${clip(business.categories.map(({ name }) => name).join(", "), 600)}.\n` : ""}Which of these do you offer? Reply the numbers separated by commas, for example 1, 3:\n${numbered(business.choices.map(({ name }) => name))}`
       : "Which services do you offer? Send them in your own words, separated by commas, for example: plumbing, electrical, roofing.";
     case "service_areas": return "Which towns or areas do you serve? Send them separated by commas, for example: Accra, Tema, Kasoa.";
     case "service_description": return `Describe your services and experience for customers. ${optional}`;
@@ -231,8 +231,8 @@ function promptFor(business: BusinessState, phone: string, currency: string): st
       "Please check your service profile:",
       `Name: ${business.displayName}`,
       `${business.providerType === "COMPANY" ? `Company: ${business.companyName}` : "Registered as an individual"}`,
-      `Services: ${business.categories.map(({ name }) => name).join(", ")}`,
-      `Areas: ${business.areas.join(", ")}`,
+      `Services: ${clip(business.categories.map(({ name }) => name).join(", "), 600)}`,
+      `Areas: ${clip(business.areas.join(", "), 600)}`,
       `About: ${clip(business.description) ?? "not given"}`,
       `Phone: ${whatsappAddress(phone)} (this WhatsApp number)`,
       "",
@@ -684,7 +684,7 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
           else if (matches.length) for (const match of matches.slice(0, 12)) suggestions.set(match.id, match);
           else unknown.push(part);
         }
-        if (unknown.length) return say(`I could not match ${unknown.join(", ")} to a service. Try other words, for example plumbing, roofing, cleaning, solar, or land surveyors.`);
+        if (unknown.length) return say(`I could not match ${clip(unknown.join(", "), 300)} to a service. Try other words, for example plumbing, roofing, cleaning, solar, or land surveyors.`);
         business.choices = [...suggestions.values()].filter(({ id }) => !picked.has(id)).slice(0, 20);
       }
       if (picked.size > 10) return say("Choose up to 10 services.");
@@ -692,7 +692,7 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       if (business.choices.length) return say();
       if (!business.categories.length) return say();
       business.step = "service_areas";
-      return say(`Services: ${business.categories.map(({ name }) => name).join(", ")}.`);
+      return say(`Services: ${clip(business.categories.map(({ name }) => name).join(", "), 600)}.`);
     }
     case "service_areas": {
       const areas = splitList(body);

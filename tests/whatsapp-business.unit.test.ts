@@ -209,3 +209,15 @@ describe("WhatsApp business: message size", () => {
     expect(replies.at(-1)!.length).toBeLessThan(4096);
   });
 });
+
+describe("WhatsApp business: service review size", () => {
+  it("stays inside WhatsApp's message limit with the longest areas and service names", async () => {
+    const long = (n: number) => `${"Long service name ".repeat(11).slice(0, 199)}${n}`;
+    const categories = Array.from({ length: 10 }, (_, index) => ({ id: `0000000${index}-0000-4000-8000-000000000001`, name: long(index) }));
+    const dependencies = deps({ categories: vi.fn(async () => categories) });
+    const areas = Array.from({ length: 20 }, (_, index) => `${"Area ".repeat(23)}${String(index).padStart(2, "0")}`).join(", ");
+    const { replies } = await run(["2", "C".repeat(160), categories.map(({ name }) => name).join(", "), areas, "D".repeat(5000)], dependencies, "6");
+    expect(replies.at(-1)).toContain("Reply confirm to create it");
+    expect(Math.max(...replies.map((reply) => reply.length))).toBeLessThan(4096);
+  });
+});
