@@ -99,7 +99,7 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
   }
   if (state.workflow === "property_search") {
     if (!state.property.listingType || !state.property.location) return reply(promptFor(state));
-    if (state.property.listingType === "RENT" && state.property.maxPriceMinor && !state.property.frequency) return reply("Is that rental budget per month, per year, per week or per night?");
+    if (state.property.listingType === "RENT" && state.property.maxPriceMinor && !state.property.frequency) return reply("Is that rental budget per month, per year, per quarter or per night?");
     const found = await dependencies.tools.searchProperties(state.property, state.page);
     state.results = found.ids; state.hasMore = found.hasMore;
     const filters = `Filters: ${state.property.listingType}, ${state.property.location}${state.property.category ? `, ${state.property.category}` : ""}${state.property.maxPriceMinor ? `, maximum ${state.property.currencyCode} ${Number(state.property.maxPriceMinor) / 100}${state.property.frequency ? ` ${state.property.frequency}` : ""}` : ""}${state.property.bedroomsMin !== undefined ? `, ${state.property.bedroomsMin} bedrooms` : ""}.`;

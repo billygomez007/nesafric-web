@@ -78,7 +78,8 @@ const defaults: BusinessDependencies = {
   submitListing: submitMarketplaceListingForReview,
   categories: async () => (await listServiceCategories()).map(({ id, name }) => ({ id, name })),
   companies: manageableCompanies,
-  createCompany: (userId, name, countryCode) => createOrganisation(userId, { name, type: "OTHER", countryCode }, { skipSubscription: true }),
+  // An ordinary workspace with its trial, exactly as a company created on the website.
+  createCompany: (userId, name, countryCode) => createOrganisation(userId, { name, type: "OTHER", countryCode }),
   createProvider: createServiceProvider,
   listProvider: updateMarketplaceProfile,
   uploadProviderLogo: uploadServiceProviderLogo,

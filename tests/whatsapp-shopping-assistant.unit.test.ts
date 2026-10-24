@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { advanceConversation } from "@/modules/whatsapp-assistant/engine";
 import { interpretLocally } from "@/modules/whatsapp-assistant/interpret";
-import { initialState, type AssistantState } from "@/modules/whatsapp-assistant/schemas";
+import { assistantStateSchema, initialState, type AssistantState } from "@/modules/whatsapp-assistant/schemas";
+import { publicListingSearchSchema } from "@/modules/listings/schemas";
 import { formatViewingTime, parseViewingTime } from "@/modules/whatsapp-assistant/viewing-time";
 
 // Saturday 24 October 2026, 09:00 GMT.
@@ -71,7 +72,22 @@ describe("WhatsApp shopping: reading requests without a model", () => {
   });
 
   it("reads yearly rent", () => {
-    expect(read("rent in airport residential 60000 cedis per annum").property).toMatchObject({ frequency: "YEARLY", maxPriceMinor: "6000000" });
+    expect(read("rent in airport residential 60000 cedis per annum").property).toMatchObject({ frequency: "ANNUAL", maxPriceMinor: "6000000" });
+  });
+
+  it("never reads a length of stay as a price", () => {
+    expect(read("house to rent in accra for 1 year")).toEqual({ intent: "property_search", property: { listingType: "RENT", category: "HOUSE", location: "accra" } });
+    expect(read("apartment to rent in osu for 6 months").property?.maxPriceMinor).toBeUndefined();
+  });
+
+  it.each(["rent in osu 2000 per annum", "rent in osu 2000 cedis monthly", "rent in osu 2000 cedis quarterly", "rent in osu 300 cedis daily", "rent in osu 300 cedis a night"])("produces filters the listing search accepts: %s", (text) => {
+    const parsed = read(text);
+    expect(publicListingSearchSchema.safeParse({ ...parsed.property, page: 1, pageSize: 3 }).success).toBe(true);
+  });
+
+  it("carries a conversation saved with the old yearly and weekly values", () => {
+    expect(assistantStateSchema.parse({ property: { frequency: "YEARLY" } }).property.frequency).toBe("ANNUAL");
+    expect(assistantStateSchema.parse({ property: { frequency: "WEEKLY" } }).property.frequency).toBeUndefined();
   });
 
   it("keeps business intents deterministic", () => {
@@ -136,7 +152,7 @@ describe("WhatsApp shopping: the conversation", () => {
 
   it("asks how often a rental budget is paid before searching", async () => {
     const { replies, deps } = await converse(["rent in osu under 4000", "monthly"]);
-    expect(replies[0]).toBe("Is that rental budget per month, per year, per week or per night?");
+    expect(replies[0]).toBe("Is that rental budget per month, per year, per quarter or per night?");
     expect(deps.tools.searchProperties).toHaveBeenCalledTimes(1);
     expect(deps.tools.searchProperties).toHaveBeenCalledWith(expect.objectContaining({ maxPriceMinor: "400000", frequency: "MONTHLY" }), 1);
   });

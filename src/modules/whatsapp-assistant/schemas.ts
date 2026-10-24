@@ -9,7 +9,9 @@ export const propertyFiltersSchema = z.object({
   maxPriceMinor: z.string().regex(/^\d{1,16}$/).optional(),
   bedroomsMin: z.number().int().min(0).max(100).optional(),
   bedroomsMax: z.number().int().min(0).max(100).optional(),
-  frequency: z.enum(["MONTHLY", "YEARLY", "WEEKLY", "PER_NIGHT"]).optional(),
+  // The listing search's own price units. Conversations saved before this used YEARLY (now
+  // ANNUAL) and WEEKLY (no listing is priced per week, so the filter is dropped).
+  frequency: z.preprocess((value) => value === "YEARLY" ? "ANNUAL" : value === "WEEKLY" ? undefined : value, z.enum(["DAILY", "MONTHLY", "QUARTERLY", "ANNUAL", "PER_NIGHT"]).optional()),
 }).strict();
 export const serviceFiltersSchema = z.object({
   q: z.string().trim().min(2).max(200).optional(),

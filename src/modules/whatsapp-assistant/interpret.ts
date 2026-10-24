@@ -30,18 +30,21 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
     property.bedroomsMax = count;
   }
   // Before a number: a currency or a ceiling word. After it: a currency. A count of bedrooms,
-  // bathrooms or plots is never a price ("for 2 bedrooms").
-  const amount = "([\\d,]+(?:\\.\\d{1,2})?)\\s*(million|thousand|k|m)?\\b(?!\\s*-?\\s*(?:bed|br\\b|bd\\b|room|bath|plot|acre|storey|stor(?:y|ey)))";
+  // bathrooms or plots, or a length of stay, is never a price ("for 2 bedrooms", "for 1 year").
+  const amount = "([\\d,]+(?:\\.\\d{1,2})?)\\s*(million|thousand|k|m)?\\b(?!\\s*-?\\s*(?:bed|br\\b|bd\\b|room|bath|plot|acre|storey|stor(?:y|ey)|years?\\b|yrs?\\b|months?\\b|mos?\\b|weeks?\\b|days?\\b|nights?\\b))";
   const budget = input.match(new RegExp(`(?:ghs|ghc|gh₵|₵|cedis|under|below|budget(?: of| is)?|around|max(?:imum)?|up to|less than|not more than|for)\\s*${amount}`)) ?? input.match(new RegExp(`${amount}\\s*(?:ghs|ghc|gh₵|cedis|cedi)\\b`));
   if (budget) {
     const units = Number(budget[1].replaceAll(",", "")) * (/^(million|m)$/.test(budget[2] ?? "") ? 1_000_000 : /^(thousand|k)$/.test(budget[2] ?? "") ? 1000 : 1);
     if (units > 0 && Number.isSafeInteger(Math.round(units * 100))) property.maxPriceMinor = String(Math.round(units * 100));
     if (/ghs|ghc|gh₵|₵|cedi/.test(input)) property.currencyCode = "GHS";
   }
-  if (/\b(month|monthly)\b/.test(input)) property.frequency = "MONTHLY";
-  if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(input)) property.frequency = "YEARLY";
-  if (/\b(week|weekly)\b/.test(input)) property.frequency = "WEEKLY";
-  if (/\b(night|nightly)\b/.test(input)) property.frequency = "PER_NIGHT";
+  // How the price is quoted, not how long the stay is: "for 1 year" says nothing about the price unit.
+  const units = input.replace(/\b(?:for\s+)?\d+\s*(?:years?|yrs?|months?|weeks?|days?|nights?)\b/g, " ");
+  if (/\b(month|monthly)\b/.test(units)) property.frequency = "MONTHLY";
+  if (/\b(quarter|quarterly)\b/.test(units)) property.frequency = "QUARTERLY";
+  if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(units)) property.frequency = "ANNUAL";
+  if (/\b(day|daily)\b/.test(units)) property.frequency = "DAILY";
+  if (/\b(night|nightly)\b/.test(units)) property.frequency = "PER_NIGHT";
   if (state.workflow === "property_search" && !state.property.location && !location && !Object.values(property).some(Boolean) && input.length >= 2) property.location = input;
   const intent = input === "1" || /\b(propert(?:y|ies))\b/.test(input) || Object.values(property).some((value) => value !== undefined) || state.workflow === "property_search" ? "property_search" : "unknown";
   return { intent, property: Object.fromEntries(Object.entries(property).filter(([, value]) => value !== undefined)) };
