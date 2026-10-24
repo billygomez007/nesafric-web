@@ -21,7 +21,7 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
   ];
   property.category = categories.find(([pattern]) => pattern.test(input))?.[1];
   // A place starts with a letter: "around 4000" is a budget, not an area.
-  const location = input.match(/\b(?:in|near|around|at)\s+(?![\d₵])(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget|max|maximum|up to|less than|not more than)\b|\s+(?:ghs|ghc|gh₵|₵)|\s+[\d,]+(?:\.\d+)?\s*(?:k|m|million|thousand)?\s*(?:ghs|ghc|gh₵|cedis?)\b|[.,!?]|$)/)?.[1]?.trim();
+  const location = input.match(/\b(?:in|near|around|at)\s+(?![\d₵])(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget|max|maximum|up to|less than|not more than)\b|\s+(?:ghs|ghc|gh₵|₵)|\s+[\d,]+(?:\.\d+)?\s*(?:k|m|million|thousand)?\s*(?:ghs|ghc|gh₵|cedis?)\b|,\s*(?=ghs|ghc|gh₵|₵|cedis|under|below|max|up to|less than|budget|around|for\b|with\b|to rent|to buy|\d)|[.!?]|$)/)?.[1]?.trim();
   if (location) property.location = location;
   const bedroom = input.match(/\b(\d{1,2}|one|two|three|four|five|six)[ -]?(?:bed(?:room)?s?|br|bd)\b/);
   if (bedroom) {
@@ -42,7 +42,10 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
     if (/ghs|ghc|gh₵|₵|cedi/.test(input)) property.currencyCode = "GHS";
   }
   // How the price is quoted, not how long the stay is: "for 1 year" says nothing about the price unit.
-  const units = input.replace(/\b(?:for\s+)?\d+\s*(?:years?|yrs?|months?|weeks?|days?|nights?)\b/g, " ");
+  const units = input
+    .replace(/\b(?:for\s+)?\d+\s*(?:years?|yrs?|months?|weeks?|days?|nights?)\b/g, " ")
+    // "for one year", "for a month": a stay. "3000 a year" (no "for") stays a price unit.
+    .replace(/\bfor\s+(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|a few|several)\s+(?:years?|months?|weeks?|days?|nights?)\b/g, " ");
   if (/\b(month|monthly)\b/.test(units)) property.frequency = "MONTHLY";
   if (/\b(quarter|quarterly)\b/.test(units)) property.frequency = "QUARTERLY";
   if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(units)) property.frequency = "ANNUAL";

@@ -80,6 +80,18 @@ describe("WhatsApp shopping: reading requests without a model", () => {
     expect(read("apartment to rent in osu for 6 months").property?.maxPriceMinor).toBeUndefined();
   });
 
+  it("never takes a stay written in words for the price unit", () => {
+    expect(read("house to rent in accra for one year").property?.frequency).toBeUndefined();
+    expect(read("flat to rent in osu for a month").property?.frequency).toBeUndefined();
+    expect(read("flat to rent in osu 3000 cedis a year").property?.frequency).toBe("ANNUAL");
+  });
+
+  it("keeps a town after a comma in the area, and ends the area where a filter follows", () => {
+    expect(read("rent in east legon, accra").property?.location).toBe("east legon, accra");
+    expect(read("rent in east legon, under 5000").property).toMatchObject({ location: "east legon", maxPriceMinor: "500000" });
+    expect(read("rent in east legon, ghs 4000 monthly").property).toMatchObject({ location: "east legon", maxPriceMinor: "400000" });
+  });
+
   it.each([["apartment to rent in accra for 2 people", undefined], ["room to rent in osu for 3 adults", undefined], ["flat to rent in osu for 5k", "500000"], ["flat to rent in osu for 3000 a month", "300000"], ["flat to rent in osu for 3000 per month", "300000"], ["house for sale in tema for 1.2 million", "120000000"]])("reads a budget after for only when it is money: %s", (text, minor) => {
     expect(read(text).property?.maxPriceMinor).toBe(minor);
   });
