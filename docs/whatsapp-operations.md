@@ -168,6 +168,7 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 1. Migrations `20261018230000_whatsapp_number_assignments` and `20261019090000_whatsapp_conversation_provenance` applied. The official number assigned through the platform endpoint, and every legacy claim reviewed (section 2).
 2. Templates approved and their env vars set; the health check shows `whatsapp: CONFIGURED`.
 3. From a real phone, send `hi` and get the menu.
+   Then shop: `1`, `rent`, an area with published listings, `2` for details, `view 1`, a name, `tomorrow 2pm`, `confirm`. The lead and viewing request reach the listing team, and `status` shows them (`docs/whatsapp-shopping-audit.md`).
 4. Run `link` with a real SMS code.
 5. Run `register` end to end, then `confirm`. Check that the organisation, properties and pending ownership claim exist.
 6. Run `add provider` to a second real phone, then reply ACCEPT from it.

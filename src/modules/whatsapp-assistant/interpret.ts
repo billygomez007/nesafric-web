@@ -20,22 +20,26 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
     [/\b(apartments?|flats?)\b/, "APARTMENT"], [/\b(townhouses?)\b/, "TOWNHOUSE"], [/\b(houses?|homes?)\b/, "HOUSE"], [/\bland\b/, "LAND"], [/\boffices?\b/, "OFFICE"], [/\bshops?\b/, "SHOP"], [/\bwarehouses?\b/, "WAREHOUSE"], [/\bhotels?\b/, "HOTEL"], [/\bshort stays?\b/, "SHORT_STAY"], [/\bvillas?\b/, "VILLA"],
   ];
   property.category = categories.find(([pattern]) => pattern.test(input))?.[1];
-  const location = input.match(/\b(?:in|near|around|at)\s+(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget)\b|[.!?]|$)/)?.[1]?.trim();
+  // A place starts with a letter: "around 4000" is a budget, not an area.
+  const location = input.match(/\b(?:in|near|around|at)\s+(?![\d₵])(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget|max|maximum|up to|less than|not more than)\b|\s+(?:ghs|ghc|gh₵|₵)|\s+[\d,]+(?:\.\d+)?\s*(?:k|m|million|thousand)?\s*(?:ghs|ghc|gh₵|cedis?)\b|[.,!?]|$)/)?.[1]?.trim();
   if (location) property.location = location;
-  const bedroom = input.match(/\b(\d{1,2}|one|two|three|four|five|six)[ -]?(?:bed(?:room)?s?)\b/);
+  const bedroom = input.match(/\b(\d{1,2}|one|two|three|four|five|six)[ -]?(?:bed(?:room)?s?|br|bd)\b/);
   if (bedroom) {
     const count = ({ one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 } as Record<string, number>)[bedroom[1]] ?? Number(bedroom[1]);
     property.bedroomsMin = count;
     property.bedroomsMax = count;
   }
-  const budget = input.match(/(?:ghs|gh₵|cedis|under|below|budget(?: of)?|around)\s*([\d,]+(?:\.\d{1,2})?)\s*(million|thousand|k|m)?\b/);
+  // Before a number: a currency or a ceiling word. After it: a currency. A count of bedrooms,
+  // bathrooms or plots is never a price ("for 2 bedrooms").
+  const amount = "([\\d,]+(?:\\.\\d{1,2})?)\\s*(million|thousand|k|m)?\\b(?!\\s*-?\\s*(?:bed|br\\b|bd\\b|room|bath|plot|acre|storey|stor(?:y|ey)))";
+  const budget = input.match(new RegExp(`(?:ghs|ghc|gh₵|₵|cedis|under|below|budget(?: of| is)?|around|max(?:imum)?|up to|less than|not more than|for)\\s*${amount}`)) ?? input.match(new RegExp(`${amount}\\s*(?:ghs|ghc|gh₵|cedis|cedi)\\b`));
   if (budget) {
     const units = Number(budget[1].replaceAll(",", "")) * (/^(million|m)$/.test(budget[2] ?? "") ? 1_000_000 : /^(thousand|k)$/.test(budget[2] ?? "") ? 1000 : 1);
-    if (Number.isSafeInteger(Math.round(units * 100))) property.maxPriceMinor = String(Math.round(units * 100));
-    if (/ghs|gh₵|cedis/.test(input)) property.currencyCode = "GHS";
+    if (units > 0 && Number.isSafeInteger(Math.round(units * 100))) property.maxPriceMinor = String(Math.round(units * 100));
+    if (/ghs|ghc|gh₵|₵|cedi/.test(input)) property.currencyCode = "GHS";
   }
   if (/\b(month|monthly)\b/.test(input)) property.frequency = "MONTHLY";
-  if (/\b(year|yearly|annually)\b/.test(input)) property.frequency = "YEARLY";
+  if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(input)) property.frequency = "YEARLY";
   if (/\b(week|weekly)\b/.test(input)) property.frequency = "WEEKLY";
   if (/\b(night|nightly)\b/.test(input)) property.frequency = "PER_NIGHT";
   if (state.workflow === "property_search" && !state.property.location && !location && !Object.values(property).some(Boolean) && input.length >= 2) property.location = input;

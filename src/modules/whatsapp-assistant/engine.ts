@@ -3,6 +3,7 @@ import { AppError } from "@/platform/errors";
 import { assistantStateSchema, initialState, type AssistantState, type Interpretation } from "./schemas";
 import { interpretMessage } from "./interpret";
 import { marketplaceTools, type MarketplaceTools } from "./tools";
+import { formatViewingTime, parseViewingTime } from "./viewing-time";
 
 export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
 
@@ -13,7 +14,7 @@ type Dependencies = { tools: MarketplaceTools; interpret: typeof interpretMessag
 function promptFor(state: AssistantState) {
   if (state.step === "name") return "What name should the agent use for this request?";
   if (state.step === "message") return "What would you like to ask about this property?";
-  if (state.step === "time") return "Send your preferred viewing date and time with its UTC offset, for example 2026-12-20T14:00:00+00:00. Ghana uses +00:00. This requests a one-hour slot; the agent must confirm it.";
+  if (state.step === "time") return "When would you like to view it? Send a date and time in Ghana time, for example tomorrow 2pm, saturday 10:30am or 20/12 14:00. This requests a one-hour slot; the agent must confirm it.";
   if (state.step === "confirm") return "Reply confirm to submit this request, or cancel to discard it.";
   if (state.workflow === "property_search") return !state.property.listingType ? "Are you looking to rent or buy?" : !state.property.location ? "Which area should I search?" : "Send search to see matching properties, or tell me which filters to change.";
   if (state.workflow === "service_search") return !state.service.q ? "What service do you need?" : !state.service.city ? "Which area do you need the service in?" : "Send search to see providers, or tell me what to change.";
@@ -47,8 +48,9 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
       if (body.length > 5000) return reply("Please shorten your inquiry to 5,000 characters.");
       state.message = body; state.step = "confirm";
     } else if (state.step === "time") {
-      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(body) || !Number.isFinite(Date.parse(body)) || Date.parse(body) <= Date.now()) return reply("Please send a valid future date and time including its UTC offset.\n" + promptFor(state));
-      state.startsAt = new Date(body).toISOString(); state.step = "confirm";
+      const startsAt = parseViewingTime(body);
+      if (!startsAt) return reply("I could not read that as a future date and time within the next year.\n" + promptFor(state));
+      state.startsAt = startsAt.toISOString(); state.step = "confirm";
     } else if (state.step === "confirm") {
       if (command !== "confirm") return reply("Nothing has been submitted. Reply confirm to submit, or cancel to start again.");
       try {
@@ -61,16 +63,17 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
       }
     }
     const details = await dependencies.tools.propertyDetails(state.selectedListingId!);
-    return reply(`Review your ${state.workflow === "viewing" ? "viewing request" : "inquiry"}:\nProperty: ${details.title}\nName: ${state.name}\nPhone shared with the listing team: +${input.phone.replace(/^\+/, "")}\n${state.startsAt ? `Preferred one-hour slot starts: ${state.startsAt}` : `Question: ${state.message}`}\n\nReply confirm to submit and share these details, or cancel.`);
+    return reply(`Review your ${state.workflow === "viewing" ? "viewing request" : "inquiry"}:\nProperty: ${details.title}\nName: ${state.name}\nPhone shared with the listing team: +${input.phone.replace(/^\+/, "")}\n${state.startsAt ? `Preferred one-hour slot starts: ${formatViewingTime(state.startsAt)}` : `Question: ${state.message}`}\n\nReply confirm to submit and share these details, or cancel.`);
   }
 
-  const selection = command.match(/^(details|inquire|view)\s+([1-3])$/);
+  // A bare number picks a result to see its details, once there are results to pick from.
+  const selection = command.match(/^(details|inquire|view)\s+([1-3])$/) ?? (state.results.length ? command.match(/^()([1-3])$/) : null);
   if (selection && state.workflow === "property_search") {
     const id = state.results[Number(selection[2]) - 1];
     if (!id) return reply("Choose a property number from the most recent results.");
     try {
       const details = await dependencies.tools.propertyDetails(id);
-      if (selection[1] === "details") return reply(`${details.title}\n${details.description}\n${details.url}\n\nOnly the published details above are known. Reply inquire ${selection[2]} to ask the listing team, or view ${selection[2]} to request a viewing.`);
+      if (selection[1] === "details" || selection[1] === "") return reply(`${details.title}\n${details.description}\n${details.url}\n\nOnly the published details above are known. Reply inquire ${selection[2]} to ask the listing team, or view ${selection[2]} to request a viewing.`);
       if (!details.enquiryEnabled) return reply(`This property does not accept this request here. See its available actions: ${details.url}`);
       state.selectedListingId = id; state.workflow = selection[1] === "view" ? "viewing" : "inquiry"; state.step = "name";
       return reply(promptFor(state));
@@ -79,6 +82,7 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
       throw error;
     }
   }
+  if (selection && state.workflow === "service_search") return reply(!state.results[Number(selection[2]) - 1] ? "Choose a provider number from the most recent results." : `Open provider ${selection[2]}'s profile link above to contact them or request a quote securely. Reply more for other providers, or cancel to start another search.`);
   if (command === "more" && (state.workflow === "property_search" || state.workflow === "service_search")) {
     if (!state.hasMore) return reply("There are no more results for these filters. Change the area or budget, or cancel to start another search.");
     state.page += 1;
