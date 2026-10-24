@@ -1,11 +1,11 @@
-import { absoluteUrl } from "@/platform/brand";
+import { absoluteUrl, BRAND, whatsappChatUrl } from "@/platform/brand";
 import { AppError } from "@/platform/errors";
 import { assistantStateSchema, initialState, type AssistantState, type Interpretation } from "./schemas";
 import { interpretMessage } from "./interpret";
 import { marketplaceTools, type MarketplaceTools } from "./tools";
 import { formatViewingTime, parseViewingTime } from "./viewing-time";
 
-export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
+export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate agency or company\n4. Register as an agent\n5. List a property for rent or sale\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Use menu, resume or cancel at any time.`;
 
 type Result = { state: AssistantState; reply: string; handoff?: boolean };
 export type EngineInput = { state: unknown; body: string; kind: string; phone: string; conversationId: string; messageId: string; defaultCountry: string; defaultCurrency: string };
@@ -89,7 +89,7 @@ export async function advanceConversation(input: EngineInput, dependencies: Depe
   } else {
     const interpretation: Interpretation = await dependencies.interpret(body, state);
     if (interpretation.intent === "support") return { ...reply("Your conversation has been added to the support queue. Reply menu to go back to the assistant."), handoff: true };
-    if (interpretation.intent === "registration" || interpretation.intent === "listing") return reply(`Continue securely in your NesAfric account: ${absoluteUrl(interpretation.intent === "registration" ? "/onboarding" : "/pro")}\nWhatsApp business onboarding and listing editing are not enabled yet. Your WhatsApp number alone cannot grant access to a business or its listings. Reply support if you need help.`);
+    if (interpretation.intent === "registration" || interpretation.intent === "listing") return reply(`${interpretation.intent === "registration" ? "Register your agency, agent profile or service business" : "List your property"} on the official NesAfric WhatsApp number, ${BRAND.contact.whatsappDisplay}: ${whatsappChatUrl(interpretation.intent === "registration" ? "Register my business" : "List a property")}\nOr continue on the website: ${absoluteUrl(interpretation.intent === "registration" ? "/onboarding" : "/pro")}`);
     if (interpretation.intent === "status") return reply(state.lastRequest ? await dependencies.tools.customerRequestStatus(state.lastRequest, input.phone) : `There is no submitted customer request in this conversation. For your business applications and listings, sign in: ${absoluteUrl("/pro")}`);
     if (interpretation.intent === "unknown") return reply("Would you like to find a property, find a service provider, or talk to support? Please choose one task first.");
     if (state.workflow !== "idle" && state.workflow !== interpretation.intent) { state.paused = true; return reply("You have a saved search. Reply resume to continue it, or cancel and send your new request again."); }

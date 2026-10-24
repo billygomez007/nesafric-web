@@ -23,9 +23,63 @@ export const interpretationSchema = z.object({
 }).strict();
 export type Interpretation = z.infer<typeof interpretationSchema>;
 
+const choice = z.object({ id: z.string().uuid(), name: z.string().max(200) });
+export const BUSINESS_STEPS = [
+  "account_name", "account_code",
+  "agency_type", "agency_name", "agency_areas", "agency_description", "agency_email", "agency_review", "agency_logo",
+  "listing_professional", "listing_purpose", "listing_category", "listing_title", "listing_location", "listing_price", "listing_frequency",
+  "listing_bedrooms", "listing_bathrooms", "listing_description", "listing_authority", "listing_review", "listing_photos", "listing_evidence",
+  "service_type", "service_company", "service_name", "service_categories", "service_areas", "service_description", "service_review", "service_logo",
+  "logo_target", "logo_upload",
+] as const;
+export const businessStateSchema = z.object({
+  kind: z.enum(["agency", "listing", "service", "logo"]),
+  step: z.enum(BUSINESS_STEPS),
+  /** Account creation on this number: the challenge reference only, never the code. */
+  account: z.object({ displayName: z.string().max(100).optional(), challengeId: z.string().uuid().optional(), failures: z.number().int().min(0).max(10).default(0) }).default({ failures: 0 }),
+  professionalType: z.enum(["INDIVIDUAL_AGENT", "BROKER", "BROKERAGE", "REAL_ESTATE_COMPANY", "DEVELOPER", "PROPERTY_MARKETING_COMPANY", "OTHER"]).optional(),
+  displayName: z.string().max(200).optional(),
+  areas: z.array(z.string().max(120)).max(20).default([]),
+  description: z.string().max(5000).optional(),
+  email: z.string().max(320).optional(),
+  /** Choices shown at the current step, in the order shown. */
+  choices: z.array(choice).max(60).default([]),
+  professionalId: z.string().uuid().optional(),
+  listing: z.object({
+    purpose: z.enum(["RENT", "SALE"]).optional(),
+    category: z.string().max(40).optional(),
+    title: z.string().max(200).optional(),
+    location: z.string().max(250).optional(),
+    priceMinor: z.string().regex(/^\d{1,16}$/).optional(),
+    frequency: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL", "DAILY"]).optional(),
+    bedrooms: z.number().int().min(0).max(100).optional(),
+    bathrooms: z.number().min(0).max(100).optional(),
+    description: z.string().max(10_000).optional(),
+    authority: z.enum(["OWNER_SELF", "PROPERTY_MANAGER", "MANAGING_AGENT", "BROKERAGE_AUTHORIZED", "DEVELOPER", "THIRD_PARTY_AUTHORIZED"]).optional(),
+  }).default({}),
+  providerType: z.enum(["INDIVIDUAL", "COMPANY"]).optional(),
+  companyOrganisationId: z.string().uuid().optional(),
+  companyName: z.string().max(160).optional(),
+  categories: z.array(choice).max(10).default([]),
+  /** Whose logo the logo step changes. */
+  target: z.object({ kind: z.enum(["professional", "provider"]), id: z.string().uuid(), name: z.string().max(200) }).optional(),
+  /** What has been created, so a confirm that partly failed resumes without duplicates. */
+  committed: z.object({
+    professionalId: z.string().uuid().optional(),
+    slug: z.string().max(200).optional(),
+    listingId: z.string().uuid().optional(),
+    organisationId: z.string().uuid().optional(),
+    providerId: z.string().uuid().optional(),
+    profileListed: z.boolean().default(false),
+    /** WhatsApp media ids already stored, so a redelivered photo is not stored twice. */
+    media: z.array(z.string().max(100)).max(20).default([]),
+  }).default({ profileListed: false, media: [] }),
+}).strict();
+export type BusinessState = z.infer<typeof businessStateSchema>;
+
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -100,6 +154,8 @@ export const assistantStateSchema = z.object({
     classification: z.object({ category: z.string().max(40), priority: z.enum(["EMERGENCY", "URGENT", "NORMAL", "LOW"]), safetyHazard: z.boolean(), title: z.string().max(120), source: z.enum(["model", "rules"]) }).optional(),
     duplicate: z.object({ id: z.string().uuid(), referenceNumber: z.string().max(40), title: z.string().max(200) }).optional(),
   }).optional(),
+  /** Business sign-up and listing on WhatsApp (src/modules/whatsapp-assistant/business.ts). */
+  business: businessStateSchema.optional(),
   /** Account linking in progress. Holds the challenge reference only, never the code. */
   link: z.object({
     channel: z.enum(["sms", "email"]),

@@ -1,4 +1,6 @@
-# WhatsApp shopping assistant: audit (2026-10-24)
+# WhatsApp assistant: audit (2026-10-24)
+
+Official number: **0502820002 (+233 50 282 0002)**.
 
 The shopping assistant is the customer side of the official NesAfric WhatsApp number: finding a property or a service provider, asking about a listing and requesting a viewing. Code: `src/modules/whatsapp-assistant/engine.ts` (conversation), `interpret.ts` (reading a request), `tools.ts` (marketplace search and submissions), `viewing-time.ts` (viewing dates). Deployment, number assignment and the go-live checklist are in `docs/whatsapp-operations.md`.
 
@@ -13,6 +15,9 @@ The shopping assistant is the customer side of the official NesAfric WhatsApp nu
 | Reading free text | Done. Deterministic rules always; an AI provider (`AI_PROVIDER`) can fill search fields only, with a 10 s timeout and the rules as fallback. It never chooses records, identities or permissions. |
 | Menu, `resume`, `cancel`, `support` hand-off | Done. |
 | Number assignment, quarantine, provenance, rate limit (20 per minute per conversation) | Done (see the runbook). |
+| Agent, agency and company sign-up with logo (menu 3 and 4) | **Added.** See `docs/whatsapp-operations.md` section 2a. |
+| Property listing with photos, sent for review (menu 5) | **Added.** |
+| Service business sign-up, listed on the service marketplace, with logo (menu 6) | **Added.** |
 | Real Meta delivery end to end | **Not verified.** Every test uses a recording adapter. |
 
 ## Fixed in this change

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand-logo";
-import { BRAND } from "@/platform/brand";
+import { BRAND, whatsappChatUrl } from "@/platform/brand";
 
 const COLUMNS = [
   {
@@ -66,6 +66,11 @@ export function SiteFooter() {
               <p>
                 <a className="transition hover:text-gold-soft" href={`tel:${BRAND.contact.phoneTel}`}>
                   {BRAND.contact.phoneDisplay}
+                </a>
+              </p>
+              <p>
+                <a className="transition hover:text-gold-soft" href={whatsappChatUrl("Hi NesAfric")} target="_blank" rel="noopener noreferrer">
+                  WhatsApp {BRAND.contact.whatsappDisplay}
                 </a>
               </p>
               <p className="pt-1 text-xs leading-5 text-white/55">{BRAND.contact.address}</p>

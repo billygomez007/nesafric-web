@@ -13,12 +13,13 @@ import { advanceReport } from "./maintenance/report";
 import { advanceRules, isRuleCommand } from "./rules";
 import { advanceJobs } from "./jobs";
 import { answerLandlord } from "./landlord";
+import { advanceBusiness, businessTrigger, startBusiness } from "./business";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown> };
 
-export const OFFICIAL_MENU_SUFFIX = "\n\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
-const START_ONBOARDING = /^(4|register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
+export const OFFICIAL_MENU_SUFFIX = "\n\nAgents, agencies and service businesses: choose 3, 4, 5 or 6 to register, upload your logo and list right here on WhatsApp.\nLandlords and property managers: reply register to set up and manage your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
+const START_ONBOARDING = /^(register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
 const MAX_CODE_FAILURES = 5;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,63}$/;
 
@@ -38,8 +39,10 @@ type Dependencies = {
   rules: typeof advanceRules;
   jobs: typeof advanceJobs;
   landlord: typeof answerLandlord;
+  startBusiness: typeof startBusiness;
+  business: typeof advanceBusiness;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord, startBusiness, business: advanceBusiness };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -62,6 +65,11 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
     const result = await dependencies.onboarding({ phone: input.phone, messageId: input.messageId, body: input.body, kind: input.kind, organisationId: input.organisationId, defaultCountry: input.defaultCountry, defaultCurrency: input.defaultCurrency });
     return { state: result.exit ? reset() : { ...reset(), workflow: "onboarding" }, reply: result.reply, redactInbound: result.redactInbound };
   }
+
+  // Agents, agencies and service businesses: sign-up, logo and listings, confirmed before saving.
+  if (state.workflow === "business") return dependencies.business(input, state, reset);
+  const trigger = input.kind === "text" && ["idle", "property_search", "service_search"].includes(state.workflow) ? businessTrigger(command, state) : null;
+  if (trigger) return dependencies.startBusiness(trigger, input, reset);
 
   // Work orders: provider answers and progress, landlord quote decisions, tenant confirmation.
   if (state.workflow === "idle" || state.workflow === "job") {
