@@ -31,7 +31,7 @@ import { businessStateSchema, type AssistantState, type BusinessState } from "./
 
 export type BusinessKind = BusinessState["kind"];
 export type BusinessInput = { phone: string; messageId: string; body: string; kind: string; organisationId: string; defaultCountry: string; defaultCurrency: string; media?: { id: string; mimeType?: string } };
-export type BusinessResult = { state: AssistantState; reply: string; redactInbound?: boolean };
+export type BusinessResult = { state: AssistantState; reply: string; redactInbound?: boolean; handoff?: boolean };
 type File = { fileName: string; contentType: string; dataBase64: string };
 type Linked = Awaited<ReturnType<typeof linkedWhatsAppUser>>;
 
@@ -382,6 +382,10 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
   const redactInbound = business.step === "account_code";
   const say = (prefix = "", extra: Partial<BusinessResult> = {}) => reply(state, business, input, prefix, extra);
 
+  // Help is always one word away. "8" stays an answer here: several steps are numbered lists.
+  if (/^(support|human|talk to support|help me)$/.test(command)) {
+    return { state: { ...state, business }, reply: "Your conversation has been added to the support queue. A team member will reply here; no response time is guaranteed. Reply menu to stop waiting and go back to the assistant.", handoff: true, redactInbound };
+  }
   if (command === "cancel" || command === "menu" || command === "stop") {
     const kept = business.committed.listingId ? " Your draft listing is kept; finish it on the website or reply 5 to list another." : business.committed.professionalId || business.committed.providerId ? " Your profile is saved." : " Nothing was saved.";
     return { state: reset(), reply: `Stopped.${kept} Reply menu for other options.`, redactInbound };

@@ -344,3 +344,15 @@ describe("WhatsApp business: image types", () => {
     expect(dependencies.uploadListingPhoto).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("WhatsApp business: support", () => {
+  it("hands the chat to support from any step, keeping the answers, without taking the word as an answer", async () => {
+    const dependencies = deps({ linkedUser: vi.fn(async () => null) });
+    const started = await startBusiness(businessTrigger("3", initialState())!, input("3"), reset, dependencies);
+    const result = await advanceBusiness(input("support"), started.state, reset, dependencies);
+    expect(result.handoff).toBe(true);
+    expect(result.reply).toContain("support queue");
+    expect(result.state.business?.step).toBe("account_name");
+    expect(dependencies.requestOtp).not.toHaveBeenCalled();
+  });
+});
