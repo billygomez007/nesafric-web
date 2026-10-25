@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 
 const ENV_KEYS = [
-  "STORAGE_PROVIDER", "VERCEL", "VERCEL_ENV",
+  "STORAGE_PROVIDER", "VERCEL", "VERCEL_ENV", "K_SERVICE",
   "STORAGE_S3_BUCKET", "STORAGE_S3_ACCESS_KEY_ID", "STORAGE_S3_SECRET_ACCESS_KEY",
   "STORAGE_S3_PRIVATE_BUCKET", "STORAGE_S3_PUBLIC_BUCKET",
   "STORAGE_S3_PRIVATE_ACCESS_KEY_ID", "STORAGE_S3_PRIVATE_SECRET_ACCESS_KEY",
@@ -44,6 +44,12 @@ describe("getObjectStorageAdapter cloud-durability guard (registry-level)", () =
   it("throws STORAGE_NOT_CONFIGURED on Vercel with neither bucket configured, instead of silently falling back", async () => {
     process.env.VERCEL = "1";
     process.env.VERCEL_ENV = "preview";
+    const { getObjectStorageAdapter } = await import("@/platform/storage/registry");
+    expect(() => getObjectStorageAdapter()).toThrowError(/durable storage is not yet configured/i);
+  });
+
+  it("throws STORAGE_NOT_CONFIGURED on Google Cloud Run with no durable storage configured", async () => {
+    process.env.K_SERVICE = "nesafric-web";
     const { getObjectStorageAdapter } = await import("@/platform/storage/registry");
     expect(() => getObjectStorageAdapter()).toThrowError(/durable storage is not yet configured/i);
   });

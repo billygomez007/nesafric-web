@@ -8,5 +8,8 @@
  * S3 adapter (legacy single-bucket fallback eligibility).
  */
 export function isCloudRuntime() {
+  // Google Cloud Run sets K_SERVICE on every revision; its container disk is in-memory and lost when
+  // the instance stops, so it is a cloud runtime for the same reason Vercel is.
+  if (process.env.K_SERVICE) return true;
   return process.env.VERCEL === "1" && process.env.VERCEL_ENV !== "development";
 }

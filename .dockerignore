@@ -1,0 +1,15 @@
+.git
+.github
+.next
+node_modules
+mobile
+coverage
+design
+brand
+docs
+tests
+*.md
+!README.md
+.env*
+.vercel
+*.tsbuildinfo

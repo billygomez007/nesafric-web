@@ -138,11 +138,11 @@ Numbers that organisations saved in their channel settings before this change ar
 
 ### Worker
 
-On Vercel, each accepted webhook also processes its own reply path right after answering Meta (`src/platform/jobs/fast-path.ts`; turn off with `WHATSAPP_INLINE_PROCESSING=false`), so replies do not wait for the cron. The `/api/jobs/run` endpoint still runs everything else (dispatch timeouts, digests, retries), so it must be called every few minutes:
+Each accepted webhook also processes its own reply path right after answering Meta (`src/platform/jobs/fast-path.ts`; turn off with `WHATSAPP_INLINE_PROCESSING=false`), so replies do not wait for the scheduler. On Cloud Run this needs CPU after the response, which the service has (`--no-cpu-throttling`, see docs/cloud-run-deployment.md). The `/api/jobs/run` endpoint still runs everything else (dispatch timeouts, digests, retries), so it must be called every few minutes:
 
-- `vercel.json` runs it once a day at 03:00 UTC, the most often Vercel Hobby allows (it refuses deployments with a more frequent cron). It authenticates with `CRON_SECRET`.
-- An external scheduler calls it every 1 to 5 minutes: `POST https://nesafric.com/api/jobs/run` with header `x-jobs-run-secret: <JOBS_RUN_SECRET>`. Use cron-job.org (free) or Google Cloud Scheduler (one job is free). Do not use a scheduled GitHub Actions workflow: the repository is private, each run is billed as at least one Actions minute, and a 5-minute schedule uses up the free plan's 2,000 minutes a month within a week, which stops CI as well.
-- On Vercel Pro, the `vercel.json` schedule can go back to `*/5 * * * *` and the workflow can be removed.
+- On Google Cloud Run, `deploy/cloud-run/setup.sh` creates the Cloud Scheduler job `nesafric-jobs-run`: `POST <service>/api/jobs/run` every 5 minutes with header `x-jobs-run-secret: <JOBS_RUN_SECRET>`.
+- On Vercel (being retired), `vercel.json` runs it once a day at 03:00 UTC, the most Vercel Hobby allows, authenticated with `CRON_SECRET`.
+- Do not use a scheduled GitHub Actions workflow: the repository is private, each run is billed as at least one Actions minute, and a 5-minute schedule uses up the free plan's 2,000 minutes a month within a week, which stops CI as well.
 
 Run `npm run worker` continuously, or call `POST /api/jobs/run` at least every minute. Either one:
 
