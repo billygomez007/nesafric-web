@@ -356,6 +356,18 @@ describe("WhatsApp business: support", () => {
     expect(dependencies.requestOtp).not.toHaveBeenCalled();
   });
 
+  it.each(["real person", "complaint", "human"])("hands off for %s, as the main assistant does", async (word) => {
+    const dependencies = deps({ linkedUser: vi.fn(async () => null) });
+    const started = await startBusiness(businessTrigger("3", initialState())!, input("3"), reset, dependencies);
+    expect((await advanceBusiness(input(word), started.state, reset, dependencies)).handoff).toBe(true);
+  });
+
+  it("asks again for an agency name its organisation could not hold", async () => {
+    const { replies, state } = await run(["1", "x".repeat(161)], deps(), "3");
+    expect(replies.at(-1)).toContain("between 2 and 160 characters");
+    expect(state.business?.step).toBe("agency_name");
+  });
+
   it("repeats the question for help instead of taking it as an answer", async () => {
     const dependencies = deps({ linkedUser: vi.fn(async () => null) });
     const started = await startBusiness(businessTrigger("3", initialState())!, input("3"), reset, dependencies);

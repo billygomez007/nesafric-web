@@ -383,7 +383,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
   const say = (prefix = "", extra: Partial<BusinessResult> = {}) => reply(state, business, input, prefix, extra);
 
   // Help is always one word away. "8" stays an answer here: several steps are numbered lists.
-  if (/^(support|human|talk to support|help me)$/.test(command)) {
+  // The main assistant's support words, as whole messages only: "we support landlords" is a description.
+  if (/^(support|human|real person|a real person|complaint|talk to support|talk to a person|help me)$/.test(command)) {
     return { state: { ...state, business }, reply: "Your conversation has been added to the support queue. A team member will reply here; no response time is guaranteed. Reply menu to stop waiting and go back to the assistant.", handoff: true, redactInbound };
   }
   // "help", as in the main menu, never becomes an answer: it repeats the question and the way out.
@@ -455,7 +456,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     }
     case "agency_name": {
       const name = command === "me" ? linked.user.displayName : body;
-      if (name.length < 2 || name.length > 200) return say("Please send a name between 2 and 200 characters.");
+      // The profile's own organisation takes the same name, and holds 160 characters.
+      if (name.length < 2 || name.length > 160) return say("Please send a name between 2 and 160 characters.");
       business.displayName = name;
       business.step = "agency_areas";
       return say();
