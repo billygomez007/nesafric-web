@@ -100,7 +100,7 @@ describe("search replies send property cards in order", () => {
     const tools = { searchProperties: vi.fn(async () => ({ ids: listings.map((item) => item.id), hasMore: false, listings, total: 2, cards: [] })), propertyDetails: vi.fn(), searchServices: vi.fn(), submitCustomerRequest: vi.fn(), customerRequestStatus: vi.fn() };
     const interpret = vi.fn(async () => ({ intent: "property_search", property: { listingType: "RENT", location: "dzorwulu" } }));
     const result = await advanceConversation(input("rent in dzorwulu"), { tools: tools as never, interpret: interpret as never });
-    expect(result.reply).toContain("Filters: RENT, dzorwulu");
+    expect(result.reply).toContain("Filters: To rent, in dzorwulu.");
     expect(result.extras).toHaveLength(3);
     expect(result.extras![0].interactive).toMatchObject({ header: { type: "image" }, footer: "Property 1 of 2" });
     expect(result.extras![1].interactive).toMatchObject({ footer: "Property 2 of 2" });

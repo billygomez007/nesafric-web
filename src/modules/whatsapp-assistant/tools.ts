@@ -117,5 +117,11 @@ export async function searchAgents(area: string, page: number) {
   };
 }
 
-export const marketplaceTools = { searchProperties, searchServices, propertyDetails, submitCustomerRequest, customerRequestStatus };
+/** Property types with published, verified listings for rent or for sale, and how many each. */
+export async function propertyTypes(listingType: "RENT" | "SALE") {
+  const rows = await db.listing.groupBy({ by: ["category"], where: { ...PUBLIC_LISTING_WHERE, archivedAt: null, listingType }, _count: { _all: true } });
+  return rows.map((row) => ({ category: row.category, count: row._count._all }));
+}
+
+export const marketplaceTools = { propertyTypes, searchProperties, searchServices, propertyDetails, submitCustomerRequest, customerRequestStatus };
 export type MarketplaceTools = typeof marketplaceTools;

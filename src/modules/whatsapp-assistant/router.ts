@@ -71,7 +71,9 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   // with "details 2"); an option's words or list tap count when nothing else is under way.
   const searching = ["idle", "property_search", "service_search", "agent_search"].includes(state.workflow);
   if (input.kind === "text" && (searching || ["inquiry", "viewing"].includes(state.workflow))) {
-    const pick = searching ? OFFICIAL_MENU_COMMANDS[command] ?? (state.workflow === "idle" || state.paused ? OFFICIAL_ALIASES[command] : undefined) : undefined;
+    // During a guided search step a number is its answer (2 bedrooms), not a menu choice.
+    const answering = state.workflow === "property_search" && state.guided && Boolean(state.searchStep) && !state.paused;
+    const pick = searching ? (answering ? undefined : OFFICIAL_MENU_COMMANDS[command]) ?? (state.workflow === "idle" || state.paused ? OFFICIAL_ALIASES[command] : undefined) : undefined;
     const navigation = !pick && ["menu", "cancel"].includes(OFFICIAL_ALIASES[command] ?? "") ? OFFICIAL_ALIASES[command] : undefined;
     if (pick && !["menu", "cancel"].includes(pick)) state = reset();
     const target = pick ?? navigation;

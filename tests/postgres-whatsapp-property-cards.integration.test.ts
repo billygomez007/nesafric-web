@@ -78,9 +78,8 @@ describe("PostgreSQL WhatsApp property cards", () => {
     expect(sent[0].body).toMatch(/^Good (morning|afternoon|evening), Ama! 🏡/);
     expect(sent[0].whatsappInteractive).toMatchObject({ type: "list", button: "Choose an option" });
 
-    await say("rent", adapters);
     sent.length = 0;
-    await say("Dzorwulu", adapters);
+    await say("rent in Dzorwulu", adapters);
     expect(sent.map((request) => request.whatsappInteractive?.type ?? "text")).toEqual(["text", "button", "button", "button"]);
     expect(sent[0].body).toContain("Here are matching properties");
     expect(sent[1].whatsappInteractive).toMatchObject({ header: { type: "image", link: `https://storage.googleapis.com/nesafric-public/${listings[0].id}.jpg` }, footer: "Property 1 of 2" });
@@ -97,9 +96,8 @@ describe("PostgreSQL WhatsApp property cards", () => {
   it("retries a sequence after a transient failure without resending what already went out", async () => {
     let failSecond = true;
     const { sent, adapters } = recordingAdapters((request) => request.whatsappInteractive?.footer === "Property 2 of 2" && failSecond);
-    await say("rent", adapters);
     sent.length = 0;
-    await say("Dzorwulu", adapters);
+    await say("rent in Dzorwulu", adapters);
     expect(sent.map((request) => request.whatsappInteractive?.footer ?? request.body.slice(0, 7))).toEqual(["Filters", "Property 1 of 2"]);
     const job = await db.backgroundJob.findFirstOrThrow({ where: { type: "conversation-message-sequence" } });
     expect(job.status).toBe("FAILED");
