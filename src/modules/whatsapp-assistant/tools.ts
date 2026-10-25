@@ -19,6 +19,8 @@ export async function searchProperties(filters: AssistantState["property"], page
   const result = await searchPublicListings({ ...filters, page, pageSize: 3 });
   return {
     ids: result.items.map((item) => item.id), hasMore: page < result.pagination.totalPages,
+    /** Full public listings, for property cards with the cover photo. */
+    listings: result.items, total: result.pagination.total,
     cards: result.items.map((item, index) => [
       `${index + 1}. ${clip(item.title)}`,
       `${money(item.pricing.rentAmountMinor ?? item.pricing.askingAmountMinor, item.pricing.currencyCode)}${item.pricing.frequency ? ` / ${item.pricing.frequency.toLowerCase().replaceAll("_", " ")}` : ""}`,
@@ -50,7 +52,7 @@ export async function searchServices(filters: AssistantState["service"], page: n
 
 export async function propertyDetails(id: string) {
   const { listing } = await getPublicListing(id);
-  return { title: listing.title, description: clip(listing.description, 1500), enquiryEnabled: listing.contact.enquiryEnabled && !listing.bookable, url: absoluteUrl(`/marketplace/properties/${listing.id}`) };
+  return { title: listing.title, description: clip(listing.description, 1500), enquiryEnabled: listing.contact.enquiryEnabled && !listing.bookable, url: absoluteUrl(`/marketplace/properties/${listing.id}`), listing };
 }
 
 /** Reuse domain submission keys so a crash after domain commit cannot duplicate the action. */

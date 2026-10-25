@@ -5,6 +5,7 @@ import { assistantStateSchema, initialState, type AssistantState, type Interpret
 import { interpretMessage } from "./interpret";
 import { marketplaceTools, type MarketplaceTools } from "./tools";
 import { formatViewingTime, parseViewingTime } from "./viewing-time";
+import { propertyCard, propertyDetailsMessage, resultsNavigation, type PropertyMessage } from "./property-cards";
 
 export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
 
@@ -46,7 +47,7 @@ export function mainMenuList(reply: string, official = false): WhatsAppInteracti
 const confirmButtons = (text: string) => replyButtons(text, [{ id: "confirm", title: "Confirm" }, { id: "cancel", title: "Cancel" }]);
 const resumeButtons = (text: string) => replyButtons(text, [{ id: "resume", title: "Resume" }, { id: "cancel", title: "Cancel" }]);
 
-type Result = { state: AssistantState; reply: string; handoff?: boolean; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
+type Result = { state: AssistantState; reply: string; handoff?: boolean; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive; /** Messages sent after the reply, in order (property cards). */ extras?: PropertyMessage[] };
 export type EngineInput = { state: unknown; body: string; kind: string; phone: string; conversationId: string; messageId: string; defaultCountry: string; defaultCurrency: string };
 type Dependencies = { tools: MarketplaceTools; interpret: typeof interpretMessage };
 
@@ -112,14 +113,19 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
     return { ...reply(review), interactive: confirmButtons(review) };
   }
 
-  const selection = command.match(/^(details|inquire|view)\s+([1-3])$/);
-  if (selection && state.workflow === "property_search") {
-    const id = state.results[Number(selection[2]) - 1];
+  // A number picks from the latest results; a card's button carries the listing id itself.
+  const selection = command.match(/^(details|inquire|view)\s+([1-3]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
+  if (selection && (state.workflow === "property_search" || (selection[2].length > 1 && ["idle", "inquiry", "viewing"].includes(state.workflow)))) {
+    const id = selection[2].length > 1 ? selection[2] : state.results[Number(selection[2]) - 1];
     if (!id) return reply("Choose a property number from the most recent results.");
     try {
       const details = await dependencies.tools.propertyDetails(id);
-      if (selection[1] === "details" || selection[1] === "") return reply(`${details.title}\n${details.description}\n${details.url}\n\nOnly the published details above are known. Reply inquire ${selection[2]} to ask the listing team, or view ${selection[2]} to request a viewing.`);
+      if (selection[1] === "details" || selection[1] === "") {
+        if (details.listing) { const message = propertyDetailsMessage(details.listing); return { state, reply: message.body, interactive: message.interactive }; }
+        return reply(`${details.title}\n${details.description}\n${details.url}\n\nOnly the published details above are known. Reply inquire ${selection[2]} to ask the listing team, or view ${selection[2]} to request a viewing.`);
+      }
       if (!details.enquiryEnabled) return reply(`This property does not accept this request here. See its available actions: ${details.url}`);
+      if (state.workflow !== "property_search" && state.workflow !== "idle") { state.message = undefined; state.startsAt = undefined; }
       state.selectedListingId = id; state.workflow = selection[1] === "view" ? "viewing" : "inquiry"; state.step = "name";
       return reply(promptFor(state));
     } catch (error) {
@@ -148,7 +154,14 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
     const found = await dependencies.tools.searchProperties(state.property, state.page);
     state.results = found.ids; state.hasMore = found.hasMore;
     const filters = `Filters: ${state.property.listingType}, ${state.property.location}${state.property.category ? `, ${state.property.category}` : ""}${state.property.maxPriceMinor ? `, maximum ${state.property.currencyCode} ${Number(state.property.maxPriceMinor) / 100}${state.property.frequency ? ` ${state.property.frequency}` : ""}` : ""}${state.property.bedroomsMin !== undefined ? `, ${state.property.bedroomsMin} bedrooms` : ""}.`;
-    return reply(found.ids.length ? `${filters}\n\n${found.cards.join("\n\n")}\n\nReply details 1, inquire 1 or view 1 for a result.${found.hasMore ? " Reply more for the next page." : ""}` : `${filters}\nNo published, available properties match. You can change the area or budget. I have not relaxed your filters.`);
+    if (!found.ids.length) return reply(`${filters}\nNo published, available properties match. You can change the area or budget. I have not relaxed your filters.`);
+    // Cards with the cover photo when the search returns full listings; the text list otherwise.
+    if (found.listings?.length && found.total) {
+      const from = (state.page - 1) * 3 + 1;
+      const extras = [...found.listings.map((listing, index) => propertyCard(listing, from + index, found.total!)), resultsNavigation({ from, to: from + found.listings.length - 1, total: found.total }, found.hasMore)];
+      return { state, reply: `${filters}\nHere ${found.total === 1 ? "is the matching property" : "are matching properties"}:`, extras };
+    }
+    return reply(`${filters}\n\n${found.cards.join("\n\n")}\n\nReply details 1, inquire 1 or view 1 for a result.${found.hasMore ? " Reply more for the next page." : ""}`);
   }
   if (!state.service.q || !state.service.city) return reply(promptFor(state));
   const found = await dependencies.tools.searchServices(state.service, state.page);

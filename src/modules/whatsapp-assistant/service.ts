@@ -13,6 +13,8 @@ import { activeWhatsAppAssignment, lockWhatsAppChannelShared, trustedWhatsAppCon
 import { isOfficialWhatsAppOrganisation, isWhatsAppOptedOut, recordInboundIdentity, setWhatsAppOptOut, whatsappSessionKey } from "./identity";
 
 type ChannelConfig = z.infer<typeof assistantChannelConfigSchema>;
+/** A message sent after the reply, in order (a property card, the paging buttons). */
+export type ExtraReply = { body: string; interactive?: WhatsAppInteractive };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
@@ -104,15 +106,23 @@ type Tx = Prisma.TransactionClient;
  * fallback, so the transcript and staff inbox read the same either way. It is a session message,
  * held to the customer-service window like any free-form reply.
  */
-async function queueReply(tx: Tx, organisationId: string, assignmentId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply", replyMetadata?: Record<string, unknown>, interactive?: WhatsAppInteractive) {
+async function queueReply(tx: Tx, organisationId: string, assignmentId: string, conversationId: string, phone: string, inboundId: string, body: string, suffix = "reply", replyMetadata?: Record<string, unknown>, interactive?: WhatsAppInteractive, extras: ExtraReply[] = []) {
   const externalMessageId = `assistant:${inboundId}:${suffix}`;
-  const metadata = interactive ? { ...replyMetadata, whatsappInteractive: interactive } : replyMetadata;
   const existing = await tx.message.findUnique({ where: { organisationId_channel_externalMessageId: { organisationId, channel: "WHATSAPP", externalMessageId } } });
   if (existing) return;
-  const message = await tx.message.create({ data: { organisationId, conversationId, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body, externalMessageId, ...(metadata ? { metadata: json(metadata), containsSensitiveData: Boolean(metadata.redactAfterSend) } : {}) } });
-  const delivery = await tx.messageDelivery.create({ data: { organisationId, messageId: message.id, channel: "WHATSAPP", recipientAddress: phone, idempotencyKey: `message-delivery:${message.id}`, whatsappAssignmentId: assignmentId } });
-  await tx.backgroundJob.create({ data: { organisationId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${delivery.id}`, payload: { organisationId, deliveryId: delivery.id }, maxAttempts: 5 } });
-  await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(), lastOutboundAt: new Date() } });
+  // Extra messages (property cards) follow the reply in order: one job sends them one by one.
+  const items = [{ body, interactive, metadata: replyMetadata, id: externalMessageId }, ...extras.map((extra, index) => ({ body: extra.body, interactive: extra.interactive, metadata: undefined, id: `${externalMessageId}:${index + 1}` }))];
+  const start = Date.now();
+  const deliveryIds: string[] = [];
+  for (const [index, item] of items.entries()) {
+    const metadata = item.interactive ? { ...item.metadata, whatsappInteractive: item.interactive } : item.metadata;
+    const message = await tx.message.create({ data: { organisationId, conversationId, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body: item.body, externalMessageId: item.id, createdAt: new Date(start + index), ...(metadata ? { metadata: json(metadata), containsSensitiveData: Boolean(metadata.redactAfterSend) } : {}) } });
+    const delivery = await tx.messageDelivery.create({ data: { organisationId, messageId: message.id, channel: "WHATSAPP", recipientAddress: phone, idempotencyKey: `message-delivery:${message.id}`, whatsappAssignmentId: assignmentId } });
+    deliveryIds.push(delivery.id);
+  }
+  if (deliveryIds.length === 1) await tx.backgroundJob.create({ data: { organisationId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${deliveryIds[0]}`, payload: { organisationId, deliveryId: deliveryIds[0] }, maxAttempts: 5 } });
+  else await tx.backgroundJob.create({ data: { organisationId, type: "conversation-message-sequence", idempotencyKey: `conversation-message-sequence:${deliveryIds[0]}`, payload: { organisationId, deliveryIds }, maxAttempts: 5 } });
+  await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(start + items.length - 1), lastOutboundAt: new Date() } });
 }
 
 /** True when the inbound's assignment is still the organisation's active one (caller holds the shared channel lock). */
@@ -131,7 +141,7 @@ const jobSchema = z.object({ organisationId: z.string().uuid(), conversationId: 
 
 type Outcome =
   | { kind: "skip" }
-  | { kind: "reply"; state: unknown; reply: string; status: ConversationStatus; handoff: boolean; redactInbound: boolean; optOut?: boolean; workflow: string; step: string; replyMetadata?: Record<string, unknown>; interactive?: WhatsAppInteractive };
+  | { kind: "reply"; state: unknown; reply: string; status: ConversationStatus; handoff: boolean; redactInbound: boolean; optOut?: boolean; workflow: string; step: string; replyMetadata?: Record<string, unknown>; interactive?: WhatsAppInteractive; extras?: ExtraReply[] };
 
 const ENDED_STATUSES = ["CLOSED", "RESOLVED"];
 
@@ -171,7 +181,7 @@ async function decide(organisationId: string, conversation: { id: string; status
     ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined, profileName: typeof metadata.profileName === "string" ? metadata.profileName : undefined })
     : await advanceConversation(input);
   if (result.reply.length > 4096) throw new Error("Assistant reply exceeds WhatsApp text limit.");
-  return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step, replyMetadata: "replyMetadata" in result ? result.replyMetadata as Record<string, unknown> | undefined : undefined, interactive: result.interactive };
+  return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step, replyMetadata: "replyMetadata" in result ? result.replyMetadata as Record<string, unknown> | undefined : undefined, interactive: result.interactive, extras: result.extras };
 }
 
 const sameSnapshot = (a: { status: string; assignedMemberId: string | null; assistantState: unknown }, b: typeof a) =>
@@ -246,7 +256,7 @@ export async function processAssistantMessage(payload: Record<string, unknown>) 
           }
           if (outcome.redactInbound) await tx.message.update({ where: { id: message.id }, data: { body: "[verification code removed]", containsSensitiveData: true } });
           if (outcome.optOut !== undefined) await setWhatsAppOptOut(tx, conversation.channelAddress!, outcome.optOut);
-          await queueReply(tx, job.organisationId, stampOf(still.metadata)!, conversation.id, conversation.channelAddress!, message.id, outcome.reply, "reply", outcome.replyMetadata, outcome.interactive);
+          await queueReply(tx, job.organisationId, stampOf(still.metadata)!, conversation.id, conversation.channelAddress!, message.id, outcome.reply, "reply", outcome.replyMetadata, outcome.interactive, outcome.extras);
           await tx.conversation.update({ where: { id: conversation.id }, data: { assistantState: json(outcome.state), status: outcome.status } });
           if (outcome.handoff) await tx.conversationAssignment.create({ data: { organisationId: job.organisationId, conversationId: conversation.id, assigneeType: "UNASSIGNED", reason: "WhatsApp customer requested human support." } });
           await tx.message.update({ where: { id: message.id }, data: { processedAt: new Date() } });

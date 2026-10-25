@@ -20,7 +20,7 @@ import { searchAgents } from "./tools";
 import { COMMERCIAL_PROMPT, commercialChoices, FIND_PROPERTY_PROMPT, findPropertyChoices, greetingLine, MORE_OPTIONS, OFFICIAL_ALIASES, OFFICIAL_MENU_COMMANDS, rentOrBuyButtons, VIEWING_PROMPT, viewingButtons, welcomeReply } from "./welcome";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** The sender's WhatsApp profile name, as Meta sent it (untrusted, display only). */ profileName?: string };
-export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
+export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive; /** Messages sent after the reply, in order (property cards). */ extras?: Array<{ body: string; interactive?: WhatsAppInteractive }> };
 
 const START_ONBOARDING = /^(register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
 const MAX_CODE_FAILURES = 5;
@@ -81,6 +81,8 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
     }
     if (pick === "more options") return { state, reply: MORE_OPTIONS };
     if (pick === "find a property") return { state, reply: FIND_PROPERTY_PROMPT, interactive: findPropertyChoices() };
+    if (command === "new search" && (state.workflow === "property_search" || state.workflow === "idle")) return { state: reset(), reply: FIND_PROPERTY_PROMPT, interactive: findPropertyChoices() };
+    if (command === "change filters" && state.workflow === "property_search") return { state: { ...state, paused: false }, reply: CHANGE_FILTERS_PROMPT };
     if (pick === "commercial") return { state, reply: COMMERCIAL_PROMPT, interactive: commercialChoices() };
     if (pick === "book a viewing") return { state, reply: VIEWING_PROMPT, interactive: viewingButtons() };
     if (pick === "find an agent") return { state: { ...state, workflow: "agent_search", agentArea: undefined, page: 1 }, reply: AGENT_AREA_PROMPT };
@@ -185,6 +187,8 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   const [before, after] = result.reply.split(MAIN_MENU);
   return { ...result, ...welcomeReply(await greeting(), before, after) };
 }
+
+const CHANGE_FILTERS_PROMPT = "Tell me what to change, for example:\n• in East Legon (area)\n• under 5000 a month (budget)\n• 2 bedrooms\n• apartment, house, land or office (type)\nI'll search again with the new filters. Reply new search to start over.";
 
 const AGENT_AREA_PROMPT = "Which area should I search for agents? For example East Legon, Kumasi or Takoradi.\nOnly agents and agencies verified by NesAfric are shown.";
 

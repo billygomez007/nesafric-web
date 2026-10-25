@@ -27,6 +27,8 @@ export const whatsappInteractiveSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("button"),
+    /** An image above the text (a listing's cover photo). Meta fetches it, so it must be public HTTPS. */
+    header: z.object({ type: z.literal("image"), link: z.string().url().max(2000).startsWith("https://") }).optional(),
     body,
     footer: z.string().trim().min(1).max(60).optional(),
     buttons: z.array(z.object({ id, title: z.string().trim().min(1).max(20) })).min(1).max(3),
@@ -68,6 +70,7 @@ export function graphInteractive(interactive: WhatsAppInteractive) {
   }
   return {
     type: "button",
+    ...(interactive.header ? { header: { type: "image", image: { link: interactive.header.link } } } : {}),
     body: { text: interactive.body },
     ...footer,
     action: { buttons: interactive.buttons.map((button) => ({ type: "reply", reply: { id: button.id, title: button.title } })) },
