@@ -103,7 +103,8 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     expect(await say("Block A, Block B")).toContain("Units in Block A");
     expect(await say("2")).toContain("What type");
     expect(await say("apartment")).toContain("Units in Block B");
-    expect(await say("B1, studio\nB2, room, 1")).toContain("Saved Palm Court: 2 buildings, 4 units");
+    // Everyday wording from the 2026-10-19 live test is accepted as typed.
+    expect(await say("B1, 2 bedroom flat\nB2, single room")).toContain("Saved Palm Court: 2 buildings, 4 units");
     await say("yes");
     await say("Sunset Villas");
     await say("Osu");
@@ -136,6 +137,7 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     const palm = await db.property.findFirstOrThrow({ where: { organisationId: organisation.id, name: "Palm Court" }, include: { buildings: { include: { units: true }, orderBy: { name: "asc" } } } });
     expect(palm.buildings.map((building) => [building.name, building.units.map((unit) => unit.name).sort()])).toEqual([["Block A", ["Block A 1", "Block A 2"]], ["Block B", ["B1", "B2"]]]);
     expect(palm.buildings[0].units.every((unit) => unit.unitType === "apartment")).toBe(true);
+    expect(palm.buildings[1].units.sort((x, y) => x.name.localeCompare(y.name)).map((unit) => [unit.name, unit.unitType, unit.bedrooms])).toEqual([["B1", "apartment", 2], ["B2", "room", null]]);
     expect(await db.unit.count({ where: { property: { name: "Sunset Villas", organisationId: organisation.id }, buildingId: null } })).toBe(1);
 
     const leases = await db.lease.findMany({ where: { organisationId: organisation.id }, include: { unit: true }, orderBy: { referenceNumber: "asc" } });

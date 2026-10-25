@@ -20,24 +20,44 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
     [/\b(apartments?|flats?)\b/, "APARTMENT"], [/\b(townhouses?)\b/, "TOWNHOUSE"], [/\b(houses?|homes?)\b/, "HOUSE"], [/\bland\b/, "LAND"], [/\boffices?\b/, "OFFICE"], [/\bshops?\b/, "SHOP"], [/\bwarehouses?\b/, "WAREHOUSE"], [/\bhotels?\b/, "HOTEL"], [/\bshort stays?\b/, "SHORT_STAY"], [/\bvillas?\b/, "VILLA"],
   ];
   property.category = categories.find(([pattern]) => pattern.test(input))?.[1];
-  const location = input.match(/\b(?:in|near|around|at)\s+(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget)\b|[.!?]|$)/)?.[1]?.trim();
+  // "around 4000" or "in 2 bedrooms" is not an area; "near 37 Military Hospital" is.
+  const location = input.match(/\b(?:in|near|around|at)\s+(?!₵|[\d,.]+\s*(?:k|m|thousand|million)?\s*(?:ghs|ghc|gh₵|cedis?|per\b|a month|a year|monthly|yearly|[.,!?]|$)|\d+\s*-?\s*(?:bed|br\b|bd\b|room|bath))(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget|max|maximum|up to|less than|not more than)\b|\s+(?:ghs|ghc|gh₵|₵)|\s+[\d,]+(?:\.\d+)?\s*(?:k|m|million|thousand)?\s*(?:ghs|ghc|gh₵|cedis?)\b|,\s*(?=ghs|ghc|gh₵|₵|cedis|under|below|max|up to|less than|budget|around|for\b|with\b|to rent|to buy|[\d,.]+\s*(?:k|m|thousand|million)?\s*(?:ghs|ghc|gh₵|cedis?|per\b|a month|a year|monthly|yearly|[.,!?]|$)|\d+\s*-?\s*(?:bed|br\b|bd\b|room|bath))|[.!?]|$)/)?.[1]?.trim();
   if (location) property.location = location;
-  const bedroom = input.match(/\b(\d{1,2}|one|two|three|four|five|six)[ -]?(?:bed(?:room)?s?)\b/);
+  const bedroom = input.match(/\b(\d{1,2}|one|two|three|four|five|six)[ -]?(?:bed(?:room)?s?|br|bd)\b/);
   if (bedroom) {
     const count = ({ one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 } as Record<string, number>)[bedroom[1]] ?? Number(bedroom[1]);
     property.bedroomsMin = count;
     property.bedroomsMax = count;
   }
-  const budget = input.match(/(?:ghs|gh₵|cedis|under|below|budget(?: of)?|around)\s*([\d,]+(?:\.\d{1,2})?)\s*(million|thousand|k|m)?\b/);
+  // Before a number: a currency or a ceiling word. After it: a currency. A count of bedrooms,
+  // bathrooms or plots, or a length of stay, is never a price ("for 2 bedrooms", "for 1 year").
+  const amount = "([\\d,]+(?:\\.\\d{1,2})?)\\s*(million|thousand|k|m)?\\b(?!\\s*-?\\s*(?:bed|br\\b|bd\\b|room|bath|plot|acre|storey|stor(?:y|ey)|years?\\b|yrs?\\b|months?\\b|mos?\\b|weeks?\\b|days?\\b|nights?\\b))";
+  // A bare "for" says nothing about money ("for 2 people", "for 1 year"): after it, a number is a
+  // budget only with a magnitude ("for 5k") or a price unit ("for 3000 a month").
+  const forMoney = input.match(new RegExp(`\\bfor\\s+([\\d,]+(?:\\.\\d{1,2})?)\\s*(?:(million|thousand|k|m)\\b|(?=\\s*(?:a\\s+month|a\\s+year|per\\b|monthly|yearly|annually|p\\.?a\\b|\\/)))`));
+  const budget = input.match(new RegExp(`(?:ghs|ghc|gh₵|₵|cedis|under|below|budget(?: of| is)?|around|max(?:imum)?|up to|less than|not more than)\\s*${amount}`)) ?? input.match(new RegExp(`${amount}\\s*(?:ghs|ghc|gh₵|cedis|cedi)\\b`)) ?? forMoney;
   if (budget) {
     const units = Number(budget[1].replaceAll(",", "")) * (/^(million|m)$/.test(budget[2] ?? "") ? 1_000_000 : /^(thousand|k)$/.test(budget[2] ?? "") ? 1000 : 1);
-    if (Number.isSafeInteger(Math.round(units * 100))) property.maxPriceMinor = String(Math.round(units * 100));
-    if (/ghs|gh₵|cedis/.test(input)) property.currencyCode = "GHS";
+    if (units > 0 && Number.isSafeInteger(Math.round(units * 100))) property.maxPriceMinor = String(Math.round(units * 100));
+    if (/ghs|ghc|gh₵|₵|cedi/.test(input)) property.currencyCode = "GHS";
   }
-  if (/\b(month|monthly)\b/.test(input)) property.frequency = "MONTHLY";
-  if (/\b(year|yearly|annually)\b/.test(input)) property.frequency = "YEARLY";
-  if (/\b(week|weekly)\b/.test(input)) property.frequency = "WEEKLY";
-  if (/\b(night|nightly)\b/.test(input)) property.frequency = "PER_NIGHT";
+  // How the price is quoted, not how long the stay is: "for 1 year" says nothing about the price unit.
+  const units = input
+    // "12 months", "a 12-month lease", "one-year", "for one year": a stay.
+    .replace(/\b(?:for\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*-?\s*(?:years?|yrs?|months?|weeks?|days?|nights?)\b/g, " ")
+    // "for a month", "for a few weeks": a stay too. "3000 a year" (no "for") stays a price unit.
+    .replace(/\bfor\s+(?:a|an|a few|several)\s+(?:years?|months?|weeks?|days?|nights?)\b/g, " ");
+  // A unit narrows the search only when it prices something: with a budget in the same message,
+  // as a "per …" phrase, or as the answer to "per month or per year?" ("daily cleaning" is not).
+  const answeringUnit = state.workflow === "property_search" && Boolean(state.property.maxPriceMinor) && !state.property.frequency;
+  const unitOnly = /^(?:per |a |an )?(?:month|monthly|quarter|quarterly|year|yearly|annually|annum|p\.?a\.?|day|daily|night|nightly)\.?$/.test(units.trim());
+  if (property.maxPriceMinor || answeringUnit || unitOnly || /\bper\s+(?:month|quarter|year|annum|day|night)\b/.test(units)) {
+    if (/\b(month|monthly)\b/.test(units)) property.frequency = "MONTHLY";
+    if (/\b(quarter|quarterly)\b/.test(units)) property.frequency = "QUARTERLY";
+    if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(units)) property.frequency = "ANNUAL";
+    if (/\b(day|daily)\b/.test(units)) property.frequency = "DAILY";
+    if (/\b(night|nightly)\b/.test(units)) property.frequency = "PER_NIGHT";
+  }
   if (state.workflow === "property_search" && !state.property.location && !location && !Object.values(property).some(Boolean) && input.length >= 2) property.location = input;
   const intent = input === "1" || /\b(propert(?:y|ies))\b/.test(input) || Object.values(property).some((value) => value !== undefined) || state.workflow === "property_search" ? "property_search" : "unknown";
   return { intent, property: Object.fromEntries(Object.entries(property).filter(([, value]) => value !== undefined)) };

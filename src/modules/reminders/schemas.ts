@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialUpdateSchema } from "@/lib/partial-update-schema";
 
 const channels = z.array(z.enum(["IN_APP", "EMAIL", "SMS", "WHATSAPP"]))
   .min(1, "Choose at least one notification channel.")
@@ -10,7 +11,7 @@ export const createReminderPolicySchema = z.object({
   enabled: z.boolean().default(true),
 });
 
-export const updateReminderPolicySchema = createReminderPolicySchema.partial()
+export const updateReminderPolicySchema = partialUpdateSchema(createReminderPolicySchema)
   .refine((input) => Object.keys(input).length > 0, "At least one reminder policy field must be provided.");
 
 export const manualReminderSchema = z.object({

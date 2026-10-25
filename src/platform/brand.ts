@@ -36,6 +36,11 @@ export const BRAND = {
     support: "support@nesafric.com",
     phoneDisplay: "+233 (0) 50 282 0005",
     phoneTel: "+233502820005",
+    /** The official NesAfric WhatsApp Business number (0502820002): property search, agency and
+     * service-business sign-up, listings and support all run on it. Meta routes it by its phone
+     * number ID, assigned through the platform endpoint (docs/whatsapp-operations.md). */
+    whatsappDisplay: "+233 (0) 50 282 0002",
+    whatsappE164: "+233502820002",
     address: "Plot 16, Atlantic Towers, Accra",
   },
 
@@ -47,6 +52,12 @@ export const BRAND = {
     info: "NesAfric <info@nesafric.com>",
   },
 } as const;
+
+/** A click-to-chat link to the official WhatsApp number, optionally with a prefilled message. */
+export function whatsappChatUrl(text?: string): string {
+  const number = BRAND.contact.whatsappE164.replace(/^\+/, "");
+  return `https://wa.me/${number}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
+}
 
 export function absoluteUrl(path: string): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;

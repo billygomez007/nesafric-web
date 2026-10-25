@@ -1,13 +1,15 @@
 # WhatsApp property operations: deployment and runbook
 
-This covers the official NesAfric WhatsApp number and the autonomous maintenance workflow (onboarding, provider network, tenant reports, routing, dispatch, completion, alerts and digests). Design and progress: `docs/autonomous-property-ops-plan.md`.
+The official NesAfric WhatsApp Business number is **0502820002 (+233 50 282 0002)**. Customers, agents, agencies, service businesses and landlords all use it. The website footer links to it (`BRAND.contact.whatsappE164` in `src/platform/brand.ts`). Assistants on other organisations' numbers send registration and listing requests to it.
+
+This covers the official NesAfric WhatsApp number, business registration and listing on it (`docs/whatsapp-business-flows.md`), and the autonomous maintenance workflow (onboarding, provider network, tenant reports, routing, dispatch, completion, alerts and digests). Design and progress: `docs/autonomous-property-ops-plan.md`.
 
 Real WhatsApp delivery has **not** been verified end to end. Every test uses a recording adapter instead of Meta. Do not announce the feature as live until the checklist in section 6 is complete.
 
 ## 1. Meta setup
 
 1. Create a Meta app (type Business) and connect a WhatsApp Business Account (WABA).
-2. Register the official number and note its **phone number ID** and the **WABA ID**.
+2. Register the official number, +233 50 282 0002, and note its **phone number ID** and the **WABA ID**. The application knows the number only by that phone number ID (section 2). If the number is still registered in the WhatsApp Business app on a phone, delete that account first, or migrate it, before Meta lets you add it to the Cloud API.
 3. Create a system user with `whatsapp_business_messaging` and `whatsapp_business_management`, and generate a long-lived token.
 4. Webhook:
    - Callback URL: `https://<host>/api/webhooks/whatsapp`.
@@ -108,6 +110,9 @@ Numbers that organisations saved in their channel settings before this change ar
 | `WHATSAPP_TEMPLATE_NOTIFICATION` | `name:language` of the notification template. |
 | `WHATSAPP_TEMPLATE_PROVIDER_INVITE` | `name:language` of the invitation template. |
 | `WHATSAPP_TEMPLATE_WORK_ORDER` | `name:language` of the work-order template. |
+| `WHATSAPP_TEMPLATE_WABA_ID` | The official number's WABA ID again. Template sync and submission refuse to run unless it matches the official assignment. |
+| `WHATSAPP_TEMPLATE_SUBMISSION_ENABLED` | `true` only while submitting templates. |
+| `WHATSAPP_UTILITY_EVENTS_SINCE` | ISO time from which business events send Utility templates. Unset means none are sent. |
 | `ARKESEL_API_KEY`, `ARKESEL_SENDER_ID` | SMS verification codes for account linking and onboarding. |
 | `OTP_HASH_SECRET` | At least 32 characters (falls back to `SESSION_SECRET`). |
 | `AI_PROVIDER`, `AI_PROVIDER_API_KEY` | Optional. Without them, deterministic rules classify reports and questions. |
@@ -116,7 +121,11 @@ Numbers that organisations saved in their channel settings before this change ar
 
 ### Worker
 
-On Vercel, each accepted webhook also processes its own reply path right after answering Meta (`src/platform/jobs/fast-path.ts`; turn off with `WHATSAPP_INLINE_PROCESSING=false`), so replies do not wait for the cron. The `/api/jobs/run` cron still runs everything else (dispatch timeouts, digests, retries). Vercel Hobby runs crons only once a day; use Pro, or an external scheduler, for the 5-minute schedule in `vercel.json`.
+Each accepted webhook also processes its own reply path right after answering Meta (`src/platform/jobs/fast-path.ts`; turn off with `WHATSAPP_INLINE_PROCESSING=false`), so replies do not wait for the scheduler. On Cloud Run this needs CPU after the response, which the service has (`--no-cpu-throttling`, see docs/cloud-run-deployment.md). The `/api/jobs/run` endpoint still runs everything else (dispatch timeouts, digests, retries), so it must be called every few minutes:
+
+- On Google Cloud Run, `deploy/cloud-run/setup.sh` creates the Cloud Scheduler job `nesafric-jobs-run`: `POST <service>/api/jobs/run` every 5 minutes with header `x-jobs-run-secret: <JOBS_RUN_SECRET>`.
+- On Vercel (being retired), `vercel.json` runs it once a day at 03:00 UTC, the most Vercel Hobby allows, authenticated with `CRON_SECRET`.
+- Do not use a scheduled GitHub Actions workflow: the repository is private, each run is billed as at least one Actions minute, and a 5-minute schedule uses up the free plan's 2,000 minutes a month within a week, which stops CI as well.
 
 Run `npm run worker` continuously, or call `POST /api/jobs/run` at least every minute. Either one:
 
@@ -136,6 +145,20 @@ All of these are Utility category. Use quick-reply buttons where shown; the repl
 | WORK_ORDER | `New job {{2}} from {{1}} at {{3}}: {{4}}. Urgency: {{5}}. {{6}} Please reply by {{7}}.` | Accept, Decline |
 
 Customer text inside templates (organisation names, locations, issue titles) is stripped of links and phone numbers and length-capped before sending.
+
+### Utility templates U01–U30
+
+The Utility templates are defined in `src/modules/whatsapp-templates/registry.ts`. Their Meta status is stored in `WhatsAppTemplateState`. They are not configured through env vars. Full report, event mapping and checklist: `docs/whatsapp-utility-templates-phase1.md`.
+
+| Command (`npm run whatsapp:templates -- …`) | Effect |
+|---|---|
+| `validate` | Meta format and compliance checks. Offline. |
+| `payloads <file>` | Creation payloads as JSON. Offline. |
+| `sync` | Reads every template's status from Meta. Templates outside the registry are listed and never changed. |
+| `submit --keys U01,U02 --confirm-waba <id> [--acknowledge U17]` | Needs `WHATSAPP_TEMPLATE_SUBMISSION_ENABLED=true`. Final, valid templates only. A template already on Meta, or rejected, is never created again. |
+| `report` | Registry joined with stored status. |
+
+Sending: a business event sends a template only when the template is APPROVED, still UTILITY and has exactly the registry's text, and the recipient has an allowed opt-in and has not replied STOP. Every decision, sent or skipped, is a `WhatsAppUtilityDispatch` row with its reason. Subscribe the webhook to `message_template_status_update`, `template_category_update` and `message_template_quality_update` as well as `messages`, so pauses and recategorisations stop sends at once.
 
 ## 4. Monitoring
 
@@ -168,6 +191,8 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 1. Migrations `20261018230000_whatsapp_number_assignments` and `20261019090000_whatsapp_conversation_provenance` applied. The official number assigned through the platform endpoint, and every legacy claim reviewed (section 2).
 2. Templates approved and their env vars set; the health check shows `whatsapp: CONFIGURED`.
 3. From a real phone, send `hi` and get the menu.
+   Then run the business registration and listing steps in `docs/whatsapp-live-test-runbook.md`.
+   Then shop: `1`, `rent`, an area with published listings, `details 2`, `view 1`, a name, `tomorrow 2pm`, `confirm`. The lead and viewing request reach the listing team, and `status` shows them (`docs/whatsapp-shopping-audit.md`).
 4. Run `link` with a real SMS code.
 5. Run `register` end to end, then `confirm`. Check that the organisation, properties and pending ownership claim exist.
 6. Run `add provider` to a second real phone, then reply ACCEPT from it.
@@ -179,6 +204,8 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 
 ## 7. Known limits
 
+- Listing on WhatsApp covers rent and sale of homes, land and commercial property. Hotels and short stays (nightly booking details) and developments are listed on the website.
+- Editing a listing after it is submitted, verification documents, and team members are on the website.
 - WhatsApp numbers are assigned by NesAfric support (section 2). There is no embedded signup yet, so a landlord cannot connect their own number without support, and there is no admin screen: the platform endpoints are API-only.
 - Legacy numbers stop working at deployment until they are reviewed (section 2). Meta's redelivery of `503` webhooks is time-limited, so review them promptly.
 - All numbers share one system-user token; a per-number or per-business token is not supported. Meta itself does not stop a token holder sending as any number on the WABA; the assignment check is in this application only.

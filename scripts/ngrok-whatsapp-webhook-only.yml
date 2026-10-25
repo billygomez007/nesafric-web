@@ -1,0 +1,14 @@
+# ngrok traffic policy for local WhatsApp testing (scripts/setup-local-whatsapp.ts).
+# A tunnel to `next dev` would otherwise publish the whole local app, including the dev server's
+# own endpoints. This policy answers 404 for everything except the WhatsApp webhook, so Meta can
+# reach the webhook and nothing else is exposed.
+#
+#   ngrok http 3000 --traffic-policy-file scripts/ngrok-whatsapp-webhook-only.yml
+on_http_request:
+  - expressions:
+      - "req.url.path != '/api/webhooks/whatsapp'"
+    actions:
+      - type: custom-response
+        config:
+          status_code: 404
+          body: "Not found"

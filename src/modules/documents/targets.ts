@@ -10,7 +10,7 @@ import { archivePreviousLogos, LOGO_MIME_TYPES } from "@/modules/marketplace-pro
 import { archivePreviousProviderLogos } from "@/modules/providers/logo";
 import { DOCUMENT_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, getObjectStorageAdapter, buildInternalPublicMediaUrl } from "@/platform/storage";
 import type { z } from "zod";
-import { MAX_LISTING_PHOTOS } from "@/lib/listing-media-rules";
+import { LISTING_PHOTO_MIME_TYPES, MAX_LISTING_MEDIA_ITEMS, MAX_LISTING_PHOTOS, MAX_PROVIDER_PORTFOLIO_IMAGES } from "@/lib/listing-media-rules";
 import { ensureListingCover, lockListingMedia } from "@/modules/listings/cover";
 import type { uploadDocumentSchema } from "./schemas";
 
@@ -101,8 +101,17 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
       const publicUrl = isPublic ? (adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey)) : "private:pending-signed-url";
       // Under the listing lock: the photo limit and the cover can't be raced by parallel uploads.
       await lockListingMedia(tx, targetId);
-      if (await tx.listingMedia.count({ where: { listingId: targetId } }) >= MAX_LISTING_PHOTOS) {
-        throw new AppError("LISTING_MEDIA_LIMIT_REACHED", 422, `A property listing can contain up to ${MAX_LISTING_PHOTOS} images.`);
+      const locked = await tx.listing.findUniqueOrThrow({ where: { id: targetId }, select: { status: true, marketplaceProfessionalId: true } });
+      // Marketplace listings change photos only while editable; re-checked here under the lock so
+      // an upload cannot land on a listing that was submitted for review meanwhile.
+      if (locked.marketplaceProfessionalId && !["DRAFT", "REJECTED", "PAUSED"].includes(locked.status)) {
+        throw new AppError("LISTING_NOT_EDITABLE", 409, "Photos can only be changed while the listing is a draft, rejected, or paused.");
+      }
+      if (mediaType === "PHOTO" && await tx.listingMedia.count({ where: { listingId: targetId, type: "PHOTO" } }) >= MAX_LISTING_PHOTOS) {
+        throw new AppError("LISTING_MEDIA_LIMIT_REACHED", 422, `A property listing can contain up to ${MAX_LISTING_PHOTOS} photos. Remove one to add another.`);
+      }
+      if (await tx.listingMedia.count({ where: { listingId: targetId } }) >= MAX_LISTING_MEDIA_ITEMS) {
+        throw new AppError("LISTING_MEDIA_LIMIT_REACHED", 422, `A property listing can contain up to ${MAX_LISTING_MEDIA_ITEMS} media items.`);
       }
       const highestSortOrder = await tx.listingMedia.aggregate({ where: { listingId: targetId }, _max: { sortOrder: true } });
       const created = await tx.listingMedia.create({
@@ -119,6 +128,7 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
           fileSizeBytes: sizeBytes,
           checksum,
           isCover: false,
+          sourceMediaId: input.sourceMediaId ?? null,
         },
       });
       // The first photo becomes the cover; later uploads keep the cover the professional chose.
@@ -372,6 +382,39 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
       }
       const adapter = getObjectStorageAdapter();
       return { id: provider.id, displayName: provider.displayName, logoUrl: adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey) };
+    },
+  },
+
+  /** A photo of the provider's work shown on its public marketplace profile — `targetId` is a
+   * `ServiceProvider.id`. Owner only (same `ownsProvider` rule as the logo), always PUBLIC, at
+   * most MAX_PROVIDER_PORTFOLIO_IMAGES per provider, counted under a provider row lock. */
+  PROVIDER_PORTFOLIO_IMAGE: {
+    allowedMimeTypes: [...LISTING_PHOTO_MIME_TYPES],
+    allowedClassifications: ["PUBLIC"],
+    authorize: async (tx, { userId, targetId }) => {
+      const provider = await ownsProvider(userId, targetId, tx);
+      if (!provider) throw forbidden();
+      return { organisationId: provider.companyOrganisationId };
+    },
+    attach: async (tx, { targetId, storageObject, contentType, input }) => {
+      await tx.$queryRaw`SELECT "id" FROM "ServiceProvider" WHERE "id" = ${targetId}::uuid FOR UPDATE`;
+      if (await tx.providerPortfolioImage.count({ where: { providerId: targetId } }) >= MAX_PROVIDER_PORTFOLIO_IMAGES) {
+        throw new AppError("PORTFOLIO_LIMIT_REACHED", 422, `A service profile can show up to ${MAX_PROVIDER_PORTFOLIO_IMAGES} portfolio images. Remove one to add another.`);
+      }
+      const adapter = getObjectStorageAdapter();
+      const highest = await tx.providerPortfolioImage.aggregate({ where: { providerId: targetId }, _max: { sortOrder: true } });
+      return tx.providerPortfolioImage.create({
+        data: {
+          providerId: targetId,
+          storageObjectId: storageObject.id,
+          storageKey: storageObject.storageKey,
+          publicUrl: adapter.getPublicUrl(storageObject.storageKey) ?? buildInternalPublicMediaUrl(storageObject.storageKey),
+          mimeType: contentType,
+          caption: input.title ?? null,
+          sortOrder: (highest._max.sortOrder ?? -1) + 1,
+          sourceMediaId: input.sourceMediaId ?? null,
+        },
+      });
     },
   },
 

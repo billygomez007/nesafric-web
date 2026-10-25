@@ -4,6 +4,7 @@ import { absoluteUrl } from "@/platform/brand";
 import { searchPublicListings, getPublicListing, createMarketplaceLead, findLeadForSubmission, createViewingRequest, findViewingForSubmission } from "@/modules/listings/service";
 import { discoverMarketplaceProviders } from "@/modules/marketplace/service";
 import type { AssistantState } from "./schemas";
+import { formatViewingTime } from "./viewing-time";
 
 function money(amount: string | null, currency: string) {
   if (amount === null) return "Price not supplied";
@@ -75,7 +76,7 @@ export async function customerRequestStatus(request: NonNullable<AssistantState[
   const lead = await db.marketplaceLead.findFirst({ where: { id: request.leadId, listingId: request.listingId, phone: `+${phone.replace(/^\+/, "")}` }, select: { id: true, status: true } });
   if (!lead) return "This request is no longer available. Reply support for assistance.";
   const viewing = request.viewingId ? await db.viewingRequest.findFirst({ where: { id: request.viewingId, leadId: lead.id }, select: { id: true, status: true, confirmedStartsAt: true } }) : null;
-  return viewing ? `Viewing ${viewing.id}: ${viewing.status}.${viewing.confirmedStartsAt ? ` Appointment time: ${viewing.confirmedStartsAt.toISOString()}.` : " No appointment time has been confirmed."}` : `Inquiry ${lead.id}: ${lead.status}.`;
+  return viewing ? `Viewing ${viewing.id}: ${viewing.status}.${viewing.confirmedStartsAt ? ` Appointment time: ${formatViewingTime(viewing.confirmedStartsAt)}.` : " No appointment time has been confirmed."}` : `Inquiry ${lead.id}: ${lead.status}.`;
 }
 
 export const marketplaceTools = { searchProperties, searchServices, propertyDetails, submitCustomerRequest, customerRequestStatus };

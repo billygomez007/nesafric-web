@@ -1,3 +1,4 @@
+import { VALID_PNG_BASE64 } from "./helpers/images";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, notFound } from "@/platform/errors";
 
@@ -12,7 +13,7 @@ const PROFESSIONAL_ID = "11111111-1111-4111-8111-111111111111";
 const LISTING_ID = "22222222-2222-4222-8222-222222222222";
 const BACKING_ORG_ID = "33333333-3333-4333-8333-333333333333";
 // 1×1 PNG
-const PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const PNG_BASE64 = VALID_PNG_BASE64;
 
 const mocks = vi.hoisted(() => ({
   requireMarketplaceRole: vi.fn(),
@@ -33,7 +34,7 @@ vi.mock("@/modules/entitlements/service", () => ({ assertOperational: mocks.asse
 vi.mock("@/modules/integrations/service", () => ({ recordIntegrationOutcome: mocks.recordIntegrationOutcome }));
 vi.mock("@/platform/database/client", () => {
   const tx = {
-    listing: { findUnique: vi.fn(async () => mocks.listing) },
+    listing: { findUnique: vi.fn(async () => mocks.listing), findUniqueOrThrow: vi.fn(async () => mocks.listing) },
     storageObject: { create: mocks.storageObjectCreate },
     listingMedia: {
       aggregate: vi.fn(async () => ({ _max: { sortOrder: null } })),
@@ -126,8 +127,8 @@ describe("uploadMarketplaceListingMedia", () => {
     expect(mocks.storageObjectCreate).not.toHaveBeenCalled();
   });
 
-  it("enforces the 12-photo listing limit", async () => {
-    mocks.listing = { ...mocks.listing!, _count: { media: 12 } };
+  it("enforces the 10-photo listing limit", async () => {
+    mocks.listing = { ...mocks.listing!, _count: { media: 10 }, media: Array.from({ length: 10 }, (_, index) => ({ id: `photo-${index}` })) } as typeof mocks.listing;
 
     await expect(upload()).rejects.toMatchObject({ code: "LISTING_MEDIA_LIMIT_REACHED" });
     expect(mocks.storageObjectCreate).not.toHaveBeenCalled();

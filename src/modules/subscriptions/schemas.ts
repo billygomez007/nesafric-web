@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialUpdateSchema } from "@/lib/partial-update-schema";
 
 export const changePlanSchema = z.object({
   planKey: z.string().trim().min(1).max(80),
@@ -31,7 +32,7 @@ export const createPlanSchema = z.object({
   })).default([]),
 }).strict();
 
-export const updatePlanSchema = createPlanSchema.partial().extend({ key: z.string().trim().min(1).max(80).optional() }).strict();
+export const updatePlanSchema = partialUpdateSchema(createPlanSchema).extend({ key: z.string().trim().min(1).max(80).optional() }).strict();
 
 export const createEntitlementOverrideSchema = z.object({
   featureKey: z.string().trim().min(1),

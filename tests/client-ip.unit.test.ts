@@ -38,6 +38,26 @@ describe("client IP identity (rate-limit key source)", () => {
     expect(resolveClientIdentity(request, { TRUSTED_CLIENT_IP_HEADER: "X-Client-IP" })).toEqual({ ip: "41.66.1.10", source: "configured-header" });
   });
 
+  it("on Cloud Run trusts only the last x-forwarded-for entry, which Google's front end appends", () => {
+    const forged = headers({ "x-forwarded-for": "6.6.6.6, 41.66.1.10", "x-real-ip": "7.7.7.7" });
+    expect(resolveClientIdentity(forged, { K_SERVICE: "nesafric-web" })).toEqual({ ip: "41.66.1.10", source: "cloud-run" });
+    expect(resolveClientIdentity(headers({ "x-forwarded-for": "41.66.1.10" }), { K_SERVICE: "nesafric-web" })).toEqual({ ip: "41.66.1.10", source: "cloud-run" });
+    expect(resolveClientIdentity(headers({}), { K_SERVICE: "nesafric-web" })).toEqual({ ip: null, source: "none" });
+  });
+
+  it("on Cloud Run behind a Google load balancer takes the entry before the balancer's own", () => {
+    const request = headers({ "x-forwarded-for": "6.6.6.6, 41.66.1.10, 34.120.1.1" });
+    expect(resolveClientIdentity(request, { K_SERVICE: "nesafric-web", CLOUD_RUN_BEHIND_LOAD_BALANCER: "true" })).toEqual({ ip: "41.66.1.10", source: "cloud-run" });
+    expect(resolveClientIdentity(headers({ "x-forwarded-for": "41.66.1.10" }), { K_SERVICE: "nesafric-web", CLOUD_RUN_BEHIND_LOAD_BALANCER: "true" })).toEqual({ ip: null, source: "none" });
+  });
+
+  it("on Cloud Run behind Cloudflare uses cf-connecting-ip only when the appended peer is Cloudflare", () => {
+    const viaCloudflare = headers({ "x-forwarded-for": "154.160.2.33, 172.67.159.104", "cf-connecting-ip": "154.160.2.33" });
+    expect(resolveClientIdentity(viaCloudflare, { K_SERVICE: "nesafric-web", TRUST_CLOUDFLARE_CLIENT_IP: "true" })).toEqual({ ip: "154.160.2.33", source: "cloudflare" });
+    const direct = headers({ "x-forwarded-for": "41.66.1.10", "cf-connecting-ip": "9.9.9.9" });
+    expect(resolveClientIdentity(direct, { K_SERVICE: "nesafric-web", TRUST_CLOUDFLARE_CLIENT_IP: "true" })).toEqual({ ip: "41.66.1.10", source: "cloud-run" });
+  });
+
   it("matches Cloudflare ranges for IPv4 and IPv6, and allows overriding them", () => {
     expect(isCloudflareIp("104.21.58.116", {})).toBe(true);
     expect(isCloudflareIp("2606:4700:3030::ac43:9f68", {})).toBe(true);

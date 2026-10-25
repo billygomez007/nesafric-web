@@ -8,6 +8,11 @@ import { BlockList, isIP } from "net";
  * - On Vercel (`VERCEL=1`), `x-real-ip` / `x-forwarded-for` are overwritten by Vercel's edge with the
  *   address that connected to it; external values are not forwarded ("to prevent spoofing",
  *   vercel.com/docs/headers/request-headers). That connecting address is the "peer".
+ * - On Google Cloud Run (`K_SERVICE` is set by the platform), Google's front end appends the address
+ *   that connected to it to `x-forwarded-for`, after anything the caller sent, so only the LAST entry
+ *   is trusted. Behind a Google external Application Load Balancer the load balancer appends its own
+ *   address after the client's; set `CLOUD_RUN_BEHIND_LOAD_BALANCER=true` to take the one before it.
+ *   `TRUSTED_CLIENT_IP_HEADER`, when set, still wins (for a proxy that overwrites one header).
  * - Elsewhere, an operator may name one header their own proxy overwrites via
  *   `TRUSTED_CLIENT_IP_HEADER`. With neither, there is no trustworthy identity (`ip: null`).
  * - See docs/guest-write-protection.md for the evidence required before trusting Cloudflare.
@@ -26,7 +31,7 @@ export const CLOUDFLARE_IP_RANGES = [
   "2a06:98c0::/29", "2c0f:f248::/32",
 ];
 
-export type ClientIpSource = "vercel" | "configured-header" | "cloudflare" | "none";
+export type ClientIpSource = "vercel" | "cloud-run" | "configured-header" | "cloudflare" | "none";
 export type ClientIdentity = { ip: string | null; source: ClientIpSource };
 
 type Env = Record<string, string | undefined>;
@@ -58,6 +63,13 @@ function parseIp(value: string | null) {
   return isIP(candidate) ? candidate : null;
 }
 
+/** The entry `fromEnd` places before the end of a comma-separated list header (0 = the last), or null. */
+function parseIpFromEnd(value: string | null, fromEnd: number) {
+  const entries = value?.split(",").map((entry) => entry.trim()) ?? [];
+  const candidate = entries[entries.length - 1 - fromEnd] ?? "";
+  return isIP(candidate) ? candidate : null;
+}
+
 export function isCloudflareIp(ip: string, env: Env = process.env) {
   const family = isIP(ip);
   if (!family) return false;
@@ -73,6 +85,9 @@ export function resolveClientIdentity(headers: Headers, env: Env = process.env):
   } else if (env.TRUSTED_CLIENT_IP_HEADER) {
     peer = parseIp(headers.get(env.TRUSTED_CLIENT_IP_HEADER.trim().toLowerCase()));
     source = peer ? "configured-header" : "none";
+  } else if (env.K_SERVICE) {
+    peer = parseIpFromEnd(headers.get("x-forwarded-for"), env.CLOUD_RUN_BEHIND_LOAD_BALANCER === "true" ? 1 : 0);
+    source = peer ? "cloud-run" : "none";
   }
   if (!peer) return { ip: null, source: "none" };
 
