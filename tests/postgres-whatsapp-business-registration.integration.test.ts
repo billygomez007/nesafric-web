@@ -69,7 +69,7 @@ describe("PostgreSQL WhatsApp business registration", () => {
 
   it("registers an agency one question at a time, with a replaceable logo, and submits it for Super Admin review", async () => {
     const { user, chat } = await linkedUser();
-    expect((await chat.send("3")).reply).toContain("What kind of business is it?");
+    expect((await chat.send("register agency")).reply).toContain("What kind of business is it?");
     chat.reset();
     await db.whatsAppFlowDraft.deleteMany();
     const atLogo = await agencyAnswers(chat);
@@ -101,9 +101,9 @@ describe("PostgreSQL WhatsApp business registration", () => {
 
   it("starts registration from the menu even in the middle of a search (found in the live test)", async () => {
     const { chat } = await linkedUser();
-    await chat.say("2", "Cleaning");
+    await chat.say("7", "Cleaning");
     expect((await chat.send("Dzorwulu")).reply).toContain("No verified providers");
-    expect((await chat.send("3")).reply).toContain("What kind of business is it?");
+    expect((await chat.send("register agency")).reply).toContain("What kind of business is it?");
     expect(chat.state.workflow).toBe("business");
   });
 

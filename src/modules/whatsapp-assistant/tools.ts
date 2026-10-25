@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { db } from "@/platform/database/client";
 import { absoluteUrl } from "@/platform/brand";
-import { searchPublicListings, getPublicListing, createMarketplaceLead, findLeadForSubmission, createViewingRequest, findViewingForSubmission } from "@/modules/listings/service";
+import { PUBLIC_LISTING_WHERE, searchPublicListings, getPublicListing, createMarketplaceLead, findLeadForSubmission, createViewingRequest, findViewingForSubmission } from "@/modules/listings/service";
 import { discoverMarketplaceProviders } from "@/modules/marketplace/service";
 import type { AssistantState } from "./schemas";
 import { formatViewingTime } from "./viewing-time";
@@ -77,6 +77,42 @@ export async function customerRequestStatus(request: NonNullable<AssistantState[
   if (!lead) return "This request is no longer available. Reply support for assistance.";
   const viewing = request.viewingId ? await db.viewingRequest.findFirst({ where: { id: request.viewingId, leadId: lead.id }, select: { id: true, status: true, confirmedStartsAt: true } }) : null;
   return viewing ? `Viewing ${viewing.id}: ${viewing.status}.${viewing.confirmedStartsAt ? ` Appointment time: ${formatViewingTime(viewing.confirmedStartsAt)}.` : " No appointment time has been confirmed."}` : `Inquiry ${lead.id}: ${lead.status}.`;
+}
+
+const AGENT_TYPES = ["INDIVIDUAL_AGENT", "BROKER", "BROKERAGE", "REAL_ESTATE_COMPANY"] as const;
+const AGENT_TYPE_LABEL: Record<string, string> = { INDIVIDUAL_AGENT: "Agent", BROKER: "Broker", BROKERAGE: "Brokerage", REAL_ESTATE_COMPANY: "Real estate company" };
+
+/**
+ * Verified, active agents and agencies whose public service areas mention the area. Only the
+ * public profile projection is used; contact happens on the profile page, never through a phone
+ * number shared in this chat.
+ */
+export async function searchAgents(area: string, page: number) {
+  const pattern = `%${area.trim().replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+  const pageSize = 3;
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT p."id" FROM "MarketplaceProfessional" p
+    WHERE p."status" = 'ACTIVE' AND p."archivedAt" IS NULL AND p."verificationStatus" = 'VERIFIED'
+      AND p."type"::text = ANY(${[...AGENT_TYPES]})
+      AND EXISTS (SELECT 1 FROM unnest(p."serviceAreas") AS served(area) WHERE served.area ILIKE ${pattern})
+    ORDER BY p."createdAt" DESC, p."id"
+    OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize + 1}`;
+  const ids = rows.slice(0, pageSize).map(({ id }) => id);
+  const found = await db.marketplaceProfessional.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, slug: true, displayName: true, type: true, serviceAreas: true, _count: { select: { listings: { where: { ...PUBLIC_LISTING_WHERE, archivedAt: null } } } } },
+  });
+  const ordered = ids.map((id) => found.find((item) => item.id === id)).filter((item): item is NonNullable<typeof item> => Boolean(item));
+  return {
+    ids: ordered.map((item) => item.id), hasMore: rows.length > pageSize,
+    cards: ordered.map((item, index) => [
+      `${index + 1}. ${clip(item.displayName, 120)}`,
+      `${AGENT_TYPE_LABEL[item.type] ?? "Agent"} · Verified by NesAfric`,
+      `Areas: ${clip(item.serviceAreas.join(", "), 150)}`,
+      `Published listings: ${item._count.listings}`,
+      absoluteUrl(`/marketplace/professionals/${encodeURIComponent(item.slug)}`),
+    ].join("\n")),
+  };
 }
 
 export const marketplaceTools = { searchProperties, searchServices, propertyDetails, submitCustomerRequest, customerRequestStatus };

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@/platform/errors";
-import { advanceOfficialConversation, OFFICIAL_MENU_SUFFIX } from "@/modules/whatsapp-assistant/router";
+import { advanceOfficialConversation } from "@/modules/whatsapp-assistant/router";
+import { welcomeText } from "@/modules/whatsapp-assistant/welcome";
 import { MAIN_MENU } from "@/modules/whatsapp-assistant/engine";
 
 const challengeId = "4f1a7d2c-5b8e-4c3a-9d6f-1e2b3c4d5e6f";
@@ -23,6 +24,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     jobs: vi.fn(async () => null),
     landlord: vi.fn(async () => null),
     business: vi.fn(async () => null), invitationReply: vi.fn(async () => null),
+    agents: vi.fn(async () => ({ ids: [], hasMore: false, cards: [] })),
     ...overrides,
   } as never;
 }
@@ -83,10 +85,11 @@ describe("official WhatsApp number: account linking", () => {
     expect((await advanceOfficialConversation(input("account"), linked)).reply).toContain("NesAfric account: Ama Owusu");
   });
 
-  it("hands everything else to the marketplace assistant and adds the account options to its menu", async () => {
+  it("hands everything else to the marketplace assistant and shows the official welcome menu", async () => {
     const deps = dependencies();
     const result = await advanceOfficialConversation(input("find me a flat in Osu"), deps);
     expect((deps as { engine: ReturnType<typeof vi.fn> }).engine).toHaveBeenCalled();
-    expect(result.reply).toContain(OFFICIAL_MENU_SUFFIX.trim());
+    expect(result.reply).toMatch(/^Good (morning|afternoon|evening)! 🏡\n\n🏡 Welcome to NesAfric!/);
+    expect(result.reply).toBe(welcomeText(result.reply.split("\n")[0]));
   });
 });

@@ -17,7 +17,7 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
   if (/\b(rent|renting|rental)\b/.test(input)) property.listingType = "RENT";
   if (/\b(buy|buying|sale|purchase)\b/.test(input)) property.listingType = "SALE";
   const categories: Array<[RegExp, NonNullable<typeof property.category>]> = [
-    [/\b(apartments?|flats?)\b/, "APARTMENT"], [/\b(townhouses?)\b/, "TOWNHOUSE"], [/\b(houses?|homes?)\b/, "HOUSE"], [/\bland\b/, "LAND"], [/\boffices?\b/, "OFFICE"], [/\bshops?\b/, "SHOP"], [/\bwarehouses?\b/, "WAREHOUSE"], [/\bhotels?\b/, "HOTEL"], [/\bshort stays?\b/, "SHORT_STAY"], [/\bvillas?\b/, "VILLA"],
+    [/\b(apartments?|flats?)\b/, "APARTMENT"], [/\b(townhouses?)\b/, "TOWNHOUSE"], [/\b(houses?|homes?)\b/, "HOUSE"], [/\bland\b/, "LAND"], [/\boffices?\b/, "OFFICE"], [/\bshops?\b/, "SHOP"], [/\bwarehouses?\b/, "WAREHOUSE"], [/\bcommercial\b/, "COMMERCIAL"], [/\bhotels?\b/, "HOTEL"], [/\bshort stays?\b/, "SHORT_STAY"], [/\bvillas?\b/, "VILLA"],
   ];
   property.category = categories.find(([pattern]) => pattern.test(input))?.[1];
   // "around 4000" or "in 2 bedrooms" is not an area; "near 37 Military Hospital" is.

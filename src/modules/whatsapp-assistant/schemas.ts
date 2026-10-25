@@ -27,7 +27,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business", "agent_search"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -39,6 +39,8 @@ export const assistantStateSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   message: z.string().trim().max(5_000).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
+  /** Agent directory search (official number): the area asked for. */
+  agentArea: z.string().trim().min(2).max(120).optional(),
   lastRequest: z.object({ listingId: z.string().uuid(), leadId: z.string().uuid(), viewingId: z.string().uuid().optional() }).optional(),
   /** Provider-network management: what was last listed, and an action awaiting confirmation. */
   network: z.object({
