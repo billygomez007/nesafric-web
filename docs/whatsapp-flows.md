@@ -21,7 +21,7 @@ Logs: `whatsapp.flows.exchange`, `.completed`, `.token_rejected`, `.client_error
 
 | Flow | Meta id | Screens | Server actions | Writes (through the existing domain services) |
 |---|---|---|---|---|
-| `nesafric_property_search` | 1656146049308321 | SEARCH → RESULTS / NO_RESULTS → DETAILS → (Book / Ask) | `searchPublicListings` (published only, GHS, region, type, budget, bedrooms); `getPublicListing` for every id the screen sends back | None. Hands the chosen listing to Book a viewing or Property inquiry |
+| `nesafric_property_search` | 1656146049308321 | SEARCH → RESULTS → DETAILS → (Book / Ask) | `searchPublicListings` (published only, GHS, region, type, budget, bedrooms); `getPublicListing` for every id the screen sends back | None. Hands the chosen listing to Book a viewing or Property inquiry |
 | `nesafric_book_viewing` | 947132434820601 | BOOK | Listing from the token only. Dates from tomorrow to 60 days ahead. Hourly slots 08:00–17:00 Ghana time, minus slots overlapping a CONFIRMED or RESCHEDULED viewing of that listing, and less than 2 hours ahead. Availability is re-checked at submission. One open request per number per listing (a second one returns the first) | Lead and viewing request (`submitCustomerRequest`, idempotency key from the token nonce). Status REQUESTED: the agent confirms |
 | `nesafric_property_inquiry` | 1421839692827883 | INQUIRY | Listing from the token only | Lead with the question |
 | `nesafric_list_property` | 4464855953767350 | NOTICE / BASICS → PRICING → AUTHORITY | Linked account, then its businesses (agency, agent or landlord organisation). Every answer goes through the chat listing step's own validator (`prefillGuided`) | DRAFT listing (`syncListing`, as in the chat). The chat continues with photos, review and submission to NesAfric review |
@@ -29,7 +29,7 @@ Logs: `whatsapp.flows.exchange`, `.completed`, `.token_rejected`, `.client_error
 | `nesafric_landlord_registration` | 1671682967750311 | NOTICE / SETUP | Linked account. Units parsed as in the chat | Onboarding draft with the first property and its units. The chat continues (more properties, tenants, invitations) |
 | `nesafric_tenant_registration` | 935408099445570 | NOTICE / CONNECT | Linked account | `redeemTenantAccessCode` (the landlord's NT- code) |
 | `nesafric_maintenance_request` | 2393058591440552 | NOTICE / REPORT | The account's tenancies (`listUserTenancies` for repairs). The maintenance service re-checks the tenancy | Maintenance request (intake WHATSAPP, idempotent reference), routed to that landlord |
-| `nesafric_find_professional` | 1983289999015531 | SEARCH → RESULTS / NO_RESULTS → DONE | Verified, unsuspended providers only | None. The profile link is where quotes are requested |
+| `nesafric_find_professional` | 1983289999015531 | SEARCH → RESULTS → DONE | Verified, unsuspended providers only | None. The profile link is where quotes are requested |
 | `nesafric_book_service` | 1112835894967070 | REQUEST | Active service categories, dates in the next 60 days | Hand-off to the support queue with the request summary |
 | `nesafric_property_management` | 2095003597775156 | NOTICE / MENU | The account's landlord organisations and their counts | None. The chosen task runs as the same chat command (`account`, `register`, `list a property`, `providers`) |
 | `nesafric_help_support` | 1513182454191456 | HELP | Topic and message | Hand-off to the support queue (`HUMAN_REQUIRED`) |

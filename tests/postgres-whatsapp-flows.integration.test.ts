@@ -82,12 +82,12 @@ describe("PostgreSQL WhatsApp Flows", () => {
     const results = await exchange(search, "data_exchange", "SEARCH", { action: "search", purpose: "RENT", region: "Greater Accra", category: "HOUSE", max_budget: "5000" });
     expect(results.screen).toBe("RESULTS");
     expect(results.data.results).toEqual([expect.objectContaining({ id: listing.id, title: "3-bedroom house in Spintex", description: expect.stringContaining("GHS 4,500") })]);
-    expect((await exchange(search, "data_exchange", "SEARCH", { action: "search", purpose: "SALE", region: "Ashanti" })).screen).toBe("NO_RESULTS");
+    expect((await exchange(search, "data_exchange", "SEARCH", { action: "search", purpose: "SALE", region: "Ashanti" })).data.error_message).toContain("No published properties");
     expect((await exchange(search, "data_exchange", "SEARCH", { action: "search", purpose: "RENT", region: "Atlantis" })).data.error_message).toBeTruthy();
     const details = await exchange(search, "data_exchange", "RESULTS", { action: "select", listing: listing.id });
     expect(details.data).toMatchObject({ listing_id: listing.id, price: "GHS 4,500 / monthly" });
     // An id the person did not get from NesAfric (or an unpublished one) shows nothing.
-    expect((await exchange(search, "data_exchange", "RESULTS", { action: "select", listing: "00000000-0000-4000-8000-000000000000" })).screen).toBe("NO_RESULTS");
+    expect((await exchange(search, "data_exchange", "RESULTS", { action: "select", listing: "00000000-0000-4000-8000-000000000000" })).data.error_message).toContain("no longer available");
     const handOver = await exchange(search, "data_exchange", "DETAILS", { action: "next", listing: listing.id, next: "book" });
     expect(handOver.screen).toBe("SUCCESS");
     const chat = await finish(handOver);
@@ -234,8 +234,8 @@ describe("PostgreSQL WhatsApp Flows", () => {
 
   it("finds only verified professionals", async () => {
     const find = token("nesafric_find_professional");
-    expect((await exchange(find, "data_exchange", "SEARCH", { action: "search", service: "plumber", area: "Tema" })).screen).toBe("NO_RESULTS");
-    expect((await exchange(find, "data_exchange", "RESULTS", { action: "select", provider: "00000000-0000-4000-8000-000000000000" })).screen).toBe("NO_RESULTS");
+    expect((await exchange(find, "data_exchange", "SEARCH", { action: "search", service: "plumber", area: "Tema" })).data.error_message).toContain("No verified providers");
+    expect((await exchange(find, "data_exchange", "RESULTS", { action: "select", provider: "00000000-0000-4000-8000-000000000000" })).data.error_message).toContain("no longer listed");
   });
 
   it("offers the configured forms in the chat and opens one with a fresh token", async () => {

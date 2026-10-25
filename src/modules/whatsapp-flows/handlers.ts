@@ -49,7 +49,7 @@ const searchScreen = (): FlowResponse => ({ screen: "SEARCH", data: { categories
 
 const propertySearch: Handler = async (request, ctx) => {
   const data = request.data;
-  if (request.action === "INIT" || data.action === "restart") return searchScreen();
+  if (request.action === "INIT") return searchScreen();
   if (data.action === "search") {
     const purpose = field(data, "purpose");
     const category = field(data, "category");
@@ -67,7 +67,7 @@ const propertySearch: Handler = async (request, ctx) => {
       ...(bedrooms ? { bedroomsMin: Number(bedrooms) } : {}),
     };
     const result = await searchPublicListings({ ...filters, page: 1, pageSize: 10 });
-    if (!result.items.length) return { screen: "NO_RESULTS", data: { summary: "No published properties match these filters yet. Try another area, type or budget." } };
+    if (!result.items.length) return invalid("SEARCH", searchScreen().data, "No published properties match these filters yet. Try another area, type or budget.");
     return {
       screen: "RESULTS",
       data: {
@@ -81,11 +81,10 @@ const propertySearch: Handler = async (request, ctx) => {
     const listingId = field(data, "listing", 40);
     // Any id the screen sends is checked against the published marketplace again.
     const listing = await getPublicListing(listingId).then((result) => result.listing).catch(() => null);
-    if (!listing) return { screen: "NO_RESULTS", data: { summary: "That property is no longer available. Please search again." } };
+    if (!listing) return invalid("SEARCH", searchScreen().data, "That property is no longer available. Please search again.");
     const enquiries = listing.contact.enquiryEnabled && !listing.bookable;
     if (data.action === "next") {
       const next = field(data, "next", 20);
-      if (next === "search") return searchScreen();
       if ((next === "book" || next === "inquire") && enquiries) return finish(ctx, { outcome: "open_flow", flow: next === "book" ? "nesafric_book_viewing" : "nesafric_property_inquiry", listing: listing.id });
       return invalid("DETAILS", {}, "Please choose what you would like to do.");
     }
@@ -98,7 +97,8 @@ const propertySearch: Handler = async (request, ctx) => {
         location: clip(listing.location.label ?? [listing.location.locality, listing.location.city, listing.location.region].filter(Boolean).join(", "), 120) || "Ghana",
         features: [listing.attributes.bedrooms === null ? null : `${listing.attributes.bedrooms} bedrooms`, listing.attributes.bathrooms === null ? null : `${listing.attributes.bathrooms} bathrooms`, `Verification: ${listing.verification.status.toLowerCase()}`].filter(Boolean).join(" · "),
         description: `${clip(listing.description, 600)}\nMore photos: ${absoluteUrl(`/marketplace/properties/${listing.id}`)}`,
-        next_steps: [...(enquiries ? [option("book", "Book a viewing"), option("inquire", "Ask a question")] : []), option("search", "Search again")],
+        // Without enquiries there is nothing to do here but go back (the header's back arrow).
+        next_steps: enquiries ? [option("book", "Book a viewing"), option("inquire", "Ask a question")] : [option("none", "Viewings on the website only")],
       },
     };
   }
@@ -304,19 +304,19 @@ const maintenanceRequest: Handler = async (request, ctx) => {
 
 const findProfessional: Handler = async (request) => {
   const data = request.data;
-  if (request.action === "INIT" || data.action === "restart") return { screen: "SEARCH", data: {} };
+  if (request.action === "INIT") return { screen: "SEARCH", data: {} };
   if (data.action === "search") {
     const service = field(data, "service", 80);
     const area = field(data, "area", 80);
     if (service.length < 2 || area.length < 2) return invalid("SEARCH", {}, "Please enter the service and the area.");
     const result = await discoverMarketplaceProviders({ q: `${service} ${area}`, verification: "VERIFIED", page: 1, pageSize: 10 });
-    if (!result.items.length) return { screen: "NO_RESULTS", data: { summary: `No verified providers match "${clip(service, 40)}" in ${clip(area, 40)} yet. Try a nearby town or another word for the service.` } };
+    if (!result.items.length) return invalid("SEARCH", {}, `No verified providers match "${clip(service, 40)}" in ${clip(area, 40)} yet. Try a nearby town or another word for the service.`);
     return { screen: "RESULTS", data: { summary: `${result.items.length} verified ${result.items.length === 1 ? "provider" : "providers"} found.`, results: result.items.map((item) => option(item.id, item.displayName, item.categories.map(({ name }) => name).join(", "))) } };
   }
   if (data.action === "select") {
     const id = field(data, "provider", 40);
     const provider = /^[0-9a-f-]{36}$/i.test(id) ? await db.serviceProvider.findFirst({ where: { id, verificationStatus: "VERIFIED", suspendedAt: null }, select: { displayName: true, slug: true, id: true } }) : null;
-    if (!provider) return { screen: "NO_RESULTS", data: { summary: "That provider is no longer listed. Please search again." } };
+    if (!provider) return invalid("SEARCH", {}, "That provider is no longer listed. Please search again.");
     return { screen: "DONE", data: { message: `${provider.displayName}: open the profile to contact them or request a quote securely: ${absoluteUrl(provider.slug ? `/marketplace/services/${encodeURIComponent(provider.slug)}` : `/marketplace/${provider.id}`)}` } };
   }
   return { screen: "SEARCH", data: {} };

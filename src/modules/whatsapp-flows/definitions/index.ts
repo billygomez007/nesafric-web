@@ -28,7 +28,6 @@ function propertySearch() {
       body("${data.summary}"), radios("listing", "Choose a property", "${data.results}"),
       submit("View property", "select", { listing: "${form.listing}", filters: "${data.filters}" }),
     ] }),
-    screen({ id: "NO_RESULTS", title: "No matches yet", data: { summary: str("No published properties match these filters yet.") }, children: [body("${data.summary}"), submit("Search again", "restart")] }),
     screen({ id: "DETAILS", title: "Property details", data: {
       listing_id: str("listing-id"), title: str("2-bedroom apartment, East Legon"), price: str("GHS 4,500 / month"), location: str("East Legon, Greater Accra"),
       features: str("2 bedrooms · 2 bathrooms"), description: str("Bright apartment close to the main road."), next_steps: options([{ id: "book", title: "Book a viewing" }]),
@@ -38,7 +37,7 @@ function propertySearch() {
       submit("Continue", "next", { listing: "${data.listing_id}", next: "${form.next}" }),
     ] }),
     DONE,
-  ], { SEARCH: ["RESULTS", "NO_RESULTS"], RESULTS: ["DETAILS"], NO_RESULTS: ["SEARCH"], DETAILS: ["SEARCH", "DONE"], DONE: [] });
+  ], { SEARCH: ["RESULTS"], RESULTS: ["DETAILS"], DETAILS: ["DONE"], DONE: [] });
 }
 
 function bookViewing() {
@@ -102,15 +101,15 @@ function listProperty() {
   const pricingNames = pricing.map((item) => item.name as string);
   const asData = (names: string[]) => Object.fromEntries(names.map((name) => [name, str("")]));
   return flowJson([
-    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Connect this number to your NesAfric account first: reply link in the chat.") }, children: [body("${data.message}"), complete("Close")] }),
     screen({ id: "BASICS", title: "List a property", data: { businesses: options(OPT), properties: options(OPT), categories: options(OPT), regions: options(REGION_OPTIONS.slice(0, 2)) }, children: [heading("Property basics"), ...basics, submit("Next", "basics", formPayload(basics))] }),
+    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Connect this number to your NesAfric account first: reply link in the chat.") }, children: [body("${data.message}"), complete("Close")] }),
     screen({ id: "PRICING", title: "Price and details", data: { units: options(OPT), furnishing_options: options(OPT), amenity_options: options(OPT), ...asData(basicNames) }, children: [heading("Price and details"), ...pricing, submit("Next", "pricing", { ...formPayload(pricing), ...carried(basicNames) })] }),
     screen({ id: "AUTHORITY", title: "Authority to list", data: { authorities: options(OPT), evidence_types: options(OPT), ...asData([...basicNames, ...pricingNames]) }, children: [
       heading("Your authority to list"), body("NesAfric reviews every listing before it is published. Photos come next, in the chat."), ...authority,
       submit("Save and add photos", "save", { ...formPayload(authority), ...carried([...basicNames, ...pricingNames]) }),
     ] }),
     DONE,
-  ], { NOTICE: [], BASICS: ["PRICING"], PRICING: ["AUTHORITY"], AUTHORITY: ["DONE"], DONE: [] });
+  ], { BASICS: ["PRICING", "NOTICE"], NOTICE: [], PRICING: ["AUTHORITY"], AUTHORITY: ["DONE"], DONE: [] });
 }
 
 function agentRegistration() {
@@ -126,14 +125,14 @@ function agentRegistration() {
     textInput("reference", "Registration, GREDA or licence number (optional for agents)", { required: false, "max-chars": 300 }),
   ];
   return flowJson([
-    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Connect this number to your NesAfric account first: reply link in the chat.") }, children: [body("${data.message}"), complete("Close")] }),
     screen({ id: "PROFILE", title: "Register on NesAfric", data: { kinds: options(OPT), regions: options(REGION_OPTIONS.slice(0, 2)) }, children: [
       heading("Agency or agent registration"), ...form,
       caption("Next, in the chat: agencies send the business registration certificate; agents send the front and back of their Ghana Card."),
       submit("Continue", "save", formPayload(form)),
     ] }),
+    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Connect this number to your NesAfric account first: reply link in the chat.") }, children: [body("${data.message}"), complete("Close")] }),
     DONE,
-  ], { NOTICE: [], PROFILE: ["DONE"], DONE: [] });
+  ], { PROFILE: ["DONE", "NOTICE"], NOTICE: [], DONE: [] });
 }
 
 function landlordRegistration() {
@@ -146,19 +145,19 @@ function landlordRegistration() {
     textInput("units", "Units", { "max-chars": 400, "helper-text": "A number (4) or names separated by commas (A1, A2, A3)" }),
   ];
   return flowJson([
-    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Reply register in the chat to create your account first.") }, children: [body("${data.message}"), complete("Close")] }),
     screen({ id: "SETUP", title: "Landlord sign-up", data: {}, children: [heading("Set up your properties"), ...form, caption("You can add more properties, units and your tenants next, in the chat."), submit("Continue", "save", formPayload(form))] }),
+    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Reply register in the chat to create your account first.") }, children: [body("${data.message}"), complete("Close")] }),
     DONE,
-  ], { NOTICE: [], SETUP: ["DONE"], DONE: [] });
+  ], { SETUP: ["DONE", "NOTICE"], NOTICE: [], DONE: [] });
 }
 
 function tenantRegistration() {
   const form = [textInput("code", "Tenant access code from your landlord", { "min-chars": 6, "max-chars": 40, "helper-text": "It starts with NT-" })];
   return flowJson([
-    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Reply link in the chat to confirm this number first.") }, children: [body("${data.message}"), complete("Close")] }),
     screen({ id: "CONNECT", title: "Connect your tenancy", data: {}, children: [heading("Connect your tenancy"), body("Your landlord gives you an access code when they add you on NesAfric."), ...form, submit("Connect", "redeem", formPayload(form))] }),
+    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Reply link in the chat to confirm this number first.") }, children: [body("${data.message}"), complete("Close")] }),
     DONE,
-  ], { NOTICE: [], CONNECT: ["DONE"], DONE: [] });
+  ], { CONNECT: ["DONE", "NOTICE"], NOTICE: [], DONE: [] });
 }
 
 function maintenanceRequest() {
@@ -173,10 +172,10 @@ function maintenanceRequest() {
     ]),
   ];
   return flowJson([
-    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("No tenancy is connected to this number yet.") }, children: [body("${data.message}"), complete("Close")] }),
     screen({ id: "REPORT", title: "Report a problem", data: { tenancies: options(OPT), categories: options(OPT) }, children: [heading("Report a problem to your landlord"), ...form, caption("You can send photos of the problem in the chat afterwards."), submit("Send report", "report", formPayload(form))] }),
+    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("No tenancy is connected to this number yet.") }, children: [body("${data.message}"), complete("Close")] }),
     DONE,
-  ], { NOTICE: [], REPORT: ["DONE"], DONE: [] });
+  ], { REPORT: ["DONE", "NOTICE"], NOTICE: [], DONE: [] });
 }
 
 function findProfessional() {
@@ -186,9 +185,8 @@ function findProfessional() {
     screen({ id: "RESULTS", title: "Verified professionals", data: { summary: str("2 verified providers found."), results: options([{ id: "provider-id", title: "Kofi Plumbing", description: "Plumbing · Tema" }]) }, children: [
       body("${data.summary}"), radios("provider", "Choose a provider", "${data.results}"), submit("View profile", "select", { provider: "${form.provider}" }),
     ] }),
-    screen({ id: "NO_RESULTS", title: "No matches yet", data: { summary: str("No verified providers match yet.") }, children: [body("${data.summary}"), submit("Search again", "restart")] }),
     DONE,
-  ], { SEARCH: ["RESULTS", "NO_RESULTS"], RESULTS: ["DONE"], NO_RESULTS: ["SEARCH"], DONE: [] });
+  ], { SEARCH: ["RESULTS"], RESULTS: ["DONE"], DONE: [] });
 }
 
 function bookService() {
@@ -207,12 +205,12 @@ function bookService() {
 
 function propertyManagement() {
   return flowJson([
-    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Reply register in the chat to set up your properties first.") }, children: [body("${data.message}"), complete("Close")] }),
     screen({ id: "MENU", title: "Property management", data: { summary: str("Owusu Homes: 2 properties, 5 units, 3 tenants."), actions: options(OPT) }, children: [
       heading("Your properties"), body("${data.summary}"), radios("task", "What would you like to do?", "${data.actions}"), submit("Continue", "choose", { task: "${form.task}" }),
     ] }),
+    screen({ id: "NOTICE", title: "NesAfric", terminal: true, data: { message: str("Reply register in the chat to set up your properties first.") }, children: [body("${data.message}"), complete("Close")] }),
     DONE,
-  ], { NOTICE: [], MENU: ["DONE"], DONE: [] });
+  ], { MENU: ["DONE", "NOTICE"], NOTICE: [], DONE: [] });
 }
 
 function helpSupport() {

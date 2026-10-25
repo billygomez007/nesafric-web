@@ -27,6 +27,12 @@ describe("WhatsApp Flow JSON definitions", () => {
     expect(Object.keys(flow.routing_model).sort()).toEqual([...ids].sort());
     expect(Object.values(flow.routing_model).flat().every((target) => ids.includes(target))).toBe(true);
     expect(flow.screens.some((screen) => screen.terminal)).toBe(true);
+    // Meta: only forward routes (no route back to a screen that leads here) and every screen connected.
+    const reachable = new Set([ids[0]]);
+    for (let changed = true; changed;) { changed = false; for (const [from, to] of Object.entries(flow.routing_model)) if (reachable.has(from)) for (const target of to) if (!reachable.has(target)) { reachable.add(target); changed = true; } }
+    expect([...reachable].sort(), "every screen is reachable from the first").toEqual([...ids].sort());
+    const leadsTo = (from: string, target: string, seen = new Set<string>()): boolean => (flow.routing_model[from] ?? []).some((next) => next === target || (!seen.has(next) && (seen.add(next), leadsTo(next, target, seen))));
+    for (const [from, to] of Object.entries(flow.routing_model)) for (const target of to) expect(leadsTo(target, from), `backward route ${target} -> ${from}`).toBe(false);
     for (const screen of flow.screens) {
       const children = screen.layout.children;
       const names = children.filter((child) => typeof child.name === "string").map((child) => child.name as string);
