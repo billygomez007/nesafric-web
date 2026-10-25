@@ -52,6 +52,31 @@
       }
     },
     {
+      "key": "U03",
+      "payload": {
+        "name": "nes_property_viewing_reminder",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Reminder from NesAfric: your viewing for {{1}} is scheduled for {{2}} at {{3}}. Your booking reference is {{4}}. Reply here if you need to change it.",
+            "example": {
+              "body_text": [
+                [
+                  "3-bedroom house in Spintex",
+                  "Sat, 26 Oct 2026",
+                  "10:00 GMT",
+                  "VW-3M8D1R"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "key": "U04",
       "payload": {
         "name": "nes_property_viewing_rescheduled",
@@ -199,6 +224,31 @@
       }
     },
     {
+      "key": "U10",
+      "payload": {
+        "name": "nes_property_listing_received",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, thank you for listing with NesAfric. We have received your property listing {{2}} and our team will review it. Listing reference: {{3}}. Current status: {{4}}. We will message you when the review is complete.",
+            "example": {
+              "body_text": [
+                [
+                  "Abena",
+                  "4-bedroom townhouse in Cantonments",
+                  "LS-9F2C7A",
+                  "pending review"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "key": "U11",
       "payload": {
         "name": "nes_property_listing_status",
@@ -216,6 +266,31 @@
                   "4-bedroom townhouse in Cantonments",
                   "published",
                   "LS-9F2C7A"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U12",
+      "payload": {
+        "name": "nes_manager_registration_received",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, we have received the registration for your property management business {{2}}. Reference: {{3}}. Status: {{4}}. We will let you know when the review is complete.",
+            "example": {
+              "body_text": [
+                [
+                  "Akosua",
+                  "Mensah Properties",
+                  "PM-2B9E4F",
+                  "active"
                 ]
               ]
             }
@@ -247,6 +322,55 @@
       }
     },
     {
+      "key": "U14",
+      "payload": {
+        "name": "nes_business_profile_updated",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, the business profile for {{2}} has been updated successfully. Updated information: {{3}}. Reply here if you did not make this change.",
+            "example": {
+              "body_text": [
+                [
+                  "Akosua",
+                  "Mensah Properties",
+                  "contact phone number and logo"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U15",
+      "payload": {
+        "name": "nes_property_added",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, the property {{2}} has been added to your NesAfric workspace {{3}} and is ready to manage. Property reference: {{4}}. You can add units and tenants at any time.",
+            "example": {
+              "body_text": [
+                [
+                  "Akosua",
+                  "Adenta Court",
+                  "Mensah Properties",
+                  "ADC-01"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "key": "U16",
       "payload": {
         "name": "nes_property_registration_action_required",
@@ -263,6 +387,56 @@
                   "Akosua",
                   "Adenta Court",
                   "a document in the account holder's name"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U17",
+      "payload": {
+        "name": "nes_tenant_invitation",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, {{2}} has invited you to join property {{3}} on NesAfric as a tenant. Reply to this message to review and verify your invitation. Reference: {{4}}. If you were not expecting this invitation, you can ignore this message.",
+            "example": {
+              "body_text": [
+                [
+                  "Kojo",
+                  "Mensah Properties",
+                  "Adenta Court, Unit 4B",
+                  "TI-8C2F5D"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U18",
+      "payload": {
+        "name": "nes_tenant_invitation_accepted",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, good news: your tenant {{2}} has accepted the invitation for property {{3}} on NesAfric. Reference: {{4}}. They can now send repair requests and messages through NesAfric.",
+            "example": {
+              "body_text": [
+                [
+                  "Akosua",
+                  "Kojo Boateng",
+                  "Adenta Court, Unit 4B",
+                  "TI-8C2F5D"
                 ]
               ]
             }
@@ -320,6 +494,31 @@
       }
     },
     {
+      "key": "U21",
+      "payload": {
+        "name": "nes_tenant_invitation_reminder",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, your invitation from {{2}} to join property {{3}} on NesAfric is still pending. Reply here to continue. Reference: {{4}}. If you were not expecting this invitation, you can ignore this message.",
+            "example": {
+              "body_text": [
+                [
+                  "Kojo",
+                  "Mensah Properties",
+                  "Adenta Court, Unit 4B",
+                  "TI-8C2F5D"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "key": "U22",
       "payload": {
         "name": "nes_tenant_link_removed",
@@ -345,6 +544,81 @@
       }
     },
     {
+      "key": "U23",
+      "payload": {
+        "name": "nes_maintenance_request_received",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, your maintenance request for property {{2}} has been received by NesAfric. Ticket number: {{3}}. Current status: {{4}}. We will keep you updated on this request.",
+            "example": {
+              "body_text": [
+                [
+                  "Kojo",
+                  "Adenta Court, Unit 4B",
+                  "NM-1042",
+                  "received"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U24",
+      "payload": {
+        "name": "nes_maintenance_request_assigned",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, your maintenance request {{2}} has been assigned to {{3}}, who will handle the work. Current status: {{4}}. We will keep you updated on progress.",
+            "example": {
+              "body_text": [
+                [
+                  "Kojo",
+                  "NM-1042",
+                  "Kwesi Plumbing Services",
+                  "waiting for the provider to accept"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U25",
+      "payload": {
+        "name": "nes_maintenance_status_updated",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, there is an update on maintenance ticket {{2}} for property {{3}}. The new status is {{4}}. Reply here if you have any questions.",
+            "example": {
+              "body_text": [
+                [
+                  "Kojo",
+                  "NM-1042",
+                  "Adenta Court, Unit 4B",
+                  "work has started"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "key": "U26",
       "payload": {
         "name": "nes_maintenance_request_completed",
@@ -361,6 +635,81 @@
                   "Kojo",
                   "NM-1042",
                   "Adenta Court, Unit 4B"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U27",
+      "payload": {
+        "name": "nes_property_management_assignment",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, you have been assigned to manage property {{2}} under workspace {{3}}. Assignment reference: {{4}}. You can view the property in your NesAfric account.",
+            "example": {
+              "body_text": [
+                [
+                  "Efua",
+                  "Adenta Court",
+                  "Mensah Properties",
+                  "PA-6F3C2E"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U28",
+      "payload": {
+        "name": "nes_document_received",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, NesAfric has received your document for {{2}} and our team will review it. Reference: {{3}}. Current status: {{4}}. We will message you when the review is complete.",
+            "example": {
+              "body_text": [
+                [
+                  "Abena",
+                  "verification of 4-bedroom townhouse in Cantonments",
+                  "DC-1A7B3E",
+                  "under review"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "U29",
+      "payload": {
+        "name": "nes_document_review_completed",
+        "language": "en",
+        "category": "UTILITY",
+        "allow_category_change": false,
+        "components": [
+          {
+            "type": "BODY",
+            "text": "Hello {{1}}, NesAfric has completed the review of your document for {{2}}. Result: {{3}}. Reference: {{4}}. Reply here if you have any questions.",
+            "example": {
+              "body_text": [
+                [
+                  "Abena",
+                  "verification of 4-bedroom townhouse in Cantonments",
+                  "verified",
+                  "DC-1A7B3E"
                 ]
               ]
             }
@@ -394,433 +743,5 @@
       }
     }
   ],
-  "needsReview": [
-    {
-      "key": "U03",
-      "name": "nes_property_viewing_reminder",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder."
-      ],
-      "payload": {
-        "name": "nes_property_viewing_reminder",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Reminder from NesAfric: Your viewing for {{1}} is scheduled for {{2}} at {{3}}. Your booking reference is {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "3-bedroom house in Spintex",
-                  "Sat, 26 Oct 2026",
-                  "10:00 GMT",
-                  "VW-3M8D1R"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U10",
-      "name": "nes_property_listing_received",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_property_listing_received",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, your property listing {{2}} has been received. Listing reference: {{3}}. Current status: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Abena",
-                  "4-bedroom townhouse in Cantonments",
-                  "LS-9F2C7A",
-                  "pending review"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U12",
-      "name": "nes_manager_registration_received",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder."
-      ],
-      "payload": {
-        "name": "nes_manager_registration_received",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, we have received the registration for your property management business {{2}}. Reference: {{3}}. Status: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Akosua",
-                  "Mensah Properties",
-                  "PM-2B9E4F",
-                  "active"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U14",
-      "name": "nes_business_profile_updated",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder."
-      ],
-      "payload": {
-        "name": "nes_business_profile_updated",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, the business profile for {{2}} has been updated successfully. Updated information: {{3}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Akosua",
-                  "Mensah Properties",
-                  "contact phone number and logo"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U15",
-      "name": "nes_property_added",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_property_added",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, property {{2}} has been added to your NesAfric workspace {{3}}. Property reference: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Akosua",
-                  "Adenta Court",
-                  "Mensah Properties",
-                  "ADC-01"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U17",
-      "name": "nes_tenant_invitation",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder."
-      ],
-      "payload": {
-        "name": "nes_tenant_invitation",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, {{2}} has invited you to join property {{3}} on NesAfric as a tenant. Reply to this message to review and verify your invitation. Reference: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Kojo",
-                  "Mensah Properties",
-                  "Adenta Court, Unit 4B",
-                  "TI-8C2F5D"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U18",
-      "name": "nes_tenant_invitation_accepted",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_tenant_invitation_accepted",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, tenant {{2}} has accepted the invitation for property {{3}}. Reference: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Akosua",
-                  "Kojo Boateng",
-                  "Adenta Court, Unit 4B",
-                  "TI-8C2F5D"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U21",
-      "name": "nes_tenant_invitation_reminder",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder."
-      ],
-      "payload": {
-        "name": "nes_tenant_invitation_reminder",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, your invitation from {{2}} to join property {{3}} on NesAfric is still pending. Reply here to continue. Reference: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Kojo",
-                  "Mensah Properties",
-                  "Adenta Court, Unit 4B",
-                  "TI-8C2F5D"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U23",
-      "name": "nes_maintenance_request_received",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_maintenance_request_received",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, your maintenance request for property {{2}} has been received. Ticket: {{3}}. Status: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Kojo",
-                  "Adenta Court, Unit 4B",
-                  "NM-1042",
-                  "received"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U24",
-      "name": "nes_maintenance_request_assigned",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_maintenance_request_assigned",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, your maintenance request {{2}} has been assigned to {{3}}. Current status: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Kojo",
-                  "NM-1042",
-                  "Kwesi Plumbing Services",
-                  "waiting for the provider to accept"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U25",
-      "name": "nes_maintenance_status_updated",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_maintenance_status_updated",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, maintenance ticket {{2}} for property {{3}} has been updated. New status: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Kojo",
-                  "NM-1042",
-                  "Adenta Court, Unit 4B",
-                  "work has started"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U27",
-      "name": "nes_property_management_assignment",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder."
-      ],
-      "payload": {
-        "name": "nes_property_management_assignment",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, you have been assigned to manage property {{2}} under workspace {{3}}. Assignment reference: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Efua",
-                  "Adenta Court",
-                  "Mensah Properties",
-                  "PA-6F3C2E"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U28",
-      "name": "nes_document_received",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_document_received",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, your document for {{2}} has been received by NesAfric. Reference: {{3}}. Status: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Abena",
-                  "verification of 4-bedroom townhouse in Cantonments",
-                  "DC-1A7B3E",
-                  "under review"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "key": "U29",
-      "name": "nes_document_review_completed",
-      "content": "NEEDS_REVIEW",
-      "errors": [
-        "Body must not end with a placeholder.",
-        "Too many parameters for the length of the message (Meta rejects these)."
-      ],
-      "payload": {
-        "name": "nes_document_review_completed",
-        "language": "en",
-        "category": "UTILITY",
-        "allow_category_change": false,
-        "components": [
-          {
-            "type": "BODY",
-            "text": "Hello {{1}}, the review of your document for {{2}} is complete. Result: {{3}}. Reference: {{4}}.",
-            "example": {
-              "body_text": [
-                [
-                  "Abena",
-                  "verification of 4-bedroom townhouse in Cantonments",
-                  "verified",
-                  "DC-1A7B3E"
-                ]
-              ]
-            }
-          }
-        ]
-      }
-    }
-  ]
+  "needsReview": []
 }

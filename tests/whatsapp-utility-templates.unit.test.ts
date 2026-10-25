@@ -10,7 +10,8 @@ const GROUPS: Array<[string, number, number]> = [
   ["TENANT_MANAGEMENT", 17, 22], ["PROPERTY_OPERATIONS", 23, 27], ["ACCOUNT_ACTIVITY", 28, 30],
 ];
 const withBody = (body: string, params = utilityTemplate("U19").params): UtilityTemplate => ({ ...utilityTemplate("U19"), body, params, reviewFlag: undefined });
-const NEEDS_REVIEW = ["U03", "U10", "U12", "U14", "U15", "U17", "U18", "U21", "U23", "U24", "U25", "U27", "U28", "U29"];
+/** Every catalogue body passes the Meta format checks (none ends with a variable). */
+const NEEDS_REVIEW: string[] = [];
 
 describe("Utility template registry", () => {
   it("defines U01-U30 once each, in their six categories, as English Utility templates", () => {

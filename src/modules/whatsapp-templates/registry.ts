@@ -77,11 +77,6 @@ const STATUS = (sample: string) => p("status", sample, 60);
 
 type Entry = Omit<UtilityTemplate, "version" | "language" | "category" | "content"> & { version?: number; content?: UtilityTemplate["content"] };
 const catalogue = (template: Entry): UtilityTemplate => ({ version: 1, language: "en", category: "UTILITY", content: "FINAL", ...template });
-/** Meta does not accept a body that ends with a variable; a full stop after it is not enough. */
-const ENDS_WITH_VARIABLE = "The catalogue body ends with a variable (only a full stop follows it). Meta rejects bodies that end with a variable, so this needs a catalogue change (for example a closing sentence) before submission.";
-/** NesAfric's local rule (at least three fixed words per variable, plus three): Meta rejects bodies with "too many variables for its length". */
-const DENSE = "It also has few fixed words per variable; Meta may reject it as having too many variables for its length.";
-const needsReview = (template: Entry, reviewFlag: string): UtilityTemplate => catalogue({ ...template, content: "NEEDS_REVIEW", reviewFlag });
 
 export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
   // Category A: customer property enquiries
@@ -99,14 +94,14 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
     trigger: { event: "viewing.confirmed", condition: "The agent or landlord confirms a time." },
     recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"], wiring: { status: "WIRED" },
   }),
-  needsReview({
+  catalogue({
     key: "U03", name: "nes_property_viewing_reminder", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Reminder",
-    body: "Reminder from NesAfric: Your viewing for {{1}} is scheduled for {{2}} at {{3}}. Your booking reference is {{4}}.",
+    body: "Reminder from NesAfric: your viewing for {{1}} is scheduled for {{2}} at {{3}}. Your booking reference is {{4}}. Reply here if you need to change it.",
     params: [PROPERTY("3-bedroom house in Spintex"), DATE("Sat, 26 Oct 2026"), TIME("10:00 GMT"), REFERENCE("VW-3M8D1R")],
     trigger: { event: "viewing.reminder_due", condition: "A confirmed viewing is approaching." },
     recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"],
     wiring: { status: "NOT_WIRED", reason: "No business event marks an approaching viewing; this needs a scheduled reminder job over confirmed viewings, not a new event." },
-  }, ENDS_WITH_VARIABLE),
+  }),
   catalogue({
     key: "U04", name: "nes_property_viewing_rescheduled", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Rescheduled",
     body: "Hello {{1}}, your viewing for {{2}} has been rescheduled to {{3}} at {{4}}. Please reply if you need help.",
@@ -151,13 +146,13 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
     trigger: { event: "marketplace_professional.verification_reviewed", condition: "A NesAfric reviewer sets the profile to REJECTED with what is needed; the agent can register again on WhatsApp." },
     recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
-  needsReview({
+  catalogue({
     key: "U10", name: "nes_property_listing_received", group: "AGENT_ONBOARDING", title: "Property Listing Received",
-    body: "Hello {{1}}, your property listing {{2}} has been received. Listing reference: {{3}}. Current status: {{4}}.",
+    body: "Hello {{1}}, thank you for listing with NesAfric. We have received your property listing {{2}} and our team will review it. Listing reference: {{3}}. Current status: {{4}}. We will message you when the review is complete.",
     params: [NAME("Abena"), p("property_title", "4-bedroom townhouse in Cantonments", 80, "customer"), REFERENCE("LS-9F2C7A"), STATUS("pending review")],
     trigger: { event: "listing.pending_review", condition: "A listing moves to PENDING_REVIEW. Not sent while the lister is chatting with NesAfric." },
     recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
+  }),
   catalogue({
     key: "U11", name: "nes_property_listing_status", group: "AGENT_ONBOARDING", title: "Property Listing Status",
     body: "Hello {{1}}, the status of your property listing {{2}} has changed to {{3}}. Reference: {{4}}. Reply for assistance.",
@@ -167,14 +162,14 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
   }),
 
   // Category C: landlord and property manager onboarding
-  needsReview({
+  catalogue({
     key: "U12", name: "nes_manager_registration_received", group: "LANDLORD_ONBOARDING", title: "Property Manager Registration Received",
-    body: "Hello {{1}}, we have received the registration for your property management business {{2}}. Reference: {{3}}. Status: {{4}}.",
+    body: "Hello {{1}}, we have received the registration for your property management business {{2}}. Reference: {{3}}. Status: {{4}}. We will let you know when the review is complete.",
     params: [NAME("Akosua"), p("business_name", "Mensah Properties", 80, "customer"), REFERENCE("PM-2B9E4F"), STATUS("active")],
     trigger: { event: "organisation.created", condition: "A property-management business is registered." },
     recipient: "LANDLORD_OR_MANAGER", optIn: ["LINKED_ACCOUNT"],
     wiring: { status: "NOT_WIRED", reason: "Registration has no review step: the workspace is active at once and U13 reports that from the same event. Sending both would message the manager twice." },
-  }, ENDS_WITH_VARIABLE),
+  }),
   catalogue({
     key: "U13", name: "nes_workspace_activated", group: "LANDLORD_ONBOARDING", title: "Workspace Activated",
     body: "Hello {{1}}, your NesAfric workspace for {{2}} is now active. You can manage your properties and tenants through WhatsApp.",
@@ -182,21 +177,21 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
     trigger: { event: "organisation.created", condition: "A landlord or property-management workspace is created. Not sent while the owner is already chatting with NesAfric (WhatsApp onboarding confirms in the chat)." },
     recipient: "LANDLORD_OR_MANAGER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
-  needsReview({
+  catalogue({
     key: "U14", name: "nes_business_profile_updated", group: "LANDLORD_ONBOARDING", title: "Business Profile Updated",
-    body: "Hello {{1}}, the business profile for {{2}} has been updated successfully. Updated information: {{3}}.",
+    body: "Hello {{1}}, the business profile for {{2}} has been updated successfully. Updated information: {{3}}. Reply here if you did not make this change.",
     params: [NAME("Akosua"), p("business_name", "Mensah Properties", 80, "customer"), p("updated_information", "contact phone number and logo", 120)],
     trigger: { event: "marketplace_professional.updated", condition: "An authorised owner or manager updates the business profile." },
     recipient: "LANDLORD_OR_MANAGER", optIn: ["LINKED_ACCOUNT"],
     wiring: { status: "NOT_WIRED", reason: "Profile updates write an audit record but no domain event yet, and the person making the change sees it confirmed on screen." },
-  }, ENDS_WITH_VARIABLE),
-  needsReview({
+  }),
+  catalogue({
     key: "U15", name: "nes_property_added", group: "LANDLORD_ONBOARDING", title: "Property Added",
-    body: "Hello {{1}}, property {{2}} has been added to your NesAfric workspace {{3}}. Property reference: {{4}}.",
+    body: "Hello {{1}}, the property {{2}} has been added to your NesAfric workspace {{3}} and is ready to manage. Property reference: {{4}}. You can add units and tenants at any time.",
     params: [NAME("Akosua"), PROPERTY("Adenta Court"), p("workspace_name", "Mensah Properties", 80, "customer"), p("property_reference", "ADC-01", 40, "customer")],
     trigger: { event: "property.created", condition: "A property is added to the workspace. Not sent while the person who added it is chatting with NesAfric." },
     recipient: "LANDLORD_OR_MANAGER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
+  }),
   catalogue({
     key: "U16", name: "nes_property_registration_action_required", group: "LANDLORD_ONBOARDING", title: "Property Registration Action Required",
     body: "Hello {{1}}, additional information is needed to complete registration of property {{2}}. Required information: {{3}}. Reply here to continue.",
@@ -206,20 +201,20 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
   }),
 
   // Category D: tenant management
-  needsReview({
+  catalogue({
     key: "U17", name: "nes_tenant_invitation", group: "TENANT_MANAGEMENT", title: "Tenant Invitation",
-    body: "Hello {{1}}, {{2}} has invited you to join property {{3}} on NesAfric as a tenant. Reply to this message to review and verify your invitation. Reference: {{4}}.",
+    body: "Hello {{1}}, {{2}} has invited you to join property {{3}} on NesAfric as a tenant. Reply to this message to review and verify your invitation. Reference: {{4}}. If you were not expecting this invitation, you can ignore this message.",
     params: [NAME("Kojo"), p("landlord_name", "Mensah Properties", 80, "customer"), PROPERTY("Adenta Court, Unit 4B"), p("invitation_reference", "TI-8C2F5D", 20)],
     trigger: { event: "tenant.access_invitation_created", condition: "Landlord creates a tenant access invitation for a tenancy that records WhatsApp consent and is not yet connected to an account." },
     recipient: "TENANT", optIn: ["TENANT_CONSENT_RECORDED"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} Also: the recipient number is supplied by the landlord, so it is sent only with the tenant's recorded WhatsApp consent; the reference is not the access code, and replying only explains how to verify (one-time code for the number, then the access code).`),
-  needsReview({
+  }),
+  catalogue({
     key: "U18", name: "nes_tenant_invitation_accepted", group: "TENANT_MANAGEMENT", title: "Tenant Invitation Accepted",
-    body: "Hello {{1}}, tenant {{2}} has accepted the invitation for property {{3}}. Reference: {{4}}.",
+    body: "Hello {{1}}, good news: your tenant {{2}} has accepted the invitation for property {{3}} on NesAfric. Reference: {{4}}. They can now send repair requests and messages through NesAfric.",
     params: [NAME("Akosua"), p("tenant_name", "Kojo Boateng", 80, "customer"), PROPERTY("Adenta Court, Unit 4B"), p("invitation_reference", "TI-8C2F5D", 20)],
     trigger: { event: "tenant.access_invitation_redeemed", condition: "The tenant redeems the access code after OTP verification. Sent to the landlord or manager who created the invitation." },
     recipient: "LANDLORD_OR_MANAGER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
+  }),
   catalogue({
     key: "U19", name: "nes_tenant_link_confirmed", group: "TENANT_MANAGEMENT", title: "Tenant Link Confirmed",
     body: "Hello {{1}}, your tenant profile has been linked to property {{2}}, managed by {{3}}. Reply here for assistance.",
@@ -234,14 +229,14 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
     trigger: { event: "lease.amended", condition: "The landlord records an amendment to a lease that is not a draft (signed lease terms change only by amendment). Sent to each tenant on the lease whose account is connected to the tenancy." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
-  needsReview({
+  catalogue({
     key: "U21", name: "nes_tenant_invitation_reminder", group: "TENANT_MANAGEMENT", title: "Tenant Invitation Reminder",
-    body: "Hello {{1}}, your invitation from {{2}} to join property {{3}} on NesAfric is still pending. Reply here to continue. Reference: {{4}}.",
+    body: "Hello {{1}}, your invitation from {{2}} to join property {{3}} on NesAfric is still pending. Reply here to continue. Reference: {{4}}. If you were not expecting this invitation, you can ignore this message.",
     params: [NAME("Kojo"), p("landlord_name", "Mensah Properties", 80, "customer"), PROPERTY("Adenta Court, Unit 4B"), p("invitation_reference", "TI-8C2F5D", 20)],
     trigger: { event: "tenant.access_invitation_reminder_due", condition: "An invitation sent with U17 is still pending." },
     recipient: "TENANT", optIn: ["TENANT_CONSENT_RECORDED"],
     wiring: { status: "NOT_WIRED", reason: "No event marks a pending invitation; this needs a scheduled reminder with a per-invitation limit, and only after U17 was delivered." },
-  }, `${ENDS_WITH_VARIABLE} Also: a reminder to someone who has not yet engaged is the most likely to be recategorised as Marketing; limit it to one reminder per invitation.`),
+  }),
   catalogue({
     key: "U22", name: "nes_tenant_link_removed", group: "TENANT_MANAGEMENT", title: "Tenant Link Removed",
     body: "Hello {{1}}, your tenant association with property {{2}} has ended effective {{3}}. Contact {{4}} if you believe this is incorrect.",
@@ -251,27 +246,27 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
   }),
 
   // Category E: property operations
-  needsReview({
+  catalogue({
     key: "U23", name: "nes_maintenance_request_received", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Received",
-    body: "Hello {{1}}, your maintenance request for property {{2}} has been received. Ticket: {{3}}. Status: {{4}}.",
+    body: "Hello {{1}}, your maintenance request for property {{2}} has been received by NesAfric. Ticket number: {{3}}. Current status: {{4}}. We will keep you updated on this request.",
     params: [NAME("Kojo"), PROPERTY("Adenta Court, Unit 4B"), p("ticket", "NM-1042", 20), STATUS("received")],
     trigger: { event: "maintenance.requested", condition: "A repair request for a tenancy is created on the web or mobile app. Reports made on WhatsApp are answered in the chat." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
-  needsReview({
+  }),
+  catalogue({
     key: "U24", name: "nes_maintenance_request_assigned", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Assigned",
-    body: "Hello {{1}}, your maintenance request {{2}} has been assigned to {{3}}. Current status: {{4}}.",
+    body: "Hello {{1}}, your maintenance request {{2}} has been assigned to {{3}}, who will handle the work. Current status: {{4}}. We will keep you updated on progress.",
     params: [NAME("Kojo"), p("ticket", "NM-1042", 20), p("provider_name", "Kwesi Plumbing Services", 80, "customer"), STATUS("waiting for the provider to accept")],
     trigger: { event: "workorder.assigned", condition: "The landlord assigns a provider to the request's work order. Requests handled by the automatic provider network are skipped: providers' updates already reach the tenant." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
-  needsReview({
+  }),
+  catalogue({
     key: "U25", name: "nes_maintenance_status_updated", group: "PROPERTY_OPERATIONS", title: "Maintenance Status Updated",
-    body: "Hello {{1}}, maintenance ticket {{2}} for property {{3}} has been updated. New status: {{4}}.",
+    body: "Hello {{1}}, there is an update on maintenance ticket {{2}} for property {{3}}. The new status is {{4}}. Reply here if you have any questions.",
     params: [NAME("Kojo"), p("ticket", "NM-1042", 20), PROPERTY("Adenta Court, Unit 4B"), STATUS("work has started")],
     trigger: { event: "maintenance.started | maintenance.rejected | maintenance.cancelled", condition: "Sent to the tenant. Requests handled by the automatic provider network are skipped: providers' updates already reach the tenant. Landlords keep their existing escalations and digest." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
+  }),
   catalogue({
     key: "U26", name: "nes_maintenance_request_completed", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Completed",
     body: "Hello {{1}}, maintenance request {{2}} for property {{3}} has been marked completed. Reply here if the issue is unresolved.",
@@ -279,30 +274,30 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
     trigger: { event: "maintenance.completed", condition: "Requests handled by the automatic provider network are skipped: the provider's completion message already reaches the tenant." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
-  needsReview({
+  catalogue({
     key: "U27", name: "nes_property_management_assignment", group: "PROPERTY_OPERATIONS", title: "Property Management Assignment",
-    body: "Hello {{1}}, you have been assigned to manage property {{2}} under workspace {{3}}. Assignment reference: {{4}}.",
+    body: "Hello {{1}}, you have been assigned to manage property {{2}} under workspace {{3}}. Assignment reference: {{4}}. You can view the property in your NesAfric account.",
     params: [NAME("Efua"), PROPERTY("Adenta Court"), p("workspace_name", "Mensah Properties", 80, "customer"), REFERENCE("PA-6F3C2E")],
     trigger: { event: "property.manager_assigned", condition: "An authorised administrator assigns a manager to a property." },
     recipient: "WORKSPACE_MEMBER", optIn: ["LINKED_ACCOUNT"],
     wiring: { status: "NOT_WIRED", reason: "Property-level manager assignments do not exist as records or events; access is granted per workspace role." },
-  }, ENDS_WITH_VARIABLE),
+  }),
 
   // Category F: account and document activity
-  needsReview({
+  catalogue({
     key: "U28", name: "nes_document_received", group: "ACCOUNT_ACTIVITY", title: "Document Received",
-    body: "Hello {{1}}, your document for {{2}} has been received by NesAfric. Reference: {{3}}. Status: {{4}}.",
+    body: "Hello {{1}}, NesAfric has received your document for {{2}} and our team will review it. Reference: {{3}}. Current status: {{4}}. We will message you when the review is complete.",
     params: [NAME("Abena"), p("document_purpose", "verification of 4-bedroom townhouse in Cantonments", 100, "customer"), REFERENCE("DC-1A7B3E"), STATUS("under review")],
     trigger: { event: "listing.verification_submitted", condition: "Listing verification evidence is submitted. Not sent while the submitter is chatting with NesAfric." },
     recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
-  needsReview({
+  }),
+  catalogue({
     key: "U29", name: "nes_document_review_completed", group: "ACCOUNT_ACTIVITY", title: "Document Review Completed",
-    body: "Hello {{1}}, the review of your document for {{2}} is complete. Result: {{3}}. Reference: {{4}}.",
+    body: "Hello {{1}}, NesAfric has completed the review of your document for {{2}}. Result: {{3}}. Reference: {{4}}. Reply here if you have any questions.",
     params: [NAME("Abena"), p("document_purpose", "verification of 4-bedroom townhouse in Cantonments", 100, "customer"), p("result", "verified", 160, "customer"), REFERENCE("DC-1A7B3E")],
     trigger: { event: "listing.verification_verified | listing.verification_rejected", condition: "A reviewer decides the listing's verification evidence." },
     recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
-  }, `${ENDS_WITH_VARIABLE} ${DENSE}`),
+  }),
   catalogue({
     key: "U30", name: "nes_account_status_updated", group: "ACCOUNT_ACTIVITY", title: "Account Status Updated",
     body: "Hello {{1}}, your NesAfric account or business profile {{2}} has a status update: {{3}}. Reference: {{4}}. Reply if you need assistance.",
