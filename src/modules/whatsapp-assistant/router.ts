@@ -17,6 +17,7 @@ import { answerLandlord } from "./landlord";
 import { advanceBusiness } from "./business";
 import { invitationReply } from "@/modules/whatsapp-templates/invitation-reply";
 import { searchAgents } from "./tools";
+import { handleViewingCommand, handleViewingOutcome, openViewingNegotiation, viewingReference } from "./viewings";
 import { COMMERCIAL_PROMPT, commercialChoices, FIND_PROPERTY_PROMPT, findPropertyChoices, greetingLine, MORE_OPTIONS, OFFICIAL_ALIASES, OFFICIAL_MENU_COMMANDS, rentOrBuyButtons, VIEWING_PROMPT, viewingButtons, welcomeReply } from "./welcome";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** The sender's WhatsApp profile name, as Meta sent it (untrusted, display only). */ profileName?: string };
@@ -45,6 +46,9 @@ type Dependencies = {
   business: typeof advanceBusiness;
   invitationReply: typeof invitationReply;
   agents: typeof searchAgents;
+  viewingCommand?: typeof handleViewingCommand;
+  viewingOutcome?: typeof handleViewingOutcome;
+  openViewing?: typeof openViewingNegotiation;
   /** The clock for the greeting (tests pass a fixed time). */
   now?: () => Date;
 };
@@ -66,6 +70,15 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   const greeting = async () => greetingLine(dependencies.now?.() ?? new Date(), (await dependencies.linkedUser(input.phone))?.user.displayName ?? input.profileName);
 
   if (state.workflow === "link") return continueLink(input, state, reset, dependencies);
+
+  // Viewing negotiation and the after-viewing check: explicit commands with a VW- reference, from
+  // either side and from any step (they are what the viewing buttons send).
+  if (input.kind === "text" && /^(accept|propose|decline|cancel|viewed)\s+vw-[0-9a-f]{6}\b/.test(command)) {
+    const linked = await dependencies.linkedUser(input.phone);
+    const answer = await (dependencies.viewingCommand ?? handleViewingCommand)({ phone: input.phone, body: input.body, messageId: input.messageId, linkedUserId: linked?.user.id })
+      ?? await (dependencies.viewingOutcome ?? handleViewingOutcome)({ phone: input.phone, body: input.body });
+    if (answer) return { state, ...answer };
+  }
 
   // The welcome menu. A bare number is a menu choice wherever a search is open (results are picked
   // with "details 2"); an option's words or list tap count when nothing else is under way.
@@ -176,6 +189,15 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   }
 
   const result = await dependencies.engine(input);
+  // A viewing just requested in the chat: ask the listing team now, on WhatsApp where possible.
+  const requested = result.state.lastRequest?.viewingId;
+  if (requested && requested !== state.lastRequest?.viewingId) {
+    const negotiation = await (dependencies.openViewing ?? openViewingNegotiation)(requested);
+    const reference = viewingReference(requested);
+    return { ...result, reply: negotiation.teamReachable
+      ? `Viewing request ${reference} sent to the listing team. I'll message you here when they accept or suggest another time. It is not confirmed until then.`
+      : `Viewing request ${reference} saved. The listing team will confirm the time. Reply status to check it.` };
+  }
   // Anything not understood on the first turn, or between tasks, gets the welcome menu.
   if (state.workflow === "idle" && result.reply.startsWith("Would you like to find a property, find a service provider")) return { ...result, ...welcomeReply(await greeting(), "I did not catch that.\n\n") };
   if (result.reply === "Are you looking to rent or buy?" && !result.interactive) return { ...result, interactive: rentOrBuyButtons(result.reply) };

@@ -68,3 +68,20 @@ loop, notifying the customer, reminders 2 h and 1 h before, and the after-viewin
    window.
 4. **Remaining partial flows:** questions answered from listing data, provider contact requests,
    service categories on WhatsApp, template registry aligned with Meta's approved names.
+
+## Delivered (branch `feat/whatsapp-end-to-end`)
+
+| Stage | Result |
+|---|---|
+| 1 Property cards | Each result is a button message with the listing's cover photo as an image header (title, type, location, rooms, price with its period or "sale price", short description, verification) and View property / Ask a question / Book a viewing. Show more / Change filters / New search follow. Replies of several messages are sent by one `conversation-message-sequence` job, in order. |
+| 2 Step-by-step search | Rent or buy, then type (only published types, with counts), bedrooms (studio, number, range, 5+), area (typed), budget (ranges or typed). Every step but the area can be skipped. |
+| 3 Viewings | `ViewingProposal` (migration `20261026090000_whatsapp_viewing_proposals`). A viewing requested in the chat alerts the listing team (lead assignee, else listing representative, else creator) on their linked WhatsApp: buttons inside the 24-hour window, the approved `nesafric_inquiry_agent_alert` outside it. Accept / propose another time / decline from the team; accept / another time / cancel from the customer; confirmed only when one side accepts the other's open proposal, through the listing domain's transitions. Both sides are told; the template dispatcher skips what the negotiation already said. Reminders 2 h and 1 h before (Africa/Accra), to both sides, once per agreed time, dropped if the time moves or the viewing ends; a check 2 h after asks the customer whether it took place and records the answer on the enquiry (the team still marks it completed). |
+| Templates | U01-U06, U10, U23-U26 now use Meta's approved `nesafric_*` names and exact text; U31 (`nesafric_inquiry_agent_alert`) added. Values a template does not use are ignored. |
+
+## Remaining
+
+- **Approved templates not yet usable** until synced: set `WHATSAPP_TEMPLATE_WABA_ID=1104581892174096` on Cloud Run and run `npm run whatsapp:templates -- sync` once (read-only on Meta). Event-driven notices also need `WHATSAPP_UTILITY_EVENTS_SINCE` (an ISO time; earlier events are never sent).
+- **No Meta template** fits: agent registration received (U07), verification decisions (U08, U09), listing status changes by outcome (U11), tenant invitations (`nesafric_tenant_invitation` is MARKETING), the after-viewing question (sent only inside the 24-hour window).
+- **Partial flows unchanged:** service-provider contact or quotes in the chat; service categories with none set; hotels and short stays (payment); account creation (`/register`); lease execution and ownership proof upload; natural-language questions about a listing (the inquiry goes to the listing team instead).
+- **WhatsApp Flows** (PR #46): drafts with validation errors; not part of this branch.
+- Three pre-existing test failures on `main` (tenant access-code connection and invitations).

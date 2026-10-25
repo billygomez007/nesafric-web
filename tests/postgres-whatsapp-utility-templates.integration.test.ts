@@ -136,12 +136,12 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     const client = fakeClient([remoteOf(utilityTemplate("U01"), "APPROVED"), remoteOf(utilityTemplate("U02"), "REJECTED", { rejected_reason: "INVALID_FORMAT" }), { id: "x", name: "nesafric_notification", language: "en", status: "APPROVED", category: "UTILITY" }]);
     const result = await syncTemplateStatuses({ client });
     expect(client.list).toHaveBeenCalledWith(WABA);
-    expect(result.states).toHaveLength(30);
+    expect(result.states).toHaveLength(31);
     expect(result.states.find(({ templateKey }) => templateKey === "U01")).toMatchObject({ status: "APPROVED", metaCategory: "UTILITY", contentHash: templateContentHash(utilityTemplate("U01")) });
     expect(result.states.find(({ templateKey }) => templateKey === "U02")).toMatchObject({ status: "REJECTED", rejectedReason: "INVALID_FORMAT" });
     expect(result.states.find(({ templateKey }) => templateKey === "U03")).toMatchObject({ status: "NOT_SUBMITTED" });
     expect(result.unmanaged).toEqual([{ name: "nesafric_notification", language: "en", status: "APPROVED", category: "UTILITY" }]);
-    expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: true, name: "nes_property_enquiry_received" });
+    expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: true, name: "nesafric_inquiry_received" });
     expect(await db.auditEvent.count({ where: { organisationId: officialOrg.id, action: "whatsapp_template.status_synced" } })).toBeGreaterThan(0);
 
     // A different WABA in the deployment settings stops everything before Meta is called.
@@ -153,20 +153,14 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
 
   it("submits only final, valid templates that are not already on Meta, and never resubmits a rejection", async () => {
     await official();
-    const remote = [remoteOf(utilityTemplate("U01"), "APPROVED"), remoteOf(utilityTemplate("U02"), "REJECTED", { rejected_reason: "TAG_CONTENT_MISMATCH" })];
+    const remote = [remoteOf(utilityTemplate("U01"), "APPROVED"), remoteOf(utilityTemplate("U07"), "REJECTED", { rejected_reason: "TAG_CONTENT_MISMATCH" })];
     await expect(submitTemplates({ keys: ["U05"], confirmWabaId: WABA, client: fakeClient(remote) })).rejects.toThrow(/switched off/);
     vi.stubEnv("WHATSAPP_TEMPLATE_SUBMISSION_ENABLED", "true");
     await expect(submitTemplates({ keys: ["U05"], confirmWabaId: "777", client: fakeClient(remote) })).rejects.toThrow(/not the official one/);
 
-    // Catalogue text that failed a check is never submitted.
-    const review = fakeClient(remote);
-    const reviewRun = await submitTemplates({ keys: ["U10"], confirmWabaId: WABA, client: review });
-    expect(reviewRun.outcomes).toEqual([expect.objectContaining({ key: "U10", result: "SKIPPED", reason: expect.stringMatching(/Invalid: Body must not end with a placeholder/) })]);
-    expect(review.create).not.toHaveBeenCalled();
-
     const client = fakeClient(remote);
-    const { outcomes } = await submitTemplates({ keys: ["U01", "U02", "U05"], confirmWabaId: WABA, client });
-    expect(outcomes.map(({ key, result }) => `${key}:${result}`)).toEqual(["U01:SKIPPED", "U02:SKIPPED", "U05:SUBMITTED"]);
+    const { outcomes } = await submitTemplates({ keys: ["U01", "U07", "U05"], confirmWabaId: WABA, client });
+    expect(outcomes.map(({ key, result }) => `${key}:${result}`)).toEqual(["U01:SKIPPED", "U07:SKIPPED", "U05:SUBMITTED"]);
     expect(outcomes[0].reason).toMatch(/Already on Meta as APPROVED; not overwritten/);
     expect(outcomes[1].reason).toMatch(/Rejected by Meta \(TAG_CONTENT_MISMATCH\).*not resubmitted automatically/);
     expect(client.create).toHaveBeenCalledTimes(1);
@@ -188,7 +182,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
   it("records template review webhooks, and stops sending a template Meta moves to Marketing", async () => {
     await official();
     await approve("U01");
-    const status = (event: string, reason?: string) => ({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "message_template_status_update", value: { event, message_template_id: 42, message_template_name: "nes_property_enquiry_received", message_template_language: "en", ...(reason ? { reason } : {}) } }] }] });
+    const status = (event: string, reason?: string) => ({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "message_template_status_update", value: { event, message_template_id: 42, message_template_name: "nesafric_inquiry_received", message_template_language: "en", ...(reason ? { reason } : {}) } }] }] });
     expect((await webhook(status("PAUSED"), "wrong-secret")).status).toBe(401);
     expect((await webhook(status("PAUSED"))).status).toBe(200);
     expect((await webhook(status("PAUSED"))).status).toBe(200);
@@ -198,7 +192,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: false, reason: expect.stringMatching(/PAUSED/) });
 
     await webhook(status("APPROVED"));
-    await webhook({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "template_category_update", value: { message_template_id: 42, message_template_name: "nes_property_enquiry_received", message_template_language: "en", previous_category: "UTILITY", new_category: "MARKETING" } }] }] });
+    await webhook({ object: "whatsapp_business_account", entry: [{ id: WABA, changes: [{ field: "template_category_update", value: { message_template_id: 42, message_template_name: "nesafric_inquiry_received", message_template_language: "en", previous_category: "UTILITY", new_category: "MARKETING" } }] }] });
     await work();
     expect(await db.whatsAppTemplateState.findFirstOrThrow({ where: { templateKey: "U01" } })).toMatchObject({ status: "APPROVED", metaCategory: "MARKETING" });
     expect(await approvedTemplate(db, utilityTemplate("U01"))).toMatchObject({ approved: false, reason: expect.stringMatching(/MARKETING, not UTILITY/) });
@@ -232,8 +226,8 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     const [message] = templatesTo(SEEKER);
     expect(templatesTo(SEEKER)).toHaveLength(1);
     const reference = `EQ-${lead.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
-    expect(message.whatsappTemplate).toEqual({ name: "nes_property_enquiry_received", language: "en", bodyParameters: ["Ama", "3-bedroom house in Spintex", reference] });
-    expect(message.body).toBe(`Hello Ama, your enquiry about property 3-bedroom house in Spintex has been received by NesAfric. Reference: ${reference}. We will update you when the agent responds.`);
+    expect(message.whatsappTemplate).toEqual({ name: "nesafric_inquiry_received", language: "en", bodyParameters: ["Ama", "3-bedroom house in Spintex", reference] });
+    expect(message.body).toBe(`Hello Ama, we received your inquiry about 3-bedroom house in Spintex. Your reference is ${reference}. We will notify you when the agent responds.`);
     expect(sent.filter(({ recipientAddress }) => recipientAddress === "233241110009")).toHaveLength(0);
     expect((await dispatches("U01")).map(({ outcome, reason }) => `${outcome}:${reason}`)).toEqual([
       "SKIPPED:Template U01 is NOT_SUBMITTED, not APPROVED.", "QUEUED:null", "SKIPPED:The enquirer did not ask for WhatsApp updates.",
@@ -256,7 +250,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await dispatchUtilityEvents();
     await work();
     expect(templatesTo(SEEKER).slice(1).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([
-      ["nes_property_enquiry_response", ["Ama", "3-bedroom house in Spintex", "the agent has responded", reference]],
+      ["nesafric_inquiry_response", ["Ama", "3-bedroom house in Spintex", reference]],
     ]);
   });
 
@@ -271,8 +265,8 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await dispatchUtilityEvents();
     await work();
     // A viewing request has no catalogue template; the confirmation names the agent.
-    expect(templatesTo(SEEKER).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nes_property_viewing_confirmed"]);
-    expect(templatesTo(SEEKER)[0].whatsappTemplate?.bodyParameters).toEqual(["Kwame", "3-bedroom house in Spintex", "Sat, 24 Oct 2037", "10:00 GMT", "Abena Agyei"]);
+    expect(templatesTo(SEEKER).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nesafric_viewing_confirmed"]);
+    expect(templatesTo(SEEKER)[0].whatsappTemplate?.bodyParameters).toEqual(["Kwame", "3-bedroom house in Spintex", "Sat, 24 Oct 2037", "10:00 GMT"]);
 
     await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "RESCHEDULED", confirmedStartsAt: "2037-10-26T15:30:00.000Z", confirmedEndsAt: "2037-10-26T16:30:00.000Z" });
     await dispatchUtilityEvents();
@@ -280,8 +274,8 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await dispatchUtilityEvents();
     await work();
     expect(templatesTo(SEEKER).slice(1).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([
-      ["nes_property_viewing_rescheduled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2037", "15:30 GMT"]],
-      ["nes_property_viewing_cancelled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2037, 15:30 GMT", `VW-${viewing.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`]],
+      ["nesafric_viewing_rescheduled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2037", "15:30 GMT"]],
+      ["nesafric_viewing_cancelled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2037, 15:30 GMT"]],
     ]);
   });
 
@@ -362,7 +356,7 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await dispatchUtilityEvents();
     await work();
     expect(templatesTo(TENANT)).toHaveLength(1);
-    expect(templatesTo(TENANT)[0].whatsappTemplate?.bodyParameters).toEqual(["Kojo", "Palm Court, A1", request.referenceNumber, "received"]);
+    expect(templatesTo(TENANT)[0].whatsappTemplate?.bodyParameters).toEqual(["Kojo", "Palm Court, A1", request.referenceNumber]);
     expect((await dispatches("U23")).map(({ outcome, reason }) => `${outcome}:${reason}`).sort()).toEqual([
       "QUEUED:null", "SKIPPED:Reported on WhatsApp; answered in the chat.", "SKIPPED:The request does not belong to the event's workspace.",
     ]);

@@ -95,8 +95,7 @@ export function metaContentHash(remote: { name: string; language: string; compon
 export function templateParameters(template: UtilityTemplate, values: Record<string, string>) {
   const missing = template.params.filter(({ name }) => !values[name]?.trim()).map(({ name }) => name);
   if (missing.length) throw new Error(`Template ${template.key} is missing ${missing.join(", ")}.`);
-  const unknown = Object.keys(values).filter((name) => !template.params.some((param) => param.name === name));
-  if (unknown.length) throw new Error(`Template ${template.key} has no parameter ${unknown.join(", ")}.`);
+  // An event supplies every value it has; a template uses only the ones it declares.
   return template.params.map((param) => {
     const flat = values[param.name].replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
     return param.source === "customer" ? safeTemplateText(flat, param.max) : flat.slice(0, param.max);

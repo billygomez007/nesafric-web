@@ -1,3 +1,4 @@
+import { WHATSAPP_NEGOTIATION_NOTE } from "@/modules/whatsapp-assistant/viewings";
 import { createHash } from "node:crypto";
 import { db } from "@/platform/database/client";
 import type { DomainEvent, Prisma } from "@/platform/database/generated/client";
@@ -59,6 +60,13 @@ async function viewingContext(tx: Tx, viewingId: string) {
   return tx.viewingRequest.findUnique({ where: { id: viewingId }, include: { lead: true, listing: { select: { title: true, createdByUserId: true, listingRepresentativeUserId: true } }, preferredTimes: { orderBy: { startsAt: "asc" }, take: 1 } } });
 }
 
+const NEGOTIATED = "Agreed in the WhatsApp viewing negotiation, which told both sides.";
+/** True when the latest change to this status was made in the WhatsApp negotiation (it sends its own messages). */
+async function agreedOnWhatsApp(tx: Tx, viewingId: string, status: "CONFIRMED" | "RESCHEDULED" | "CANCELLED") {
+  const latest = await tx.viewingRequestStatusHistory.findFirst({ where: { viewingRequestId: viewingId, toStatus: status }, orderBy: { createdAt: "desc" }, select: { note: true } });
+  return latest?.note === WHATSAPP_NEGOTIATION_NOTE;
+}
+
 /** The person showing the property: the listing's representative, else whoever listed it. */
 async function agentName(tx: Tx, listing: { createdByUserId: string; listingRepresentativeUserId: string | null }) {
   const user = await tx.user.findUnique({ where: { id: listing.listingRepresentativeUserId ?? listing.createdByUserId }, select: { displayName: true } });
@@ -81,13 +89,14 @@ const handlers: Record<string, Handler> = {
   "viewing.confirmed": async (tx, event) => {
     const viewing = await viewingContext(tx, event.aggregateId);
     if (viewing?.status !== "CONFIRMED" || !viewing.confirmedStartsAt) return [{ templateKey: "U02", skip: "The viewing is no longer confirmed." }];
-    const agent = await agentName(tx, viewing.listing);
-    if (!agent) return [{ templateKey: "U02", skip: "The listing has no agent to name." }];
+    if (await agreedOnWhatsApp(tx, viewing.id, "CONFIRMED")) return [{ templateKey: "U02", skip: NEGOTIATED }];
+    const agent = await agentName(tx, viewing.listing) ?? "the listing team";
     return [plan("U02", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), property_name: viewing.listing.title, date: accraDate(viewing.confirmedStartsAt!), time: accraClock(viewing.confirmedStartsAt!), agent_name: agent }))];
   },
   "viewing.rescheduled": async (tx, event) => {
     const viewing = await viewingContext(tx, event.aggregateId);
     if (viewing?.status !== "RESCHEDULED") return [{ templateKey: "U04", skip: "The viewing changed again." }];
+    if (await agreedOnWhatsApp(tx, viewing.id, "RESCHEDULED")) return [{ templateKey: "U04", skip: NEGOTIATED }];
     if (!viewing.confirmedStartsAt) return [{ templateKey: "U04", skip: "No new time is set yet; the lister confirms it with the customer." }];
     return [plan("U04", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), property_name: viewing.listing.title, date: accraDate(viewing.confirmedStartsAt!), time: accraClock(viewing.confirmedStartsAt!) }))];
   },
@@ -105,6 +114,7 @@ const handlers: Record<string, Handler> = {
     if (payloadOf(event).toStatus !== "CANCELLED") return [];
     const viewing = await viewingContext(tx, event.aggregateId);
     if (viewing?.status !== "CANCELLED") return [{ templateKey: "U06", skip: "The viewing is no longer cancelled." }];
+    if (await agreedOnWhatsApp(tx, viewing.id, "CANCELLED")) return [{ templateKey: "U06", skip: NEGOTIATED }];
     const scheduled = viewing.confirmedStartsAt ?? viewing.preferredTimes[0]?.startsAt;
     if (!scheduled) return [{ templateKey: "U06", skip: "The viewing had no time to name." }];
     return [plan("U06", enquiryRecipient(viewing.lead), () => ({ recipient_name: firstName(viewing.lead.name), property_name: viewing.listing.title, scheduled_for: accraTime(scheduled), reference: short("VW", viewing.id) }))];

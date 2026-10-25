@@ -2,6 +2,7 @@ import { normalizeBusinessWhatsAppNumber } from "@/modules/business-whatsapp/pho
 import type { Prisma } from "@/platform/database/generated/client";
 import { lockWhatsAppChannelShared } from "@/modules/conversations/channels/whatsapp-numbers";
 import { resolveWhatsAppSendConfig, whatsappTemplate, type WhatsAppTemplateKey } from "@/modules/conversations/channels/whatsapp-sender";
+import type { WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { officialWhatsAppOrganisationId, whatsappSessionKey } from "./identity";
 import { assistantChannelConfigSchema } from "./schemas";
 
@@ -106,7 +107,13 @@ export async function queueOfficialTemplate(tx: Tx, original: OfficialTemplateMe
  * last 24 hours, otherwise the approved NOTIFICATION template carrying the same text. Returns
  * null with a reason when neither is possible (nothing is sent then).
  */
-export async function queueOfficialText(tx: Tx, original: { phoneE164: string; displayName: string; text: string; externalMessageId: string; metadata?: Record<string, unknown> }): Promise<{ messageId: string } | { messageId: null; reason: string }> {
+export async function queueOfficialText(tx: Tx, original: {
+  phoneE164: string; displayName: string; text: string; externalMessageId: string; metadata?: Record<string, unknown>;
+  /** Buttons or a list sent with the text inside the 24-hour window (the text is the fallback). */
+  interactive?: WhatsAppInteractive;
+  /** Outside the window: this instead of the NOTIFICATION template (an approved Utility template). */
+  fallback?: () => Promise<{ messageId: string } | { messageId: null; reason: string }>;
+}): Promise<{ messageId: string } | { messageId: null; reason: string }> {
   const phoneE164 = whatsappRecipientE164(original.phoneE164);
   if (!phoneE164) return { messageId: null, reason: "The recipient's phone number is not a valid WhatsApp number." };
   const input = { ...original, phoneE164 };
@@ -123,9 +130,10 @@ export async function queueOfficialText(tx: Tx, original: { phoneE164: string; d
   const conversation = await tx.conversation.findUnique({ where: { whatsappSessionKey: whatsappSessionKey(officialId, phoneNumberId, waId) } });
   const windowOpen = Boolean(conversation?.lastInboundAt && Date.now() - conversation.lastInboundAt.getTime() < 23 * 60 * 60_000);
   if (!windowOpen || !conversation) {
+    if (input.fallback) return input.fallback();
     return queueOfficialTemplate(tx, { phoneE164: input.phoneE164, displayName: input.displayName, template: "NOTIFICATION", bodyParameters: [input.text.slice(0, 1000)], body: input.text, externalMessageId: input.externalMessageId, metadata: input.metadata });
   }
-  const created = await tx.message.create({ data: { organisationId: officialId, conversationId: conversation.id, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body: input.text.slice(0, 4096), externalMessageId: input.externalMessageId, metadata: JSON.parse(JSON.stringify(input.metadata ?? {})) } });
+  const created = await tx.message.create({ data: { organisationId: officialId, conversationId: conversation.id, channel: "WHATSAPP", direction: "OUTBOUND", senderType: "SYSTEM", body: input.text.slice(0, 4096), externalMessageId: input.externalMessageId, metadata: JSON.parse(JSON.stringify({ ...(input.metadata ?? {}), ...(input.interactive ? { whatsappInteractive: input.interactive } : {}) })) } });
   const delivery = await tx.messageDelivery.create({ data: { organisationId: officialId, messageId: created.id, channel: "WHATSAPP", recipientAddress: waId, idempotencyKey: `message-delivery:${created.id}`, whatsappAssignmentId: assignmentId } });
   await tx.backgroundJob.create({ data: { organisationId: officialId, type: "conversation-message-delivery", idempotencyKey: `conversation-message-delivery:${delivery.id}`, payload: { organisationId: officialId, deliveryId: delivery.id }, maxAttempts: 5 } });
   await tx.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date(), lastOutboundAt: new Date() } });

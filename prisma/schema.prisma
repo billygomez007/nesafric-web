@@ -3914,6 +3914,7 @@ model ViewingRequest {
   assignee          OrganisationMember?           @relation("ViewingAssigneeMember", fields: [assigneeMemberId], references: [id], onDelete: SetNull)
   preferredTimes    ViewingPreferredTime[]
   history           ViewingRequestStatusHistory[]
+  proposals         ViewingProposal[]
 
   /// Public-form submission binding (`Idempotency-Key`); see MarketplaceLead.idempotencyKeyHash.
   idempotencyKeyHash     String?
@@ -3924,6 +3925,44 @@ model ViewingRequest {
   @@index([listingId, createdAt])
   @@index([leadId, createdAt])
   @@index([assigneeMemberId, status])
+}
+
+/// Who proposed a viewing time in a WhatsApp negotiation.
+enum ViewingProposalParty {
+  CUSTOMER
+  LISTING_TEAM
+}
+
+enum ViewingProposalStatus {
+  /// Waiting for the other side. At most one per viewing (partial unique index).
+  OPEN
+  ACCEPTED
+  /// Replaced by a counter-proposal.
+  SUPERSEDED
+  DECLINED
+  /// The viewing was cancelled or confirmed some other way while this was open.
+  WITHDRAWN
+}
+
+/// One proposed time in the back-and-forth between a customer and the listing team. A viewing is
+/// confirmed only when one side accepts the other's open proposal.
+model ViewingProposal {
+  id               String                @id @default(uuid()) @db.Uuid
+  viewingRequestId String                @db.Uuid
+  proposedBy       ViewingProposalParty
+  /// The listing-team member who proposed or answered (null for the customer).
+  actorUserId      String?               @db.Uuid
+  startsAt         DateTime
+  endsAt           DateTime
+  status           ViewingProposalStatus @default(OPEN)
+  /// The WhatsApp message that made this proposal: a redelivered message never proposes twice.
+  sourceMessageId  String?
+  respondedAt      DateTime?
+  createdAt        DateTime              @default(now())
+  viewingRequest   ViewingRequest        @relation(fields: [viewingRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([viewingRequestId, sourceMessageId])
+  @@index([viewingRequestId, status, createdAt])
 }
 
 model ViewingPreferredTime {
