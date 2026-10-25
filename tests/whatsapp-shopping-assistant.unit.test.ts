@@ -38,6 +38,11 @@ describe("WhatsApp shopping: viewing times", () => {
     expect(parseViewingTime(text, now)).toBeNull();
   });
 
+  it("reads a yearless 29 February as next year's when this year has none", () => {
+    expect(parseViewingTime("29/02 14:00", new Date("2027-03-01T09:00:00Z"))?.toISOString()).toBe("2028-02-29T14:00:00.000Z");
+    expect(parseViewingTime("29/02/2027 14:00", new Date("2027-03-01T09:00:00Z"))).toBeNull();
+  });
+
   it("shows a time the way a shopper reads it", () => {
     expect(formatViewingTime("2026-12-20T14:00:00.000Z")).toBe("Sun 20 Dec 2026, 2:00 pm GMT");
     expect(formatViewingTime(new Date("2026-10-26T00:05:00Z"))).toBe("Mon 26 Oct 2026, 12:05 am GMT");

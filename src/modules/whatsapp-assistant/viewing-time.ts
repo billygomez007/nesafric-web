@@ -81,7 +81,8 @@ export function parseViewingTime(body: string, now = new Date()): Date | null {
   if (!time) return null;
   let value = utc(date.year, date.month, date.day, time);
   // "20 Dec 2pm" in late December after the slot means next year's.
-  if (value && value <= now && !date.explicitYear) value = utc(date.year + 1, date.month, date.day, time);
+  // A 29 February with no year that this year lacks is next year's, if that year has one.
+  if ((!value || value <= now) && !date.explicitYear) value = utc(date.year + 1, date.month, date.day, time);
   if (!value || value <= now || value.getTime() - now.getTime() > MAX_AHEAD_MS) return null;
   return value;
 }
