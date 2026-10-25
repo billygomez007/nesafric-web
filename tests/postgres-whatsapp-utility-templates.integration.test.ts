@@ -158,11 +158,8 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     vi.stubEnv("WHATSAPP_TEMPLATE_SUBMISSION_ENABLED", "true");
     await expect(submitTemplates({ keys: ["U05"], confirmWabaId: "777", client: fakeClient(remote) })).rejects.toThrow(/not the official one/);
 
-    // Catalogue text that failed a check is never submitted.
-    const review = fakeClient(remote);
-    const reviewRun = await submitTemplates({ keys: ["U10"], confirmWabaId: WABA, client: review });
-    expect(reviewRun.outcomes).toEqual([expect.objectContaining({ key: "U10", result: "SKIPPED", reason: expect.stringMatching(/Invalid: Body must not end with a placeholder/) })]);
-    expect(review.create).not.toHaveBeenCalled();
+    // Every catalogue body now passes the format checks (tests/whatsapp-utility-templates.unit.test.ts);
+    // text that fails one is refused by `submit` before Meta is called.
 
     const client = fakeClient(remote);
     const { outcomes } = await submitTemplates({ keys: ["U01", "U02", "U05"], confirmWabaId: WABA, client });
