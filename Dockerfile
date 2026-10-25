@@ -11,6 +11,12 @@ COPY prisma.config.ts ./
 # postinstall runs `prisma generate` into src/platform/database/generated.
 RUN mkdir -p src/platform/database && npm ci --no-audit --no-fund
 
+# Before builder: Cloud Build's classic docker builder builds every stage above --target, so
+# `--target=migrate` must not pull in the Next.js build.
+FROM deps AS migrate
+ENV NODE_ENV=production
+CMD ["npx", "prisma", "migrate", "deploy"]
+
 FROM deps AS builder
 COPY . .
 # NEXT_PUBLIC_* values are inlined into the browser bundle at build time, so they are build args.
@@ -20,10 +26,6 @@ ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
     NEXT_PUBLIC_GTM_ID=$NEXT_PUBLIC_GTM_ID \
     NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate && npm run build
-
-FROM deps AS migrate
-ENV NODE_ENV=production
-CMD ["npx", "prisma", "migrate", "deploy"]
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
