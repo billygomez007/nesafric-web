@@ -389,6 +389,18 @@ describe("WhatsApp business: long lists", () => {
     expect(state.business).toMatchObject({ professionalId: many[10].id, step: "listing_purpose" });
   });
 
+  it("chooses nothing for a name two records share, and makes no new company", async () => {
+    const twins = [...many.slice(0, 10), { ...many[10], displayName: "Profile 1" }];
+    const listing = await run(["Profile 1"], deps({ professionals: vi.fn(async () => twins) }));
+    expect(listing.replies.at(-1)).toContain('More than one is called "Profile 1"');
+    expect(listing.state.business?.professionalId).toBeUndefined();
+    const companies = [{ id: "00000000-0000-4000-8000-000000000201", name: "Boateng Ltd" }, { id: "00000000-0000-4000-8000-000000000202", name: "Boateng Ltd" }];
+    const service = await run(["2", "Boateng Ltd"], deps({ companies: vi.fn(async () => companies) }), "6");
+    expect(service.replies.at(-1)).toContain("More than one is called");
+    expect(service.state.business).toMatchObject({ step: "service_company" });
+    expect(service.state.business?.companyName).toBeUndefined();
+  });
+
   it("takes a typed name of an existing company beyond the list as that company, never a new one", async () => {
     const companies = Array.from({ length: 10 }, (_, index) => ({ id: `00000000-0000-4000-8000-0000000001${String(index + 10)}`, name: `Company ${index + 1}` }));
     const dependencies = deps({ companies: vi.fn(async () => companies) });

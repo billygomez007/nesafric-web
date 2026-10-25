@@ -379,8 +379,17 @@ async function logoTargets(userId: string, dependencies: BusinessDependencies) {
   ];
 }
 
-/** A typed name chooses among ALL of the account's records, so one beyond the numbered list is reachable. */
-const byName = <T extends { name: string }>(items: ReadonlyArray<T>, typed: string) => items.find(({ name }) => name.trim().toLowerCase() === typed.trim().toLowerCase());
+/**
+ * A typed name chooses among ALL of the account's records, so one beyond the numbered list is
+ * reachable. Names are not unique: a name two records share chooses neither ("ambiguous").
+ */
+const byName = <T extends { name: string }>(items: ReadonlyArray<T>, typed: string): T | "ambiguous" | undefined => {
+  const matches = items.filter(({ name }) => name.trim().toLowerCase() === typed.trim().toLowerCase());
+  return matches.length > 1 ? "ambiguous" : matches[0];
+};
+/** The entry a reply's number names in the list shown, if the reply is such a number. */
+const listedChoice = <T>(choices: ReadonlyArray<T>, command: string): T | undefined => /^\d{1,2}$/.test(command) ? choices.at(Number(command) - 1 < 0 ? choices.length : Number(command) - 1) : undefined;
+const ambiguousName = (typed: string) => `More than one is called "${typed.slice(0, 80)}". Reply its number from the list, or rename one in your dashboard (${absoluteUrl("/pro")}) so they can be told apart.`;
 
 export async function advanceBusiness(input: BusinessInput, state: AssistantState, reset: () => AssistantState, dependencies: BusinessDependencies = defaults): Promise<BusinessResult> {
   const business = state.business ? structuredClone(state.business) : null;
@@ -532,8 +541,9 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     }
     case "logo_target": {
       const targets = await logoTargets(userId, dependencies);
-      const listed = business.choices[Number(command) - 1];
+      const listed = listedChoice(business.choices, command);
       const picked = (listed && targets.find(({ id }) => id === listed.id)) ?? byName(targets, body);
+      if (picked === "ambiguous") return say(ambiguousName(body));
       if (!picked) return say();
       business.target = picked;
       business.step = "logo_upload";
@@ -542,7 +552,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
 
     // ---- Property listings --------------------------------------------------------------------
     case "listing_professional": {
-      const picked = business.choices[Number(command) - 1] ?? byName((await dependencies.professionals(userId)).filter(({ status }) => status === "ACTIVE").map(({ id, displayName: name }) => ({ id, name })), body);
+      const picked = listedChoice(business.choices, command) ?? byName((await dependencies.professionals(userId)).filter(({ status }) => status === "ACTIVE").map(({ id, displayName: name }) => ({ id, name })), body);
+      if (picked === "ambiguous") return say(ambiguousName(body));
       if (!picked) return say();
       business.professionalId = picked.id;
       business.choices = [{ id: picked.id, name: picked.name }];
@@ -705,7 +716,9 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     case "service_company": {
       const index = /^\d$/.test(command) ? Number(command) - 1 : -1;
       // A typed name that is one of their companies, listed or not, is that company, never a new one.
-      const picked = business.choices[index] ?? (index < 0 ? byName(await dependencies.companies(userId), body) : undefined);
+      const picked = listedChoice(business.choices, command) ?? (index < 0 ? byName(await dependencies.companies(userId), body) : undefined);
+      // Two of their companies share the name: neither is chosen, and no new one is made.
+      if (picked === "ambiguous") return say(ambiguousName(body));
       if (picked) {
         const existing = await dependencies.existingProvider(userId, { type: "COMPANY", companyOrganisationId: picked.id });
         if (existing) return { state: reset(), reply: alreadyProvider(existing) };
