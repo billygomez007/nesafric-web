@@ -76,7 +76,7 @@ export async function acceptWhatsAppEvents(organisationId: string, config: Chann
       // Receipt order is stable even when two events arrive in the same millisecond.
       const receivedAt = new Date(Math.max(Date.now(), (conversation.lastMessageAt?.getTime() ?? 0) + 1));
       const limited = await tx.message.count({ where: { conversationId: conversation.id, direction: "INBOUND", createdAt: { gte: new Date(Date.now() - 60_000) } } }) >= 20;
-      const message = await tx.message.create({ data: { organisationId, conversationId: conversation.id, channel: "WHATSAPP", direction: "INBOUND", senderType: "PROSPECT", externalMessageId: inbound.externalMessageId, externalReferenceId: inbound.externalReferenceId, body: inbound.body, metadata: json({ ...inbound.providerPayload, providerReceivedAt: inbound.receivedAt?.toISOString(), rateLimited: limited, whatsappAssignmentId: assignmentId }), processedAt: limited ? receivedAt : null, createdAt: receivedAt } });
+      const message = await tx.message.create({ data: { organisationId, conversationId: conversation.id, channel: "WHATSAPP", direction: "INBOUND", senderType: "PROSPECT", externalMessageId: inbound.externalMessageId, externalReferenceId: inbound.externalReferenceId, body: inbound.body, metadata: json({ ...inbound.providerPayload, providerReceivedAt: inbound.receivedAt?.toISOString(), rateLimited: limited, whatsappAssignmentId: assignmentId, ...(inbound.senderName ? { profileName: inbound.senderName.slice(0, 100) } : {}) }), processedAt: limited ? receivedAt : null, createdAt: receivedAt } });
       const providerAt = inbound.receivedAt && inbound.receivedAt.getTime() <= Date.now() ? inbound.receivedAt : new Date();
       const lastInboundAt = new Date(Math.max(conversation.lastInboundAt?.getTime() ?? 0, providerAt.getTime()));
       await tx.conversation.update({ where: { id: conversation.id }, data: { lastInboundAt, lastMessageAt: receivedAt } });
@@ -168,7 +168,7 @@ async function decide(organisationId: string, conversation: { id: string; status
   const rawMedia = metadata.media as { id?: unknown; mime_type?: unknown } | undefined;
   const media = typeof rawMedia?.id === "string" ? { id: rawMedia.id, mimeType: typeof rawMedia.mime_type === "string" ? rawMedia.mime_type : undefined } : undefined;
   const result = isOfficialWhatsAppOrganisation(organisationId)
-    ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined })
+    ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined, profileName: typeof metadata.profileName === "string" ? metadata.profileName : undefined })
     : await advanceConversation(input);
   if (result.reply.length > 4096) throw new Error("Assistant reply exceeds WhatsApp text limit.");
   return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step, replyMetadata: "replyMetadata" in result ? result.replyMetadata as Record<string, unknown> | undefined : undefined, interactive: result.interactive };

@@ -2,7 +2,7 @@ import { absoluteUrl } from "@/platform/brand";
 import { AppError } from "@/platform/errors";
 import { maskPhone } from "@/platform/identity/phone";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
-import { advanceConversation, MAIN_MENU, mainMenuList, OFFICIAL_MAIN_MENU, type EngineInput } from "./engine";
+import { advanceConversation, MAIN_MENU, type EngineInput } from "./engine";
 import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { assistantStateSchema, initialState, type AssistantState } from "./schemas";
 import { linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
@@ -16,11 +16,12 @@ import { advanceJobs } from "./jobs";
 import { answerLandlord } from "./landlord";
 import { advanceBusiness } from "./business";
 import { invitationReply } from "@/modules/whatsapp-templates/invitation-reply";
+import { searchAgents } from "./tools";
+import { COMMERCIAL_PROMPT, commercialChoices, FIND_PROPERTY_PROMPT, findPropertyChoices, greetingLine, MORE_OPTIONS, OFFICIAL_ALIASES, OFFICIAL_MENU_COMMANDS, rentOrBuyButtons, VIEWING_PROMPT, viewingButtons, welcomeReply } from "./welcome";
 
-export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
+export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** The sender's WhatsApp profile name, as Meta sent it (untrusted, display only). */ profileName?: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
 
-export const OFFICIAL_MENU_SUFFIX = "\n\nRegister an agency, agent profile or service business, or list a property, right here: choose 3, 4, 5 or 6. Reply my applications to see their status.\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
 const START_ONBOARDING = /^(register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
 const MAX_CODE_FAILURES = 5;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,63}$/;
@@ -43,8 +44,11 @@ type Dependencies = {
   landlord: typeof answerLandlord;
   business: typeof advanceBusiness;
   invitationReply: typeof invitationReply;
+  agents: typeof searchAgents;
+  /** The clock for the greeting (tests pass a fixed time). */
+  now?: () => Date;
 };
-const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord, business: advanceBusiness, invitationReply };
+const defaults: Dependencies = { engine: advanceConversation, requestOtp, verifyOtp, linkedUser: linkedWhatsAppUser, link: linkWhatsAppIdentity, unlink: unlinkWhatsAppIdentity, roles: resolveAccountRoles, onboarding: advanceOnboarding, openDraft: findOpenDraft, providerMessage: handleProviderMessage, network: advanceNetwork, report: advanceReport, rules: advanceRules, jobs: advanceJobs, landlord: answerLandlord, business: advanceBusiness, invitationReply, agents: searchAgents, now: () => new Date() };
 
 const methodPrompt = (phone: string) => `To connect this number I need to confirm the NesAfric account is yours.\nReply sms to get a 6-digit code by text message at ${maskPhone(whatsappAddress(phone))}, or send the email address on your NesAfric account to get it by email.\nReply cancel to stop.`;
 
@@ -55,11 +59,35 @@ const methodPrompt = (phone: string) => `To connect this number I need to confir
  */
 export async function advanceOfficialConversation(input: OfficialInput, dependencies: Dependencies = defaults): Promise<OfficialResult> {
   const parsed = assistantStateSchema.safeParse(input.state ?? {});
-  const state = parsed.success ? structuredClone(parsed.data) : initialState();
-  const command = input.body.trim().toLowerCase();
+  let state = parsed.success ? structuredClone(parsed.data) : initialState();
+  let command = input.body.trim().toLowerCase();
   const reset = (): AssistantState => ({ ...initialState(), lastRequest: state.lastRequest });
+  // A linked account's name is preferred to the WhatsApp profile name; neither is ever required.
+  const greeting = async () => greetingLine(dependencies.now?.() ?? new Date(), (await dependencies.linkedUser(input.phone))?.user.displayName ?? input.profileName);
 
   if (state.workflow === "link") return continueLink(input, state, reset, dependencies);
+
+  // The welcome menu. A bare number is a menu choice wherever a search is open (results are picked
+  // with "details 2"); an option's words or list tap count when nothing else is under way.
+  const searching = ["idle", "property_search", "service_search", "agent_search"].includes(state.workflow);
+  if (input.kind === "text" && (searching || ["inquiry", "viewing"].includes(state.workflow))) {
+    const pick = searching ? OFFICIAL_MENU_COMMANDS[command] ?? (state.workflow === "idle" || state.paused ? OFFICIAL_ALIASES[command] : undefined) : undefined;
+    const navigation = !pick && ["menu", "cancel"].includes(OFFICIAL_ALIASES[command] ?? "") ? OFFICIAL_ALIASES[command] : undefined;
+    if (pick && !["menu", "cancel"].includes(pick)) state = reset();
+    const target = pick ?? navigation;
+    if (target) {
+      command = target;
+      input = { ...input, body: target, state };
+    }
+    if (pick === "more options") return { state, reply: MORE_OPTIONS };
+    if (pick === "find a property") return { state, reply: FIND_PROPERTY_PROMPT, interactive: findPropertyChoices() };
+    if (pick === "commercial") return { state, reply: COMMERCIAL_PROMPT, interactive: commercialChoices() };
+    if (pick === "book a viewing") return { state, reply: VIEWING_PROMPT, interactive: viewingButtons() };
+    if (pick === "find an agent") return { state: { ...state, workflow: "agent_search", agentArea: undefined, page: 1 }, reply: AGENT_AREA_PROMPT };
+    if (pick === "property services") input = { ...input, body: "service provider" };
+    if (state.workflow === "agent_search" && command === "resume") return { state: { ...state, paused: false }, reply: AGENT_AREA_PROMPT };
+    if (state.workflow === "agent_search" && !state.paused && !target && !["menu", "cancel", "support", "resume"].includes(command)) return findAgents(input.body.trim(), state, reset, dependencies);
+  }
 
   // Onboarding keeps its progress in its own draft, so it survives conversation resets.
   const startsOnboarding = input.kind === "text" && (START_ONBOARDING.test(command) || (command === "resume" && state.workflow === "idle" && Boolean(await dependencies.openDraft(whatsappAddress(input.phone)))));
@@ -144,15 +172,33 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   }
 
   const result = await dependencies.engine(input);
+  // Anything not understood on the first turn, or between tasks, gets the welcome menu.
+  if (state.workflow === "idle" && result.reply.startsWith("Would you like to find a property, find a service provider")) return { ...result, ...welcomeReply(await greeting(), "I did not catch that.\n\n") };
+  if (result.reply === "Are you looking to rent or buy?" && !result.interactive) return { ...result, interactive: rentOrBuyButtons(result.reply) };
   // On the official number registration and listing happen here, not only on the website.
   if (result.reply.startsWith("Continue securely in your NesAfric account")) {
     const reply = "You can register or list right here on WhatsApp. Reply register agency, register agent, register services, or register (landlords). To list a property, reply list a property.";
     return { ...result, state: reset(), reply, interactive: replyButtons(reply, [{ id: "register agency", title: "Register agency" }, { id: "register services", title: "Register provider" }, { id: "list a property", title: "List a property" }]) };
   }
   if (!result.reply.includes(MAIN_MENU)) return result;
-  // On the official number registration and listing happen here, not only on the website.
-  const reply = result.reply.replace(MAIN_MENU, OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);
-  return { ...result, reply, interactive: mainMenuList(reply, true) };
+  // The official number has its own welcome (see welcome.ts).
+  const [before, after] = result.reply.split(MAIN_MENU);
+  return { ...result, ...welcomeReply(await greeting(), before, after) };
+}
+
+const AGENT_AREA_PROMPT = "Which area should I search for agents? For example East Legon, Kumasi or Takoradi.\nOnly agents and agencies verified by NesAfric are shown.";
+
+async function findAgents(said: string, state: AssistantState, reset: () => AssistantState, dependencies: Dependencies): Promise<OfficialResult> {
+  const more = said.toLowerCase() === "more";
+  if (more && !state.agentArea) return { state, reply: AGENT_AREA_PROMPT };
+  if (more && !state.hasMore) return { state, reply: "There are no more agents for that area. Send another area, or reply menu." };
+  if (!more && (said.length < 2 || said.length > 120)) return { state, reply: AGENT_AREA_PROMPT };
+  const area = more ? state.agentArea! : said;
+  const page = more ? state.page + 1 : 1;
+  const found = await dependencies.agents(area, page);
+  const next: AssistantState = { ...reset(), workflow: "agent_search", agentArea: area, page, hasMore: found.hasMore, results: [] };
+  if (!found.ids.length) return { state: next, reply: page === 1 ? `No verified agents list ${area} as an area they cover yet. Send another area, or reply menu.` : "There are no more agents for that area. Send another area, or reply menu." };
+  return { state: next, reply: `Verified agents for ${area}:\n\n${found.cards.join("\n\n")}\n\nOpen a profile to see their listings and contact them.${found.hasMore ? " Reply more for others." : ""} Send another area to search again, or reply menu.` };
 }
 
 async function continueLink(input: OfficialInput, state: AssistantState, reset: () => AssistantState, dependencies: Dependencies): Promise<OfficialResult> {
@@ -160,8 +206,8 @@ async function continueLink(input: OfficialInput, state: AssistantState, reset: 
   const command = body.toLowerCase();
   const redactInbound = state.step === "link_code";
   if (command === "cancel" || command === "menu") {
-    const reply = "Account linking cancelled. Nothing was changed.\n\n" + OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX;
-    return { state: reset(), reply, redactInbound, interactive: mainMenuList(reply, true) };
+    const greeting = greetingLine(dependencies.now?.() ?? new Date(), input.profileName);
+    return { state: reset(), redactInbound, ...welcomeReply(greeting, "Account linking cancelled. Nothing was changed.\n\n") };
   }
   if (input.kind !== "text") return { state, reply: "Please reply with text to continue linking, or cancel.", redactInbound };
 
