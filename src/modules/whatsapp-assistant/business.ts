@@ -386,6 +386,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
   if (/^(support|human|talk to support|help me)$/.test(command)) {
     return { state: { ...state, business }, reply: "Your conversation has been added to the support queue. A team member will reply here; no response time is guaranteed. Reply menu to stop waiting and go back to the assistant.", handoff: true, redactInbound };
   }
+  // "help", as in the main menu, never becomes an answer: it repeats the question and the way out.
+  if (command === "help") return say("Answer the question below to continue. Reply support to reach a person, or cancel to stop.", { redactInbound });
   if (command === "cancel" || command === "menu" || command === "stop") {
     const kept = business.committed.listingId ? " Your draft listing is kept; finish it on the website or reply 5 to list another." : business.committed.professionalId || business.committed.providerId ? " Your profile is saved." : " Nothing was saved.";
     return { state: reset(), reply: `Stopped.${kept} Reply menu for other options.`, redactInbound };

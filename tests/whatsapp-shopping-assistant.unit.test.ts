@@ -89,6 +89,16 @@ describe("WhatsApp shopping: reading requests without a model", () => {
     expect(read("flat to rent in osu 3000 cedis a year").property?.frequency).toBe("ANNUAL");
   });
 
+  it("reads a price unit only where it prices something", () => {
+    expect(read("house to rent in accra with daily cleaning").property?.frequency).toBeUndefined();
+    expect(read("apartment in osu, monthly cleaning included").property?.frequency).toBeUndefined();
+    expect(read("short stay in osu per night").property?.frequency).toBe("PER_NIGHT");
+    expect(read("rent in osu 3000 cedis monthly").property?.frequency).toBe("MONTHLY");
+    const asked = { ...initialState(), workflow: "property_search" as const, property: { listingType: "RENT" as const, location: "osu", maxPriceMinor: "300000" } };
+    expect(read("monthly", asked).property?.frequency).toBe("MONTHLY");
+    expect(read("yearly").property?.frequency).toBe("ANNUAL");
+  });
+
   it("keeps a place name that starts with a number", () => {
     expect(read("rent near 37 military hospital").property?.location).toBe("37 military hospital");
     expect(read("rent around 4000").property?.location).toBeUndefined();

@@ -355,4 +355,14 @@ describe("WhatsApp business: support", () => {
     expect(result.state.business?.step).toBe("account_name");
     expect(dependencies.requestOtp).not.toHaveBeenCalled();
   });
+
+  it("repeats the question for help instead of taking it as an answer", async () => {
+    const dependencies = deps({ linkedUser: vi.fn(async () => null) });
+    const started = await startBusiness(businessTrigger("3", initialState())!, input("3"), reset, dependencies);
+    const result = await advanceBusiness(input("help"), started.state, reset, dependencies);
+    expect(result.reply).toContain("Reply support to reach a person");
+    expect(result.reply).toContain("What is your full name?");
+    expect(result.state.business?.account.displayName).toBeUndefined();
+    expect(dependencies.requestOtp).not.toHaveBeenCalled();
+  });
 });

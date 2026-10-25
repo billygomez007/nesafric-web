@@ -47,11 +47,17 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
     .replace(/\b(?:for\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*-?\s*(?:years?|yrs?|months?|weeks?|days?|nights?)\b/g, " ")
     // "for a month", "for a few weeks": a stay too. "3000 a year" (no "for") stays a price unit.
     .replace(/\bfor\s+(?:a|an|a few|several)\s+(?:years?|months?|weeks?|days?|nights?)\b/g, " ");
-  if (/\b(month|monthly)\b/.test(units)) property.frequency = "MONTHLY";
-  if (/\b(quarter|quarterly)\b/.test(units)) property.frequency = "QUARTERLY";
-  if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(units)) property.frequency = "ANNUAL";
-  if (/\b(day|daily)\b/.test(units)) property.frequency = "DAILY";
-  if (/\b(night|nightly)\b/.test(units)) property.frequency = "PER_NIGHT";
+  // A unit narrows the search only when it prices something: with a budget in the same message,
+  // as a "per …" phrase, or as the answer to "per month or per year?" ("daily cleaning" is not).
+  const answeringUnit = state.workflow === "property_search" && Boolean(state.property.maxPriceMinor) && !state.property.frequency;
+  const unitOnly = /^(?:per |a |an )?(?:month|monthly|quarter|quarterly|year|yearly|annually|annum|p\.?a\.?|day|daily|night|nightly)\.?$/.test(units.trim());
+  if (property.maxPriceMinor || answeringUnit || unitOnly || /\bper\s+(?:month|quarter|year|annum|day|night)\b/.test(units)) {
+    if (/\b(month|monthly)\b/.test(units)) property.frequency = "MONTHLY";
+    if (/\b(quarter|quarterly)\b/.test(units)) property.frequency = "QUARTERLY";
+    if (/\b(year|yearly|annually|annum|p\.?a\.?)\b/.test(units)) property.frequency = "ANNUAL";
+    if (/\b(day|daily)\b/.test(units)) property.frequency = "DAILY";
+    if (/\b(night|nightly)\b/.test(units)) property.frequency = "PER_NIGHT";
+  }
   if (state.workflow === "property_search" && !state.property.location && !location && !Object.values(property).some(Boolean) && input.length >= 2) property.location = input;
   const intent = input === "1" || /\b(propert(?:y|ies))\b/.test(input) || Object.values(property).some((value) => value !== undefined) || state.workflow === "property_search" ? "property_search" : "unknown";
   return { intent, property: Object.fromEntries(Object.entries(property).filter(([, value]) => value !== undefined)) };
