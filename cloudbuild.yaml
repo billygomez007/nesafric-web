@@ -12,7 +12,11 @@ substitutions:
   # Set _GTM_ID on the trigger to the production NEXT_PUBLIC_GTM_ID (setup.sh prints it); empty
   # leaves Google Tag Manager and analytics off.
   _GTM_ID: ""
-  _RUNTIME_SA: nesafric-web-runtime
+  # The service's runtime identity in nesafric-production (Cloud SQL client, secret accessor).
+  _RUNTIME_SA: nesafric-web
+  # Cloud SQL instance the migration job connects to through the connector socket that
+  # DATABASE_URL names; empty when the database is reached over the network.
+  _CLOUDSQL_INSTANCE: nesafric-production:europe-west1:nesafric-prod-db
   # "true" when setup.sh ran with USE_STATIC_EGRESS=true (the database allows only listed IPs).
   _STATIC_EGRESS: "false"
 options:
@@ -61,6 +65,9 @@ steps:
         if [ "${_STATIC_EGRESS}" = "true" ]; then
           # The service leaves through the static-IP NAT (setup.sh USE_STATIC_EGRESS); so must the job.
           flags=(--network=default --subnet=default --vpc-egress=all-traffic)
+        fi
+        if [ -n "${_CLOUDSQL_INSTANCE}" ]; then
+          flags+=(--set-cloudsql-instances=${_CLOUDSQL_INSTANCE})
         fi
         gcloud run jobs deploy ${_SERVICE}-migrate \
           --region=${_REGION} \

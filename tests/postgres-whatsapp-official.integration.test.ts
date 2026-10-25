@@ -20,6 +20,8 @@ import { createTenant } from "@/modules/tenants/service";
 import { defaultChannelAdapters, type ChannelAdapters } from "@/modules/conversations/channels/registry";
 import type { OutboundMessageRequest } from "@/modules/conversations/channels/types";
 import { recordWhatsAppDeliveryStatus } from "@/modules/whatsapp-assistant/service";
+import { OFFICIAL_MAIN_MENU } from "@/modules/whatsapp-assistant/engine";
+import { OFFICIAL_MENU_SUFFIX } from "@/modules/whatsapp-assistant/router";
 import { deliverNotification } from "@/modules/notifications/service";
 import { createJobHandlers } from "@/platform/jobs/handlers";
 import { NonRetryableJobError } from "@/platform/jobs/errors";
@@ -142,6 +144,33 @@ describe("PostgreSQL official WhatsApp number", () => {
     expect(await db.message.count({ where: { organisationId: official.id, body: code } })).toBe(0);
     expect(sent.at(-1)?.body).toContain("Owusu Homes: 1 property, 2 units, 0 open maintenance requests");
     expect(await db.auditEvent.count({ where: { action: "channel_identity.linked", entityId: identity.id } })).toBe(1);
+  });
+
+  it("queues the main menu as a tappable list with the numbered menu stored as its fallback, and handles a tapped row", async () => {
+    const { official } = await fixture();
+    const { adapters, sent } = recordingAdapters();
+    await receive("menu");
+    await work(adapters);
+    const conversation = await conversationFor(official.id);
+    const reply = await db.message.findFirstOrThrow({ where: { conversationId: conversation.id, direction: "OUTBOUND" } });
+    expect(reply.body).toBe(OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);
+    const interactive = (reply.metadata as { whatsappInteractive: { type: string; body: string; button: string; sections: Array<{ rows: Array<{ id: string; title: string }> }> } }).whatsappInteractive;
+    expect(interactive).toMatchObject({ type: "list", button: "Choose an option" });
+    expect(interactive.body).not.toContain("1. Find a property");
+    const rows = interactive.sections.flatMap((section) => section.rows);
+    expect(rows.map((row) => row.id)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "link", "account"]);
+    expect(rows.every((row) => row.title.length <= 24)).toBe(true);
+    expect(sent).toEqual([expect.objectContaining({ body: OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX, whatsappInteractive: interactive })]);
+    expect(sent[0].whatsappTemplate).toBeUndefined();
+
+    // A tapped row arrives as list_reply; its id becomes the message body and follows the typed path.
+    const tapped = inbound("unused");
+    tapped.entry[0].changes[0].value.messages[0] = { id: "wamid.tap", from: WA_ID, timestamp: String(Math.floor(Date.now() / 1000)), type: "interactive", interactive: { type: "list_reply", list_reply: { id: "account", title: "My account" } } } as never;
+    expect((await officialPost(signed(tapped))).status).toBe(200);
+    await work(adapters);
+    expect((await db.message.findFirstOrThrow({ where: { externalMessageId: "wamid.tap" } })).body).toBe("account");
+    expect(sent.at(-1)?.body).toContain("not linked");
+    expect(sent.at(-1)?.whatsappInteractive).toBeUndefined();
   });
 
   it("does not show account data to an unlinked number", async () => {

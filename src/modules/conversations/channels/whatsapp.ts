@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { graphInteractive, parseWhatsAppInteractive } from "./whatsapp-interactive";
 import type { ChannelAdapter, NormalizedInboundMessage, OutboundDeliveryResult, OutboundMessageRequest } from "./types";
 
 function safeEqual(expected: string, actual: string) {
@@ -44,6 +45,8 @@ export class WhatsAppChannelAdapter implements ChannelAdapter {
       return { status: "FAILED", retryable: false, failureReason: "The WhatsApp customer service window is closed; an approved template is required." };
     }
     if (!request.whatsappTemplate && request.body.length > 4096) return { status: "FAILED", retryable: false, failureReason: "WhatsApp text exceeds 4096 characters." };
+    // An interactive payload that fails WhatsApp's limits is dropped: the plain-text body still goes out.
+    const interactive = request.whatsappTemplate ? undefined : parseWhatsAppInteractive(request.whatsappInteractive);
     try {
       const response = await fetch(sendUrl, {
         method: "POST",
@@ -59,7 +62,7 @@ export class WhatsAppChannelAdapter implements ChannelAdapter {
               name: request.whatsappTemplate.name, language: { code: request.whatsappTemplate.language },
               ...(request.whatsappTemplate.bodyParameters?.length ? { components: [{ type: "body", parameters: request.whatsappTemplate.bodyParameters.map((value) => ({ type: "text", text: value })) }] } : {}),
             },
-          } : { type: "text", text: { body: request.body } }),
+          } : interactive ? { type: "interactive", interactive: graphInteractive(interactive) } : { type: "text", text: { body: request.body } }),
         }),
       });
       // 429 and 5xx are transient. Any other rejection will be rejected again.

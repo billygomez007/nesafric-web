@@ -12,54 +12,15 @@ import {
   type SelectedListingImage,
   uploadListingImagePhotos,
 } from "@/lib/listing-image-upload";
-import { formatMegabytes, MAX_LISTING_PHOTO_SOURCE_BYTES } from "@/lib/listing-media-rules";
+import { formatMegabytes, MAX_LISTING_PHOTOS, MAX_LISTING_PHOTO_SOURCE_BYTES } from "@/lib/listing-media-rules";
+import { amenityKey, LISTING_AMENITIES, LISTING_PROPERTY_TYPES } from "@/lib/listing-options";
 import { PRICE_UNIT_LABELS, priceUnitsFor } from "@/lib/price-units";
 import { isBookableCategory } from "@/lib/listing-categories";
 
 
-const PROPERTY_TYPES = [
-  ["APARTMENT", "Apartment"],
-  ["HOUSE", "House"],
-  ["TOWNHOUSE", "Townhouse"],
-  ["VILLA", "Villa"],
-  ["LAND", "Land"],
-  ["OFFICE", "Office"],
-  ["SHOP", "Shop / Retail"],
-  ["WAREHOUSE", "Warehouse"],
-  ["COMMERCIAL", "Commercial space"],
-  ["GUEST_HOUSE", "Guest house"],
-  ["HOTEL", "Hotel"],
-  ["SHORT_STAY", "Short stay"],
-] as const;
+const PROPERTY_TYPES = LISTING_PROPERTY_TYPES;
 
-const AMENITIES = [
-  "Air conditioning",
-  "Swimming pool",
-  "Security service",
-  "CCTV",
-  "Gated community",
-  "Parking",
-  "Garage",
-  "Generator",
-  "Backup power",
-  "Water reservoir",
-  "Borehole",
-  "Garden",
-  "Balcony",
-  "Roof terrace",
-  "Boys quarters",
-  "Internet",
-  "DSTV / Satellite TV",
-  "Fitted kitchen",
-  "Cooker",
-  "Refrigerator",
-  "Microwave",
-  "Washing machine",
-  "Elevator",
-  "Gym",
-  "Playground",
-  "Pet friendly",
-] as const;
+const AMENITIES = LISTING_AMENITIES;
 
 /** The subset of GET /api/marketplace-professionals/[id]/listings/[listingId] the edit form uses. */
 export type EditableMarketplaceListing = {
@@ -360,13 +321,7 @@ export function MarketplaceListingForm({
       showContactPhone: form.get("showContactPhone") === "on",
       enquiryEnabled: true,
 
-      amenities: amenities.map((label) => ({
-        key: label
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, ""),
-        label,
-      })),
+      amenities: amenities.map((label) => ({ key: amenityKey(label), label })),
 
       media: [],
     };
@@ -792,7 +747,7 @@ export function MarketplaceListingForm({
               5. Property photos
             </p>
             <h2 className="mt-1 text-lg font-semibold">
-              Upload up to 12 photos
+              Upload up to {MAX_LISTING_PHOTOS} photos
             </h2>
             <p className="mt-1 text-sm text-muted">
               Choose photos directly from your phone or computer. The photo marked

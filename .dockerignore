@@ -8,8 +8,16 @@ design
 brand
 docs
 tests
+var
 *.md
 !README.md
-.env*
+.env
+.env.*
+!.env.example
 .vercel
 *.tsbuildinfo
+*.log
+.claude
+.kilo
+.agents
+dataconnect

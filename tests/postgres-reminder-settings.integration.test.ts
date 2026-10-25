@@ -124,9 +124,10 @@ describe("PostgreSQL Phase 4D reminder and communication settings", () => {
       enabled: false,
     });
     expect(disabled).toMatchObject({ daysOffset: 21, channels: ["SMS", "WHATSAPP"], enabled: false });
+    expect(await updateReminderPolicy(fixture.owner.id, fixture.organisation.id, policy.id, { daysOffset: 20 })).toMatchObject({ daysOffset: 20, enabled: false });
     expect((await updateReminderPolicy(fixture.owner.id, fixture.organisation.id, policy.id, { enabled: true })).enabled).toBe(true);
-    expect(await db.auditEvent.count({ where: { organisationId: fixture.organisation.id, entityId: policy.id, action: { startsWith: "reminder_policy." } } })).toBe(3);
-    expect(await db.domainEvent.count({ where: { organisationId: fixture.organisation.id, aggregateId: policy.id, name: { startsWith: "reminder_policy." } } })).toBe(3);
+    expect(await db.auditEvent.count({ where: { organisationId: fixture.organisation.id, entityId: policy.id, action: { startsWith: "reminder_policy." } } })).toBe(4);
+    expect(await db.domainEvent.count({ where: { organisationId: fixture.organisation.id, aggregateId: policy.id, name: { startsWith: "reminder_policy." } } })).toBe(4);
   });
 
   it("rejects invalid, duplicate, and conflicting thresholds", async () => {

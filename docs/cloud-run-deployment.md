@@ -44,7 +44,7 @@ Cloud Scheduler ── every 5 min ──► POST /api/jobs/run  (x-jobs-run-sec
    - If the database only accepts listed IPs, run the setup with `USE_STATIC_EGRESS=true`, then add the printed IP to the database allowlist **next to** the Vercel IPs. Do not remove the Vercel IPs until the switch is done.
    - If the database accepts any IP with a password and TLS, which is common on Neon, Supabase and similar hosts, nothing is needed.
 4. **Region.** Choose the region closest to the database. The default is `europe-west1` (Belgium), which supports domain mapping and is a short hop from most European database regions.
-5. **Storage.** Production must have GCS or S3/R2 configured (`STORAGE_GCS_*` or `STORAGE_S3_*`), as it did on Vercel. For GCS in the same project, the runtime service account `nesafric-web-runtime` can be granted access to the buckets instead of setting `GOOGLE_SERVICE_ACCOUNT_JSON`.
+5. **Storage.** Production must have GCS or S3/R2 configured (`STORAGE_GCS_*` or `STORAGE_S3_*`), as it did on Vercel. For GCS in the same project, the runtime service account `nesafric-web` can be granted access to the buckets instead of setting `GOOGLE_SERVICE_ACCOUNT_JSON`.
 
 ## Step 1: project setup (Cloud Shell)
 

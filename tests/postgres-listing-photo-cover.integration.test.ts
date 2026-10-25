@@ -26,7 +26,7 @@ async function cleanDatabase() {
 }
 
 /** A real PNG of the given size and colour (optionally padded with uncompressed rows to be large). */
-function png(rgb: [number, number, number], width = 2, height = 2, compress = true) {
+function png(rgb: [number, number, number], width = 240, height = 240, compress = true) {
   const crc32 = (buf: Buffer) => {
     let c = ~0;
     for (const byte of buf) { c ^= byte; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); }

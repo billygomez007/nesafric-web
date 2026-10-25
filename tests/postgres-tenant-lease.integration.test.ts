@@ -77,4 +77,21 @@ describe("PostgreSQL Phase 2 tenant and lease core", () => {
     expect(await db.auditEvent.count({ where: { organisationId: organisationA.id, entityId: lease.id } })).toBeGreaterThanOrEqual(3);
     expect(await db.domainEvent.count({ where: { organisationId: organisationA.id, aggregateId: lease.id } })).toBeGreaterThanOrEqual(3);
   });
+
+  it("keeps move and renewal status on a notes-only update", async () => {
+    const owner = await registerUser({ displayName: "Efua", email: "efua.lease@example.com", password: "secure-password-123" });
+    const organisation = await createOrganisation(owner.id, { name: "Efua Leasing", type: "INDIVIDUAL_LANDLORD", countryCode: "GH" });
+    const property = await createProperty(owner.id, organisation.id, { name: "Osu House", referenceNumber: "OH-1", category: "Residential", countryCode: "GH", currencyCode: "GHS", units: [{ name: "1A" }] });
+    const tenant = await createTenant(owner.id, organisation.id, { legalName: "Kofi Tenant", email: "kofi@example.com" });
+    const lease = await createLease(owner.id, organisation.id, {
+      referenceNumber: "LEASE-NOTES", propertyId: property.id, tenantOrganisationIds: [tenant.relationship.id],
+      startDate: "2026-01-01", rentAmountMinor: "100000", currencyCode: "GHS", rentFrequency: "MONTHLY", status: "ACTIVE",
+    });
+    await updateLease(owner.id, organisation.id, lease.id, { moveStatus: "MOVED_IN", renewalStatus: "PENDING" });
+
+    const updated = await updateLease(owner.id, organisation.id, lease.id, { notes: "Keys handed over." });
+    expect(updated).toMatchObject({ notes: "Keys handed over.", moveStatus: "MOVED_IN", renewalStatus: "PENDING" });
+    const events = await db.domainEvent.findMany({ where: { aggregateId: lease.id, name: "lease.updated" } });
+    expect(events.map(({ payload }) => payload)).toContainEqual({ changedFields: ["notes"] });
+  });
 });

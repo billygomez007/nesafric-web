@@ -20,9 +20,10 @@ import {
   listHomepageMediaForPlatform,
   listPublicHomepageCompanies,
 } from "@/modules/platform-admin/homepage-media-service";
+import { VALID_PNG } from "./helpers/images";
 
 // A valid 1×1 PNG; `pngOfSize` pads it to exercise the size limit without changing its type.
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const PNG = VALID_PNG;
 const logo = (fileName = "logo.png", bytes = PNG) => ({ fileName, contentType: "image/png", dataBase64: bytes.toString("base64") });
 
 async function cleanDatabase() {

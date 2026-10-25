@@ -130,6 +130,9 @@ Numbers that organisations saved in their channel settings before this change ar
 | `WHATSAPP_TEMPLATE_NOTIFICATION` | `name:language` of the notification template. |
 | `WHATSAPP_TEMPLATE_PROVIDER_INVITE` | `name:language` of the invitation template. |
 | `WHATSAPP_TEMPLATE_WORK_ORDER` | `name:language` of the work-order template. |
+| `WHATSAPP_TEMPLATE_WABA_ID` | The official number's WABA ID again. Template sync and submission refuse to run unless it matches the official assignment. |
+| `WHATSAPP_TEMPLATE_SUBMISSION_ENABLED` | `true` only while submitting templates. |
+| `WHATSAPP_UTILITY_EVENTS_SINCE` | ISO time from which business events send Utility templates. Unset means none are sent. |
 | `ARKESEL_API_KEY`, `ARKESEL_SENDER_ID` | SMS verification codes for account linking and onboarding. |
 | `OTP_HASH_SECRET` | At least 32 characters (falls back to `SESSION_SECRET`). |
 | `AI_PROVIDER`, `AI_PROVIDER_API_KEY` | Optional. Without them, deterministic rules classify reports and questions. |
@@ -162,6 +165,20 @@ All of these are Utility category. Use quick-reply buttons where shown; the repl
 | WORK_ORDER | `New job {{2}} from {{1}} at {{3}}: {{4}}. Urgency: {{5}}. {{6}} Please reply by {{7}}.` | Accept, Decline |
 
 Customer text inside templates (organisation names, locations, issue titles) is stripped of links and phone numbers and length-capped before sending.
+
+### Utility templates U01–U30
+
+The Utility templates are defined in `src/modules/whatsapp-templates/registry.ts`. Their Meta status is stored in `WhatsAppTemplateState`. They are not configured through env vars. Full report, event mapping and checklist: `docs/whatsapp-utility-templates-phase1.md`.
+
+| Command (`npm run whatsapp:templates -- …`) | Effect |
+|---|---|
+| `validate` | Meta format and compliance checks. Offline. |
+| `payloads <file>` | Creation payloads as JSON. Offline. |
+| `sync` | Reads every template's status from Meta. Templates outside the registry are listed and never changed. |
+| `submit --keys U01,U02 --confirm-waba <id> [--acknowledge U17]` | Needs `WHATSAPP_TEMPLATE_SUBMISSION_ENABLED=true`. Final, valid templates only. A template already on Meta, or rejected, is never created again. |
+| `report` | Registry joined with stored status. |
+
+Sending: a business event sends a template only when the template is APPROVED, still UTILITY and has exactly the registry's text, and the recipient has an allowed opt-in and has not replied STOP. Every decision, sent or skipped, is a `WhatsAppUtilityDispatch` row with its reason. Subscribe the webhook to `message_template_status_update`, `template_category_update` and `message_template_quality_update` as well as `messages`, so pauses and recategorisations stop sends at once.
 
 ## 4. Monitoring
 

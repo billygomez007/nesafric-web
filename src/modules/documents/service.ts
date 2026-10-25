@@ -17,7 +17,9 @@ import {
   buildInternalPublicMediaUrl,
   type StorageClassificationValue,
 } from "@/platform/storage";
-import { formatMegabytes, MAX_LISTING_PHOTOS, MAX_LISTING_PHOTO_UPLOAD_BYTES } from "@/lib/listing-media-rules";
+import { PROCESSED_IMAGE_MIME_TYPES, processUploadedImage } from "@/platform/storage/image-processing";
+import { LISTING_PHOTO_MAX_EDGE } from "@/lib/listing-media-rules";
+import { formatMegabytes, MAX_LISTING_MEDIA_ITEMS, MAX_LISTING_PHOTOS, MAX_LISTING_PHOTO_UPLOAD_BYTES } from "@/lib/listing-media-rules";
 import { ensureListingCover, lockListingMedia } from "@/modules/listings/cover";
 import { PLACEMENT_CREATIVE_SPECS, aspectRatioLabel, dimensionMismatch } from "@/modules/campaigns/creative-spec";
 import { getUploadDescriptor } from "./targets";
@@ -46,6 +48,7 @@ const UPLOAD_TARGET_NAMESPACES: Record<string, string> = {
   APPLICATION_DOCUMENT: "application-documents",
   ORGANISATION_LOGO: "organisations/branding",
   MARKETPLACE_PROFESSIONAL_LOGO: "marketplace-professionals/branding",
+  PROVIDER_PORTFOLIO_IMAGE: "provider-portfolio",
 };
 const GENERATED_DOCUMENT_TYPES = ["RECEIPT", "TENANT_STATEMENT", "MOVE_OUT_STATEMENT", "LEASE_AGREEMENT"] as const;
 
@@ -89,6 +92,12 @@ type UploadEntitlementScope =
   /** Platform-admin action on a customer's behalf: never limited by the customer's plan. */
   | { kind: "platform" };
 
+/** Smallest edge accepted for images shown publicly as photos (not for documents or evidence). */
+const MINIMUM_IMAGE_EDGE: Record<string, number> = { LISTING_MEDIA: 200, PROVIDER_PORTFOLIO_IMAGE: 200, MARKETPLACE_PROFESSIONAL_LOGO: 64, SERVICE_PROVIDER_LOGO: 64, ORGANISATION_LOGO: 64 };
+const MAXIMUM_IMAGE_EDGE = 12_000;
+/** Public photo targets, resized to LISTING_PHOTO_MAX_EDGE on their longest edge. */
+const PHOTO_TARGETS = new Set(["LISTING_MEDIA", "PROVIDER_PORTFOLIO_IMAGE"]);
+
 async function performUpload(params: {
   userId: string;
   organisationId: string | null;
@@ -102,7 +111,7 @@ async function performUpload(params: {
   // never actually be stored — this throws immediately in a cloud deployment with no durable
   // storage configured, rather than only failing once we reach the actual write.
   const adapter = getObjectStorageAdapter();
-  const bytes = Buffer.from(input.dataBase64, "base64");
+  let bytes = Buffer.from(input.dataBase64, "base64");
   if (bytes.length === 0) throw new AppError("EMPTY_FILE", 422, "The uploaded file is empty.");
   if (bytes.length > maxUploadBytes()) {
     throw new AppError("FILE_TOO_LARGE", 413, `The uploaded file exceeds the ${Math.floor(maxUploadBytes() / (1024 * 1024))}MB limit.`);
@@ -135,6 +144,16 @@ async function performUpload(params: {
     const mediaType = input.mediaType ?? "PHOTO";
     if (mediaType === "VIDEO" && sniffed.kind !== "VIDEO") throw new AppError("MEDIA_TYPE_MISMATCH", 422, "A video media type requires a video file.");
     if (mediaType !== "VIDEO" && sniffed.kind === "VIDEO") throw new AppError("MEDIA_TYPE_MISMATCH", 422, "Photo/floor plan media cannot be a video file.");
+  }
+  if (sniffed.kind === "IMAGE" && PROCESSED_IMAGE_MIME_TYPES.includes(sniffed.mimeType)) {
+    // Fully decoded, turned upright and re-encoded without metadata: camera, device and location
+    // data never reach storage, and a damaged or mislabelled file is refused, on every upload path.
+    const processed = await processUploadedImage(bytes, sniffed.mimeType, {
+      minEdge: MINIMUM_IMAGE_EDGE[targetType],
+      maxEdge: MAXIMUM_IMAGE_EDGE,
+      resizeTo: PHOTO_TARGETS.has(targetType) ? LISTING_PHOTO_MAX_EDGE : undefined,
+    });
+    bytes = Buffer.from(processed.bytes);
   }
   // Dimension check for campaign creative (item: server-side dimension/aspect-ratio validation).
   // Mirrors the admin UI's own client-side check (same `dimensionMismatch` helper) rather than
@@ -351,7 +370,6 @@ export async function removeMarketplaceProfessionalLogoAsPlatform(principal: Pla
 }
 
 /** Same cap the listing form and `createListingSchema.mediaUrls` already state to users. */
-const MAX_MARKETPLACE_LISTING_MEDIA = MAX_LISTING_PHOTOS;
 
 export async function uploadMarketplaceListingMedia(
   userId: string,
@@ -375,6 +393,7 @@ export async function uploadMarketplaceListingMedia(
       marketplaceProfessionalId: true,
       status: true,
       _count: { select: { media: true } },
+      media: { where: { type: "PHOTO" }, select: { id: true } },
     },
   });
 
@@ -409,11 +428,13 @@ export async function uploadMarketplaceListingMedia(
     throw new AppError("LISTING_NOT_EDITABLE", 409, "Photos can only be changed while the listing is a draft, rejected, or paused.");
   }
 
-  if (listing._count.media >= MAX_MARKETPLACE_LISTING_MEDIA) {
+  // A fast, friendly answer; the authoritative check runs again under the listing lock.
+  const requestedType = typeof input === "object" && input !== null ? (input as { mediaType?: unknown }).mediaType ?? "PHOTO" : "PHOTO";
+  if ((requestedType === "PHOTO" && (listing.media?.length ?? 0) >= MAX_LISTING_PHOTOS) || listing._count.media >= MAX_LISTING_MEDIA_ITEMS) {
     throw new AppError(
       "LISTING_MEDIA_LIMIT_REACHED",
       422,
-      `A property listing can contain up to ${MAX_MARKETPLACE_LISTING_MEDIA} images.`,
+      `A property listing can contain up to ${MAX_LISTING_PHOTOS} photos. Remove one to add another.`,
     );
   }
 
@@ -865,4 +886,45 @@ export async function listTenantDocuments(userId: string, organisationId: string
     generatedAt: row.generatedAt,
     leaseId: row.leaseId,
   }));
+}
+
+const PROVIDER_PORTFOLIO_TARGET = "PROVIDER_PORTFOLIO_IMAGE";
+
+/** Adds one portfolio image to a provider's public profile (owner only, at most 10). */
+export async function uploadProviderPortfolioImage(userId: string, providerId: string, input: unknown) {
+  if (!isUuid(providerId)) throw notFound();
+  const raw = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
+  const data = uploadDocumentSchema.parse({
+    fileName: raw.fileName,
+    contentType: raw.contentType,
+    dataBase64: raw.dataBase64,
+    title: raw.title,
+    sourceMediaId: raw.sourceMediaId,
+    targetType: PROVIDER_PORTFOLIO_TARGET,
+    targetId: providerId,
+    classification: "PUBLIC",
+  });
+  const result = await performUpload({ userId, organisationId: null, targetType: PROVIDER_PORTFOLIO_TARGET, input: data });
+  return result.attached as { id: string; publicUrl: string; sortOrder: number };
+}
+
+export async function listProviderPortfolioImages(userId: string, providerId: string) {
+  if (!isUuid(providerId)) throw notFound();
+  if (!(await ownsProvider(userId, providerId))) throw forbidden();
+  return db.providerPortfolioImage.findMany({ where: { providerId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, publicUrl: true, sortOrder: true, caption: true } });
+}
+
+/** Removes a portfolio image and its stored file. */
+export async function removeProviderPortfolioImage(userId: string, providerId: string, imageId: string) {
+  if (!isUuid(providerId) || !isUuid(imageId)) throw notFound();
+  if (!(await ownsProvider(userId, providerId))) throw forbidden();
+  const removed = await db.$transaction(async (tx) => {
+    const image = await tx.providerPortfolioImage.findFirst({ where: { id: imageId, providerId } });
+    if (!image) throw notFound();
+    await tx.providerPortfolioImage.delete({ where: { id: image.id } });
+    await tx.storageObject.updateMany({ where: { id: image.storageObjectId, archivedAt: null }, data: { archivedAt: new Date() } });
+    return image;
+  });
+  await getObjectStorageAdapter().deleteObject(removed.storageKey, "PUBLIC").catch(() => undefined);
+  return { id: removed.id };
 }

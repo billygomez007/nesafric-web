@@ -63,7 +63,7 @@ export function promptFor(draft: Draft, phone: string): string {
     case "property_city": return `Which town or area is ${property?.name} in?`;
     case "property_address": return `What is the street address or nearest landmark of ${property?.name}? Reply skip to leave it out.`;
     case "buildings": return `Is ${property?.name} one building, or several blocks?\nReply 1 for one building, or send the block names separated by commas, for example: Block A, Block B.`;
-    case "units": return `Units in ${building?.name ?? property?.name}: send the number of units to number them automatically (${unitPrefix(draft)}1, ${unitPrefix(draft)}2…), or list them one per line as: unit name, type, bedrooms. For example:\nA1, apartment, 2\nA2, studio`;
+    case "units": return `Units in ${building?.name ?? property?.name}. Reply with one of these:\n• How many units, for example 4, to name them ${unitPrefix(draft)}1 to ${unitPrefix(draft)}4\n• The unit names, for example: A1, A2, A3\n• One unit per line with its type, for example:\nA1, 3 bedroom apartment\nA2, studio\nTypes: ${UNIT_TYPES.join(", ")}.`;
     case "unit_type": return `What type are these ${plural(building?.units.length ?? 0, "unit")}? Reply one of: ${UNIT_TYPES.join(", ")} — or skip.`;
     case "more_properties": return `Saved ${property?.name}: ${plural(property?.buildings.length ?? 0, "building")}, ${plural(property?.buildings.reduce((sum, item) => sum + item.units.length, 0) ?? 0, "unit")}. Add another property? Reply yes or no.`;
     case "tenants_offer": return "Do you want to add your current tenants now? Reply yes, or later to skip.";

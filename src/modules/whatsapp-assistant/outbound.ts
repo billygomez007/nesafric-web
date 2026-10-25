@@ -10,7 +10,8 @@ export type OfficialTemplateMessage = {
   /** E.164 with "+". */
   phoneE164: string;
   displayName: string;
-  template: WhatsAppTemplateKey;
+  /** A configured template key, or a template the caller already checked is approved (Utility registry). */
+  template: WhatsAppTemplateKey | { name: string; language: string };
   bodyParameters: string[];
   /** Readable copy for the transcript. */
   body: string;
@@ -25,14 +26,14 @@ export type OfficialTemplateMessage = {
  * transaction (`tx`) it takes the shared lock on the official channel first, so the assignment it
  * returns stays in force until the caller commits what it queues.
  */
-export async function officialTemplateReadiness(template: WhatsAppTemplateKey, tx?: Tx) {
+export async function officialTemplateReadiness(template: WhatsAppTemplateKey | { name: string; language: string }, tx?: Tx) {
   const officialId = officialWhatsAppOrganisationId();
   if (officialId && tx) await lockWhatsAppChannelShared(tx, officialId);
   const sender = officialId ? await resolveWhatsAppSendConfig(officialId, process.env, tx) : null;
   const channel = assistantChannelConfigSchema.safeParse(sender?.config);
-  const approved = whatsappTemplate(template);
+  const approved = typeof template === "string" ? whatsappTemplate(template) : template;
   if (!officialId || !sender?.official || !channel.success) return { ready: false as const, reason: "The official NesAfric WhatsApp number is not configured." };
-  if (!approved) return { ready: false as const, reason: `No approved WhatsApp template is configured (WHATSAPP_TEMPLATE_${template}).` };
+  if (!approved) return { ready: false as const, reason: `No approved WhatsApp template is configured (WHATSAPP_TEMPLATE_${String(template)}).` };
   return { ready: true as const, officialId, assignmentId: sender.assignmentId, phoneNumberId: channel.data.phoneNumberId, approved };
 }
 

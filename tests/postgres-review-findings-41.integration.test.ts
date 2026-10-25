@@ -10,11 +10,12 @@ import { assistantStateSchema } from "@/modules/whatsapp-assistant/schemas";
 import { getObjectStorageAdapter } from "@/platform/storage/registry";
 import { db } from "@/platform/database/client";
 import { createLease } from "./helpers/lease";
+import { VALID_JPEG } from "./helpers/images";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 // A minimal JPEG (SOI + JFIF header) that the upload pipeline's content sniffing accepts.
-const JPEG = Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=", "base64");
+const JPEG = VALID_JPEG;
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner", "BackgroundJob", "ChannelIdentity", "AuthOtpChallenge", "StorageObject" CASCADE');

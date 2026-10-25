@@ -53,7 +53,7 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
     }
     setSubmitting(true);
     try {
-      const leadBody = JSON.stringify({ name: data.get("name"), email: data.get("email") || undefined, phone: data.get("phone") || undefined, message: data.get("message") || undefined, source: "PROPERTY_MARKETPLACE", marketingConsent: data.get("marketingConsent") === "on" });
+      const leadBody = JSON.stringify({ name: data.get("name"), email: data.get("email") || undefined, phone: data.get("phone") || undefined, message: data.get("message") || undefined, source: "PROPERTY_MARKETPLACE", marketingConsent: data.get("marketingConsent") === "on", whatsappUpdatesConsent: Boolean(data.get("phone")) && data.get("whatsappUpdatesConsent") === "on" });
       const leadResponse = await fetch(`/api/public/listings/${listingId}/leads`, { method: "POST", headers: { "content-type": "application/json", "idempotency-key": idempotencyKeyFor(leadKey, leadBody) }, body: leadBody });
       if (!leadResponse.ok) return setError((await leadResponse.json()).error?.message ?? "Unable to send enquiry.");
       const lead = await leadResponse.json();
@@ -307,6 +307,7 @@ export function PublicListingDetail({ listingId }: { listingId: string }) {
                 <label className="grid min-w-0 gap-1.5 text-xs font-medium text-muted">Preferred start<input className={`${fieldClass} min-w-0`} name="startsAt" type="datetime-local" /></label>
                 <label className="grid min-w-0 gap-1.5 text-xs font-medium text-muted">Preferred end<input className={`${fieldClass} min-w-0`} name="endsAt" type="datetime-local" /></label>
               </div>
+              <label className="flex items-start gap-2.5 text-xs leading-5 text-muted"><input className="mt-0.5 h-4 w-4 accent-forest" name="whatsappUpdatesConsent" type="checkbox" />Send updates about this enquiry to my phone number on WhatsApp. Reply STOP at any time to stop them.</label>
               <label className="flex items-start gap-2.5 text-xs leading-5 text-muted"><input className="mt-0.5 h-4 w-4 accent-forest" name="marketingConsent" type="checkbox" />The lister may contact me about similar properties.</label>
               <button className={`${buttonClass("primary")} w-full`} disabled={submitting} type="submit">{submitting ? "Sending…" : "Send request"}</button>
               {success && <SuccessNotice>{success}</SuccessNotice>}

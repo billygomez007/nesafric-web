@@ -4,6 +4,7 @@ import { registerUser } from "@/modules/identity/service";
 import { createServiceProvider, getProvider, listServiceCategories, reviewProviderEvidence, reviewProviderIdentity, submitProviderVerification, updateServiceProvider } from "@/modules/providers/service";
 import { discoverMarketplaceProviders, getPublicMarketplaceProvider, updateMarketplaceProfile } from "@/modules/marketplace/service";
 import { removeServiceProviderLogo, uploadServiceProviderLogo } from "@/modules/documents/service";
+import { VALID_PNG_BASE64 } from "./helpers/images";
 
 /**
  * Provider logo management against PostgreSQL + the in-memory storage adapter: only the provider's
@@ -12,7 +13,7 @@ import { removeServiceProviderLogo, uploadServiceProviderLogo } from "@/modules/
  */
 
 // Minimal valid PNG signature + IHDR header (sniffed as image/png; 1×1).
-const PNG = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex").toString("base64");
+const PNG = VALID_PNG_BASE64;
 const png = (fileName = "logo.png") => ({ fileName, contentType: "image/png", dataBase64: PNG });
 
 async function cleanDatabase() {

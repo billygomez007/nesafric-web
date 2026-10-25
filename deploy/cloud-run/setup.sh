@@ -27,7 +27,7 @@ set -euo pipefail
 REGION="${REGION:-europe-west1}"
 SERVICE="${SERVICE:-nesafric-web}"
 REPOSITORY=nesafric
-RUNTIME_SA="nesafric-web-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
+RUNTIME_SA="nesafric-web@${PROJECT_ID}.iam.gserviceaccount.com"
 DEPLOY_SA="nesafric-web-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 USE_STATIC_EGRESS="${USE_STATIC_EGRESS:-false}"
 [ -f "$ENV_FILE" ] || { echo "ENV_FILE not found: $ENV_FILE" >&2; exit 1; }
@@ -45,7 +45,7 @@ gcloud artifacts repositories describe "$REPOSITORY" --location="$REGION" >/dev/
     --description="NesAfric web images"
 
 step "Service accounts"
-for account in nesafric-web-runtime nesafric-web-deployer; do
+for account in nesafric-web nesafric-web-deployer; do
   gcloud iam service-accounts describe "${account}@${PROJECT_ID}.iam.gserviceaccount.com" >/dev/null 2>&1 ||
     gcloud iam service-accounts create "$account" --display-name="$account"
 done

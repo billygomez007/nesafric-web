@@ -15,14 +15,36 @@ export type LineError = { line: number; text: string; reason: string };
 const lines = (body: string) => body.split(/\r?\n/).map((text) => text.trim()).filter(Boolean);
 const cells = (line: string) => line.split(",").map((cell) => cell.trim());
 
+/** Everyday names landlords use for the unit types above. */
+const UNIT_TYPE_SYNONYMS: Record<string, string> = { flat: "apartment", "single room": "room", ch: "chamber and hall", "chamber hall": "chamber and hall" };
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+/** A unit name such as A1, B-2, 12, Flat 1 or Shop 3B: a short label that ends in a number. */
+const UNIT_NAME = /^[a-z]{0,12}[ -]?\d{1,4}[a-z]?$/i;
+
 export function parseUnitType(raw: string | undefined) {
   if (!raw) return undefined;
-  const value = raw.toLowerCase().replace(/\s+/g, " ").trim();
-  if (value === "ch" || value === "chamber & hall") return "chamber and hall";
-  return (UNIT_TYPES as readonly string[]).includes(value) ? value : null;
+  const value = raw.toLowerCase().replace(/&/g, " and ").replace(/[-\s]+/g, " ").trim();
+  const known = (candidate: string) => (UNIT_TYPES as readonly string[]).includes(candidate) ? candidate : UNIT_TYPE_SYNONYMS[candidate] ?? null;
+  // "apartments" or "flats" are read as their singular.
+  return known(value) ?? (value.endsWith("s") ? known(value.slice(0, -1)) : null);
 }
 
-/** A unit count (auto-named) or unit lines: `A1, apartment, 2` (type and bedrooms optional). */
+/** "3 bedrooms apartment", "2-bedroom flat", "one bed apartment", "4 bedroom" or a plain type. */
+export function parseUnitDescription(raw: string): { unitType?: string; bedrooms?: number } | null {
+  const value = raw.toLowerCase().replace(/[-\s]+/g, " ").trim();
+  const match = value.match(/^(\d{1,2}|[a-z]+)\s*(?:bed(?:room)?s?|br)(?:\s+(.+))?$/);
+  if (match) {
+    const bedrooms = /^\d+$/.test(match[1]) ? Number(match[1]) : NUMBER_WORDS[match[1]];
+    if (bedrooms === undefined) return null;
+    if (!match[2]) return { bedrooms };
+    const unitType = parseUnitType(match[2]);
+    return unitType ? { unitType, bedrooms } : null;
+  }
+  const unitType = parseUnitType(value);
+  return unitType ? { unitType } : null;
+}
+
+/** A unit count (auto-named), unit names on one line (`A1, A2, A3`), or unit lines: `A1, apartment, 2` or `A1, 3 bedroom apartment` (type and bedrooms optional). */
 export function parseUnits(body: string, prefix: string): { units: DraftUnit[]; errors: LineError[]; autoNamed: boolean } {
   const trimmed = body.trim();
   if (/^\d{1,3}$/.test(trimmed)) {
@@ -34,14 +56,30 @@ export function parseUnits(body: string, prefix: string): { units: DraftUnit[]; 
   const errors: LineError[] = [];
   const seen = new Set<string>();
   lines(body).forEach((text, index) => {
-    const [name, type, bedrooms] = cells(text);
+    const parts = cells(text);
+    // "A1, A2, A3": every cell is a unit name, so each one is a unit.
+    if (parts.length > 1 && parts.every((part) => UNIT_NAME.test(part))) {
+      for (const name of parts) {
+        if (seen.has(name.toLowerCase())) { errors.push({ line: index + 1, text, reason: `${name} is listed twice.` }); continue; }
+        seen.add(name.toLowerCase());
+        units.push({ name });
+      }
+      return;
+    }
+    const [name, type, bedroomsCell] = parts;
     if (!name || name.length > 80) return errors.push({ line: index + 1, text, reason: "A unit needs a name of up to 80 characters." });
     if (seen.has(name.toLowerCase())) return errors.push({ line: index + 1, text, reason: `${name} is listed twice.` });
-    const unitType = parseUnitType(type);
-    if (unitType === null) return errors.push({ line: index + 1, text, reason: `Unknown unit type "${type}". Use one of: ${UNIT_TYPES.join(", ")}.` });
-    if (bedrooms !== undefined && bedrooms !== "" && !/^\d{1,2}$/.test(bedrooms)) return errors.push({ line: index + 1, text, reason: "Bedrooms must be a whole number." });
+    const description = type ? parseUnitDescription(type) : {};
+    if (description === null) return errors.push({ line: index + 1, text, reason: `Unknown unit type "${type}". Use one of: ${UNIT_TYPES.join(", ")} (for example "3 bedroom apartment"). To list several units on one line, separate the names with commas, like A1, A2, A3.` });
+    let bedrooms = description.bedrooms;
+    if (bedroomsCell !== undefined && bedroomsCell !== "") {
+      const match = bedroomsCell.toLowerCase().match(/^(\d{1,2})(?:\s*bed(?:room)?s?)?$/);
+      if (!match) return errors.push({ line: index + 1, text, reason: "Bedrooms must be a whole number." });
+      if (bedrooms !== undefined && bedrooms !== Number(match[1])) return errors.push({ line: index + 1, text, reason: `The bedrooms are given twice (${bedrooms} and ${match[1]}). Give them once.` });
+      bedrooms = Number(match[1]);
+    }
     seen.add(name.toLowerCase());
-    units.push({ name, ...(unitType ? { unitType } : {}), ...(bedrooms ? { bedrooms: Number(bedrooms) } : {}) });
+    units.push({ name, ...(description.unitType ? { unitType: description.unitType } : {}), ...(bedrooms ? { bedrooms } : {}) });
   });
   if (units.length > 500) return { units: [], errors: [{ line: 501, text: "", reason: "Send at most 500 units per building." }], autoNamed: false };
   return { units, errors, autoNamed: false };

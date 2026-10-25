@@ -11,8 +11,9 @@ import { createServiceProvider } from "@/modules/providers/service";
 import { getOrganisationIntegrationOverview, upsertIntegrationConfig } from "@/modules/integrations/service";
 import { listDocumentCenter, uploadOrganisationDocument, uploadProviderEvidenceDocument } from "@/modules/documents/service";
 import { upsertChannelConfig } from "@/modules/conversations/service";
+import { VALID_JPEG } from "./helpers/images";
 
-const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01]);
+const JPEG_BYTES = VALID_JPEG;
 const PDF_BYTES = Buffer.from("%PDF-1.4\n%mock-id-scan\n");
 const base64 = (buffer: Buffer) => buffer.toString("base64");
 
