@@ -88,7 +88,9 @@ swept.
 
 How `/api/jobs/run` is triggered today:
 
-- **Production:** Vercel Cron from `vercel.json` (`*/5 * * * *`, GET). Vercel runs crons only for
+- **Production:** Vercel Cron from `vercel.json` (daily, `0 3 * * *`, GET — the Hobby plan limit), plus
+  `.github/workflows/production-jobs-cron.yml` every 5 minutes with `JOBS_RUN_SECRET` (see
+  `docs/whatsapp-operations.md`, "Worker"). Vercel runs crons only for
   the **production** deployment and authenticates with `Authorization: Bearer $CRON_SECRET`.
   The route accepts that header, so production needs `CRON_SECRET` set. The endpoint **fails
   closed**: with neither `CRON_SECRET` nor `JOBS_RUN_SECRET` set, every call gets
@@ -97,7 +99,7 @@ How `/api/jobs/run` is triggered today:
   `JOBS_RUN_SECRET` is set, Vercel's cron call is refused (401). Either way neither jobs nor this
   sweep run, so **set `CRON_SECRET` in production before deploying this change**. Confirm in the
   Vercel dashboard (Settings → Cron Jobs) that the job is listed and its recent invocations return
-  200, and that the plan permits a 5-minute schedule.
+  200.
 - **Staging:** `.github/workflows/staging-jobs-cron.yml` POSTs every 5 minutes with
   `STAGING_JOBS_RUN_SECRET`.
 - Preview deployments have no cron; the opportunistic sweep still bounds their tables.

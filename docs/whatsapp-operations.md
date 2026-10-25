@@ -138,7 +138,12 @@ Numbers that organisations saved in their channel settings before this change ar
 
 ### Worker
 
-On Vercel, each accepted webhook also processes its own reply path right after answering Meta (`src/platform/jobs/fast-path.ts`; turn off with `WHATSAPP_INLINE_PROCESSING=false`), so replies do not wait for the cron. The `/api/jobs/run` cron still runs everything else (dispatch timeouts, digests, retries). Vercel Hobby runs crons only once a day; use Pro, or an external scheduler, for the 5-minute schedule in `vercel.json`.
+On Vercel, each accepted webhook also processes its own reply path right after answering Meta (`src/platform/jobs/fast-path.ts`; turn off with `WHATSAPP_INLINE_PROCESSING=false`), so replies do not wait for the cron. The `/api/jobs/run` endpoint still runs everything else (dispatch timeouts, digests, retries), so it must be called every few minutes:
+
+- `vercel.json` runs it once a day at 03:00 UTC, the most often Vercel Hobby allows (it refuses deployments with a more frequent cron). It authenticates with `CRON_SECRET`.
+- `.github/workflows/production-jobs-cron.yml` calls it every 5 minutes. Set the repository secret `PRODUCTION_JOBS_RUN_SECRET` to the same value as `JOBS_RUN_SECRET` in Vercel production; optionally set the repository variable `PRODUCTION_SITE_URL` (default `https://nesafric.com`). Without the secret the workflow skips itself. GitHub may delay scheduled runs by several minutes under load.
+- While GitHub Actions is unavailable, an external scheduler such as cron-job.org does the same: `POST https://nesafric.com/api/jobs/run` every 5 minutes with header `x-jobs-run-secret: <JOBS_RUN_SECRET>`.
+- On Vercel Pro, the `vercel.json` schedule can go back to `*/5 * * * *` and the workflow can be removed.
 
 Run `npm run worker` continuously, or call `POST /api/jobs/run` at least every minute. Either one:
 
