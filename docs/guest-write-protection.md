@@ -88,9 +88,9 @@ swept.
 
 How `/api/jobs/run` is triggered today:
 
-- **Production:** Vercel Cron from `vercel.json` (daily, `0 3 * * *`, GET — the Hobby plan limit), plus
-  `.github/workflows/production-jobs-cron.yml` every 5 minutes with `JOBS_RUN_SECRET` (see
-  `docs/whatsapp-operations.md`, "Worker"). Vercel runs crons only for
+- **Production:** Vercel Cron from `vercel.json` (daily, `0 3 * * *`, GET — the Hobby plan limit), plus an
+  external scheduler (cron-job.org or Cloud Scheduler) every few minutes with `JOBS_RUN_SECRET` (see
+  `docs/whatsapp-operations.md`, "Worker"; not GitHub Actions, whose minutes it would use up). Vercel runs crons only for
   the **production** deployment and authenticates with `Authorization: Bearer $CRON_SECRET`.
   The route accepts that header, so production needs `CRON_SECRET` set. The endpoint **fails
   closed**: with neither `CRON_SECRET` nor `JOBS_RUN_SECRET` set, every call gets

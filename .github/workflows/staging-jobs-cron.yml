@@ -4,10 +4,13 @@ name: Staging background jobs
 # evaluation, conversation delivery, calendar sync) on a schedule, since the staging app runs on
 # Vercel (serverless — no long-running `npm run worker` process). See src/app/api/jobs/run/route.ts.
 # Staging-only: STAGING_JOBS_RUN_SECRET is a generated, non-production credential.
+#
+# Manual only. On a private repository every run is billed as at least one Actions minute, so a
+# 5-minute schedule (about 8,600 runs a month) used up the free plan's 2,000 minutes within a week
+# and stopped every workflow, CI included. Schedule staging from an external scheduler instead
+# (docs/whatsapp-operations.md, "Worker").
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 jobs:
