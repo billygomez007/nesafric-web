@@ -297,6 +297,14 @@ const fileFor = (mediaId: string, file: { body: Buffer; contentType: string }): 
   dataBase64: file.body.toString("base64"),
 });
 /** Items separated by commas, semicolons or lines; repeats (any case) kept once, as the domain requires. */
+/**
+ * Whether an image type is one we store. The type WhatsApp declares with the message is optional:
+ * without one the image is fetched and the type the download reports decides (`required`).
+ */
+const acceptedType = (type: string | undefined, accepted: ReadonlyArray<string>, required = false) => {
+  const value = type?.split(";")[0].trim().toLowerCase();
+  return value ? accepted.includes(value) : !required;
+};
 const splitList = (body: string) => {
   const seen = new Set<string>();
   return body.split(/[,;\n]/).map((item) => item.trim()).filter((item) => item && !seen.has(item.toLowerCase()) && seen.add(item.toLowerCase()));
@@ -489,12 +497,13 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       const finish = () => business.kind === "agency" ? agencyDone(business) : business.kind === "service" ? serviceDone(business) : "Logo updated. It shows on your public profile now. Reply menu for other options.";
       if (input.kind === "text") return { state: reset(), reply: business.kind === "logo" ? "The logo is unchanged. Reply menu for other options." : finish() };
       const media = input.media;
-      if (input.kind !== "image" || !media || !(LOGO_MIME_TYPES as readonly string[]).includes((media.mimeType ?? "").split(";")[0])) return say("Please send the logo as a JPG, PNG or WebP photo.");
+      if (input.kind !== "image" || !media || !acceptedType(media.mimeType, LOGO_MIME_TYPES)) return say("Please send the logo as a JPG, PNG or WebP photo.");
       const target = business.target!;
       try {
         const stored = await once(dependencies, key(`logo:${target.id}:${media.id}`), async () => {
           const file = await dependencies.download(media.id);
           if (!file) return null;
+          if (!acceptedType(file.contentType, LOGO_MIME_TYPES, true)) throw new AppError("WHATSAPP_IMAGE_TYPE", 422, "Please send the logo as a JPG, PNG or WebP photo.");
           if (target.kind === "professional") await dependencies.uploadProfessionalLogo(userId, target.id, fileFor(media.id, file));
           else await dependencies.uploadProviderLogo(userId, target.id, fileFor(media.id, file));
           return { id: media.id };
@@ -625,13 +634,14 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
         return say(`${business.committed.media.length} ${business.committed.media.length === 1 ? "photo" : "photos"} saved.`);
       }
       const media = input.media;
-      if (input.kind !== "image" || !media || !(LISTING_PHOTO_MIME_TYPES as readonly string[]).includes((media.mimeType ?? "").split(";")[0])) return say("That file was not added. Please send photos as JPG, PNG or WebP images.");
+      if (input.kind !== "image" || !media || !acceptedType(media.mimeType, LISTING_PHOTO_MIME_TYPES)) return say("That file was not added. Please send photos as JPG, PNG or WebP images.");
       if (business.committed.media.includes(media.id)) return { state: { ...state, business }, reply: "That photo is already saved." };
       if (business.committed.media.length >= MAX_LISTING_PHOTOS) return say(`A listing can have up to ${MAX_LISTING_PHOTOS} photos. Reply done to continue.`);
       try {
         const stored = await once(dependencies, key(`photo:${media.id}`), async () => {
           const file = await dependencies.download(media.id);
           if (!file) return null;
+          if (!acceptedType(file.contentType, LISTING_PHOTO_MIME_TYPES, true)) throw new AppError("WHATSAPP_IMAGE_TYPE", 422, "That file was not added. Please send photos as JPG, PNG or WebP images.");
           await dependencies.uploadListingPhoto(userId, business.professionalId!, business.committed.listingId!, { ...fileFor(media.id, file), mediaType: "PHOTO" });
           return { id: media.id };
         });

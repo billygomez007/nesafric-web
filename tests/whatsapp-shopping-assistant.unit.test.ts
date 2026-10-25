@@ -94,6 +94,9 @@ describe("WhatsApp shopping: reading requests without a model", () => {
     expect(read("rent around 4000").property?.location).toBeUndefined();
     expect(read("rent around 4000 cedis per month").property?.location).toBeUndefined();
     expect(read("flat in 2 bedrooms").property?.location).toBeUndefined();
+    expect(read("rent in cantonments, 37 military hospital").property?.location).toBe("cantonments, 37 military hospital");
+    expect(read("rent in east legon, 2nd circular road").property?.location).toBe("east legon, 2nd circular road");
+    expect(read("rent in east legon, 4000 cedis per month").property).toMatchObject({ location: "east legon", maxPriceMinor: "400000" });
   });
 
   it("keeps a town after a comma in the area, and ends the area where a filter follows", () => {

@@ -328,3 +328,19 @@ describe("WhatsApp business: archived service businesses", () => {
     expect(replies.at(-1)).not.toContain("Reply logo");
   });
 });
+
+describe("WhatsApp business: image types", () => {
+  it("takes an image sent without a declared type when the download is an accepted image, and refuses other downloads", async () => {
+    const download = vi.fn().mockResolvedValueOnce({ body: Buffer.from("x"), contentType: "image/png" }).mockResolvedValueOnce({ body: Buffer.from("x"), contentType: "application/pdf" });
+    const dependencies = deps({ download });
+    const details = ["sale", "land", "Half plot at Oyarifa", "Oyarifa", "GHS 250,000", "Dry, documented land with an indenture, close to the main road.", "1", "confirm"];
+    let { state } = await run(details, dependencies);
+    let result = await advanceBusiness(input("[image received]", { kind: "image", messageId: "m-a", media: { id: "501" } }), state, reset, dependencies);
+    expect(result.reply).toBe("Photo 1 saved. Send more, or reply done.");
+    expect(dependencies.uploadListingPhoto).toHaveBeenCalledWith(userId, professionalId, listingId, expect.objectContaining({ fileName: "whatsapp-501.png", contentType: "image/png" }));
+    ({ state } = result);
+    result = await advanceBusiness(input("[image received]", { kind: "image", messageId: "m-b", media: { id: "502" } }), state, reset, dependencies);
+    expect(result.reply).toContain("Please send photos as JPG, PNG or WebP images.");
+    expect(dependencies.uploadListingPhoto).toHaveBeenCalledTimes(1);
+  });
+});
