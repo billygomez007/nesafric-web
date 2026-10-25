@@ -4,6 +4,7 @@ import { AppError } from "@/platform/errors";
 import { createOrganisation } from "@/modules/organisations/service";
 import { createBuilding, createProperty } from "@/modules/assets/service";
 import { createTenant } from "@/modules/tenants/service";
+import { createTenantAccessInvitation } from "@/modules/tenants/access-invitations";
 import { createLease } from "@/modules/leases/service";
 import { createReminderPolicy } from "@/modules/reminders/service";
 import { inviteNetworkProvider } from "@/modules/provider-network/service";
@@ -12,7 +13,7 @@ import { onboardingDataSchema, type Draft, type OnboardingData } from "./draft";
 
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 
-export type CommitSummary = { organisationId: string; organisationName: string; properties: number; units: number; tenants: number; draftLeases: number; reminders: boolean; pendingVerifications: number; providersInvited: number; providerInviteProblem: string | null };
+export type CommitSummary = { organisationId: string; organisationName: string; properties: number; units: number; tenants: number; draftLeases: number; invitations: Array<{ label: string; code: string }>; invitationProblems: number; reminders: boolean; pendingVerifications: number; providersInvited: number; providerInviteProblem: string | null };
 
 /** Deterministic per-draft references, so a retried commit finds what it already created. */
 export const draftReference = (draftId: string) => `WA-${draftId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -24,6 +25,8 @@ export const draftReference = (draftId: string) => `WA-${draftId.replace(/-/g, "
  * deterministic reference: a crash or retry resumes without duplicates.
  *
  * Leases are created as DRAFT: the existing execution rules still decide when one becomes active.
+ * Tenants the landlord confirmed live there now (`inviteTenants`) are invited: once a tenant
+ * redeems the code, they can report repairs on a started draft tenancy (`reportableLease`).
  * Ownership or authority is recorded as a PENDING claim per property, never as verified.
  */
 export async function commitDraft(draft: Draft, userId: string): Promise<CommitSummary> {
@@ -99,6 +102,28 @@ export async function commitDraft(draft: Draft, userId: string): Promise<CommitS
       }
     }
 
+    // 3b. Invite tenants the landlord confirmed (consent to WhatsApp recorded by that answer). Each
+    // invitation sends the tenant the U17 message; the access code goes only to the landlord. A
+    // retry after this step sends nothing again (codes are never stored in the draft).
+    const invitations: Array<{ label: string; code: string }> = [];
+    let invitationProblems = 0;
+    if (data.inviteTenants && !data.committed.tenantsInvited) {
+      for (const [index, tenant] of data.tenants.entries()) {
+        const record = data.committed.tenants[index];
+        if (!tenant.phone || !record) continue;
+        try {
+          await db.tenantOrganisation.update({ where: { id: record.tenantOrganisationId }, data: { communicationWhatsappAllowed: true } });
+          const created = await createTenantAccessInvitation(userId, organisationId, record.tenantOrganisationId, record.leaseId);
+          invitations.push({ label: `${data.properties.length > 1 ? `${data.properties[tenant.propertyIndex]?.name}/` : ""}${tenant.unitName} ${tenant.legalName}`, code: created.code });
+        } catch (error) {
+          if (!(error instanceof AppError && error.status < 500)) throw error;
+          invitationProblems += 1;
+        }
+      }
+      data.committed.tenantsInvited = true;
+      await progress();
+    }
+
     // 4. Lease-expiry reminders, 60 and 30 days before the end date.
     if (data.leaseExpiryReminders && !data.committed.reminders) {
       for (const daysOffset of [60, 30]) {
@@ -149,7 +174,7 @@ export async function commitDraft(draft: Draft, userId: string): Promise<CommitS
     return {
       organisationId, organisationName: organisation.name, properties: propertyIds.length,
       units: data.properties.reduce((sum, property) => sum + property.buildings.reduce((count, building) => count + building.units.length, 0), 0),
-      tenants: data.tenants.length, draftLeases: data.tenants.length, reminders: data.committed.reminders, pendingVerifications: propertyIds.length,
+      tenants: data.tenants.length, draftLeases: data.tenants.length, invitations, invitationProblems, reminders: data.committed.reminders, pendingVerifications: propertyIds.length,
       providersInvited: data.providers.length, providerInviteProblem,
     };
   } catch (error) {

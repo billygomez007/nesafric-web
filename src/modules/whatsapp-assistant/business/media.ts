@@ -1,6 +1,6 @@
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { IMAGE_MIME_TYPES } from "@/platform/storage/mime";
+import { DOCUMENT_MIME_TYPES, IMAGE_MIME_TYPES } from "@/platform/storage/mime";
 import { uploadMarketplaceListingMedia, uploadOrganisationDocument, uploadProviderPortfolioImage } from "@/modules/documents/service";
 import { downloadWhatsAppMedia, type DownloadedMedia } from "../maintenance/media";
 
@@ -18,6 +18,14 @@ export async function downloadWhatsAppImage(mediaId: string, download: MediaDown
   if (!/^\d{1,30}$/.test(mediaId)) return null;
   const file = await download(mediaId).catch(() => null);
   if (!file || !(IMAGE_MIME_TYPES as readonly string[]).includes(file.contentType) || file.contentType === "application/pdf") return null;
+  return file;
+}
+
+/** Downloads a WhatsApp image or PDF for a private verification document (certificate, ID card). */
+export async function downloadWhatsAppDocument(mediaId: string, download: MediaDownloader = downloadWhatsAppMedia) {
+  if (!/^\d{1,30}$/.test(mediaId)) return null;
+  const file = await download(mediaId).catch(() => null);
+  if (!file || !(DOCUMENT_MIME_TYPES as readonly string[]).includes(file.contentType)) return null;
   return file;
 }
 

@@ -38,6 +38,9 @@ type ProfessionalRow = {
   serviceAreas: string[];
   status: string;
   verificationStatus: string;
+  /** Present only for reviewers with marketplace.verify. */
+  verificationEvidenceReferences?: string[];
+  verificationDocuments?: Array<{ id: string; type: string; storageObjectId: string; createdAt: string }>;
   createdAt: string;
   archivedAt: string | null;
   homepageCompanyLogos: Array<{ id: string; isPublished: boolean; sortOrder: number }>;
@@ -75,6 +78,44 @@ function homepageState(professional: ProfessionalRow) {
   const item = professional.homepageCompanyLogos?.[0];
   if (!item) return "none" as const;
   return item.isPublished ? ("published" as const) : ("hidden" as const);
+}
+
+const DOCUMENT_LABELS: Record<string, string> = {
+  BUSINESS_REGISTRATION_CERTIFICATE: "Business registration certificate",
+  GHANA_CARD_FRONT: "Ghana Card (front)",
+  GHANA_CARD_BACK: "Ghana Card (back)",
+};
+
+/** Verification documents (private): each opens through a short-lived signed link. */
+function VerificationDocuments({ professional }: { professional: ProfessionalRow }) {
+  const [error, setError] = useState<string | null>(null);
+  if (!professional.verificationDocuments && !professional.verificationEvidenceReferences) return null;
+  const documents = professional.verificationDocuments ?? [];
+  const references = professional.verificationEvidenceReferences ?? [];
+  async function open(storageObjectId: string) {
+    setError(null);
+    const response = await fetch(`/api/documents/${storageObjectId}/signed-url`);
+    const body = await response.json().catch(() => null) as { url?: string; error?: { message?: string } } | null;
+    if (!response.ok || !body?.url) return setError(body?.error?.message ?? "The document could not be opened.");
+    window.open(body.url, "_blank", "noopener,noreferrer");
+  }
+  return (
+    <div className="mt-3 rounded-xl border border-hairline p-4">
+      <p className="text-xs font-semibold text-muted">Verification documents</p>
+      {documents.length === 0 ? <p className="mt-1 text-sm text-muted">No documents uploaded.</p> : (
+        <ul className="mt-2 space-y-1">
+          {documents.map((document) => (
+            <li key={document.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span>{DOCUMENT_LABELS[document.type] ?? humanize(document.type)} <span className="text-xs text-muted">· {new Date(document.createdAt).toLocaleDateString()}</span></span>
+              <button type="button" className={buttonClass("secondary", "sm")} onClick={() => void open(document.storageObjectId)}>Open</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {references.length > 0 && <p className="mt-2 text-xs text-muted">References: {references.join("; ")}</p>}
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </div>
+  );
 }
 
 function humanize(value: string) {
@@ -759,6 +800,7 @@ function ProfessionalsContent() {
                     </dd>
                   </div>
                 </dl>
+                <VerificationDocuments professional={selected} />
                 {isHomepageCompanyType(selected.type) && homepageState(selected) === "none" && homepageIneligibilityReason(selected) && (
                   <p className="mt-2 text-xs text-muted">
                     Homepage: {homepageIneligibilityReason(selected)}

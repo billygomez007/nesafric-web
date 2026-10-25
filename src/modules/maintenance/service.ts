@@ -1,4 +1,5 @@
 import { Prisma, MaintenanceStatus, WorkOrderStatus } from "@/platform/database/generated/client";
+import { reportableLease } from "@/modules/tenants/reportable-lease";
 import { db } from "@/platform/database/client";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { membershipHasPermission } from "@/platform/authorization/policy";
@@ -112,7 +113,7 @@ async function validateTenantLease(
       organisationId,
       propertyId,
       archivedAt: null,
-      status: { in: ["ACTIVE", "EXPIRING"] },
+      ...reportableLease(tenantOrganisationId),
       ...(unitId ? { unitId } : {}),
       parties: { some: { tenantOrganisationId, role: "TENANT" } },
     },
@@ -395,7 +396,7 @@ export async function createMaintenanceRequest(userId: string, organisationId: s
           organisationId,
           propertyId: data.propertyId,
           archivedAt: null,
-          status: { in: ["ACTIVE", "EXPIRING"] },
+          ...reportableLease(data.tenantOrganisationId),
           ...(data.unitId ? { unitId: data.unitId } : {}),
           parties: { some: { tenantOrganisationId: data.tenantOrganisationId, role: "TENANT" } },
         },

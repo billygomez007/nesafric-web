@@ -5,11 +5,11 @@ import { absoluteUrl } from "@/platform/brand";
 import { createOrganisation } from "@/modules/organisations/service";
 import { createMarketplaceProfessional, submitMarketplaceVerification } from "@/modules/marketplace-professionals/service";
 import { createServiceProvider, submitProviderVerification } from "@/modules/providers/service";
-import { uploadMarketplaceProfessionalLogo, uploadServiceProviderLogo } from "@/modules/documents/service";
+import { uploadMarketplaceProfessionalDocument, uploadMarketplaceProfessionalLogo, uploadServiceProviderLogo } from "@/modules/documents/service";
 import { claimFlowDraftForSubmission, finishFlowDraft, getFlowDraft, startFlowDraft, type FlowDraft } from "./drafts";
 import { advanceGuided, promptFor, type GuidedFlow, type Step } from "./guided";
 import { buttons, command, isSkip, numbered, paragraph, pickNumbers, region, regionPrompt, text, type FlowInput, type FlowResult } from "./common";
-import { downloadWhatsAppImage, type MediaDownloader } from "./media";
+import { downloadWhatsAppDocument, downloadWhatsAppImage, type MediaDownloader } from "./media";
 
 export const REGISTRATION_TYPES = ["AGENCY", "AGENT", "PROVIDER"] as const;
 export type RegistrationType = (typeof REGISTRATION_TYPES)[number];
@@ -45,9 +45,30 @@ const dataSchema = z.object({
   evidenceType: z.enum(["BUSINESS_REGISTRATION", "PROFESSIONAL_LICENSE", "TRADE_CERTIFICATE", "REFERENCE_EVIDENCE"]).optional(),
   reference: z.string().max(500).optional(),
   logoMediaId: z.string().max(40).nullable().optional(),
+  /** Verification documents, as WhatsApp media ids: uploaded privately when the person submits. */
+  certificateMediaId: z.string().max(40).optional(),
+  idFrontMediaId: z.string().max(40).optional(),
+  idBackMediaId: z.string().max(40).optional(),
   _meta: z.record(z.string(), z.unknown()).optional(),
 }).passthrough();
 type Data = z.infer<typeof dataSchema>;
+
+type DocumentField = "certificateMediaId" | "idFrontMediaId" | "idBackMediaId";
+
+/** A required private document step: an image (or a PDF for the certificate), replaceable by sending another. */
+function documentStep(id: string, label: string, when: (data: Data) => boolean, field: DocumentField, ask: string): Step<Data> {
+  return {
+    id, label, when, editable: true,
+    prompt: (data) => ({ text: data[field] ? `${label} received. Send another to replace it, or reply done to continue.` : ask }),
+    answer: (body, data) => /^(done|next|continue)$/.test(command(body)) && data[field] ? { data } : { error: `Please send the ${label.toLowerCase()} as a photo${field === "certificateMediaId" ? " or PDF" : ""}. It is needed for verification; reply pause to finish later.` },
+    media: async (mediaId, data, input) => {
+      const type = input.media?.mimeType?.split(";")[0].trim().toLowerCase();
+      if (type && !type.startsWith("image/") && !(field === "certificateMediaId" && type === "application/pdf")) return { data, reply: `That file type can't be used. Please send the ${label.toLowerCase()} as a photo${field === "certificateMediaId" ? " or PDF" : ""}.` };
+      return { data: { ...data, [field]: mediaId }, reply: `${label} received. It is stored privately when you submit.`, advance: true };
+    },
+    summary: (data) => `${label}: ${data[field] ? "received" : "missing"}`,
+  };
+}
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,63}$/;
 const isProfessional = (data: Data) => data.type !== "PROVIDER";
@@ -138,10 +159,21 @@ const steps: Step<Data>[] = [
     id: "reference", label: "Verification reference",
     prompt: (data) => ({ text: data.type === "PROVIDER"
       ? "Send the reference NesAfric can check: the number or the name and phone of the reference. Do not send photos of ID cards here."
-      : "NesAfric verifies every agency and agent before listings go live. Send a reference we can check, for example your business registration number, GREDA or agent licence number. Do not send photos of ID cards here." }),
-    answer: (body, data) => { const value = text(body, 3, 300); return value ? { data: { ...data, reference: value } } : { error: "Please send a reference of 3 to 300 characters." }; },
+      : data.type === "AGENCY"
+        ? "NesAfric verifies every agency before listings go live. Send your business registration number (and GREDA number if you have one). Next I'll ask for a photo of the registration certificate."
+        : "NesAfric verifies every agent before listings go live. Send your agent licence or GREDA number, or reply skip if you don't have one. Next I'll ask for photos of your Ghana Card." }),
+    answer: (body, data) => {
+      if (data.type === "AGENT" && isSkip(body)) return { data: { ...data, reference: undefined } };
+      const value = text(body, 3, 300); return value ? { data: { ...data, reference: value } } : { error: "Please send a reference of 3 to 300 characters." };
+    },
     summary: (data) => data.reference ? `Reference: ${data.reference}` : null,
   },
+  documentStep("certificate", "Business registration certificate", (data) => data.type === "AGENCY", "certificateMediaId",
+    "Send a clear photo or PDF of the business registration certificate (Registrar-General's certificate of incorporation or business name registration). Only NesAfric reviewers see it."),
+  documentStep("id_front", "Ghana Card (front)", (data) => data.type === "AGENT", "idFrontMediaId",
+    "Send a clear photo of the FRONT of your Ghana Card, with all four corners visible. Only NesAfric reviewers see it."),
+  documentStep("id_back", "Ghana Card (back)", (data) => data.type === "AGENT", "idBackMediaId",
+    "Now send a clear photo of the BACK of your Ghana Card. Only NesAfric reviewers see it."),
   {
     id: "logo", label: "Logo", editable: true,
     prompt: (data) => ({ text: data.logoMediaId ? "Logo received. Send another image to replace it, or reply done to continue." : "Send your logo as an image (JPEG, PNG or WebP, at least 64 × 64 pixels), or reply skip." }),
@@ -243,7 +275,38 @@ async function uploadLogo(mediaId: string | null | undefined, upload: (file: { f
   }
 }
 
+const REQUIRED_DOCUMENTS: Record<"AGENCY" | "AGENT", Array<{ field: DocumentField; type: "BUSINESS_REGISTRATION_CERTIFICATE" | "GHANA_CARD_FRONT" | "GHANA_CARD_BACK"; label: string }>> = {
+  AGENCY: [{ field: "certificateMediaId", type: "BUSINESS_REGISTRATION_CERTIFICATE", label: "business registration certificate" }],
+  AGENT: [{ field: "idFrontMediaId", type: "GHANA_CARD_FRONT", label: "front of your Ghana Card" }, { field: "idBackMediaId", type: "GHANA_CARD_BACK", label: "back of your Ghana Card" }],
+};
+
+/** Stores each verification document once per profile (a retried submission skips what is saved). */
+async function uploadDocuments(data: Data, userId: string, professionalId: string, download?: MediaDownloader) {
+  const failed: string[] = [];
+  for (const document of REQUIRED_DOCUMENTS[data.type as "AGENCY" | "AGENT"] ?? []) {
+    const mediaId = data[document.field];
+    if (!mediaId) { failed.push(document.label); continue; }
+    const sourceMediaId = `whatsapp:${mediaId}`;
+    if (await db.marketplaceProfessionalDocument.findUnique({ where: { marketplaceProfessionalId_sourceMediaId: { marketplaceProfessionalId: professionalId, sourceMediaId } }, select: { id: true } })) continue;
+    const file = await downloadWhatsAppDocument(mediaId, download);
+    if (!file) { failed.push(document.label); continue; }
+    const extension = file.contentType === "application/pdf" ? "pdf" : file.contentType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+    try {
+      await uploadMarketplaceProfessionalDocument(userId, professionalId, { fileName: `${document.type.toLowerCase()}-${mediaId}.${extension}`, contentType: file.contentType, dataBase64: file.body.toString("base64"), professionalDocumentType: document.type, sourceMediaId });
+    } catch (error) {
+      if (error instanceof AppError && error.status < 500) { failed.push(document.label); continue; }
+      throw error;
+    }
+  }
+  return failed;
+}
+
 async function submitProfessional(draft: FlowDraft, data: Data, input: FlowInput, download?: MediaDownloader): Promise<FlowResult> {
+  const missing = (REQUIRED_DOCUMENTS[data.type as "AGENCY" | "AGENT"] ?? []).filter((document) => !data[document.field]);
+  if (missing.length) {
+    await finishFlowDraft(draft.id, { status: "OPEN", step: missing[0].field === "certificateMediaId" ? "certificate" : missing[0].field === "idFrontMediaId" ? "id_front" : "id_back" });
+    return { reply: `Before submitting, please send the ${missing.map((item) => item.label).join(" and ")}. Reply resume to continue.`, draftId: draft.id };
+  }
   const existing = await existingBusinesses(input.userId, data.type);
   let target = await adopt(draft, existing, data.name!);
   if (!target && existing.length) {
@@ -265,16 +328,24 @@ async function submitProfessional(draft: FlowDraft, data: Data, input: FlowInput
     await db.whatsAppFlowDraft.update({ where: { id: draft.id }, data: { marketplaceProfessionalId: created.id } });
   }
   const logo = await uploadLogo(data.logoMediaId, (file) => uploadMarketplaceProfessionalLogo(input.userId, target!.id, file), download);
+  const failedDocuments = await uploadDocuments(data, input.userId, target.id, download);
+  if (failedDocuments.length) {
+    // The profile exists (and is adopted on retry); the person sends the document again.
+    const field = REQUIRED_DOCUMENTS[data.type as "AGENCY" | "AGENT"].find((item) => failedDocuments.includes(item.label))!.field;
+    await finishFlowDraft(draft.id, { status: "OPEN", step: field === "certificateMediaId" ? "certificate" : field === "idFrontMediaId" ? "id_front" : "id_back", data: { ...data, [field]: undefined } });
+    return { reply: `I could not save the ${failedDocuments.join(" and ")}. Please send it again as a clear photo${field === "certificateMediaId" ? " or PDF" : ""}, then reply confirm.`, draftId: draft.id };
+  }
   const current = await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: target.id }, select: { verificationStatus: true } });
   if (current.verificationStatus === "UNVERIFIED" || current.verificationStatus === "REJECTED") {
-    await submitMarketplaceVerification(input.userId, target.id, { evidenceReferences: [`Submitted on WhatsApp: ${data.reference}`] });
+    const documents = REQUIRED_DOCUMENTS[data.type as "AGENCY" | "AGENT"].map((item) => item.label);
+    await submitMarketplaceVerification(input.userId, target.id, { evidenceReferences: [`Submitted on WhatsApp${data.reference ? `: ${data.reference}` : ""}`, `Documents uploaded: ${documents.join(", ")}`] });
   }
   await finishFlowDraft(draft.id, { status: "SUBMITTED", step: "submitted", targets: { marketplaceProfessionalId: target.id } });
   return {
     reply: [
       `${target.name} is submitted for review. Status: submitted for review.`,
       logo === "failed" ? "Your logo could not be saved; you can add it on the website." : logo === "uploaded" ? "Your logo is saved." : null,
-      "NesAfric checks the reference you gave. You can prepare property listings now (reply list a property); they can be submitted for review once your business is approved.",
+      "Your documents are stored privately for NesAfric's review. You can prepare property listings now (reply list a property); they can be submitted for review once your business is approved.",
       `Manage your profile: ${absoluteUrl(`/pro/${target.id}`)}`,
     ].filter(Boolean).join("\n"),
     exit: true,

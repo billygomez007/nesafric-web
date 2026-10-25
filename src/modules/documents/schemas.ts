@@ -16,6 +16,7 @@ export const uploadTargetTypeSchema = z.enum([
   "MARKETPLACE_PROFESSIONAL_LOGO",
   "SERVICE_PROVIDER_LOGO",
   "PROVIDER_PORTFOLIO_IMAGE",
+  "MARKETPLACE_PROFESSIONAL_DOCUMENT",
 ]);
 export type UploadTargetType = z.infer<typeof uploadTargetTypeSchema>;
 
@@ -37,6 +38,8 @@ export const uploadDocumentSchema = z.object({
     "PORTFOLIO_EVIDENCE", "REFERENCE_EVIDENCE", "TRAINING_CERTIFICATE", "OTHER",
   ]).optional(),
   evidenceExpiresAt: z.coerce.date().optional(),
+  /** MARKETPLACE_PROFESSIONAL_DOCUMENT only: which verification document this is. */
+  professionalDocumentType: z.enum(["BUSINESS_REGISTRATION_CERTIFICATE", "GHANA_CARD_FRONT", "GHANA_CARD_BACK"]).optional(),
   areaId: id.optional(),
   mediaSlot: z.enum(["desktop", "mobile", "nativeApp"]).optional(),
   /** MAINTENANCE_ATTACHMENT, LISTING_MEDIA and PROVIDER_PORTFOLIO_IMAGE: the external media the
@@ -48,6 +51,9 @@ export const uploadDocumentSchema = z.object({
   }
   if (value.targetType === "APPLICATION_DOCUMENT" && !value.documentType) {
     context.addIssue({ code: "custom", path: ["documentType"], message: "documentType is required for application document uploads." });
+  }
+  if (value.targetType === "MARKETPLACE_PROFESSIONAL_DOCUMENT" && !value.professionalDocumentType) {
+    context.addIssue({ code: "custom", path: ["professionalDocumentType"], message: "professionalDocumentType is required for marketplace professional documents." });
   }
   if (value.targetType === "PROVIDER_EVIDENCE" && !value.evidenceType) {
     context.addIssue({ code: "custom", path: ["evidenceType"], message: "evidenceType is required for provider evidence uploads." });

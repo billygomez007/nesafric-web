@@ -38,6 +38,9 @@ export const onboardingDataSchema = z.object({
   /** Cursor for the building currently being described. */
   cursor: z.object({ property: z.number().int().min(0), building: z.number().int().min(0) }).default({ property: 0, building: 0 }),
   tenants: z.array(tenant).max(500).default([]),
+  /** The landlord confirmed these tenants live in the units now and agreed to WhatsApp messages:
+   * tenancies that have started are saved active, and each tenant with a phone is invited. */
+  inviteTenants: z.boolean().optional(),
   leaseExpiryReminders: z.boolean().optional(),
   providers: z.array(provider).max(50).default([]),
   /** Spending that may proceed without the landlord, in minor units. "0" = always ask. */
@@ -52,13 +55,14 @@ export const onboardingDataSchema = z.object({
     reminders: z.boolean().default(false),
     verifications: z.boolean().default(false),
     providersInvited: z.boolean().default(false),
-  }).default({ properties: {}, buildings: {}, tenants: {}, reminders: false, verifications: false, providersInvited: false }),
+    tenantsInvited: z.boolean().default(false),
+  }).default({ properties: {}, buildings: {}, tenants: {}, reminders: false, verifications: false, providersInvited: false, tenantsInvited: false }),
 }).strict();
 export type OnboardingData = z.infer<typeof onboardingDataSchema>;
 
 export const STEPS = [
   "role", "name", "account_code", "organisation", "property_name", "property_city", "property_address",
-  "buildings", "units", "unit_type", "more_properties", "tenants_offer", "tenants", "reminders",
+  "buildings", "units", "unit_type", "more_properties", "tenants_offer", "tenants", "tenant_invites", "reminders",
   "providers_offer", "providers", "approval_limit", "emergency_contact", "review",
 ] as const;
 export type Step = (typeof STEPS)[number];

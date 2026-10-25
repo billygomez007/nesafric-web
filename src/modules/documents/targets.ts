@@ -312,6 +312,26 @@ const targetDescriptors: Record<string, UploadTargetDescriptor> = {
    * its own path before uploading; this check re-verifies inside the transaction that the actor is
    * one of the two. Always PUBLIC, and always written to `MarketplaceProfessional.logoUrl` — the
    * only logo record — so the homepage rail picks it up without being re-added. */
+  /** An agency's business registration certificate or an agent's Ghana Card (front or back) —
+   * `targetId` is a `MarketplaceProfessional.id`. Always PRIVATE; an OWNER or ADMIN of the
+   * profile uploads it, and only they and NesAfric reviewers (`marketplace.verify`) read it. */
+  MARKETPLACE_PROFESSIONAL_DOCUMENT: {
+    allowedMimeTypes: DOCUMENT_MIME_TYPES,
+    allowedClassifications: ["PRIVATE"],
+    authorize: async (tx, { userId, targetId }) => {
+      const professional = await tx.marketplaceProfessional.findFirst({ where: { id: targetId, archivedAt: null }, select: { backingOrganisationId: true } });
+      if (!professional) throw notFound();
+      const member = await tx.marketplaceProfessionalMember.findUnique({ where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId: targetId, userId } } });
+      if (member?.status !== "ACTIVE" || (member.role !== "OWNER" && member.role !== "ADMIN")) throw forbidden();
+      return { organisationId: professional.backingOrganisationId };
+    },
+    attach: (tx, { targetId, storageObject, uploadedByUserId, input }) =>
+      tx.marketplaceProfessionalDocument.create({
+        data: { marketplaceProfessionalId: targetId, type: input.professionalDocumentType!, storageObjectId: storageObject.id, sourceMediaId: input.sourceMediaId, submittedByUserId: uploadedByUserId },
+        select: { id: true, type: true, storageObjectId: true, createdAt: true },
+      }),
+  },
+
   MARKETPLACE_PROFESSIONAL_LOGO: {
     allowedMimeTypes: LOGO_MIME_TYPES,
     allowedClassifications: ["PUBLIC"],
