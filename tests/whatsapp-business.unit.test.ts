@@ -378,3 +378,22 @@ describe("WhatsApp business: support", () => {
     expect(dependencies.requestOtp).not.toHaveBeenCalled();
   });
 });
+
+describe("WhatsApp business: long lists", () => {
+  const many = Array.from({ length: 12 }, (_, index) => ({ id: `00000000-0000-4000-8000-0000000000${String(index + 10)}`, displayName: `Profile ${index + 1}`, myRole: "OWNER", status: "ACTIVE", slug: null }));
+
+  it("reaches a profile beyond the numbered list by its name", async () => {
+    const dependencies = deps({ professionals: vi.fn(async () => many) });
+    const { state, replies } = await run(["Profile 11"], dependencies);
+    expect(replies[0]).toContain("send the profile's name");
+    expect(state.business).toMatchObject({ professionalId: many[10].id, step: "listing_purpose" });
+  });
+
+  it("takes a typed name of an existing company beyond the list as that company, never a new one", async () => {
+    const companies = Array.from({ length: 10 }, (_, index) => ({ id: `00000000-0000-4000-8000-0000000001${String(index + 10)}`, name: `Company ${index + 1}` }));
+    const dependencies = deps({ companies: vi.fn(async () => companies) });
+    const { state } = await run(["2", "company 10"], dependencies, "6");
+    expect(state.business).toMatchObject({ companyOrganisationId: companies[9].id, companyName: "Company 10", step: "service_categories" });
+    expect(dependencies.existingProvider).toHaveBeenCalledWith(userId, { type: "COMPANY", companyOrganisationId: companies[9].id });
+  });
+});

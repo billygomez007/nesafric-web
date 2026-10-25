@@ -41,7 +41,6 @@ async function manageableCompanies(userId: string) {
     where: { userId, status: "ACTIVE", archivedAt: null, organisation: { archivedAt: null, marketplaceProfessional: null }, roles: { some: { role: { key: { in: ["organisation_owner", "administrator"] } } } } },
     select: { organisation: { select: { id: true, name: true } } },
     orderBy: { createdAt: "asc" },
-    take: 8,
   });
   return memberships.map(({ organisation }) => organisation);
 }
@@ -208,7 +207,7 @@ function promptFor(business: BusinessState, phone: string, currency: string): st
       "Reply confirm to create the profile, or cancel.",
     ].join("\n");
     case "agency_logo": return "Now send your logo as a photo (JPG, PNG or WebP, up to 2 MB). Reply skip to add it later.";
-    case "listing_professional": return `Which profile should this listing be under?\n${numbered(business.choices.map(({ name }) => name))}`;
+    case "listing_professional": return `Which profile should this listing be under? Reply the number, or send the profile's name.\n${numbered(business.choices.map(({ name }) => name))}`;
     case "listing_purpose": return "Is the property for rent or for sale? Reply rent or sale.";
     case "listing_category": return `What type of property is it?\n${numbered(CATEGORIES.map(([, label]) => label))}`;
     case "listing_title": return "Give the listing a short title, for example: 3 bedroom house with garden, East Legon.";
@@ -256,7 +255,7 @@ function promptFor(business: BusinessState, phone: string, currency: string): st
       "Reply confirm to create it and list it on the NesAfric service marketplace, or cancel.",
     ].join("\n");
     case "service_logo": return "Send your business logo as a photo (JPG, PNG or WebP, up to 2 MB), or reply skip.";
-    case "logo_target": return `Whose logo do you want to change?\n${numbered(business.choices.map(({ name }) => name))}`;
+    case "logo_target": return `Whose logo do you want to change? Reply the number, or send the name.\n${numbered(business.choices.map(({ name }) => name))}`;
     case "logo_upload": return `Send the new logo for ${business.target?.name} as a photo (JPG, PNG or WebP, up to 2 MB). Reply cancel to keep the current one.`;
   }
 }
@@ -355,6 +354,7 @@ async function begin(business: BusinessState, userId: string, displayName: strin
     const profiles = (await dependencies.professionals(userId)).filter(({ status }) => status === "ACTIVE");
     if (!profiles.length) return "To list a property you need an agent or agency profile first. Reply 4 to register as an agent, or 3 to register your agency or company. It takes about two minutes.";
     business.choices = profiles.slice(0, 9).map(({ id, displayName: name }) => ({ id, name }));
+    // Beyond nine, the prompt asks for the profile's name, matched against every profile.
     if (profiles.length === 1) { business.professionalId = profiles[0].id; business.step = "listing_purpose"; }
     else business.step = "listing_professional";
     return true;
@@ -363,16 +363,24 @@ async function begin(business: BusinessState, userId: string, displayName: strin
     business.step = "service_type";
     return true;
   }
-  const targets = [
-    ...(await dependencies.professionals(userId)).filter(({ myRole }) => myRole === "OWNER" || myRole === "ADMIN").map(({ id, displayName: name }) => ({ kind: "professional" as const, id, name })),
-    ...(await dependencies.ownedProviders(userId)).map(({ id, displayName: name }) => ({ kind: "provider" as const, id, name })),
-  ].slice(0, 9);
+  const targets = await logoTargets(userId, dependencies);
   if (!targets.length) return "You have no business profile to add a logo to yet. Reply 3 to register an agency or company, 4 to register as an agent, or 6 for a service business.";
   if (targets.length === 1) { business.target = targets[0]; business.step = "logo_upload"; return true; }
-  business.choices = targets.map(({ id, name }) => ({ id, name }));
+  business.choices = targets.slice(0, 9).map(({ id, name }) => ({ id, name }));
   business.step = "logo_target";
   return true;
 }
+
+/** Profiles and businesses whose logo this account may change: every one, not only those listed. */
+async function logoTargets(userId: string, dependencies: BusinessDependencies) {
+  return [
+    ...(await dependencies.professionals(userId)).filter(({ myRole }) => myRole === "OWNER" || myRole === "ADMIN").map(({ id, displayName: name }) => ({ kind: "professional" as const, id, name })),
+    ...(await dependencies.ownedProviders(userId)).map(({ id, displayName: name }) => ({ kind: "provider" as const, id, name })),
+  ];
+}
+
+/** A typed name chooses among ALL of the account's records, so one beyond the numbered list is reachable. */
+const byName = <T extends { name: string }>(items: ReadonlyArray<T>, typed: string) => items.find(({ name }) => name.trim().toLowerCase() === typed.trim().toLowerCase());
 
 export async function advanceBusiness(input: BusinessInput, state: AssistantState, reset: () => AssistantState, dependencies: BusinessDependencies = defaults): Promise<BusinessResult> {
   const business = state.business ? structuredClone(state.business) : null;
@@ -523,20 +531,21 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       return { state: reset(), reply: `Logo saved.\n\n${finish()}` };
     }
     case "logo_target": {
-      const index = Number(command) - 1;
-      const picked = business.choices[index];
+      const targets = await logoTargets(userId, dependencies);
+      const listed = business.choices[Number(command) - 1];
+      const picked = (listed && targets.find(({ id }) => id === listed.id)) ?? byName(targets, body);
       if (!picked) return say();
-      const providers = new Set((await dependencies.ownedProviders(userId)).map(({ id }) => id));
-      business.target = { kind: providers.has(picked.id) ? "provider" : "professional", id: picked.id, name: picked.name };
+      business.target = picked;
       business.step = "logo_upload";
       return say();
     }
 
     // ---- Property listings --------------------------------------------------------------------
     case "listing_professional": {
-      const picked = business.choices[Number(command) - 1];
+      const picked = business.choices[Number(command) - 1] ?? byName((await dependencies.professionals(userId)).filter(({ status }) => status === "ACTIVE").map(({ id, displayName: name }) => ({ id, name })), body);
       if (!picked) return say();
       business.professionalId = picked.id;
+      business.choices = [{ id: picked.id, name: picked.name }];
       business.step = "listing_purpose";
       return say();
     }
@@ -687,7 +696,7 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
       }
       if (/^(2|company|business|firm)$/.test(command)) {
         business.providerType = "COMPANY";
-        business.choices = (await dependencies.companies(userId)).map(({ id, name }) => ({ id, name }));
+        business.choices = (await dependencies.companies(userId)).slice(0, 8).map(({ id, name }) => ({ id, name }));
         business.step = "service_company";
         return say();
       }
@@ -695,7 +704,8 @@ export async function advanceBusiness(input: BusinessInput, state: AssistantStat
     }
     case "service_company": {
       const index = /^\d$/.test(command) ? Number(command) - 1 : -1;
-      const picked = business.choices[index];
+      // A typed name that is one of their companies, listed or not, is that company, never a new one.
+      const picked = business.choices[index] ?? (index < 0 ? byName(await dependencies.companies(userId), body) : undefined);
       if (picked) {
         const existing = await dependencies.existingProvider(userId, { type: "COMPANY", companyOrganisationId: picked.id });
         if (existing) return { state: reset(), reply: alreadyProvider(existing) };
