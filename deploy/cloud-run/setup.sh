@@ -56,6 +56,15 @@ for role in roles/run.admin roles/artifactregistry.writer roles/logging.logWrite
 done
 gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" --member="serviceAccount:${DEPLOY_SA}" \
   --role=roles/iam.serviceAccountUser >/dev/null
+# `gcloud builds submit` uploads the source to this bucket and the build, running as the deployer,
+# reads it from there. Access is granted on this bucket only, not on the upload buckets.
+SOURCE_BUCKET="gs://${PROJECT_ID}_cloudbuild"
+gcloud storage buckets describe "$SOURCE_BUCKET" >/dev/null 2>&1 ||
+  gcloud storage buckets create "$SOURCE_BUCKET" --location="$REGION" --uniform-bucket-level-access
+for role in roles/storage.objectViewer roles/storage.legacyBucketReader; do
+  gcloud storage buckets add-iam-policy-binding "$SOURCE_BUCKET" --member="serviceAccount:${DEPLOY_SA}" \
+    --role="$role" >/dev/null
+done
 
 step "Secrets from ${ENV_FILE} (values are not printed)"
 secret_flags=()
@@ -148,6 +157,7 @@ Cloud Build substitutions (use them for the first build and the trigger):
 Next:
   1. First build (docs/cloud-run-deployment.md, step 2):
        gcloud builds submit --config cloudbuild.yaml --region=${REGION} \\
+         --gcs-source-staging-dir=${SOURCE_BUCKET}/source \\
          --substitutions=COMMIT_SHA=\$(git rev-parse HEAD),${SUBSTITUTIONS} \\
          --service-account=projects/${PROJECT_ID}/serviceAccounts/${DEPLOY_SA}
   2. Connect GitHub to Cloud Build and create the trigger with the same substitutions (step 3).

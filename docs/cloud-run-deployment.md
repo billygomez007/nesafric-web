@@ -70,6 +70,7 @@ Use the substitutions printed in step 1, for example:
 
 ```bash
 gcloud builds submit --config cloudbuild.yaml --region=europe-west1 \
+  --gcs-source-staging-dir=gs://<your-project-id>_cloudbuild/source \
   --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_REGION=europe-west1,_STATIC_EGRESS=false,_SITE_URL=https://www.nesafric.com,_GTM_ID=<GTM-XXXXXXX> \
   --service-account=projects/<your-project-id>/serviceAccounts/nesafric-web-deployer@<your-project-id>.iam.gserviceaccount.com
 ```

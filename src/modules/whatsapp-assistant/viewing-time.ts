@@ -50,6 +50,10 @@ function calendarDate(text: string, now: Date): { year: number; month: number; d
     const value = new Date(Date.UTC(today.year, today.month, today.day + days));
     return { year: value.getUTCFullYear(), month: value.getUTCMonth(), day: value.getUTCDate(), explicitYear: true };
   };
+  // "Saturday next week", "last Saturday" or "the day after tomorrow" name a different day than the
+  // bare word; rather than guess, ask for the date. "this Saturday" and "coming Saturday" are the
+  // bare word's day.
+  if (/\b(?:next|last|previous|past|ago|after|before|weeks?|fortnight)\b/.test(text)) return null;
   if (/\btoday\b/.test(text)) return offset(0);
   if (/\btomorrow\b/.test(text)) return offset(1);
   const weekday = text.match(new RegExp(`\\b(${DAYS.join("|")})\\b`));

@@ -17,6 +17,7 @@ describe("WhatsApp shopping: viewing times", () => {
     ["today at 4:30 pm", "2026-10-24T16:30:00.000Z"],
     ["Monday 10am", "2026-10-26T10:00:00.000Z"],
     ["saturday 11am", "2026-10-31T11:00:00.000Z"],
+    ["this coming Saturday 11am", "2026-10-31T11:00:00.000Z"],
     ["20/12 14:00", "2026-12-20T14:00:00.000Z"],
     ["20/12/2026 2pm", "2026-12-20T14:00:00.000Z"],
     ["20.12.26 9.30am", "2026-12-20T09:30:00.000Z"],
@@ -34,6 +35,7 @@ describe("WhatsApp shopping: viewing times", () => {
   it.each([
     "sometime next week", "tomorrow", "tomorrow evening", "maybe 2pm", "next month 2pm", "yesterday 2pm",
     "today 8am", "31/02 10am", "2027-02-31T10:00:00Z", "2026-11-31T10:00:00+00:00", "13pm tomorrow", "2025-01-01T10:00:00Z", "2028-12-20 14:00",
+    "Saturday next week 10am", "next saturday 10am", "last Saturday 10am", "day after tomorrow 2pm", "monday after next 10am", "tomorrow week 2pm",
   ])("refuses %s", (text) => {
     expect(parseViewingTime(text, now)).toBeNull();
   });
