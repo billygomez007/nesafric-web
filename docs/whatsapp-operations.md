@@ -2,7 +2,7 @@
 
 The official NesAfric WhatsApp Business number is **0502820002 (+233 50 282 0002)**. Customers, agents, agencies, service businesses and landlords all use it. The website footer links to it (`BRAND.contact.whatsappE164` in `src/platform/brand.ts`). Assistants on other organisations' numbers send registration and listing requests to it.
 
-This covers the official NesAfric WhatsApp number, business sign-up and listing on it (section 2a), and the autonomous maintenance workflow (onboarding, provider network, tenant reports, routing, dispatch, completion, alerts and digests). Design and progress: `docs/autonomous-property-ops-plan.md`.
+This covers the official NesAfric WhatsApp number, business registration and listing on it (`docs/whatsapp-business-flows.md`), and the autonomous maintenance workflow (onboarding, provider network, tenant reports, routing, dispatch, completion, alerts and digests). Design and progress: `docs/autonomous-property-ops-plan.md`.
 
 Real WhatsApp delivery has **not** been verified end to end. Every test uses a recording adapter instead of Meta. Do not announce the feature as live until the checklist in section 6 is complete.
 
@@ -35,26 +35,6 @@ Create an organisation for NesAfric itself and set `WHATSAPP_OFFICIAL_ORGANISATI
    ```json
    { "enabled": true, "webhookVerifyToken": "<verify token>", "config": { "marketplaceAssistantEnabled": true, "defaultCountry": "GH", "defaultCurrency": "GHS" } }
    ```
-
-### 2a. Business sign-up and listing on WhatsApp
-
-On the official number, menu items 3 to 6 and plain phrases ("list my property", "register my service business", "logo") start a guided flow (`src/modules/whatsapp-assistant/business.ts`). Each flow uses the same domain service as the website, so permissions, plan limits, audit events and NesAfric review apply unchanged.
-
-| Menu | Flow | Creates |
-|---|---|---|
-| 3 | Agency, real estate company, developer, broker, marketing company | `MarketplaceProfessional` (the person is OWNER) on the free plan, then the logo |
-| 4 | Individual agent | The same, type `INDIVIDUAL_AGENT` |
-| 5 | List a property for rent or sale | A draft listing on confirm, then each photo as it arrives, then the authority reference; the listing goes to `PENDING_REVIEW` with verification `PENDING` |
-| 6 | Service business (individual or company) | `ServiceProvider` with categories and areas, listed on the service marketplace; then the logo |
-| `logo` | Change a logo | A new logo for a profile the person owns or administers |
-
-- **Account.** A number with no linked account first gets an SMS code (mode `register`), which creates the account or signs into the one using that number, and links the number. Every later step acts only as the account linked to the number at that moment.
-- **Nothing before confirm.** Answers stay in the conversation state until the person replies `confirm` to a summary. `cancel` stops; a draft listing already created stays a draft in the dashboard.
-- **One file per message.** Each photo or logo is downloaded and stored in the pass for its own message, so one pass never downloads many files. A redelivered photo is not stored twice.
-- **Review.** A listing is never published from WhatsApp. It needs at least one photo and the reference of the document that authorises it (title, mandate, listing agreement, permit). NesAfric reviews it like a web listing.
-- **Verification.** New profiles and providers start unverified. The final message links to the website to send registration documents (agencies) or the Ghana Card and certificates (providers). Shoppers on WhatsApp see verified providers only.
-- **Service categories** are matched from plain words ("plumber", "roofer", "AC"). When a word fits several categories, the person picks from a numbered list.
-- Landlord property-management setup stays on `register`. Menu 4 now means agent sign-up.
 
 ### Assignment trust
 
@@ -211,8 +191,8 @@ Also alert on log events `whatsapp.webhook.items_skipped` (Meta changed a payloa
 1. Migrations `20261018230000_whatsapp_number_assignments` and `20261019090000_whatsapp_conversation_provenance` applied. The official number assigned through the platform endpoint, and every legacy claim reviewed (section 2).
 2. Templates approved and their env vars set; the health check shows `whatsapp: CONFIGURED`.
 3. From a real phone, send `hi` and get the menu.
-   Then register: `4`, a name, the SMS code, a profile name, areas, `skip`, `skip`, `confirm`, a logo photo. Then `5`, list a property with two photos and a mandate reference; it appears in the platform listing review queue as pending. Then `6`, a service business with two services, `confirm`, `skip`; it appears on the service marketplace (unverified).
-   Then shop: `1`, `rent`, an area with published listings, `2` for details, `view 1`, a name, `tomorrow 2pm`, `confirm`. The lead and viewing request reach the listing team, and `status` shows them (`docs/whatsapp-shopping-audit.md`).
+   Then run the business registration and listing steps in `docs/whatsapp-live-test-runbook.md`.
+   Then shop: `1`, `rent`, an area with published listings, `details 2`, `view 1`, a name, `tomorrow 2pm`, `confirm`. The lead and viewing request reach the listing team, and `status` shows them (`docs/whatsapp-shopping-audit.md`).
 4. Run `link` with a real SMS code.
 5. Run `register` end to end, then `confirm`. Check that the organisation, properties and pending ownership claim exist.
 6. Run `add provider` to a second real phone, then reply ACCEPT from it.
