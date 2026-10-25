@@ -266,22 +266,22 @@ describe("PostgreSQL WhatsApp Utility templates", () => {
     await approve("U02", "U04", "U06");
     await settle();
     const lead = await createMarketplaceLead(listing.id, undefined, { name: "Kwame Asante", phone: "+233241110001", whatsappUpdatesConsent: true });
-    const viewing = await createViewingRequest(listing.id, undefined, { leadId: lead.id, preferredTimes: [{ startsAt: "2026-10-24T10:00:00.000Z", endsAt: "2026-10-24T11:00:00.000Z", timezone: "Africa/Accra" }] });
-    await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "CONFIRMED", confirmedStartsAt: "2026-10-24T10:00:00.000Z", confirmedEndsAt: "2026-10-24T11:00:00.000Z" });
+    const viewing = await createViewingRequest(listing.id, undefined, { leadId: lead.id, preferredTimes: [{ startsAt: "2037-10-24T10:00:00.000Z", endsAt: "2037-10-24T11:00:00.000Z", timezone: "Africa/Accra" }] });
+    await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "CONFIRMED", confirmedStartsAt: "2037-10-24T10:00:00.000Z", confirmedEndsAt: "2037-10-24T11:00:00.000Z" });
     await dispatchUtilityEvents();
     await work();
     // A viewing request has no catalogue template; the confirmation names the agent.
     expect(templatesTo(SEEKER).map(({ whatsappTemplate }) => whatsappTemplate?.name)).toEqual(["nes_property_viewing_confirmed"]);
-    expect(templatesTo(SEEKER)[0].whatsappTemplate?.bodyParameters).toEqual(["Kwame", "3-bedroom house in Spintex", "Sat, 24 Oct 2026", "10:00 GMT", "Abena Agyei"]);
+    expect(templatesTo(SEEKER)[0].whatsappTemplate?.bodyParameters).toEqual(["Kwame", "3-bedroom house in Spintex", "Sat, 24 Oct 2037", "10:00 GMT", "Abena Agyei"]);
 
-    await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "RESCHEDULED", confirmedStartsAt: "2026-10-26T15:30:00.000Z", confirmedEndsAt: "2026-10-26T16:30:00.000Z" });
+    await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "RESCHEDULED", confirmedStartsAt: "2037-10-26T15:30:00.000Z", confirmedEndsAt: "2037-10-26T16:30:00.000Z" });
     await dispatchUtilityEvents();
     await updateViewingRequest(owner.id, organisation.id, viewing.id, { status: "CANCELLED", note: "The house has been let" });
     await dispatchUtilityEvents();
     await work();
     expect(templatesTo(SEEKER).slice(1).map(({ whatsappTemplate }) => [whatsappTemplate?.name, whatsappTemplate?.bodyParameters])).toEqual([
-      ["nes_property_viewing_rescheduled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2026", "15:30 GMT"]],
-      ["nes_property_viewing_cancelled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2026, 15:30 GMT", `VW-${viewing.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`]],
+      ["nes_property_viewing_rescheduled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2037", "15:30 GMT"]],
+      ["nes_property_viewing_cancelled", ["Kwame", "3-bedroom house in Spintex", "Mon, 26 Oct 2037, 15:30 GMT", `VW-${viewing.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`]],
     ]);
   });
 

@@ -171,11 +171,11 @@ describe("WhatsApp shopping: the conversation", () => {
   it("asks for what is missing, searches, and books a viewing in plain language", async () => {
     vi.useFakeTimers({ now, toFake: ["Date"] });
     try {
-      const { state, replies, deps } = await converse(["1", "rent", "Osu", "2", "view 1", "Ama Owusu", "tomorrow 2pm", "confirm"]);
+      const { state, replies, deps } = await converse(["1", "rent", "Osu", "details 2", "view 1", "Ama Owusu", "tomorrow 2pm", "confirm"]);
       expect(replies[0]).toBe("Are you looking to rent or buy?");
       expect(replies[1]).toBe("Which area should I search?");
       expect(deps.tools.searchProperties).toHaveBeenCalledWith(expect.objectContaining({ listingType: "RENT", location: "osu", country: "GH", currencyCode: "GHS" }), 1);
-      // A bare number after results opens that property, not the provider search.
+      // "details 2" opens that result; a bare number stays a menu choice.
       expect(replies[3]).toContain("Bright flat");
       expect(deps.tools.propertyDetails).toHaveBeenCalledWith(listingIds[1]);
       expect(replies[5]).toContain("tomorrow 2pm");
@@ -214,12 +214,12 @@ describe("WhatsApp shopping: the conversation", () => {
 
   it("refuses a number that is not in the latest results", async () => {
     const searchProperties = vi.fn(async () => ({ ids: listingIds.slice(0, 1), hasMore: false, cards: ["1. A"] }));
-    const { replies } = await converse(["rent in osu", "3"], { tools: tools({ searchProperties }), interpret: async (body: string, state: AssistantState) => interpretLocally(body, state) });
+    const { replies } = await converse(["rent in osu", "details 3"], { tools: tools({ searchProperties }), interpret: async (body: string, state: AssistantState) => interpretLocally(body, state) });
     expect(replies[1]).toBe("Choose a property number from the most recent results.");
   });
 
   it("points provider results to their profiles instead of leaving the search", async () => {
-    const { replies, state } = await converse(["plumber in madina", "1"]);
+    const { replies, state } = await converse(["plumber in madina", "details 1"]);
     expect(replies[1]).toContain("Open provider 1's profile link above");
     expect(state).toMatchObject({ workflow: "service_search", paused: false });
   });
