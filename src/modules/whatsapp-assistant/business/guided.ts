@@ -186,3 +186,23 @@ async function moveTo<D>(flow: GuidedFlow<D>, draft: FlowDraft, input: FlowInput
   if (target === "review") data = withMeta(data, { ...metaOf(data as Record<string, unknown>), returnToReview: true });
   return save(target, data);
 }
+
+/**
+ * Answers a flow's steps in order from `answers` (step id → the text the step accepts), as if the
+ * person had typed them one by one: the same `answer` validation runs. Stops at the first step with
+ * no answer, a media step, or an `enter` hook (those continue in the chat). Used by WhatsApp Flows,
+ * which collect several answers on one screen. Returns the first unanswered step and any errors.
+ */
+export async function prefillGuided<D>(flow: GuidedFlow<D>, data: D, answers: Record<string, string>, input: FlowInput): Promise<{ data: D; step: string; errors: Record<string, string> }> {
+  let current = data;
+  const done = new Set<string>();
+  for (;;) {
+    const next = order(flow, current).find((item) => !done.has(item.id));
+    if (!next) return { data: current, step: "review", errors: {} };
+    if (!(next.id in answers) || next.media || next.enter || !next.answer) return { data: current, step: next.id, errors: {} };
+    const answered = await next.answer(answers[next.id], current, input);
+    if ("error" in answered) return { data: current, step: next.id, errors: { [next.id]: answered.error } };
+    current = answered.data;
+    done.add(next.id);
+  }
+}

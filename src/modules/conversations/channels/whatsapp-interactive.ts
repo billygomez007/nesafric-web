@@ -31,7 +31,20 @@ export const whatsappInteractiveSchema = z.discriminatedUnion("type", [
     footer: z.string().trim().min(1).max(60).optional(),
     buttons: z.array(z.object({ id, title: z.string().trim().min(1).max(20) })).min(1).max(3),
   }),
+  /** A WhatsApp Flow (`src/modules/whatsapp-flows`). `token` is the server-signed flow_token. */
+  z.object({
+    type: z.literal("flow"),
+    body,
+    footer: z.string().trim().min(1).max(60).optional(),
+    flowId: z.string().regex(/^\d{1,30}$/),
+    token: z.string().min(1).max(1024),
+    cta: z.string().trim().min(1).max(30),
+    screen: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/).optional(),
+    /** Draft Flows can be sent for testing before they are published. */
+    mode: z.enum(["draft", "published"]).default("published"),
+  }),
 ]).superRefine((value, context) => {
+  if (value.type === "flow") return;
   const ids = value.type === "list" ? value.sections.flatMap((section) => section.rows.map((row) => row.id)) : value.buttons.map((button) => button.id);
   if (new Set(ids).size !== ids.length) context.addIssue({ code: "custom", message: "Interactive option ids must be unique." });
 });
@@ -52,6 +65,25 @@ export function replyButtons(text: string, buttons: Array<{ id: string; title: s
 /** The `interactive` object of a Graph API `/messages` request. */
 export function graphInteractive(interactive: WhatsAppInteractive) {
   const footer = interactive.footer ? { footer: { text: interactive.footer } } : {};
+  if (interactive.type === "flow") {
+    // data_exchange: the first screen comes from the endpoint (INIT), so every screen is server-built.
+    return {
+      type: "flow",
+      body: { text: interactive.body },
+      ...footer,
+      action: {
+        name: "flow",
+        parameters: {
+          flow_message_version: "3",
+          flow_id: interactive.flowId,
+          flow_token: interactive.token,
+          flow_cta: interactive.cta,
+          flow_action: "data_exchange",
+          ...(interactive.mode === "draft" ? { mode: "draft" } : {}),
+        },
+      },
+    };
+  }
   if (interactive.type === "list") {
     return {
       type: "list",

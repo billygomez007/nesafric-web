@@ -11,6 +11,8 @@ const message = z.object({
   interactive: z.object({
     button_reply: z.object({ id, title: text }).optional(),
     list_reply: z.object({ id, title: text }).optional(),
+    /** A finished WhatsApp Flow: `response_json` holds the flow_token and NesAfric's signed outcome. */
+    nfm_reply: z.object({ response_json: z.string().min(2).max(8_000), body: text.optional(), name: z.string().max(100).optional() }).optional(),
   }).optional(),
   button: z.object({ text, payload: id.optional() }).optional(),
   image: media.optional(), document: media.optional(), video: media.optional(), audio: media.optional(),
@@ -96,12 +98,13 @@ export function parseWhatsAppEvents(payload: unknown, phoneNumberId: string, bus
         const contact = value.contacts?.find((candidate) => candidate.wa_id === item.from);
         const attachment = item.image ?? item.document ?? item.video ?? item.audio;
         const kind = item.image ? "image" : item.document ? "document" : item.video ? "video" : item.audio ? "audio" : item.location ? "location" : "text";
-        const body = item.text?.body ?? item.interactive?.button_reply?.id ?? item.interactive?.list_reply?.id ?? item.button?.payload ?? item.button?.text ?? attachment?.caption ?? `[${item.type ?? kind} received]`;
+        const flowReply = item.interactive?.nfm_reply;
+        const body = flowReply ? "[Form submitted]" : item.text?.body ?? item.interactive?.button_reply?.id ?? item.interactive?.list_reply?.id ?? item.button?.payload ?? item.button?.text ?? attachment?.caption ?? `[${item.type ?? kind} received]`;
         messages.push({
           externalMessageId: item.id, channelAddress: item.from,
           externalReferenceId: item.context?.id, body, senderName: contact?.profile?.name,
           receivedAt: new Date(Number(item.timestamp) * 1000),
-          providerPayload: { phoneNumberId, kind: attachment || item.location ? kind : item.text || item.interactive || item.button ? "text" : "unsupported", ...(attachment ? { media: attachment } : {}), ...(item.location ? { location: item.location } : {}) },
+          providerPayload: { phoneNumberId, kind: flowReply ? "flow" : attachment || item.location ? kind : item.text || item.interactive || item.button ? "text" : "unsupported", ...(flowReply ? { flowResponse: flowReply.response_json } : {}), ...(attachment ? { media: attachment } : {}), ...(item.location ? { location: item.location } : {}) },
         });
       }
       for (const raw of value.statuses ?? []) {

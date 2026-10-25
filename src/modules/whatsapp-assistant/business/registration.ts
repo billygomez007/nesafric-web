@@ -6,8 +6,8 @@ import { createOrganisation } from "@/modules/organisations/service";
 import { createMarketplaceProfessional, submitMarketplaceVerification } from "@/modules/marketplace-professionals/service";
 import { createServiceProvider, submitProviderVerification } from "@/modules/providers/service";
 import { uploadMarketplaceProfessionalDocument, uploadMarketplaceProfessionalLogo, uploadServiceProviderLogo } from "@/modules/documents/service";
-import { claimFlowDraftForSubmission, finishFlowDraft, getFlowDraft, startFlowDraft, type FlowDraft } from "./drafts";
-import { advanceGuided, promptFor, type GuidedFlow, type Step } from "./guided";
+import { applyFlowDraftChange, claimFlowDraftForSubmission, finishFlowDraft, getFlowDraft, startFlowDraft, type FlowDraft } from "./drafts";
+import { advanceGuided, prefillGuided, promptFor, type GuidedFlow, type Step } from "./guided";
 import { buttons, command, isSkip, numbered, paragraph, pickNumbers, region, regionPrompt, text, type FlowInput, type FlowResult } from "./common";
 import { downloadWhatsAppDocument, downloadWhatsAppImage, type MediaDownloader } from "./media";
 
@@ -409,4 +409,32 @@ export async function applicationsSummary(userId: string, address: string) {
     ...drafts.map((item) => `${item.kind === "BUSINESS_APPLICATION" ? "Business registration" : item.kind === "PROPERTY_LISTING" ? "Property listing" : "Service listing"}: saved draft (reply resume)`),
   ];
   return lines.length ? `Your NesAfric applications:\n${lines.map((line) => `• ${line}`).join("\n")}` : "You have no business applications yet. Reply menu to register one.";
+}
+
+/** Agency types and the individual agent, as Agent Registration Flow options. */
+export const REGISTRATION_FLOW_KINDS = [
+  ...AGENCY_TYPES.map((item, index) => ({ id: `AGENCY:${index + 1}`, title: item.label })),
+  { id: "AGENT", title: "Individual agent" },
+];
+
+/**
+ * Starts an agency or agent registration from Agent Registration Flow answers. Each answer goes
+ * through its chat step; the chat then asks for the verification documents (certificate, or the
+ * Ghana Card front and back), the logo and the review, exactly as a typed registration.
+ */
+export async function startRegistrationFromFlow(input: FlowInput, kind: string, answers: Record<string, string>): Promise<{ error: string; step: string } | { draftId: string; reply: string }> {
+  const type: "AGENCY" | "AGENT" | null = kind.startsWith("AGENCY:") ? "AGENCY" : kind === "AGENT" ? "AGENT" : null;
+  if (!type) return { error: "Please choose what you are registering.", step: "kind" };
+  const existing = await existingBusinesses(input.userId, type);
+  if (existing.length) return { error: duplicateNotice(existing), step: "kind" };
+  const { draft, created } = await startFlowDraft({ address: input.address, userId: input.userId, kind: "BUSINESS_APPLICATION", step: type === "AGENCY" ? "agency_type" : "name", data: { type }, messageId: input.messageId });
+  if (!created && dataSchema.safeParse(draft.data).data?.type !== type) return { error: "You already have another registration in progress. Reply resume in the chat to finish or cancel it.", step: "kind" };
+  const flow = registrationFlow();
+  const prefilled = await prefillGuided(flow, flow.read({ type }), { ...(type === "AGENCY" ? { agency_type: kind.split(":")[1] } : {}), ...answers }, input);
+  const [field, message] = Object.entries(prefilled.errors)[0] ?? [];
+  if (field) return { error: message, step: field };
+  const result = await applyFlowDraftChange(draft.id, input.userId, `${input.messageId}:answers`, () => ({ step: prefilled.step, data: prefilled.data as Record<string, unknown> }));
+  if (!result.draft) return { error: "This registration is no longer open.", step: "kind" };
+  const prompt = await promptFor(flow, result.draft);
+  return { draftId: draft.id, reply: prompt.reply };
 }

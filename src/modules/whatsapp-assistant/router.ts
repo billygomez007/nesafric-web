@@ -1,4 +1,5 @@
 import { absoluteUrl } from "@/platform/brand";
+import { completeFlow, formsMenu, openForm } from "@/modules/whatsapp-flows/completion";
 import { AppError } from "@/platform/errors";
 import { maskPhone } from "@/platform/identity/phone";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
@@ -17,7 +18,7 @@ import { answerLandlord } from "./landlord";
 import { advanceBusiness } from "./business";
 import { invitationReply } from "@/modules/whatsapp-templates/invitation-reply";
 
-export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string };
+export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** A finished WhatsApp Flow's response_json. */ flowResponse?: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
 
 export const OFFICIAL_MENU_SUFFIX = "\n\nRegister an agency, agent profile or service business, or list a property, right here: choose 3, 4, 5 or 6. Reply my applications to see their status.\nLandlords and property managers: reply register to set up your properties right here.\nAlready use NesAfric? Reply link to connect this WhatsApp number to your account, or account to see your properties, tenancies and jobs.";
@@ -60,6 +61,19 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   const reset = (): AssistantState => ({ ...initialState(), lastRequest: state.lastRequest });
 
   if (state.workflow === "link") return continueLink(input, state, reset, dependencies);
+
+  // WhatsApp Flows: a finished form, or the forms menu.
+  if (input.kind === "flow") {
+    const completed = await completeFlow({ phone: input.phone, organisationId: input.organisationId, flowResponse: input.flowResponse }, state, reset);
+    if (completed.command) return advanceOfficialConversation({ ...input, kind: "text", body: completed.command, flowResponse: undefined }, dependencies);
+    return { state: completed.state, reply: completed.reply, handoff: completed.handoff, interactive: completed.interactive };
+  }
+  if (input.kind === "text" && state.workflow === "idle") {
+    const formsInput = { address: whatsappAddress(input.phone), organisationId: input.organisationId };
+    const picked = command.match(/^form (\d{1,2})$/);
+    const forms = command === "forms" ? formsMenu(formsInput, state) : picked ? openForm(Number(picked[1]), formsInput, state) : null;
+    if (forms) return { state: forms.state, reply: forms.reply, interactive: forms.interactive };
+  }
 
   // Onboarding keeps its progress in its own draft, so it survives conversation resets.
   const startsOnboarding = input.kind === "text" && (START_ONBOARDING.test(command) || (command === "resume" && state.workflow === "idle" && Boolean(await dependencies.openDraft(whatsappAddress(input.phone)))));
