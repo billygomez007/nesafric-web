@@ -9,6 +9,8 @@ substitutions:
   _SERVICE: nesafric-web
   _REPOSITORY: nesafric
   _SITE_URL: https://www.nesafric.com
+  # Set _GTM_ID on the trigger to the production NEXT_PUBLIC_GTM_ID (setup.sh prints it); empty
+  # leaves Google Tag Manager and analytics off.
   _GTM_ID: ""
   _RUNTIME_SA: nesafric-web-runtime
   # "true" when setup.sh ran with USE_STATIC_EGRESS=true (the database allows only listed IPs).

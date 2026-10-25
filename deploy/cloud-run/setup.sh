@@ -6,7 +6,7 @@
 #
 # ENV_FILE holds the production values (KEY=VALUE lines, the same variables Vercel had). Each one
 # becomes a Secret Manager secret of the same name; values are read from the file and never
-# printed. NEXT_PUBLIC_* lines are build-time values and are skipped (see cloudbuild.yaml).
+# printed. NEXT_PUBLIC_* lines are build-time values, not secrets (see cloudbuild.yaml).
 #
 # Optional:
 #   REGION=europe-west1        Put it in or near the database's region.
@@ -14,6 +14,9 @@
 #                              this): all traffic leaves through Cloud NAT on one reserved IP,
 #                              which is printed at the end for the database allowlist.
 #   SERVICE=nesafric-web
+#
+# NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_GTM_ID are not secrets: they are inlined at build time, so
+# the script prints them as the Cloud Build substitutions _SITE_URL and _GTM_ID to use.
 #
 # Safe to re-run: existing resources are kept, and secrets get a new version only when the value
 # in ENV_FILE changed. It touches nothing outside PROJECT_ID: no DNS, no Vercel.
@@ -57,15 +60,22 @@ gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" --member="servi
 step "Secrets from ${ENV_FILE} (values are not printed)"
 secret_flags=()
 JOBS_RUN_SECRET_VALUE=""
-while IFS= read -r line || [ -n "$line" ]; do
-  line="${line%$'\r'}"
-  [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
-  line="${line#export }"
-  key="${line%%=*}"; value="${line#*=}"
+SITE_URL_VALUE=""
+GTM_ID_VALUE=""
+# read-env.py decodes dotenv quoting and escapes (as `vercel env pull` writes them) and checks
+# JSON values; it prints NUL-separated pairs, so values with newlines arrive intact. A parse error
+# stops the script before any secret is written. The pairs file is private (mktemp is 0600).
+pairs="$(mktemp)"
+trap 'rm -f "$pairs"' EXIT
+python3 "$(dirname "$0")/read-env.py" "$ENV_FILE" > "$pairs"
+while IFS= read -r -d '' key && IFS= read -r -d '' value; do
   [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
-  case "$key" in NEXT_PUBLIC_*|VERCEL|VERCEL_*|PORT|K_SERVICE|K_REVISION|K_CONFIGURATION) continue ;; esac
-  # Strip one pair of surrounding quotes, as dotenv does.
-  if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then value="${BASH_REMATCH[1]}"; fi
+  case "$key" in
+    # Build-time values: inlined into the browser bundle by Cloud Build, not runtime secrets.
+    NEXT_PUBLIC_SITE_URL) SITE_URL_VALUE="$value"; continue ;;
+    NEXT_PUBLIC_GTM_ID) GTM_ID_VALUE="$value"; continue ;;
+    NEXT_PUBLIC_*|VERCEL|VERCEL_*|PORT|K_SERVICE|K_REVISION|K_CONFIGURATION) continue ;;
+  esac
   [ -n "$value" ] || continue
   [ "$key" = JOBS_RUN_SECRET ] && JOBS_RUN_SECRET_VALUE="$value"
   if ! gcloud secrets describe "$key" >/dev/null 2>&1; then
@@ -81,7 +91,8 @@ while IFS= read -r line || [ -n "$line" ]; do
   gcloud secrets add-iam-policy-binding "$key" --member="serviceAccount:${RUNTIME_SA}" \
     --role=roles/secretmanager.secretAccessor >/dev/null
   secret_flags+=("${key}=${key}:latest")
-done < "$ENV_FILE"
+done < "$pairs"
+rm -f "$pairs"
 for required in DATABASE_URL SESSION_SECRET JOBS_RUN_SECRET; do
   printf '%s\n' "${secret_flags[@]}" | grep -q "^${required}=" ||
     { echo "ENV_FILE must set ${required}" >&2; exit 1; }
@@ -129,9 +140,16 @@ step "Done"
 echo "Service URL:  ${URL}"
 [ "$USE_STATIC_EGRESS" = "true" ] &&
   echo "Outbound IP:  $(gcloud compute addresses describe nesafric-egress --region="$REGION" --format='value(address)')  (add it to the database allowlist)"
+SUBSTITUTIONS="_REGION=${REGION},_STATIC_EGRESS=${USE_STATIC_EGRESS},_SITE_URL=${SITE_URL_VALUE:-https://www.nesafric.com},_GTM_ID=${GTM_ID_VALUE}"
+[ -n "$GTM_ID_VALUE" ] || echo "Note: ENV_FILE has no NEXT_PUBLIC_GTM_ID; analytics stay off until _GTM_ID is set."
 cat <<NEXT
+Cloud Build substitutions (use them for the first build and the trigger):
+  ${SUBSTITUTIONS}
 Next:
-  1. Connect GitHub to Cloud Build and create the trigger (docs/cloud-run-deployment.md, step 3),
-     with substitutions _REGION=${REGION} _STATIC_EGRESS=${USE_STATIC_EGRESS}.
-  2. Run the trigger once, then check ${URL}/api/health.
+  1. First build (docs/cloud-run-deployment.md, step 2):
+       gcloud builds submit --config cloudbuild.yaml --region=${REGION} \\
+         --substitutions=COMMIT_SHA=\$(git rev-parse HEAD),${SUBSTITUTIONS} \\
+         --service-account=projects/${PROJECT_ID}/serviceAccounts/${DEPLOY_SA}
+  2. Connect GitHub to Cloud Build and create the trigger with the same substitutions (step 3).
+  3. Check ${URL}/api/health.
 NEXT

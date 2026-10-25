@@ -25,6 +25,7 @@ Cloud Scheduler ── every 5 min ──► POST /api/jobs/run  (x-jobs-run-sec
 | `.dockerignore` | Keeps `.env*`, `.git`, tests, mobile and docs out of the image. |
 | `cloudbuild.yaml` | Build both images, push them, run migrations as a Cloud Run job, then deploy the new image. A failed migration stops the rollout, and the running revision keeps serving. |
 | `deploy/cloud-run/setup.sh` | One-time, re-runnable project setup: APIs, registry, service accounts, secrets, service settings, the scheduler job and the optional static IP. |
+| `deploy/cloud-run/read-env.py` | Reads the env file for `setup.sh`, decoding dotenv quoting and escapes, and checks JSON values. |
 | `next.config.ts` | `output: "standalone"`. |
 
 ### Code changes for Cloud Run
@@ -57,13 +58,19 @@ PROJECT_ID=<your-project-id> ENV_FILE=~/.env.production REGION=europe-west1 \
 rm ~/.env.production
 ```
 
-The script prints the `*.run.app` service URL. Until the first build, the service shows Google's sample page.
+The script prints the `*.run.app` service URL and the Cloud Build substitutions to use. Until the first build, the service shows Google's sample page.
+
+`NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_GTM_ID` are not stored as secrets. Next.js inlines them into the browser bundle at build time, so they travel as the build substitutions `_SITE_URL` and `_GTM_ID`. Without the production `_GTM_ID`, the build ships with Google Tag Manager and all analytics events switched off.
+
+The env file is read the way dotenv reads it (`deploy/cloud-run/read-env.py`): quotes are removed and escapes such as `\"` and `\n` are decoded, as `vercel env pull` writes them. A value that looks like JSON (for example `GOOGLE_SERVICE_ACCOUNT_JSON`) must parse, or the script stops before writing any secret.
 
 ## Step 2: first build
 
+Use the substitutions printed in step 1, for example:
+
 ```bash
 gcloud builds submit --config cloudbuild.yaml --region=europe-west1 \
-  --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_REGION=europe-west1,_STATIC_EGRESS=false \
+  --substitutions=COMMIT_SHA=$(git rev-parse HEAD),_REGION=europe-west1,_STATIC_EGRESS=false,_SITE_URL=https://www.nesafric.com,_GTM_ID=<GTM-XXXXXXX> \
   --service-account=projects/<your-project-id>/serviceAccounts/nesafric-web-deployer@<your-project-id>.iam.gserviceaccount.com
 ```
 
@@ -75,7 +82,7 @@ gcloud builds submit --config cloudbuild.yaml --region=europe-west1 \
    - Configuration: `cloudbuild.yaml`.
    - Region: same as the service.
    - Service account: `nesafric-web-deployer`.
-   - Substitutions: `_REGION` and `_STATIC_EGRESS`, matching step 1.
+   - Substitutions: `_REGION`, `_STATIC_EGRESS`, `_SITE_URL` and `_GTM_ID`, as printed in step 1.
 
 Builds run on Google Cloud, not GitHub Actions, so they do not use GitHub Actions minutes.
 
