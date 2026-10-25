@@ -20,8 +20,8 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
     [/\b(apartments?|flats?)\b/, "APARTMENT"], [/\b(townhouses?)\b/, "TOWNHOUSE"], [/\b(houses?|homes?)\b/, "HOUSE"], [/\bland\b/, "LAND"], [/\boffices?\b/, "OFFICE"], [/\bshops?\b/, "SHOP"], [/\bwarehouses?\b/, "WAREHOUSE"], [/\bhotels?\b/, "HOTEL"], [/\bshort stays?\b/, "SHORT_STAY"], [/\bvillas?\b/, "VILLA"],
   ];
   property.category = categories.find(([pattern]) => pattern.test(input))?.[1];
-  // A place starts with a letter: "around 4000" is a budget, not an area.
-  const location = input.match(/\b(?:in|near|around|at)\s+(?![\d₵])(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget|max|maximum|up to|less than|not more than)\b|\s+(?:ghs|ghc|gh₵|₵)|\s+[\d,]+(?:\.\d+)?\s*(?:k|m|million|thousand)?\s*(?:ghs|ghc|gh₵|cedis?)\b|,\s*(?=ghs|ghc|gh₵|₵|cedis|under|below|max|up to|less than|budget|around|for\b|with\b|to rent|to buy|\d)|[.!?]|$)/)?.[1]?.trim();
+  // "around 4000" or "in 2 bedrooms" is not an area; "near 37 Military Hospital" is.
+  const location = input.match(/\b(?:in|near|around|at)\s+(?!₵|[\d,.]+\s*(?:k|m|thousand|million)?\s*(?:ghs|ghc|gh₵|cedis?|per\b|a month|a year|monthly|yearly|[.,!?]|$)|\d+\s*-?\s*(?:bed|br\b|bd\b|room|bath))(.+?)(?=\s+(?:for|under|below|with|to rent|to buy|within|budget|max|maximum|up to|less than|not more than)\b|\s+(?:ghs|ghc|gh₵|₵)|\s+[\d,]+(?:\.\d+)?\s*(?:k|m|million|thousand)?\s*(?:ghs|ghc|gh₵|cedis?)\b|,\s*(?=ghs|ghc|gh₵|₵|cedis|under|below|max|up to|less than|budget|around|for\b|with\b|to rent|to buy|\d)|[.!?]|$)/)?.[1]?.trim();
   if (location) property.location = location;
   const bedroom = input.match(/\b(\d{1,2}|one|two|three|four|five|six)[ -]?(?:bed(?:room)?s?|br|bd)\b/);
   if (bedroom) {

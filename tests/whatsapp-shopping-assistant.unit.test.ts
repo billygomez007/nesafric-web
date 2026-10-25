@@ -89,6 +89,13 @@ describe("WhatsApp shopping: reading requests without a model", () => {
     expect(read("flat to rent in osu 3000 cedis a year").property?.frequency).toBe("ANNUAL");
   });
 
+  it("keeps a place name that starts with a number", () => {
+    expect(read("rent near 37 military hospital").property?.location).toBe("37 military hospital");
+    expect(read("rent around 4000").property?.location).toBeUndefined();
+    expect(read("rent around 4000 cedis per month").property?.location).toBeUndefined();
+    expect(read("flat in 2 bedrooms").property?.location).toBeUndefined();
+  });
+
   it("keeps a town after a comma in the area, and ends the area where a filter follows", () => {
     expect(read("rent in east legon, accra").property?.location).toBe("east legon, accra");
     expect(read("rent in east legon, under 5000").property).toMatchObject({ location: "east legon", maxPriceMinor: "500000" });

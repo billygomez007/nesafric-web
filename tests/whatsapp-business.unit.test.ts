@@ -13,6 +13,11 @@ const linked = { identityId: "i", user: { id: userId, displayName: "Ama Owusu" }
 const reset = () => initialState();
 const input = (body: string, extra: Record<string, unknown> = {}) => ({ body, kind: "text", phone: "233241234567", messageId: `m-${body}`, organisationId: "11111111-1111-4111-8111-111111111111", defaultCountry: "GH", defaultCurrency: "GHS", ...extra });
 
+/** The flow ledger as the database keeps it: one entry per key, written once. */
+function memoryLedger(entries = new Map<string, { id: string; slug?: string | null }>()) {
+  return { entries, get: vi.fn(async (key: string) => entries.get(key) ?? null), put: vi.fn(async (key: string, done: { id: string; slug?: string | null }) => { entries.set(key, done); }) };
+}
+
 function deps(overrides: Partial<Record<keyof BusinessDependencies, unknown>> = {}) {
   return {
     linkedUser: vi.fn(async () => linked),
@@ -35,7 +40,7 @@ function deps(overrides: Partial<Record<keyof BusinessDependencies, unknown>> = 
     ownedProviders: vi.fn(async () => []),
     existingProvider: vi.fn(async () => null),
     lock: vi.fn(async () => undefined),
-    recover: { professional: vi.fn(async () => null), listing: vi.fn(async () => null), company: vi.fn(async () => null), provider: vi.fn(async () => null), file: vi.fn(async () => false) },
+    ledger: memoryLedger(),
     ...overrides,
   } as unknown as BusinessDependencies & Record<string, ReturnType<typeof vi.fn>>;
 }
@@ -137,24 +142,39 @@ describe("WhatsApp business: listing a property", () => {
     expect((await advanceBusiness(input("confirm"), state, reset, dependencies)).reply).toContain("Send photos");
   });
 
-  it("recovers what an earlier pass of the same message created instead of creating it again", async () => {
-    const recover = { professional: vi.fn(async () => null), listing: vi.fn(async () => ({ id: listingId, status: "DRAFT" })), company: vi.fn(async () => null), provider: vi.fn(async () => null), file: vi.fn(async () => true) };
-    const dependencies = deps({ recover });
-    let { state } = await run(details, dependencies);
+  it("recovers what an earlier pass of the same flow created, by its ledger entry, never by name", async () => {
+    const ledger = memoryLedger();
+    const dependencies = deps({ ledger });
+    const beforeConfirm = (await run(details.slice(0, -1), dependencies)).state;
+    const flow = beforeConfirm.business!.startedAt!;
+    // An earlier pass of this confirm created the listing and wrote its ledger entry.
+    ledger.entries.set(`+233241234567:${flow}:listing`, { id: listingId });
+    let { state } = await advanceBusiness(input("confirm"), beforeConfirm, reset, dependencies);
     expect(dependencies.createListing).not.toHaveBeenCalled();
-    expect(dependencies.lock).toHaveBeenCalledWith(expect.stringMatching(/^whatsapp-business:\+233241234567:.+:listing$/));
+    expect(dependencies.lock).toHaveBeenCalledWith(`+233241234567:${flow}:listing`);
     expect(state.business?.committed.listingId).toBe(listingId);
-    // The photo is already stored: counted, not downloaded or uploaded again.
+    // The photo was stored by an earlier pass: counted, not downloaded or uploaded again.
+    ledger.entries.set(`+233241234567:${flow}:photo:333`, { id: "333" });
     ({ state } = await advanceBusiness(input("[image received]", { kind: "image", messageId: "m-p", media: { id: "333", mimeType: "image/jpeg" } }), state, reset, dependencies));
-    expect(recover.file).toHaveBeenCalledWith("LISTING_MEDIA", listingId, "whatsapp-333.jpg");
     expect(dependencies.download).not.toHaveBeenCalled();
     expect(state.business?.committed.media).toEqual(["333"]);
     // Already submitted by a pass whose conversation update was lost: reported, not resubmitted.
     ({ state } = await advanceBusiness(input("done"), state, reset, dependencies));
-    recover.listing.mockResolvedValue({ id: listingId, status: "PENDING_REVIEW" });
+    ledger.entries.set(`+233241234567:${flow}:submit`, { id: listingId });
     const done = await advanceBusiness(input("Indenture LC/1234/2019"), state, reset, dependencies);
     expect(dependencies.submitListing).not.toHaveBeenCalled();
     expect(done.reply).toContain("Submitted for NesAfric review");
+  });
+
+  it("records each effect once, so a new flow creates its own records", async () => {
+    const ledger = memoryLedger();
+    const dependencies = deps({ ledger });
+    await run(details, dependencies);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await run(details, dependencies);
+    // Two flows (two start times), two listings, even with the same title.
+    expect(dependencies.createListing).toHaveBeenCalledTimes(2);
+    expect([...ledger.entries.keys()].filter((key) => key.endsWith(":listing"))).toHaveLength(2);
   });
 
   it("asks which profile when the account has several, and needs one to start", async () => {

@@ -30,7 +30,7 @@ const WA_ID = "233247770001";
 const JPEG = Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=", "base64");
 
 async function cleanDatabase() {
-  await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner", "BackgroundJob", "ChannelIdentity", "AuthOtpChallenge", "StorageObject", "MarketplaceProfessional", "MarketplaceAsset", "ServiceProvider" CASCADE');
+  await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner", "BackgroundJob", "ChannelIdentity", "AuthOtpChallenge", "StorageObject", "MarketplaceProfessional", "MarketplaceAsset", "ServiceProvider", "PublicIdempotencyRecord" CASCADE');
 }
 
 let counter = 0;
