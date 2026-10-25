@@ -566,6 +566,8 @@ export async function listMarketplaceProfessionalsForPlatform(
 
   const search = input.search?.trim();
   const take = boundedTake(input.take);
+  // Verification documents (Ghana Cards, certificates) only for reviewers who can verify.
+  const reviewer = platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.marketplaceVerify);
 
   const professionals = await db.marketplaceProfessional.findMany({
     where: {
@@ -598,6 +600,10 @@ export async function listMarketplaceProfessionalsForPlatform(
       createdAt: true,
       archivedAt: true,
       homepageCompanyLogos: { select: { id: true, isPublished: true, sortOrder: true } },
+      ...(reviewer ? {
+        verificationEvidenceReferences: true,
+        verificationDocuments: { where: { storageObject: { archivedAt: null } }, orderBy: { createdAt: "desc" as const }, take: 10, select: { id: true, type: true, storageObjectId: true, createdAt: true } },
+      } : {}),
       subscription: {
         select: {
           status: true,

@@ -49,6 +49,7 @@ const UPLOAD_TARGET_NAMESPACES: Record<string, string> = {
   ORGANISATION_LOGO: "organisations/branding",
   MARKETPLACE_PROFESSIONAL_LOGO: "marketplace-professionals/branding",
   PROVIDER_PORTFOLIO_IMAGE: "provider-portfolio",
+  MARKETPLACE_PROFESSIONAL_DOCUMENT: "marketplace-professionals/verification",
 };
 const GENERATED_DOCUMENT_TYPES = ["RECEIPT", "TENANT_STATEMENT", "MOVE_OUT_STATEMENT", "LEASE_AGREEMENT"] as const;
 
@@ -90,7 +91,9 @@ type UploadEntitlementScope =
   | { kind: "organisation" }
   | { kind: "marketplace"; marketplaceProfessionalId: string }
   /** Platform-admin action on a customer's behalf: never limited by the customer's plan. */
-  | { kind: "platform" };
+  | { kind: "platform" }
+  /** Verification documents a business sends for review: never limited by its plan. */
+  | { kind: "verification" };
 
 /** Smallest edge accepted for images shown publicly as photos (not for documents or evidence). */
 const MINIMUM_IMAGE_EDGE: Record<string, number> = { LISTING_MEDIA: 200, PROVIDER_PORTFOLIO_IMAGE: 200, MARKETPLACE_PROFESSIONAL_LOGO: 64, SERVICE_PROVIDER_LOGO: 64, ORGANISATION_LOGO: 64 };
@@ -122,7 +125,7 @@ async function performUpload(params: {
   const entitlementScope = params.entitlementScope ?? { kind: "organisation" };
   if (entitlementScope.kind === "marketplace") {
     await assertWritableMarketplaceProfessional(entitlementScope.marketplaceProfessionalId);
-  } else if (entitlementScope.kind === "platform") {
+  } else if (entitlementScope.kind === "platform" || entitlementScope.kind === "verification") {
     // Deliberately unmetered — see UploadEntitlementScope.
   } else if (params.organisationId) {
     await assertOperational(params.organisationId, ENTITLEMENTS.storageBytesMax.key, bytes.length);
@@ -303,6 +306,17 @@ function logoUploadInput(marketplaceProfessionalId: string, input: unknown) {
     targetId: marketplaceProfessionalId,
     classification: "PUBLIC",
   });
+}
+
+/** Business self-service: an OWNER or ADMIN uploads a verification document (business registration
+ * certificate, or the front or back of an agent's Ghana Card), stored PRIVATE for NesAfric review.
+ * `{ fileName, contentType, dataBase64, professionalDocumentType, sourceMediaId? }`. */
+export async function uploadMarketplaceProfessionalDocument(userId: string, marketplaceProfessionalId: string, input: unknown) {
+  await requireMarketplaceRole(userId, marketplaceProfessionalId, "ADMIN");
+  const professional = await logoTarget(marketplaceProfessionalId);
+  const data = uploadDocumentSchema.parse({ ...(input as object), targetType: "MARKETPLACE_PROFESSIONAL_DOCUMENT", targetId: marketplaceProfessionalId, classification: "PRIVATE" });
+  const result = await performUpload({ userId, organisationId: professional.backingOrganisationId, targetType: "MARKETPLACE_PROFESSIONAL_DOCUMENT", input: data, entitlementScope: { kind: "verification" } });
+  return result.attached as { id: string; type: string; storageObjectId: string; createdAt: Date };
 }
 
 /** Business self-service: an OWNER or ADMIN of this professional uploads or replaces its logo. */
@@ -552,7 +566,18 @@ export async function getSignedStorageAccess(userId: string, organisationId: str
   return { url, expiresAt: new Date(Date.now() + expiresInSeconds * 1000) };
 }
 
+async function isMarketplaceProfessionalAdmin(userId: string, marketplaceProfessionalId: string) {
+  const member = await db.marketplaceProfessionalMember.findUnique({ where: { marketplaceProfessionalId_userId: { marketplaceProfessionalId, userId } } });
+  return member?.status === "ACTIVE" && (member.role === "OWNER" || member.role === "ADMIN");
+}
+
 async function requireStorageObjectRead(userId: string, organisationId: string | null, storageObject: { id: string; organisationId: string | null; targetType: string; targetId: string | null }) {
+  if (storageObject.targetType === "MARKETPLACE_PROFESSIONAL_DOCUMENT") {
+    if (storageObject.targetId && await isMarketplaceProfessionalAdmin(userId, storageObject.targetId)) return;
+    const principal = await db.platformPrincipal.findUnique({ where: { userId } });
+    if (principal && principal.status === "ACTIVE" && platformRoleHasPermission(principal.role, PLATFORM_PERMISSIONS.marketplaceVerify)) return;
+    throw forbidden();
+  }
   if (storageObject.targetType === "PROVIDER_EVIDENCE") {
     if (storageObject.targetId) {
       const owner = await ownsProvider(userId, storageObject.targetId);
@@ -626,6 +651,10 @@ async function requireStorageObjectRead(userId: string, organisationId: string |
  * a provider's evidence, not archive/restore someone else's document.
  */
 async function requireStorageObjectWrite(userId: string, organisationId: string | null, storageObject: { organisationId: string | null; targetType: string; targetId: string | null }) {
+  if (storageObject.targetType === "MARKETPLACE_PROFESSIONAL_DOCUMENT") {
+    if (storageObject.targetId && await isMarketplaceProfessionalAdmin(userId, storageObject.targetId)) return;
+    throw forbidden();
+  }
   if (storageObject.targetType === "PROVIDER_EVIDENCE") {
     if (storageObject.targetId && (await ownsProvider(userId, storageObject.targetId))) return;
     throw forbidden();

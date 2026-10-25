@@ -90,6 +90,54 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     await db.$disconnect();
   });
 
+  it("invites current tenants on WhatsApp: codes to the landlord, and a connected tenant can report repairs", async () => {
+    await official();
+    await registerNewLandlord();
+    await say("Mensah Lettings");
+    await say("Ridge Flats");
+    await say("Ridge");
+    await say("skip");
+    await say("1");
+    expect(await say("R1, apartment, 2\nR2, apartment, 1")).toContain("Add another property");
+    await say("no");
+    await say("yes");
+    expect(await say("R1, Yaw Darko, 0209998887, 2000, monthly, 2026-02-01, 2027-01-31\nR2, Akua Sarpong, 0204445556, 1800, monthly, 2027-06-01")).toContain("Added 2 tenants");
+    expect(await say("done")).toContain("live in the units now");
+    const review = await (async () => { await say("yes"); await say("no"); await say("no"); await say("0"); return say("me"); })();
+    expect(review).toContain("Tenants: 2 (living there now; invited on WhatsApp)");
+    const saved = await say("confirm");
+    expect(saved).toContain("WhatsApp invitations sent to 2 tenants");
+    const codes = [...saved.matchAll(/NT-[A-Z0-9-]+/g)].map((match) => match[0]);
+    expect(codes).toHaveLength(2);
+
+    const organisation = await db.organisation.findFirstOrThrow({ where: { name: "Mensah Lettings" } });
+    const leases = await db.lease.findMany({ where: { organisationId: organisation.id }, orderBy: { referenceNumber: "asc" } });
+    // Leases stay drafts until execution; the invitation is what lets a tenant report repairs.
+    expect(leases.map((lease) => lease.status)).toEqual(["DRAFT", "DRAFT"]);
+    const tenants = await db.tenantOrganisation.findMany({ where: { organisationId: organisation.id }, include: { accessInvitations: true } });
+    expect(tenants.every((tenant) => tenant.communicationWhatsappAllowed && tenant.accessInvitations.length === 1)).toBe(true);
+
+    // The tenant redeems the code from the landlord and can now report a problem for that unit.
+    const { redeemTenantAccessCode } = await import("@/modules/tenants/access-invitations");
+    const { listUserTenancies } = await import("@/modules/tenants/self-service");
+    const tenantUser = await registerUser({ displayName: "Yaw Darko", email: "yaw@example.com", password: "secure-password-123" });
+    await redeemTenantAccessCode(tenantUser.id, codes[0]);
+    const tenancies = await listUserTenancies(tenantUser.id, { forRepairs: true });
+    expect(tenancies.map((tenancy) => [tenancy.organisation.name, tenancy.leases.map((lease) => lease.unit?.name)])).toEqual([["Mensah Lettings", ["R1"]]]);
+    // The tenant portal's current-lease view is unchanged: the draft is not a current lease.
+    expect((await listUserTenancies(tenantUser.id))[0].leases).toEqual([]);
+    const { createMaintenanceRequest } = await import("@/modules/maintenance/service");
+    const unit = await db.unit.findFirstOrThrow({ where: { name: "R1", property: { organisationId: organisation.id } } });
+    const request = await createMaintenanceRequest(tenantUser.id, organisation.id, { propertyId: unit.propertyId, unitId: unit.id, tenantOrganisationId: tenancies[0].tenantOrganisationId, title: "Kitchen sink leaking", description: "Water drips under the kitchen sink.", priority: "NORMAL", category: "plumbing" }) as { id: string };
+    expect((await db.maintenanceRequest.findUniqueOrThrow({ where: { id: request.id } })).organisationId).toBe(organisation.id);
+    // The second tenant's tenancy starts next year: not yet reportable.
+    const akua = await registerUser({ displayName: "Akua Sarpong", email: "akua@example.com", password: "secure-password-123" });
+    await redeemTenantAccessCode(akua.id, codes[1]);
+    expect((await listUserTenancies(akua.id, { forRepairs: true }))[0].leases).toEqual([]);
+    // A retried commit sends nothing twice.
+    expect(await db.tenantAccessInvitation.count()).toBe(2);
+  });
+
   it("registers a new landlord with several buildings, units, tenants and professionals", async () => {
     await official();
     await registerNewLandlord();
@@ -114,7 +162,8 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     await say("no");
     await say("yes");
     expect(await say("Palm Court/Block A 1, Kofi Mensah, 0201112223, 1500, monthly, 2026-01-01, 2026-12-31\nSunset Villas/A1, Esi Boateng, -, 24000, yearly, 2026-03-01")).toContain("Added 2 tenants");
-    await say("done");
+    expect(await say("done")).toContain("live in the units now");
+    await say("no");
     await say("yes");
     await say("yes");
     expect(await say("Kwame Plumbing, 0201234567, plumber\nVolta Electric, 0207654321, electrician")).toContain("Added 2 professionals");

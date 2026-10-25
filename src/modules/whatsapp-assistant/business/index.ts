@@ -46,7 +46,7 @@ async function continueDraft(draft: FlowDraft, input: FlowInput, download?: Medi
       : continueServiceListing(draft, input, download);
 }
 
-const MEDIA_STEPS = new Set(["photos", "portfolio", "logo"]);
+const MEDIA_STEPS = new Set(["photos", "portfolio", "logo", "certificate", "id_front", "id_back"]);
 
 /**
  * Business registration and listing on the official number. Returns null when the message is

@@ -68,6 +68,7 @@ export function promptFor(draft: Draft, phone: string): string {
     case "more_properties": return `Saved ${property?.name}: ${plural(property?.buildings.length ?? 0, "building")}, ${plural(property?.buildings.reduce((sum, item) => sum + item.units.length, 0) ?? 0, "unit")}. Add another property? Reply yes or no.`;
     case "tenants_offer": return "Do you want to add your current tenants now? Reply yes, or later to skip.";
     case "tenants": return `Send one tenant per line as:\nunit, full name, phone, rent, frequency, start date, end date\nFor example:\nA1, Kofi Mensah, 0241234567, 1500, monthly, 2026-01-01, 2026-12-31\nUse - if you don't know the phone. The end date is optional.${data.properties.length > 1 ? " With several properties, write the unit as Property/Unit, for example Palm Court/A1." : ""}\nTenants are not contacted or given access by this step. Reply done when finished.`;
+    case "tenant_invites": return `Do these tenants live in the units now, and have they agreed to get WhatsApp messages from NesAfric?\nReply yes: each tenant with a phone number gets a NesAfric WhatsApp invitation, and you get an access code to give each one. Once connected, a tenant can report a problem here and it comes to you for that property.\nReply no to save the tenants without contacting anyone.`;
     case "reminders": return "Should NesAfric remind tenants 60 and 30 days before their lease ends? Reply yes or no.";
     case "providers_offer": return "Do you already work with plumbers, electricians or other maintenance professionals? Reply yes to add them, or no.";
     case "providers": return `Send one per line as: name, phone, category. For example:\nKwame Plumbing, 0201234567, plumber\nCategories: ${PROVIDER_CATEGORIES.join(", ")}.\nEach one is asked on WhatsApp to accept before any job is sent. Reply done when finished.`;
@@ -86,7 +87,7 @@ function reviewSummary(draft: Draft) {
     `${data.role === "MANAGER" ? "Property manager" : "Landlord"}: ${data.displayName ?? "your NesAfric account"}`,
     `Managed under: ${organisation}`,
     properties,
-    `Tenants: ${data.tenants.length}`,
+    `Tenants: ${data.tenants.length}${data.tenants.length ? (data.inviteTenants ? " (living there now; invited on WhatsApp)" : " (not contacted)") : ""}`,
     `Lease-expiry reminders: ${data.leaseExpiryReminders ? "on" : "off"}`,
     `Maintenance professionals: ${data.providers.length}`,
     `Repairs without your approval: ${data.approvalLimitMinor === "0" || !data.approvalLimitMinor ? "none, always ask" : `up to ${formatMinor(data.approvalLimitMinor, data.currencyCode)}`}`,
@@ -100,6 +101,8 @@ function successReply(summary: CommitSummary, draft: Draft) {
   const data = draft.data;
   return [
     `Saved. ${summary.organisationName}: ${plural(summary.properties, "property", "properties")}, ${plural(summary.units, "unit")}, ${plural(summary.tenants, "tenant")}.`,
+    summary.invitations.length ? `• WhatsApp invitations sent to ${plural(summary.invitations.length, "tenant")}. Give each tenant their access code (valid for a limited time); they send it here to connect, then they can report problems to you:\n${summary.invitations.map((item) => `  ${item.label}: ${item.code}`).join("\n")}` : null,
+    summary.invitationProblems ? `• ${plural(summary.invitationProblems, "tenant")} could not be invited; invite them from your account: ${absoluteUrl("/tenants")}` : null,
     summary.draftLeases ? `• ${plural(summary.draftLeases, "lease")} saved as drafts with the rent terms you sent. A lease becomes active once its execution is completed in your account: ${absoluteUrl("/leases")}` : null,
     `• ${data.role === "MANAGER" ? "Your authority to manage" : "Your ownership of"} ${summary.properties === 1 ? "this property is" : "these properties is"} pending verification by NesAfric. Upload proof (title deed, tenancy agreement or management contract) at ${absoluteUrl("/properties")}. Until it is reviewed the properties are marked unverified.`,
     summary.reminders ? "• Lease-expiry reminders are on (60 and 30 days before)." : null,
@@ -327,7 +330,7 @@ export async function advanceOnboarding(input: OnboardingInput, dependencies: De
       return save(promptFor(draft, input.phone));
     }
     case "tenants": {
-      if (command === "done") { draft.step = "reminders"; return save(promptFor(draft, input.phone)); }
+      if (command === "done") { draft.step = data.tenants.some((tenant) => tenant.phone) ? "tenant_invites" : "reminders"; return save(promptFor(draft, input.phone)); }
       const parsed = parseTenants(body);
       const resolved = resolveTenantUnits(draft, parsed.tenants);
       const errors = [...parsed.errors, ...resolved.errors].sort((a, b) => a.line - b.line);
@@ -335,6 +338,13 @@ export async function advanceOnboarding(input: OnboardingInput, dependencies: De
       if (data.tenants.length + resolved.resolved.length > 500) return save("You can add up to 500 tenants here; add more later in your account.");
       data.tenants.push(...resolved.resolved);
       return save(`Added ${plural(resolved.resolved.length, "tenant")} (${data.tenants.length} in total). Send more lines, or reply done.`);
+    }
+    case "tenant_invites": {
+      if (YES.test(command)) data.inviteTenants = true;
+      else if (NO.test(command)) data.inviteTenants = false;
+      else return save(promptFor(draft, input.phone));
+      draft.step = "reminders";
+      return save(promptFor(draft, input.phone));
     }
     case "reminders": {
       if (YES.test(command)) data.leaseExpiryReminders = true;

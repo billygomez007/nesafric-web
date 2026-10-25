@@ -41,11 +41,15 @@ async function linkedUser(email = "abena@example.com") {
 
 const ownedProfessionals = (userId: string) => db.marketplaceProfessional.findMany({ where: { members: { some: { userId } } } });
 
-/** Answers an agency registration up to (not including) the logo. */
+const CERTIFICATE = mediaId(50);
+
+/** Answers an agency registration (with its certificate) up to (not including) the logo. */
 async function agencyAnswers(chat: ReturnType<typeof whatsappConversation>) {
   await chat.say("register agency", "1", "Accra Prime Realty", "skip", "info@accraprime.example", "1", "Osu");
   await chat.say("We sell and let homes across central Accra, mostly apartments and townhouses.", "Osu, Labone, Cantonments");
-  return chat.send("Registrar-General BN-552211");
+  const certificate = await chat.send("Registrar-General BN-552211");
+  expect(certificate.reply).toContain("registration certificate");
+  return chat.send({ image: CERTIFICATE });
 }
 
 describe("PostgreSQL WhatsApp business registration", () => {
@@ -82,12 +86,14 @@ describe("PostgreSQL WhatsApp business registration", () => {
     const submitted = await chat.send("confirm");
     expect(submitted.reply).toContain("Accra Prime Realty is submitted for review. Status: submitted for review.");
     expect(submitted.reply).toContain("Your logo is saved.");
-    expect(downloads.calls).toEqual([mediaId(2)]);
+    expect(downloads.calls).toEqual([mediaId(2), CERTIFICATE]);
 
     const [professional] = await ownedProfessionals(user.id);
     expect([professional.displayName, professional.type, professional.verificationStatus, professional.contactEmail, professional.contactPhone]).toEqual(["Accra Prime Realty", "REAL_ESTATE_COMPANY", "PENDING", "info@accraprime.example", `+${PHONE}`]);
     expect(professional.verificationEvidenceReferences.join(" ")).toContain("BN-552211");
     expect(professional.logoUrl).toBeTruthy();
+    const documents = await db.marketplaceProfessionalDocument.findMany({ where: { marketplaceProfessionalId: professional.id }, include: { storageObject: true } });
+    expect(documents.map((document) => [document.type, document.sourceMediaId, document.storageObject.classification])).toEqual([["BUSINESS_REGISTRATION_CERTIFICATE", `whatsapp:${CERTIFICATE}`, "PRIVATE"]]);
     const draft = await db.whatsAppFlowDraft.findFirstOrThrow();
     expect([draft.status, draft.marketplaceProfessionalId]).toEqual(["SUBMITTED", professional.id]);
     expect((await chat.send("my applications")).reply).toContain("Accra Prime Realty: submitted for review");
@@ -146,6 +152,54 @@ describe("PostgreSQL WhatsApp business registration", () => {
     chat.reset();
     expect((await chat.send("register agent")).reply).toContain("already manages Accra Prime Realty Ltd");
     expect(await db.whatsAppFlowDraft.count({ where: { status: "OPEN" } })).toBe(0);
+  });
+
+  it("registers an individual agent with both sides of the Ghana Card, readable only by the owner and reviewers", async () => {
+    const { user, chat } = await linkedUser();
+    await chat.say("register agent", "Kofi Mensah Realty", "skip", "1", "East Legon");
+    await chat.send("I help families rent and buy homes in East Legon and Airport Residential.");
+    await chat.send("East Legon, Airport Residential");
+    expect((await chat.send("skip")).reply).toContain("FRONT of your Ghana Card");
+    expect((await chat.send("done")).reply).toContain("ghana card (front) as a photo");
+    expect((await chat.send({ image: mediaId(61) })).reply).toContain("BACK of your Ghana Card");
+    const atLogo = await chat.send({ image: mediaId(62) });
+    expect(atLogo.reply).toContain("Send your logo as an image");
+    const review = await chat.send("skip");
+    expect(review.reply).toContain("Ghana Card (front): received");
+    expect(review.reply).toContain("Ghana Card (back): received");
+    const submitted = await chat.send("confirm");
+    expect(submitted.reply).toContain("Kofi Mensah Realty is submitted for review");
+    expect(submitted.reply).toContain("stored privately");
+
+    const [professional] = await ownedProfessionals(user.id);
+    expect([professional.type, professional.verificationStatus]).toEqual(["INDIVIDUAL_AGENT", "PENDING"]);
+    const documents = await db.marketplaceProfessionalDocument.findMany({ where: { marketplaceProfessionalId: professional.id }, orderBy: { createdAt: "asc" } });
+    expect(documents.map((document) => document.type)).toEqual(["GHANA_CARD_FRONT", "GHANA_CARD_BACK"]);
+
+    const { getSignedStorageAccess } = await import("@/modules/documents/service");
+    await expect(getSignedStorageAccess(user.id, null, documents[0].storageObjectId)).resolves.toMatchObject({ url: expect.any(String) });
+    const stranger = await registerUser({ displayName: "Stranger", email: "stranger@example.com", password: "secure-password-123" });
+    await expect(getSignedStorageAccess(stranger.id, null, documents[0].storageObjectId)).rejects.toMatchObject({ status: 403 });
+    const admin = await createPlatformAdmin();
+    await expect(getSignedStorageAccess(admin.userId, null, documents[1].storageObjectId)).resolves.toMatchObject({ url: expect.any(String) });
+  });
+
+  it("asks again for a document WhatsApp could not deliver, keeping the profile it created", async () => {
+    const { user, chat } = await linkedUser();
+    await chat.say("register agent", "Ama Agent", "skip", "1", "Osu");
+    await chat.say("I rent apartments to young professionals in Osu and Labone.", "Osu, Labone", "skip");
+    await chat.send({ image: "900001" });
+    await chat.send({ image: mediaId(64) });
+    await chat.send("skip");
+    const failed = await chat.send("confirm");
+    expect(failed.reply).toContain("could not save the front of your Ghana Card");
+    expect(await ownedProfessionals(user.id)).toHaveLength(1);
+    expect((await ownedProfessionals(user.id))[0].verificationStatus).toBe("UNVERIFIED");
+    await chat.send({ image: mediaId(65) });
+    expect((await chat.send("confirm")).reply).toContain("Ama Agent is submitted for review");
+    const professionals = await ownedProfessionals(user.id);
+    expect(professionals.map((item) => item.verificationStatus)).toEqual(["PENDING"]);
+    expect(await db.marketplaceProfessionalDocument.count({ where: { marketplaceProfessionalId: professionals[0].id } })).toBe(2);
   });
 
   it("registers a service provider with categories, coverage and a verification reference", async () => {

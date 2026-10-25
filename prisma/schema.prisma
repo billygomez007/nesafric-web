@@ -904,6 +904,7 @@ model User {
   marketplaceProfessionalsCreated    MarketplaceProfessional[]                  @relation("MarketplaceProfessionalCreator")
   marketplaceProfessionalMemberships MarketplaceProfessionalMember[]
   marketplaceVerificationActions     MarketplaceProfessionalVerificationEvent[] @relation("MarketplaceProfessionalVerificationActor")
+  marketplaceProfessionalDocuments   MarketplaceProfessionalDocument[]          @relation("MarketplaceProfessionalDocumentSubmitter")
   listingRepresentativeFor           Listing[]                                  @relation("ListingRepresentative")
   marketplaceAssetsCreated           MarketplaceAsset[]                         @relation("MarketplaceAssetCreator")
   listingAttributionActions          ListingAttributionHistory[]                @relation("ListingAttributionActor")
@@ -4812,35 +4813,36 @@ enum IntegrationStatus {
 /// (non company-backed) service provider's verification evidence has no owning organisation —
 /// every other target type always sets it, and every organisation-scoped query filters on it.
 model StorageObject {
-  id                   String                 @id @default(uuid()) @db.Uuid
-  organisationId       String?                @db.Uuid
-  storageKey           String                 @unique
-  origin               StorageOrigin
-  classification       StorageClassification  @default(PRIVATE)
-  targetType           String
-  targetId             String?                @db.Uuid
-  originalFileName     String
-  safeFileName         String
-  declaredContentType  String?
-  contentType          String
-  sizeBytes            Int
-  sha256               String
-  uploadedByUserId     String?                @db.Uuid
-  malwareScanStatus    MalwareScanStatus      @default(SKIPPED)
-  malwareScanDetail    String?
-  malwareScannedAt     DateTime?
-  archivedAt           DateTime?
-  archivedByUserId     String?                @db.Uuid
-  archiveReason        String?
-  metadata             Json?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  organisation         Organisation?          @relation(fields: [organisationId], references: [id], onDelete: Restrict)
-  uploadedBy           User?                  @relation("StorageObjectUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  archivedBy           User?                  @relation("StorageObjectArchiver", fields: [archivedByUserId], references: [id], onDelete: SetNull)
-  history              StorageObjectHistory[]
-  generatedDocument    GeneratedDocument?
-  serviceProviderLogos ServiceProvider[]      @relation("ServiceProviderLogo")
+  id                              String                           @id @default(uuid()) @db.Uuid
+  organisationId                  String?                          @db.Uuid
+  storageKey                      String                           @unique
+  origin                          StorageOrigin
+  classification                  StorageClassification            @default(PRIVATE)
+  targetType                      String
+  targetId                        String?                          @db.Uuid
+  originalFileName                String
+  safeFileName                    String
+  declaredContentType             String?
+  contentType                     String
+  sizeBytes                       Int
+  sha256                          String
+  uploadedByUserId                String?                          @db.Uuid
+  malwareScanStatus               MalwareScanStatus                @default(SKIPPED)
+  malwareScanDetail               String?
+  malwareScannedAt                DateTime?
+  archivedAt                      DateTime?
+  archivedByUserId                String?                          @db.Uuid
+  archiveReason                   String?
+  metadata                        Json?
+  createdAt                       DateTime                         @default(now())
+  updatedAt                       DateTime                         @updatedAt
+  organisation                    Organisation?                    @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  uploadedBy                      User?                            @relation("StorageObjectUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  archivedBy                      User?                            @relation("StorageObjectArchiver", fields: [archivedByUserId], references: [id], onDelete: SetNull)
+  history                         StorageObjectHistory[]
+  generatedDocument               GeneratedDocument?
+  serviceProviderLogos            ServiceProvider[]                @relation("ServiceProviderLogo")
+  marketplaceProfessionalDocument MarketplaceProfessionalDocument?
 
   @@index([organisationId, targetType, targetId])
   @@index([organisationId, classification, archivedAt])
@@ -5504,19 +5506,20 @@ model MarketplaceProfessional {
   updatedAt                      DateTime                      @updatedAt
   archivedAt                     DateTime?
 
-  backingOrganisation  Organisation                               @relation(fields: [backingOrganisationId], references: [id], onDelete: Restrict)
-  createdBy            User                                       @relation("MarketplaceProfessionalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  members              MarketplaceProfessionalMember[]
-  verificationHistory  MarketplaceProfessionalVerificationEvent[]
-  developments         Development[]
-  listings             Listing[]
-  marketplaceAssets    MarketplaceAsset[]
-  subscription         MarketplaceSubscription?
-  aiemployees          AIEmployee[]
-  aiEmployeeActivities AIEmployeeActivity[]
-  aiEmployeeHandoffs   AIEmployeeHandoff[]
-  campaigns            Campaign[]
-  homepageCompanyLogos HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoProfessional")
+  backingOrganisation   Organisation                               @relation(fields: [backingOrganisationId], references: [id], onDelete: Restrict)
+  createdBy             User                                       @relation("MarketplaceProfessionalCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  members               MarketplaceProfessionalMember[]
+  verificationHistory   MarketplaceProfessionalVerificationEvent[]
+  developments          Development[]
+  listings              Listing[]
+  marketplaceAssets     MarketplaceAsset[]
+  subscription          MarketplaceSubscription?
+  aiemployees           AIEmployee[]
+  aiEmployeeActivities  AIEmployeeActivity[]
+  aiEmployeeHandoffs    AIEmployeeHandoff[]
+  campaigns             Campaign[]
+  homepageCompanyLogos  HomepageCompanyLogo[]                      @relation("HomepageCompanyLogoProfessional")
+  verificationDocuments MarketplaceProfessionalDocument[]
 
   @@index([type, status])
   @@index([verificationStatus])
@@ -5539,6 +5542,34 @@ model MarketplaceProfessionalMember {
 
   @@unique([marketplaceProfessionalId, userId])
   @@index([userId, status])
+}
+
+enum MarketplaceProfessionalDocumentType {
+  BUSINESS_REGISTRATION_CERTIFICATE
+  GHANA_CARD_FRONT
+  GHANA_CARD_BACK
+}
+
+/// A verification document an agency or agent uploaded (business registration certificate, or
+/// the front and back of an individual agent's Ghana Card). The file is a PRIVATE StorageObject,
+/// readable only by the profile's owners/admins and NesAfric reviewers with `marketplace.verify`.
+/// A later upload of the same type is a new row; reviewers see every one.
+model MarketplaceProfessionalDocument {
+  id                        String                              @id @default(uuid()) @db.Uuid
+  marketplaceProfessionalId String                              @db.Uuid
+  type                      MarketplaceProfessionalDocumentType
+  storageObjectId           String                              @unique @db.Uuid
+  /// `whatsapp:<media id>` when sent on WhatsApp: the same file is attached once per profile.
+  sourceMediaId             String?
+  submittedByUserId         String?                             @db.Uuid
+  createdAt                 DateTime                            @default(now())
+
+  marketplaceProfessional MarketplaceProfessional @relation(fields: [marketplaceProfessionalId], references: [id], onDelete: Cascade)
+  storageObject           StorageObject           @relation(fields: [storageObjectId], references: [id], onDelete: Restrict)
+  submittedBy             User?                   @relation("MarketplaceProfessionalDocumentSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([marketplaceProfessionalId, sourceMediaId])
+  @@index([marketplaceProfessionalId, type, createdAt])
 }
 
 /// Append-only verification-status audit trail (item 1 + item 11's "audit attribution"), the same

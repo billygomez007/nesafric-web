@@ -27,9 +27,9 @@ const SAFETY_ADVICE = "If anyone is in danger, move to safety and call emergency
 const label = (choice: Choice) => `${choice.propertyName}${choice.unitName ? `, ${choice.unitName}` : ""} (${choice.organisationName})`;
 const categoryText = (category: string) => category.charAt(0).toUpperCase() + category.slice(1);
 
-/** Active tenancies proven for this account: a tenancy the landlord linked to it, with an active or expiring lease. */
+/** Tenancies proven for this account that may report repairs: a tenancy the landlord linked to it, with an active or expiring lease, or a started draft tenancy the landlord invited it to. */
 async function tenancyChoices(userId: string): Promise<Choice[]> {
-  const tenancies = await listUserTenancies(userId);
+  const tenancies = await listUserTenancies(userId, { forRepairs: true });
   return tenancies.flatMap((tenancy) => tenancy.leases.map((lease) => ({
     tenantOrganisationId: tenancy.tenantOrganisationId, organisationId: tenancy.organisation.id, organisationName: tenancy.organisation.name,
     propertyId: lease.property.id, propertyName: lease.property.name, unitId: lease.unit?.id, unitName: lease.unit?.name,
