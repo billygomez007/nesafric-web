@@ -28,7 +28,7 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business", "agent_search", "account"]).default("idle"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business", "agent_search", "account", "admin"]).default("idle"),
   step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code", "account_name"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
@@ -40,6 +40,21 @@ export const assistantStateSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   message: z.string().trim().max(5_000).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
+  /** WhatsApp admin (platform principals with a PIN): waiting for the PIN, and a change awaiting confirm. */
+  admin: z.object({
+    awaitingPin: z.boolean().default(false),
+    then: z.string().max(1000).optional(),
+    pending: z.object({
+      action: z.enum(["approve", "changes", "reject", "reply", "done"]),
+      entity: z.enum(["listing", "professional", "provider", "conversation"]),
+      id: z.string().uuid(),
+      ref: z.string().max(12),
+      summary: z.string().max(1000),
+      note: z.string().max(2000).optional(),
+      expectedUpdatedAt: z.string().optional(),
+      expectedStatus: z.string().max(40).optional(),
+    }).optional(),
+  }).optional(),
   /** What the person wanted when an account was needed ("list a property"); run once the account exists. */
   afterAccount: z.string().regex(/^[a-z ]{2,60}$/).optional(),
   /** The day chosen in the viewing day list, before a time is picked (YYYY-MM-DD, Ghana time). */

@@ -8,6 +8,7 @@ import { NonRetryableJobError } from "@/platform/jobs/errors";
 import { assistantChannelConfigSchema, assistantStateSchema, initialState } from "./schemas";
 import { advanceConversation } from "./engine";
 import { advanceOfficialConversation } from "./router";
+import { alertAdminsAboutSupport } from "./admin";
 import type { WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { activeWhatsAppAssignment, lockWhatsAppChannelShared, trustedWhatsAppConfig, withWhatsAppProcessingGuard } from "@/modules/conversations/channels/whatsapp-numbers";
 import { isOfficialWhatsAppOrganisation, isWhatsAppOptedOut, recordInboundIdentity, setWhatsAppOptOut, whatsappSessionKey } from "./identity";
@@ -163,10 +164,12 @@ async function decide(organisationId: string, conversation: { id: string; status
     return optOutReply("You are subscribed to NesAfric WhatsApp notifications again. Reply menu to see what I can help with.", false);
   }
 
+  // Admin commands (and the PIN) always reach the admin handler, whoever owns the thread.
+  const adminMessage = kind === "text" && (/^admin(\s|$)/.test(command) || (conversation.assistantState as { workflow?: unknown } | null)?.workflow === "admin");
   // A person on the team owns the thread; their inbox shows this message.
-  if (conversation.assignedMemberId || conversation.status === "HUMAN_ACTIVE") return { kind: "skip" };
+  if (!adminMessage && (conversation.assignedMemberId || conversation.status === "HUMAN_ACTIVE")) return { kind: "skip" };
   let state = conversation.assistantState;
-  if (conversation.status === "HUMAN_REQUIRED") {
+  if (conversation.status === "HUMAN_REQUIRED" && !adminMessage) {
     if (!["menu", "cancel"].includes(command)) return { kind: "skip" };
   }
   // A resolved or closed thread starts fresh instead of ignoring the person forever.
@@ -263,6 +266,9 @@ export async function processAssistantMessage(payload: Record<string, unknown>) 
           await tx.domainEvent.create({ data: { organisationId: job.organisationId, name: outcome.handoff ? "whatsapp.support_requested" : "whatsapp.workflow_advanced", aggregateType: "conversation", aggregateId: conversation.id, payload: { messageId: message.id, workflow: outcome.workflow, step: outcome.step } } });
           return message.id === job.messageId ? "done" as const : "next" as const;
         }, { timeout: 15_000, maxWait: 5_000 });
+        // A customer asking for a person, or writing into a chat a person handles: tell WhatsApp admins.
+        const human = outcome.kind === "skip" && (conversation.assignedMemberId || ["HUMAN_ACTIVE", "HUMAN_REQUIRED"].includes(conversation.status));
+        if (committed !== "stale" && (human || (outcome.kind === "reply" && outcome.handoff))) await alertAdminsAboutSupport(conversation.id, message.id).catch((error) => console.warn(JSON.stringify({ event: "whatsapp.admin_alert_failed", reason: error instanceof Error ? error.message : "unknown" })));
         return committed === "done" ? "stop" as const : "next" as const;
       });
       if (step === "stop") return;
