@@ -95,6 +95,17 @@ describe("PostgreSQL WhatsApp Flows", () => {
     expect(chat.interactive).toMatchObject({ type: "flow", flowId: "947132434820601" });
   });
 
+  it("finds listings whose region was saved as a code or another spelling", async () => {
+    const { listing } = await publishedListing();
+    const search = token("nesafric_property_search");
+    for (const saved of ["GA", "Greater Accra Region", "Accra"]) {
+      await db.listing.update({ where: { id: listing.id }, data: { region: saved } });
+      const results = await exchange(search, "data_exchange", "SEARCH", { purpose: "RENT", region: "Greater Accra" });
+      expect(results.data.results, saved).toEqual([expect.objectContaining({ id: listing.id })]);
+    }
+    expect((await exchange(search, "data_exchange", "SEARCH", { purpose: "RENT", region: "Ashanti" })).data.error_message).toContain("No published properties");
+  });
+
   it("searches when WhatsApp leaves the step out of the payload, as it does live", async () => {
     const { listing } = await publishedListing();
     const search = token("nesafric_property_search");
