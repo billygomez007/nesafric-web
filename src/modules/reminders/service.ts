@@ -2,6 +2,8 @@ import { db } from "@/platform/database/client";
 import { AppError, notFound } from "@/platform/errors";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
 import { enqueueNotificationDelivery } from "@/modules/notifications/service";
+import { assertOperational, hasFeature } from "@/modules/entitlements/service";
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { createReminderPolicySchema, manualReminderSchema, updateReminderPolicySchema } from "./schemas";
 import { Prisma } from "@/platform/database/generated/client";
 
@@ -27,6 +29,8 @@ export async function createExpiryPolicy(userId: string, organisationId: string,
 
 export async function createReminderPolicy(userId: string, organisationId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.reminderManage);
+  // Rent and tenancy reminders are a property-management plan feature.
+  await assertOperational(organisationId, ENTITLEMENTS.pmRentRemindersEnabled.key);
   const parsed = createReminderPolicySchema.safeParse(input);
   if (!parsed.success) throw invalidPolicy(parsed.error.issues[0]?.message ?? "Invalid reminder policy.");
   const duplicate = await db.reminderPolicy.findUnique({
@@ -50,6 +54,8 @@ export async function createReminderPolicy(userId: string, organisationId: strin
 
 export async function updateReminderPolicy(userId: string, organisationId: string, policyId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.reminderManage);
+  // Rent and tenancy reminders are a property-management plan feature.
+  await assertOperational(organisationId, ENTITLEMENTS.pmRentRemindersEnabled.key);
   const parsed = updateReminderPolicySchema.safeParse(input);
   if (!parsed.success) throw invalidPolicy(parsed.error.issues[0]?.message ?? "Invalid reminder policy.");
   const current = await db.reminderPolicy.findFirst({
@@ -72,6 +78,8 @@ export async function updateReminderPolicy(userId: string, organisationId: strin
 
 export async function scheduleExpiryReminders(userId: string, organisationId: string, now = new Date()) {
   await requirePermission(userId, organisationId, PERMISSIONS.reminderManage);
+  // Without an active plan the policies stay saved but send nothing; they resume when a plan does.
+  if (!(await hasFeature(organisationId, ENTITLEMENTS.pmRentRemindersEnabled.key))) return 0;
   const [policies, leases] = await Promise.all([
     db.reminderPolicy.findMany({ where: { organisationId, eventType: "LEASE_EXPIRY", enabled: true } }),
     db.lease.findMany({ where: { organisationId, status: { in: ["ACTIVE", "EXPIRING"] }, endDate: { not: null }, archivedAt: null }, include: { parties: { include: { tenantOrganisation: true } } } }),
@@ -121,6 +129,8 @@ export async function markNotificationSent(userId: string, organisationId: strin
 
 export async function sendManualReminder(userId: string, organisationId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.reminderManage);
+  // Rent and tenancy reminders are a property-management plan feature.
+  await assertOperational(organisationId, ENTITLEMENTS.pmRentRemindersEnabled.key);
   const data = manualReminderSchema.parse(input);
   const lease = await db.lease.findFirst({
     where: {

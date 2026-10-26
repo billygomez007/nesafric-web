@@ -13,7 +13,7 @@ import { onboardingDataSchema, type Draft, type OnboardingData } from "./draft";
 
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value));
 
-export type CommitSummary = { organisationId: string; organisationName: string; properties: number; units: number; tenants: number; draftLeases: number; invitations: Array<{ label: string; code: string }>; invitationProblems: number; reminders: boolean; pendingVerifications: number; providersInvited: number; providerInviteProblem: string | null };
+export type CommitSummary = { organisationId: string; organisationName: string; properties: number; units: number; tenants: number; draftLeases: number; invitations: Array<{ label: string; code: string }>; invitationProblems: number; reminders: boolean; pendingVerifications: number; providersInvited: number; providerInviteProblem: string | null; plan?: { status: string; trialEndsAt: Date | null } };
 
 /** Deterministic per-draft references, so a retried commit finds what it already created. */
 export const draftReference = (draftId: string) => `WA-${draftId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -166,7 +166,7 @@ export async function commitDraft(draft: Draft, userId: string): Promise<CommitS
       await progress();
     }
 
-    const organisation = await db.organisation.findUniqueOrThrow({ where: { id: organisationId }, select: { name: true } });
+    const organisation = await db.organisation.findUniqueOrThrow({ where: { id: organisationId }, select: { name: true, subscription: { select: { status: true, trialEndsAt: true } } } });
     await db.$transaction([
       db.onboardingDraft.update({ where: { id: draft.id }, data: { status: "COMMITTED", committedAt: new Date(), data: json(data), organisationId } }),
       db.auditEvent.create({ data: { organisationId, actorUserId: userId, action: "onboarding.whatsapp_committed", entityType: "onboarding_draft", entityId: draft.id, metadata: { properties: propertyIds.length, tenants: data.tenants.length, providersPending: data.providers.length } } }),
@@ -176,6 +176,7 @@ export async function commitDraft(draft: Draft, userId: string): Promise<CommitS
       units: data.properties.reduce((sum, property) => sum + property.buildings.reduce((count, building) => count + building.units.length, 0), 0),
       tenants: data.tenants.length, draftLeases: data.tenants.length, invitations, invitationProblems, reminders: data.committed.reminders, pendingVerifications: propertyIds.length,
       providersInvited: data.providers.length, providerInviteProblem,
+      plan: organisation.subscription ? { status: organisation.subscription.status, trialEndsAt: organisation.subscription.trialEndsAt } : undefined,
     };
   } catch (error) {
     // Keep what was created; the person can retry confirm after fixing the cause (for example a plan limit).

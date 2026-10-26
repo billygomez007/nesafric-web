@@ -1,4 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { onPlan } from "./helpers/subscription";
+import { activatePropertyManagement } from "@/modules/subscriptions/activation";
+import { PM_PLANS } from "@/modules/subscriptions/plan-catalog";
 import { db } from "@/platform/database/client";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
@@ -22,16 +25,15 @@ import { getCommercialAnalytics } from "@/modules/platform-admin/analytics";
 import { isFeatureEnabled } from "@/modules/feature-flags/service";
 import { resolveEntitlement } from "@/modules/entitlements/service";
 import { listVisibleSupportSessions } from "@/modules/subscriptions/service";
-import { recordSubscriptionPaymentSuccess } from "@/modules/subscriptions/lifecycle";
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner" CASCADE');
   await db.tenant.deleteMany();
   // FeatureFlag/SubscriptionPlan (unlike Country/Currency/Role/Permission) are not seed-only
   // reference data — this suite creates its own test plans/flags, so clear anything this suite
-  // created (never the three permanently seeded commercial plans) for a clean, repeatable run.
+  // created (never the seeded commercial plans) for a clean, repeatable run.
   await db.featureFlag.deleteMany();
-  await db.subscriptionPlan.deleteMany({ where: { key: { notIn: ["starter", "growth", "scale"] } } });
+  await db.subscriptionPlan.deleteMany({ where: { key: { notIn: ["starter", "scale", "essential", "growth", "enterprise", "pm_trial"] } } });
 }
 
 async function makePrincipal(email: string, role: "SUPER_ADMIN" | "BILLING_ADMIN" | "SUPPORT_AGENT" | "READ_ONLY" = "SUPER_ADMIN") {
@@ -83,20 +85,22 @@ describe("PostgreSQL Phase 20 platform administration (independent of organisati
     const ownerB = await registerUser({ displayName: "Org B Owner", email: "org-b-owner@example.com", password: "secure-password-123" });
     const orgA = await createOrganisation(ownerA.id, { name: "Platform Org A", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
     const orgB = await createOrganisation(ownerB.id, { name: "Platform Org B", type: "INDIVIDUAL_LANDLORD", countryCode: "GH" });
+    await activatePropertyManagement(orgA.id, ownerA.id);
+    await activatePropertyManagement(orgB.id, ownerB.id);
 
     const listed = await listOrganisationsForPlatform(principal);
     const ids = listed.map((entry) => entry.id);
     expect(ids).toEqual(expect.arrayContaining([orgA.id, orgB.id])); // cross-tenant visibility is expected for platform admins.
     for (const entry of listed) {
       expect(entry).not.toHaveProperty("billingCustomerRef");
-      expect(entry.subscription).toMatchObject({ status: "TRIALING", plan: { key: "starter" } });
+      expect(entry.subscription).toMatchObject({ status: "TRIALING", plan: { key: "pm_trial" } });
     }
 
     await expect(getOrganisationDetailForPlatform(principal, orgA.id)).rejects.toMatchObject({ code: "SUPPORT_SESSION_REQUIRED", status: 403 });
     await createSupportSession(principal, orgA.id, { reason: "Investigating a billing question", durationMinutes: 30 });
     const detail = await getOrganisationDetailForPlatform(principal, orgA.id);
     expect(detail.organisation.id).toBe(orgA.id);
-    expect(detail.entitlements!.planKey).toBe("starter");
+    expect(detail.entitlements!.planKey).toBe("pm_trial");
     // Regression guard: nested `entitlements` (via `subscription.plan.entitlements`) and
     // `overrides` both carry a database-BigInt `limitValue` — must be serializable, or this
     // response 500s the entire platform-admin organisation-detail screen.
@@ -163,6 +167,8 @@ describe("PostgreSQL Phase 20 platform administration (independent of organisati
     const ownerB = await registerUser({ displayName: "Override Org B Owner", email: "override-org-b@example.com", password: "secure-password-123" });
     const orgA = await createOrganisation(ownerA.id, { name: "Override Platform Org A", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
     const orgB = await createOrganisation(ownerB.id, { name: "Override Platform Org B", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
+    await activatePropertyManagement(orgA.id, ownerA.id);
+    await activatePropertyManagement(orgB.id, ownerB.id);
 
     const override = await createEntitlementOverride(principal, orgA.id, { featureKey: "reporting.advanced", kind: "BOOLEAN", booleanValue: true, reason: "Beta access" });
     await expect(resolveEntitlement(orgA.id, "reporting.advanced")).resolves.toMatchObject({ booleanValue: true, source: "override" });
@@ -237,14 +243,17 @@ describe("PostgreSQL Phase 20 platform administration (independent of organisati
     expect(baseline.recentSignups30d).toBe(2);
     expect(baseline.mrrByCurrency).toEqual({}); // both organisations are still trialing — never fabricate revenue for non-paying accounts.
 
-    await recordSubscriptionPaymentSuccess(orgA.id, { amountMinor: "25000", currencyCode: "GHS", billingProviderKey: "test" }); // starter, monthly.
-    const growthPlan = await db.subscriptionPlan.findUniqueOrThrow({ where: { key: "growth" } });
-    await db.organisationSubscription.update({ where: { organisationId: orgB.id }, data: { planId: growthPlan.id } });
-    await recordSubscriptionPaymentSuccess(orgB.id, { amountMinor: "75000", currencyCode: "GHS", billingProviderKey: "test" }); // growth, monthly.
+    // Trials are never revenue.
+    await activatePropertyManagement(orgA.id, ownerA.id);
+    await activatePropertyManagement(orgB.id, ownerB.id);
+    expect((await getCommercialAnalytics(principal)).mrrByCurrency).toEqual({});
+    await onPlan(orgA.id, "essential");
+    await onPlan(orgB.id, "growth");
 
     const withRevenue = await getCommercialAnalytics(principal);
-    expect(withRevenue.mrrByCurrency.GHS).toBe("100000"); // 25000 (starter) + 75000 (growth), deterministic from real plan prices.
-    expect(withRevenue.arrByCurrency.GHS).toBe("1200000");
+    const expectedMrr = PM_PLANS.essential.monthlyPriceMinor + PM_PLANS.growth.monthlyPriceMinor; // deterministic from real plan prices.
+    expect(withRevenue.mrrByCurrency.GHS).toBe(String(expectedMrr));
+    expect(withRevenue.arrByCurrency.GHS).toBe(String(expectedMrr * 12));
     expect(withRevenue.statusCounts.ACTIVE).toBeGreaterThanOrEqual(2);
   });
 });

@@ -17,6 +17,7 @@ import { scheduleDueDigests } from "@/modules/staff-notifications/service";
 import { dispatchUtilityEvents } from "@/modules/whatsapp-templates/dispatch";
 import { scheduleViewingReminders } from "@/modules/whatsapp-assistant/viewings";
 import { scheduleUploadAndDraftCleanup } from "@/modules/documents/cleanup";
+import { advanceOverdueSubscriptions } from "@/modules/subscriptions/lifecycle";
 
 const pollIntervalMs = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 15_000);
 let stopping = false;
@@ -40,6 +41,8 @@ async function tick() {
   if (Date.now() - lastSweepAt >= SWEEP_INTERVAL_MS) {
     lastSweepAt = Date.now();
     await sweepExpiredPublicWriteRecords().catch(() => console.error("Public write record sweep failed."));
+    // Property-management plans: trial reminders, trial expiry, renewals, grace periods (idempotent).
+    await advanceOverdueSubscriptions().catch((error) => console.error("Subscription lifecycle sweep failed:", error instanceof Error ? error.message : error));
   }
 }
 

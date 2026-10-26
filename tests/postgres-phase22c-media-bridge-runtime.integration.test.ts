@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { onPlan } from "./helpers/subscription";
 import { db } from "@/platform/database/client";
 import { verifyListingAsNesAfric } from "./helpers/nesafric-review";
 import { registerUser } from "@/modules/identity/service";
@@ -48,7 +49,7 @@ async function cleanDatabase() {
 }
 
 function scalePropertyOsOrg(organisationId: string) {
-  return db.organisationSubscription.update({ where: { organisationId }, data: { plan: { connect: { key: "scale" } } } });
+  return onPlan(organisationId, "scale");
 }
 
 async function createNativeListing(userId: string, marketplaceProfessionalId: string, overrides: Record<string, unknown> = {}) {

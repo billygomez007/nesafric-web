@@ -3,6 +3,7 @@ import { PrismaClient } from "../src/platform/database/generated/client";
 import { PrismaPgWithTransactionRelease } from "../src/platform/database/pg-adapter";
 import { GHANA, GHS } from "../src/modules/geography/config";
 import { ENTITLEMENTS } from "../src/modules/entitlements/catalog";
+import { LEGACY_PLAN_KEYS, PM_CURRENCY, PM_PLAN_KEYS, PM_PLANS, PM_TRIAL_PLAN, planEntitlementRows } from "../src/modules/subscriptions/plan-catalog";
 import { MARKETPLACE_ENTITLEMENTS } from "../src/modules/marketplace-professionals/catalog";
 
 const prisma = new PrismaClient({ adapter: new PrismaPgWithTransactionRelease({ connectionString: process.env.DATABASE_URL }) });
@@ -96,12 +97,18 @@ const permissions = [
 ] as const;
 
 /**
- * Phase 20 default commercial plans (item 1 + item 2). Deliberately three illustrative tiers with
- * real, deterministic entitlement values — configurable afterwards via the platform-admin
- * console. Prices are seeded in GHS only (the currently supported country's default currency);
- * additional currencies can be added as `PlanPrice` rows without any code change.
+ * Property-management plans come from the central catalog
+ * (`src/modules/subscriptions/plan-catalog.ts`), the same values the `pm_subscription_plans`
+ * migration writes in production. The Phase 20 illustrative `starter`/`scale` plans are retired.
  */
-const PLANS = [
+const PLANS = [...PM_PLAN_KEYS.map((key) => PM_PLANS[key]), PM_TRIAL_PLAN];
+
+/**
+ * The retired Phase 20 `starter` / `scale` plans, kept inactive and private: subscriptions created
+ * before the property-management plans may still reference them, and AI-voice integration tests
+ * attach to `scale` because no plan on sale includes voice. Never offered to customers.
+ */
+const LEGACY_PLANS = [
   {
     key: "starter", name: "Starter", sortOrder: 1,
     description: "For an individual landlord getting started with a small portfolio.",
@@ -136,42 +143,6 @@ const PLANS = [
       [ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
       [ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
       [ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
-    },
-  },
-  {
-    key: "growth", name: "Growth", sortOrder: 2,
-    description: "For a growing property management business with a small team.",
-    prices: [{ currencyCode: "GHS", billingCycle: "MONTHLY" as const, amountMinor: "75000" }, { currencyCode: "GHS", billingCycle: "ANNUAL" as const, amountMinor: "750000" }],
-    entitlements: {
-      [ENTITLEMENTS.propertiesMax.key]: { kind: "LIMIT" as const, limitValue: 20 },
-      [ENTITLEMENTS.unitsMax.key]: { kind: "LIMIT" as const, limitValue: 150 },
-      [ENTITLEMENTS.teamMembersMax.key]: { kind: "LIMIT" as const, limitValue: 10 },
-      [ENTITLEMENTS.aiEmployeesMax.key]: { kind: "LIMIT" as const, limitValue: 5 },
-      [ENTITLEMENTS.aiTokensMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 2_000_000 },
-      [ENTITLEMENTS.aiCostMonthlyNanoMax.key]: { kind: "LIMIT" as const, limitValue: 50_000_000_000 },
-      [ENTITLEMENTS.storageBytesMax.key]: { kind: "LIMIT" as const, limitValue: 50 * 1024 * 1024 * 1024 },
-      [ENTITLEMENTS.listingsMax.key]: { kind: "LIMIT" as const, limitValue: 50 },
-      [ENTITLEMENTS.documentsMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 500 },
-      [ENTITLEMENTS.messagesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 5_000 },
-      [ENTITLEMENTS.integrationOperationsMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 1_000 },
-      [ENTITLEMENTS.integrationsEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
-      [ENTITLEMENTS.automationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
-      [ENTITLEMENTS.advancedReportingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.aiPropertyManagerEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
-      [ENTITLEMENTS.aiReceptionistTextEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
-      [ENTITLEMENTS.aiReceptionistVoiceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.maintenanceAiClassificationEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
-      [ENTITLEMENTS.maintenanceAiDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: true },
-      [ENTITLEMENTS.maintenanceVoiceDispatchEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.predictiveMaintenanceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.portfolioIntelligenceEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.voiceOutboundEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.voiceCallVolumeMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
-      [ENTITLEMENTS.voiceRecordingEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.voiceInboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
-      [ENTITLEMENTS.voiceOutboundMinutesMonthlyMax.key]: { kind: "LIMIT" as const, limitValue: 0 },
-      [ENTITLEMENTS.voiceHumanTransferEnabled.key]: { kind: "BOOLEAN" as const, booleanValue: false },
-      [ENTITLEMENTS.voiceConcurrentCallsMax.key]: { kind: "LIMIT" as const, limitValue: 2 },
     },
   },
   {
@@ -649,31 +620,51 @@ async function main() {
     }
   }
 
-  // Phase 20: seed the default commercial plans/prices/entitlements.
+  // Property-management plans/prices/entitlements from the central catalog.
   for (const plan of PLANS) {
     const record = await prisma.subscriptionPlan.upsert({
       where: { key: plan.key },
-      update: { name: plan.name, description: plan.description, sortOrder: plan.sortOrder, isActive: true, isPublic: true },
-      create: { key: plan.key, name: plan.name, description: plan.description, sortOrder: plan.sortOrder },
+      update: { name: plan.name, description: plan.tagline, sortOrder: plan.sortOrder, isActive: true, isPublic: plan.isPublic },
+      create: { key: plan.key, name: plan.name, description: plan.tagline, sortOrder: plan.sortOrder, isPublic: plan.isPublic },
     });
-    for (const price of plan.prices) {
+    await prisma.planPrice.updateMany({ where: { planId: record.id, NOT: { currencyCode: PM_CURRENCY, billingCycle: "MONTHLY" } }, data: { isActive: false } });
+    if (plan.monthlyPriceMinor > 0) {
       await prisma.planPrice.upsert({
-        where: { planId_currencyCode_billingCycle: { planId: record.id, currencyCode: price.currencyCode, billingCycle: price.billingCycle } },
-        update: { amountMinor: price.amountMinor, isActive: true },
-        create: { planId: record.id, currencyCode: price.currencyCode, billingCycle: price.billingCycle, amountMinor: price.amountMinor },
+        where: { planId_currencyCode_billingCycle: { planId: record.id, currencyCode: PM_CURRENCY, billingCycle: "MONTHLY" } },
+        update: { amountMinor: plan.monthlyPriceMinor, isActive: true },
+        create: { planId: record.id, currencyCode: PM_CURRENCY, billingCycle: "MONTHLY", amountMinor: plan.monthlyPriceMinor },
       });
     }
+    for (const row of planEntitlementRows(plan)) {
+      const data = { kind: row.kind, isUnlimited: false, limitValue: row.limitValue, booleanValue: row.booleanValue };
+      await prisma.planEntitlement.upsert({
+        where: { planId_featureKey: { planId: record.id, featureKey: row.featureKey } },
+        update: data,
+        create: { planId: record.id, featureKey: row.featureKey, ...data },
+      });
+    }
+  }
+  for (const plan of LEGACY_PLANS) {
+    const record = await prisma.subscriptionPlan.upsert({
+      where: { key: plan.key },
+      update: { isActive: false, isPublic: false },
+      create: { key: plan.key, name: plan.name, description: plan.description, sortOrder: plan.sortOrder, isActive: false, isPublic: false },
+    });
     for (const [featureKey, entitlement] of Object.entries(plan.entitlements)) {
       const data = "isUnlimited" in entitlement && entitlement.isUnlimited
         ? { kind: entitlement.kind, isUnlimited: true, limitValue: null, booleanValue: null }
         : { kind: entitlement.kind, isUnlimited: false, limitValue: "limitValue" in entitlement ? entitlement.limitValue : null, booleanValue: "booleanValue" in entitlement ? entitlement.booleanValue : null };
-      await prisma.planEntitlement.upsert({
-        where: { planId_featureKey: { planId: record.id, featureKey } },
-        update: data,
-        create: { planId: record.id, featureKey, ...data },
-      });
+      await prisma.planEntitlement.upsert({ where: { planId_featureKey: { planId: record.id, featureKey } }, update: {}, create: { planId: record.id, featureKey, ...data } });
+    }
+    // Feature keys added after these plans were retired take their successor's values.
+    const successor = plan.key === "starter" ? PM_PLANS.essential : PM_PLANS.enterprise;
+    for (const row of planEntitlementRows(successor)) {
+      if (row.featureKey in plan.entitlements) continue;
+      const data = { kind: row.kind, isUnlimited: false, limitValue: row.limitValue, booleanValue: row.booleanValue };
+      await prisma.planEntitlement.upsert({ where: { planId_featureKey: { planId: record.id, featureKey: row.featureKey } }, update: {}, create: { planId: record.id, featureKey: row.featureKey, ...data } });
     }
   }
+  await prisma.subscriptionPlan.updateMany({ where: { key: { in: [...LEGACY_PLAN_KEYS] } }, data: { isActive: false, isPublic: false } });
 
   // Phase 21A: seed the marketplace's own, entirely separate plan/price/entitlement family.
   for (const plan of MARKETPLACE_PLANS) {
@@ -701,18 +692,8 @@ async function main() {
     }
   }
 
-  // Phase 20: backfill a TRIALING subscription for any organisation that predates Phase 20 and
-  // therefore has none yet (item 1 — no organisation ever exists without exactly one subscription).
-  const starterPlan = await prisma.subscriptionPlan.findUniqueOrThrow({ where: { key: "starter" } });
-  const organisationsWithoutSubscription = await prisma.organisation.findMany({ where: { subscription: null }, select: { id: true, defaultCurrencyCode: true } });
-  for (const organisation of organisationsWithoutSubscription) {
-    const now = new Date();
-    const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const subscription = await prisma.organisationSubscription.create({
-      data: { organisationId: organisation.id, planId: starterPlan.id, status: "TRIALING", currencyCode: organisation.defaultCurrencyCode, trialEndsAt, currentPeriodStart: now, currentPeriodEnd: trialEndsAt },
-    });
-    await prisma.subscriptionStatusHistory.create({ data: { subscriptionId: subscription.id, organisationId: organisation.id, fromStatus: null, toStatus: "TRIALING", reason: "Backfilled by Phase 20 seed for a pre-existing organisation." } });
-  }
+  // No subscription is created here: an organisation gets one only when property management is
+  // activated (see `src/modules/subscriptions/activation.ts`).
 }
 
 main().finally(() => prisma.$disconnect());

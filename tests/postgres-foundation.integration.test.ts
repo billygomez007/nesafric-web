@@ -42,6 +42,7 @@ async function cleanDatabase() {
   await db.organisationFeatureFlagOverride.deleteMany();
   await db.platformSupportSession.deleteMany();
   await db.organisationSubscription.deleteMany();
+  await db.backgroundJob.deleteMany();
   await db.organisation.deleteMany();
   await db.session.deleteMany();
   await db.user.deleteMany();

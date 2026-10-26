@@ -3,13 +3,15 @@ import { Prisma } from "@/platform/database/generated/client";
 import { AppError, notFound } from "@/platform/errors";
 import { requirePermission, PERMISSIONS } from "@/platform/authorization/permissions";
 import { recordAudit } from "@/modules/audit/service";
-import { assertOperational, assertWithinLimit } from "@/modules/entitlements/service";
+import { assertWithinLimit, withUnitCapacity } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { createBuildingSchema, createPortfolioSchema, createPropertySchema, createUnitSchema, updatePropertySchema, updateUnitSchema } from "./schemas";
 import { activePropertyScope } from "./repository";
 
 export async function createPortfolio(userId: string, organisationId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.portfolioCreate);
+  // Portfolios are the organisation's branches; Essential has one, Growth and Enterprise more.
+  await assertWithinLimit(organisationId, ENTITLEMENTS.pmBranchesMax.key, 1);
   const data = createPortfolioSchema.parse(input);
   const portfolio = await db.portfolio.create({ data: { ...data, organisationId } });
   await recordAudit({ organisationId, actorUserId: userId, action: "portfolio.created", entityType: "portfolio", entityId: portfolio.id });
@@ -52,13 +54,12 @@ export async function createProperty(userId: string, organisationId: string, inp
   const country = await db.country.findUnique({ where: { code: data.countryCode } });
   const currency = await db.currency.findUnique({ where: { code: data.currencyCode } });
   if (!country?.isActive || !currency?.isActive) throw new AppError("INVALID_CONFIGURATION", 422, "Country or currency is not supported.");
-  // Representative entitlement checks (item 2): a subscription in a read-only state (suspended/
-  // cancelled) or already at its property/unit ceiling blocks creating more, without touching any
-  // existing property/unit.
+  // A property with no units is only a listing source and never needs a plan, so agents and sellers
+  // stay free. Units are managed units: they activate property management (the trial) and count
+  // against the plan's capacity, checked and created under one lock so concurrent requests can
+  // never exceed it.
   const newUnitCount = (data.building?.units.length ?? 0) + data.units.length;
-  await assertOperational(organisationId, ENTITLEMENTS.propertiesMax.key);
-  if (newUnitCount > 0) await assertWithinLimit(organisationId, ENTITLEMENTS.unitsMax.key, newUnitCount);
-  return db.$transaction(async (tx) => {
+  return withUnitCapacity(organisationId, userId, newUnitCount, async (tx) => {
     const { building, units, ...propertyData } = data;
     const property = await tx.property.create({ data: { ...propertyData, organisationId } });
     if (building) {
@@ -76,9 +77,7 @@ export async function createProperty(userId: string, organisationId: string, inp
 export async function createBuilding(userId: string, organisationId: string, propertyId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.propertyUpdate);
   const data = createBuildingSchema.parse(input);
-  await assertOperational(organisationId, ENTITLEMENTS.unitsMax.key);
-  if (data.units.length) await assertWithinLimit(organisationId, ENTITLEMENTS.unitsMax.key, data.units.length);
-  return db.$transaction(async (tx) => {
+  return withUnitCapacity(organisationId, userId, data.units.length, async (tx) => {
     const property = await tx.property.findFirst({ where: activePropertyScope(organisationId, propertyId), select: { id: true } });
     if (!property) throw notFound();
     const building = await tx.building.create({ data: { propertyId: property.id, name: data.name } });
@@ -93,10 +92,7 @@ export async function createUnit(userId: string, organisationId: string, propert
   await requirePermission(userId, organisationId, PERMISSIONS.propertyUpdate);
   const data = createUnitSchema.parse(input);
 
-  await assertOperational(organisationId, ENTITLEMENTS.unitsMax.key);
-  await assertWithinLimit(organisationId, ENTITLEMENTS.unitsMax.key, 1);
-
-  return db.$transaction(async (tx) => {
+  return withUnitCapacity(organisationId, userId, 1, async (tx) => {
     const property = await tx.property.findFirst({
       where: activePropertyScope(organisationId, propertyId),
       select: { id: true },

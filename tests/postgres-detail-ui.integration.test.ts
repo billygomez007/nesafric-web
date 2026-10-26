@@ -181,7 +181,8 @@ describe("PostgreSQL Phase 4C detail UI read models", () => {
     expect(detail.obligations.some(({ status }) => status === "OVERDUE")).toBe(true);
     expect(detail.obligations.some(({ status }) => status === "UPCOMING")).toBe(true);
 
-    const notifications = await listNotifications(fixture.owner.id, fixture.organisation.id);
+    // Organisation-level plan notices (e.g. "trial started") are listed too; this test is about lease notifications.
+    const notifications = (await listNotifications(fixture.owner.id, fixture.organisation.id)).filter((notification) => notification.leaseId);
     expect(notifications).toEqual([expect.objectContaining({ leaseId: fixture.lease.id, tenantOrganisationId: fixture.tenant.relationship.id })]);
   });
 

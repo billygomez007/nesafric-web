@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { onPlan } from "./helpers/subscription";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Lets a test hold legacy ingestion part-way, after the assignment check and before the message is stored.
@@ -121,7 +122,7 @@ describe("PostgreSQL WhatsApp legacy conversation provenance", () => {
 
   it("blocks the automatic AI reply on a legacy conversation from a replaced number", async () => {
     const { a, assign, first } = await fixture();
-    await db.organisationSubscription.update({ where: { organisationId: a.organisation.id }, data: { plan: { connect: { key: "scale" } } } });
+    await onPlan(a.organisation.id, "scale");
     await createAIEmployee(a.owner.id, a.organisation.id, { name: "Receptionist", role: "RECEPTIONIST", scope: "ORGANISATION", toolPermissions: [], instructions: {}, escalationConfiguration: {} });
     await db.aIAutonomyConfiguration.create({ data: { organisationId: a.organisation.id, automationActorUserId: a.owner.id, updatedByUserId: a.owner.id } });
     expect(await inbound(a.organisation.id, NUMBER_ONE, "Hello")).toBe(200);

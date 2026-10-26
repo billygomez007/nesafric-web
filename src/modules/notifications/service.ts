@@ -97,6 +97,11 @@ export async function deliverNotification(
       leaseId: notification.leaseId,
     });
     const deliveredAt = result.status === "DELIVERED" ? new Date() : undefined;
+    if (!notification.tenantOrganisationId && notification.eventType.startsWith("SUBSCRIPTION_")) {
+      // Plan notices also go to the owners by email. Imported lazily: that module depends on this one.
+      const { enqueueSubscriptionNoticeEmails } = await import("@/modules/subscriptions/notices");
+      await enqueueSubscriptionNoticeEmails(organisationId, notificationId, notification.eventType);
+    }
     return db.$transaction(async (tx) => {
       const delivered = await tx.notification.update({
         where: { id: notificationId },
@@ -109,6 +114,7 @@ export async function deliverNotification(
         },
       });
       const eventName = result.status === "DELIVERED" ? "notification.delivered" : "notification.sent";
+
       await tx.auditEvent.create({ data: { organisationId, action: eventName, entityType: "notification", entityId: notificationId, metadata: { channel: notification.channel } } });
       await tx.domainEvent.create({ data: { organisationId, name: eventName, aggregateType: "notification", aggregateId: notificationId, payload: { channel: notification.channel, providerReference: result.providerReference ?? null } } });
       return delivered;

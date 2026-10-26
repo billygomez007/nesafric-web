@@ -7,7 +7,9 @@ import { listUserTenancies } from "@/modules/tenants/self-service";
 import { redeemTenantAccessCode } from "@/modules/tenants/access-invitations";
 import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import type { AssistantState } from "../schemas";
-import { classifyReport, looksLikeMaintenance } from "./classify";
+import { classifyLocally, classifyReport, looksLikeMaintenance } from "./classify";
+import { getManagementState, hasAllowance, hasFeature } from "@/modules/entitlements/service";
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { downloadWhatsAppMedia } from "./media";
 
 type ReportState = NonNullable<AssistantState["report"]>;
@@ -72,7 +74,11 @@ async function describeStep(input: ReportInput, report: ReportState, state: Assi
 
 async function toConfirm(report: ReportState, state: AssistantState): Promise<ReportResult> {
   const choice = report.choices[report.selected ?? 0];
-  const classification = await classifyReport(report.description ?? "");
+  // AI triage is part of the landlord's plan and its monthly AI allowance. Without either, the
+  // tenant's report is still taken in full and classified with the built-in keyword rules.
+  const aiTriage = await hasFeature(choice.organisationId, ENTITLEMENTS.maintenanceAiClassificationEnabled.key)
+    && await hasAllowance(choice.organisationId, ENTITLEMENTS.pmAiRepliesMonthlyMax.key);
+  const classification = aiTriage ? await classifyReport(report.description ?? "") : classifyLocally(report.description ?? "");
   const duplicate = await db.maintenanceRequest.findFirst({
     where: {
       organisationId: choice.organisationId, tenantOrganisationId: choice.tenantOrganisationId, category: classification.category, status: { in: OPEN },
@@ -149,12 +155,17 @@ async function submit(userId: string, report: ReportState, messageId: string, st
     classification: { ...classification, sourceMessageId: messageId, photos: report.media.length },
   }) as { id: string; referenceNumber: string | null };
   const photos = await attachMedia(userId, choice.organisationId, created.id, report.media);
+  // Tenants never need a plan to report a problem. If the landlord's plan is not active, say
+  // plainly that the report is recorded but will be handled by the landlord directly.
+  const managed = (await getManagementState(choice.organisationId)).entitled;
   return {
     state: reset(),
     reply: [
       `Request ${created.referenceNumber} is logged with ${choice.organisationName}: ${categoryText(classification.category)}, ${classification.title} (${PRIORITY_TEXT[classification.priority]}).`,
       report.media.length ? `Photos saved: ${photos} of ${report.media.length}.` : null,
-      "Your landlord's team can see it now. I will message you here when it is updated.",
+      managed
+        ? "Your landlord's team can see it now. I will message you here when it is updated."
+        : "Your landlord can see it now and will handle it directly; automatic provider booking is not available for this property at the moment. I will message you here when it is updated.",
       classification.safetyHazard ? SAFETY_ADVICE : null,
       `Reply status ${created.referenceNumber} at any time.`,
     ].filter(Boolean).join("\n"),

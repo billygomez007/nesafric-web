@@ -136,10 +136,10 @@ describe("PostgreSQL registered handler worker", () => {
 
     expect(await db.lease.findUniqueOrThrow({ where: { id: eligible.id } })).toMatchObject({ status: "EXPIRED" });
     expect(await db.lease.findUniqueOrThrow({ where: { id: future.id } })).toMatchObject({ status: "ACTIVE" });
-    expect(await db.auditEvent.findMany({ where: { organisationId: fixture.organisation.id } })).toEqual([
+    expect(await db.auditEvent.findMany({ where: { organisationId: fixture.organisation.id, action: { startsWith: "lease." } } })).toEqual([
       expect.objectContaining({ action: "lease.expired", entityId: eligible.id }),
     ]);
-    expect(await db.domainEvent.findMany({ where: { organisationId: fixture.organisation.id } })).toEqual([
+    expect(await db.domainEvent.findMany({ where: { organisationId: fixture.organisation.id, name: { startsWith: "lease." } } })).toEqual([
       expect.objectContaining({ name: "lease.expired", aggregateId: eligible.id }),
     ]);
     for (const jobId of [eligibleJob.id, futureJob.id]) {
@@ -180,11 +180,11 @@ describe("PostgreSQL registered handler worker", () => {
     expect(await db.rentObligation.findUniqueOrThrow({ where: { id: overdue.id } })).toMatchObject({ status: "OVERDUE" });
     expect(await db.rentObligation.findUniqueOrThrow({ where: { id: due.id } })).toMatchObject({ status: "DUE" });
     expect(await db.rentObligation.findUniqueOrThrow({ where: { id: future.id } })).toMatchObject({ status: "UPCOMING" });
-    expect((await db.auditEvent.findMany({ where: { organisationId: fixture.organisation.id } })).map(({ action }) => action).sort()).toEqual([
+    expect((await db.auditEvent.findMany({ where: { organisationId: fixture.organisation.id, action: { startsWith: "rent_obligation." } } })).map(({ action }) => action).sort()).toEqual([
       "rent_obligation.due",
       "rent_obligation.overdue",
     ]);
-    expect((await db.domainEvent.findMany({ where: { organisationId: fixture.organisation.id } })).map(({ name }) => name).sort()).toEqual([
+    expect((await db.domainEvent.findMany({ where: { organisationId: fixture.organisation.id, name: { startsWith: "rent_obligation." } } })).map(({ name }) => name).sort()).toEqual([
       "rent_obligation.due",
       "rent_obligation.overdue",
     ]);

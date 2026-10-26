@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { PM_BILLING_RULES, PM_PLAN_KEYS, PM_PLANS } from "@/modules/subscriptions/plan-catalog";
 
 type BillingCycle = "monthly" | "annual";
 
@@ -10,6 +11,9 @@ type Plan = {
   description: string;
   monthly: number;
   annual: number;
+  /** Billed monthly only: the annual toggle shows the monthly price. */
+  monthlyOnly?: boolean;
+  pricePrefix?: string;
   badge?: string;
   featured?: boolean;
   cta: string;
@@ -17,65 +21,27 @@ type Plan = {
   highlights: string[];
 };
 
-const propertyPlans: Plan[] = [
-  {
-    name: "Starter",
-    description: "For an individual landlord getting started with a small portfolio.",
-    monthly: 250,
-    annual: 2500,
-    cta: "Start with Starter",
-    href: "/register",
-    highlights: [
-      "Up to 3 properties",
-      "Up to 15 units",
-      "Up to 3 team members",
-      "1 AI employee",
-      "Up to 5 active listings",
-      "5 GB document storage",
-      "Core property, tenant, lease, payment and maintenance tools",
-    ],
-  },
-  {
-    name: "Growth",
-    description: "For a growing property management business with a small team.",
-    monthly: 750,
-    annual: 7500,
-    badge: "Most popular",
-    featured: true,
-    cta: "Choose Growth",
-    href: "/register",
-    highlights: [
-      "Up to 20 properties",
-      "Up to 150 units",
-      "Up to 10 team members",
-      "Up to 5 AI employees",
-      "Up to 50 active listings",
-      "50 GB document storage",
-      "Integrations and workflow automation",
-      "AI property manager and text receptionist",
-      "AI maintenance classification and dispatch",
-    ],
-  },
-  {
-    name: "Scale",
-    description: "For a larger property management company with an unlimited portfolio.",
-    monthly: 2000,
-    annual: 20000,
-    cta: "Choose Scale",
-    href: "/register",
-    highlights: [
-      "Unlimited properties and units",
-      "Up to 50 team members",
-      "Up to 20 AI employees",
-      "Unlimited listings, storage, documents and messages",
-      "Advanced reporting and portfolio intelligence",
-      "Full AI property management",
-      "AI receptionist with text and voice",
-      "Predictive maintenance and voice dispatch",
-      "Outbound voice, call recording and human transfer",
-    ],
-  },
-];
+/** Property-management plans come from the same catalog the billing system enforces. */
+const propertyPlans: Plan[] = PM_PLAN_KEYS.map((key) => PM_PLANS[key]).map((plan) => ({
+  name: plan.name,
+  description: plan.tagline,
+  monthly: plan.monthlyPriceMinor / 100,
+  annual: plan.monthlyPriceMinor / 100,
+  monthlyOnly: true,
+  pricePrefix: plan.priceIsFrom ? "From " : undefined,
+  badge: plan.recommended ? "Recommended" : undefined,
+  featured: plan.recommended,
+  cta: `Start ${PM_BILLING_RULES.trialDays}-day free trial`,
+  href: "/register",
+  highlights: [
+    `Up to ${plan.allowances.units} managed units`,
+    plan.allowances.staff === 1 ? "1 admin user" : `Up to ${plan.allowances.staff} staff users`,
+    plan.allowances.branches === 1 ? "1 branch" : `Up to ${plan.allowances.branches} branches`,
+    `${plan.allowances.aiRepliesMonthly.toLocaleString("en-GH")} AI tenant replies a month`,
+    ...plan.highlights,
+    plan.support,
+  ],
+}));
 
 const professionalPlans: Plan[] = [
   {
@@ -155,22 +121,22 @@ const professionalPlans: Plan[] = [
   },
 ];
 
+const pmPlanList = PM_PLAN_KEYS.map((key) => PM_PLANS[key]);
+const included = (featureKey: string) => pmPlanList.map((plan) => (plan.features.includes(featureKey) ? "Included" : "—"));
 const propertyComparison = [
-  ["Properties", "3", "20", "Unlimited"],
-  ["Units", "15", "150", "Unlimited"],
-  ["Team members", "3", "10", "50"],
-  ["AI employees", "1", "5", "20"],
-  ["Active listings", "5", "50", "Unlimited"],
-  ["Storage", "5 GB", "50 GB", "Unlimited"],
-  ["Integrations", "—", "Included", "Included"],
-  ["Automation", "—", "Included", "Included"],
-  ["AI property manager", "—", "Included", "Included"],
-  ["AI text receptionist", "—", "Included", "Included"],
-  ["AI voice receptionist", "—", "—", "Included"],
-  ["Advanced reporting", "—", "—", "Included"],
-  ["Predictive maintenance", "—", "—", "Included"],
-  ["Portfolio intelligence", "—", "—", "Included"],
-  ["Outbound voice", "—", "—", "Included"],
+  ["Managed units", ...pmPlanList.map((plan) => String(plan.allowances.units))],
+  ["Staff users", ...pmPlanList.map((plan) => String(plan.allowances.staff))],
+  ["Branches", ...pmPlanList.map((plan) => String(plan.allowances.branches))],
+  ["AI tenant replies / month", ...pmPlanList.map((plan) => plan.allowances.aiRepliesMonthly.toLocaleString("en-GH"))],
+  ["Outbound messages / month", ...pmPlanList.map((plan) => plan.allowances.messagesMonthly.toLocaleString("en-GH"))],
+  ["WhatsApp AI tenant assistant", ...included("pm.whatsapp_ai_assistant")],
+  ["Maintenance capture, categorisation and dispatch", ...included("propertyos.maintenance.ai_dispatch")],
+  ["Rent and tenancy reminders", ...included("pm.rent_reminders")],
+  ["Role-based staff permissions", ...included("pm.staff_roles")],
+  ["Routing and escalation rules", ...included("pm.escalation_rules")],
+  ["Supervisor notifications", ...included("pm.supervisor_notifications")],
+  ["Detailed reports", ...included("reporting.advanced")],
+  ["Integrations", ...included("integrations.enabled")],
 ];
 
 const professionalComparison = [
@@ -206,8 +172,9 @@ function PlanCard({
   plan: Plan;
   billingCycle: BillingCycle;
 }) {
-  const amount = billingCycle === "monthly" ? plan.monthly : plan.annual;
-  const period = amount === 0 ? "" : billingCycle === "monthly" ? "/month" : "/year";
+  const monthly = billingCycle === "monthly" || plan.monthlyOnly;
+  const amount = monthly ? plan.monthly : plan.annual;
+  const period = amount === 0 ? "" : monthly ? "/month" : "/year";
 
   return (
     <article
@@ -241,7 +208,7 @@ function PlanCard({
       <div className="mt-6 border-t border-current/10 pt-6">
         <div className="flex items-end gap-2">
           <span className={plan.featured ? "text-4xl font-semibold tracking-tight text-white" : "text-4xl font-semibold tracking-tight text-forest"}>
-            {amount === 0 ? "Free" : formatPrice(amount)}
+            {amount === 0 ? "Free" : `${plan.pricePrefix ?? ""}${formatPrice(amount)}`}
           </span>
           {period && (
             <span className={plan.featured ? "pb-1 text-sm text-white/55" : "pb-1 text-sm text-muted"}>
@@ -250,9 +217,14 @@ function PlanCard({
           )}
         </div>
 
-        {amount > 0 && billingCycle === "annual" && (
+        {amount > 0 && !monthly && (
           <p className={plan.featured ? "mt-2 text-xs text-gold-soft" : "mt-2 text-xs text-emerald"}>
             Equivalent to 10 months of monthly billing.
+          </p>
+        )}
+        {amount > 0 && plan.monthlyOnly && billingCycle === "annual" && (
+          <p className={plan.featured ? "mt-2 text-xs text-white/55" : "mt-2 text-xs text-muted"}>
+            Billed monthly; no annual plan yet.
           </p>
         )}
         {amount === 0 && (
@@ -431,8 +403,9 @@ export function PricingExperience() {
               Plans for landlords and property-management teams.
             </h2>
             <p className="mt-4 text-base leading-7 text-slate-600">
-              Every plan includes the core NesAfric property operating system. Higher tiers expand portfolio
-              limits, team capacity, automation, AI and voice capabilities.
+              Only property management is billed — listing and searching on the marketplace stay free. Every
+              plan starts with a {PM_BILLING_RULES.trialDays}-day free trial when you start managing a property,
+              and nothing is charged automatically.
             </p>
           </div>
 
@@ -443,7 +416,7 @@ export function PricingExperience() {
           </div>
 
           <p className="mt-5 text-xs leading-5 text-slate-600">
-            Prices shown in Ghana cedis (GHS). Annual plans are priced at the equivalent of 10 monthly payments.
+            Prices shown in Ghana cedis (GHS), billed monthly. Allowances are monthly; nothing is unlimited.
           </p>
         </div>
       </section>
@@ -513,7 +486,7 @@ export function PricingExperience() {
           <div className="mt-10">
             <h3 className="mb-4 text-lg font-semibold text-forest">Property Management</h3>
             <ComparisonTable
-              headings={["Capability", "Starter", "Growth", "Scale"]}
+              headings={["Capability", ...pmPlanList.map((plan) => plan.name)]}
               rows={propertyComparison}
             />
           </div>
@@ -538,7 +511,7 @@ export function PricingExperience() {
                   Start with the workspace that matches your business today.
                 </h2>
                 <p className="mt-4 text-sm leading-6 text-muted">
-                  Property owners and managers can start with Starter. Real-estate professionals can begin on
+                  Property owners and managers start with a free trial, then choose Essential, Growth or Enterprise. Real-estate professionals can begin on
                   Marketplace Free during the Ghana launch and move to a paid tier when they need more inventory,
                   team capacity, promotion, analytics or AI sales tools.
                 </p>

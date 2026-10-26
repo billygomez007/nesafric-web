@@ -22,6 +22,7 @@ import { loadDraft } from "@/modules/whatsapp-assistant/onboarding/draft";
 import { createJobHandlers } from "@/platform/jobs/handlers";
 import { runDueJobs } from "@/platform/jobs/runner";
 import { db } from "@/platform/database/client";
+import { PM_TRIAL_PLAN } from "@/modules/subscriptions/plan-catalog";
 import { connectWhatsAppChannel } from "./helpers/whatsapp-channel";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -174,6 +175,9 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     expect(review).toContain("up to GHS 500");
     const saved = await say("confirm");
     expect(saved).toContain("Owusu Homes: 2 properties, 5 units, 2 tenants");
+    // Saving the first units over WhatsApp activates property management: the 30-day trial, with its end date.
+    expect(saved).toContain("30-day free property-management trial runs until");
+    expect(saved).toContain("No payment is taken automatically");
     expect(saved).toContain("pending verification");
     // No invitation template is configured in tests, so nothing is sent.
     expect(saved).toContain("could not be sent yet");
@@ -220,7 +224,8 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     await say("Tema");
     await say("skip");
     await say("1");
-    await say("20");
+    // One more unit than the free trial's managed-unit capacity.
+    await say(String(PM_TRIAL_PLAN.allowances.units + 1));
     await say("skip");
     await say("no");
     await say("later");
@@ -228,7 +233,10 @@ describe("PostgreSQL WhatsApp landlord onboarding", () => {
     await say("no");
     await say("0");
     await say("me");
-    expect(await say("confirm")).toContain("Not saved yet");
+    const reply = await say("confirm");
+    expect(reply).toContain("Not saved yet");
+    expect(reply).toContain("Essential");
+    expect(reply).toContain("/settings/billing");
     expect((await draftFor()).status).toBe("IN_PROGRESS");
     expect(await db.property.count({ where: { name: "Big Estate" } })).toBe(0);
   });

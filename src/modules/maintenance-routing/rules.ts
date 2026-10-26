@@ -1,3 +1,5 @@
+import { assertOperational } from "@/modules/entitlements/service";
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { z } from "zod";
 import { db } from "@/platform/database/client";
 import type { Prisma } from "@/platform/database/generated/client";
@@ -72,6 +74,8 @@ export async function listRoutingRules(userId: string, organisationId: string) {
 export async function createRoutingRule(userId: string, organisationId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceManage);
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceAssign);
+  // Configurable routing and escalation rules are a Growth feature.
+  await assertOperational(organisationId, ENTITLEMENTS.pmEscalationRulesEnabled.key);
   const data = createRuleSchema.parse(input);
   // A rule that pre-authorises spend needs the same right as approving a quote (as on update).
   if (data.authorizationMode === "PRE_AUTHORIZED" || data.spendingCapMinor) await requirePermission(userId, organisationId, PERMISSIONS.maintenanceApprove);
@@ -85,6 +89,7 @@ export async function createRoutingRule(userId: string, organisationId: string, 
 
 export async function updateRoutingRule(userId: string, organisationId: string, ruleId: string, input: unknown) {
   await requirePermission(userId, organisationId, PERMISSIONS.maintenanceManage);
+  await assertOperational(organisationId, ENTITLEMENTS.pmEscalationRulesEnabled.key);
   const data = updateRuleSchema.parse(input);
   // Changing who is sent work, or what they may spend, needs the same rights as authorising it.
   if (data.authorizationMode !== undefined || data.spendingCapMinor !== undefined || data.autoDispatch !== undefined || data.primaryProviderOrganisationId !== undefined || data.backupProviderOrganisationIds !== undefined) {

@@ -41,13 +41,31 @@ export type BillingChargeResult = {
   failureReason?: string;
 };
 
-export type NormalizedBillingEventType = "INVOICE_PAID" | "INVOICE_FAILED" | "SUBSCRIPTION_CANCELLED" | "SUBSCRIPTION_UPDATED";
+/** A one-off hosted checkout for a plan period (e.g. mobile money or card). The provider returns
+ * a URL to send the customer to and a reference its webhook will quote back. */
+export type BillingCheckoutRequest = {
+  internalReference: string;
+  organisationId: string;
+  customerName: string;
+  customerEmail?: string;
+  planKey: string;
+  billingCycle: "MONTHLY" | "ANNUAL";
+  currencyCode: string;
+  amountMinor: string;
+  returnUrl: string;
+};
+
+export type BillingCheckoutResult = { checkoutRef: string; checkoutUrl: string };
+
+export type NormalizedBillingEventType = "INVOICE_PAID" | "INVOICE_FAILED" | "SUBSCRIPTION_CANCELLED" | "SUBSCRIPTION_UPDATED" | "CHECKOUT_PAID" | "CHECKOUT_FAILED";
 
 export type NormalizedBillingEvent = {
   eventKey: string;
   eventType: NormalizedBillingEventType;
   customerRef?: string;
   subscriptionRef?: string;
+  /** Checkout events only: the `checkoutRef` returned by `createCheckout`. */
+  checkoutRef?: string;
   providerInvoiceRef?: string;
   amountMinor?: string;
   currencyCode?: string;
@@ -65,6 +83,9 @@ export interface BillingProviderAdapter {
   createCustomer(request: BillingCustomerRequest): Promise<BillingCustomerResult>;
   createRecurringSubscription(request: BillingSubscriptionRequest): Promise<BillingSubscriptionResult>;
   cancelRecurringSubscription(subscriptionRef: string): Promise<void>;
+  /** Opens a hosted checkout. The result only says where to send the customer: payment is
+   * confirmed solely by a signed `CHECKOUT_PAID` webhook, never by the customer returning. */
+  createCheckout(request: BillingCheckoutRequest): Promise<BillingCheckoutResult>;
   /** Synchronously attempts to charge the current period. Real providers are normally
    * asynchronous (the true outcome arrives via webhook) but every adapter must still return a
    * best-effort immediate result so the deterministic lifecycle sweep (`advanceOverdueSubscriptions`)

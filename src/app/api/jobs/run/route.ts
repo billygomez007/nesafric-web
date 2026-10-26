@@ -8,6 +8,7 @@ import { scheduleDueDigests } from "@/modules/staff-notifications/service";
 import { dispatchUtilityEvents } from "@/modules/whatsapp-templates/dispatch";
 import { scheduleViewingReminders } from "@/modules/whatsapp-assistant/viewings";
 import { scheduleUploadAndDraftCleanup } from "@/modules/documents/cleanup";
+import { advanceOverdueSubscriptions } from "@/modules/subscriptions/lifecycle";
 
 /**
  * Drains due jobs and prunes expired guest-write rate-limit / idempotency rows. The sweep runs even
@@ -18,6 +19,8 @@ async function runScheduledWork() {
   await dispatchUtilityEvents().catch(() => console.error("WhatsApp utility dispatch failed."));
   await scheduleViewingReminders().catch(() => console.error("WhatsApp viewing reminder scheduling failed."));
   await scheduleUploadAndDraftCleanup().catch(() => console.error("Cleanup scheduling failed."));
+  // Property-management plans: trial reminders, trial expiry, renewals, grace periods (idempotent).
+  await advanceOverdueSubscriptions().catch(() => console.error("Subscription lifecycle sweep failed."));
   try {
     await runDueJobs(jobHandlers);
   } finally {

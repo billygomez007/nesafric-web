@@ -1,3 +1,5 @@
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
+import { hasFeature } from "@/modules/entitlements/service";
 import { Prisma, type AISeverity, type AIAutonomyLevel } from "@/platform/database/generated/client";
 import { createAIProposal, createAISession, executeAIActionThroughDomainService, getAIActionPolicyMetadata, listAIActionPolicyMetadata, AUTO_EXECUTE_ACTION_ALLOWLIST, PROHIBITED_AUTONOMOUS_ACTIONS } from "@/modules/ai/service";
 import { PERMISSIONS, requirePermission } from "@/platform/authorization/permissions";
@@ -585,6 +587,12 @@ export async function enqueueProactiveEvaluation(userId: string, organisationId:
 }
 
 export async function runProactiveEvaluationJob(organisationId: string, now = new Date()) {
+  // Proactive AI operations are a property-management feature: without an active plan nothing is
+  // evaluated, but the job keeps its slot so it resumes as soon as a plan is active again.
+  if (!(await hasFeature(organisationId, ENTITLEMENTS.pmCoreEnabled.key))) {
+    await scheduleProactiveEvaluation(organisationId, new Date(now.getTime() + 15 * 60_000));
+    return null;
+  }
   const result = await evaluateProactiveOperations(organisationId, now);
   const next = new Date(now.getTime() + 15 * 60_000);
   await scheduleProactiveEvaluation(organisationId, next);

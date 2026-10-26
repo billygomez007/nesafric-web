@@ -31,3 +31,20 @@ export function organisationReadOnly(status: string) {
     { status },
   );
 }
+
+/**
+ * Property management needs an active trial or paid plan. `status` says why (never activated,
+ * trial expired, payment pending, suspended, cancelled) so the UI and WhatsApp can say exactly
+ * what to do next. Data stays readable; billing, settings, support, export and the marketplace are
+ * never behind this error.
+ */
+export function managementSubscriptionRequired(status: string, feature?: string) {
+  const message = status === "NOT_ACTIVATED"
+    ? "Property management has not been activated for this organisation."
+    : status === "PAYMENT_PENDING"
+      ? "Your payment is being confirmed. Property management features will resume as soon as the payment provider confirms it."
+      : status === "SUSPENDED"
+        ? "Property management is suspended for this organisation. Contact NesAfric support."
+        : "Your property-management plan is not active. Choose a plan to continue managing your properties — your data is safe and still available.";
+  return new AppError("PM_SUBSCRIPTION_REQUIRED", 402, message, { status, ...(feature ? { feature } : {}), billingPath: "/settings/billing" });
+}

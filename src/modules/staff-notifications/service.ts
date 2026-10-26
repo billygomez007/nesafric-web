@@ -2,6 +2,8 @@ import { db } from "@/platform/database/client";
 import { PERMISSIONS } from "@/platform/authorization/permissions";
 import { membershipHasPermission } from "@/platform/authorization/policy";
 import { queueOfficialText } from "@/modules/whatsapp-assistant/outbound";
+import { hasFeature } from "@/modules/entitlements/service";
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 
 const DEFAULTS = { digestEnabled: true, digestHour: 18, noActivitySummary: false, attentionInDigest: false, immediateReasons: [] as string[] };
 const OPEN = ["REPORTED", "TRIAGED", "AWAITING_APPROVAL", "APPROVED", "ASSIGNED", "IN_PROGRESS"] as const;
@@ -20,8 +22,12 @@ export async function recipientsFor(organisationId: string, memberId?: string | 
     where: { organisationId, status: "ACTIVE", archivedAt: null, ...(memberId ? { id: memberId } : {}) },
     include: { user: { select: { id: true, displayName: true, channelIdentities: { where: { channel: "WHATSAPP", verifiedAt: { not: null }, optedOutAt: null }, select: { address: true }, take: 1 } } }, notificationPreference: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } },
   });
+  // Notifying staff other than the owner is supervisor notifications (Growth and above). Owners
+  // are always told, whatever the plan, so a safety escalation is never lost.
+  const supervisors = await hasFeature(organisationId, ENTITLEMENTS.pmSupervisorNotificationsEnabled.key);
   return members
     .filter((member) => memberId || membershipHasPermission(member.roles, PERMISSIONS.maintenanceApprove))
+    .filter((member) => supervisors || member.roles.some((entry) => entry.role.key === "organisation_owner"))
     .map((member) => ({
       memberId: member.id, userId: member.userId, displayName: member.user.displayName, phone: member.user.channelIdentities[0]?.address ?? null,
       preference: member.notificationPreference ?? DEFAULTS,
