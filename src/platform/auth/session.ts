@@ -1,19 +1,44 @@
 import { createHash, randomBytes } from "crypto";
 import { cookies, headers } from "next/headers";
 import { db } from "@/platform/database/client";
-import { unauthenticated } from "@/platform/errors";
+import { AppError, unauthenticated } from "@/platform/errors";
+import { withAccountUnchanged, type AccountState } from "./account-lock";
 
 const COOKIE_NAME = "propertyos_session";
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 14;
 export const hashSessionToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
-export async function createSessionRecord(userId: string, token = randomBytes(32).toString("base64url")) {
-  const session = await db.session.create({ data: { userId, tokenHash: hashSessionToken(token), expiresAt: new Date(Date.now() + sessionDurationMs) } });
+/**
+ * Ties a password sign-in's session to the account state it authenticated. Checking a password
+ * (argon2) takes a moment; if meanwhile the account's real owner proves the email, or the email or
+ * phone changes, the session is refused (see the concurrency model in `account-lock.ts`).
+ */
+export type PasswordSessionGuard = { account: AccountState };
+
+export async function createSessionRecord(userId: string, token = randomBytes(32).toString("base64url"), guard?: PasswordSessionGuard) {
+  const data = { userId, tokenHash: hashSessionToken(token), expiresAt: new Date(Date.now() + sessionDurationMs) };
+  if (!guard) return { session: await db.session.create({ data }), token };
+  const session = await withAccountUnchanged(
+    userId,
+    guard.account,
+    { stale: () => new AppError("INVALID_CREDENTIALS", 401, "Email or password is incorrect.") },
+    (tx) => tx.session.create({ data }),
+  );
   return { session, token };
 }
 
-export async function createSession(userId: string) {
-  const { token } = await createSessionRecord(userId);
+export async function createSession(userId: string, guard?: PasswordSessionGuard) {
+  const { token } = await createSessionRecord(userId, undefined, guard);
+  await setSessionCookie(token);
+}
+
+/** A fresh session token and the row that stores it (hashed), for callers creating it in their own transaction. */
+export function newSessionData(userId: string) {
+  const token = randomBytes(32).toString("base64url");
+  return { token, data: { userId, tokenHash: hashSessionToken(token), expiresAt: new Date(Date.now() + sessionDurationMs) } };
+}
+
+export async function setSessionCookie(token: string) {
   const store = await cookies();
   store.set(COOKIE_NAME, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: sessionDurationMs / 1000 });
 }
@@ -52,6 +77,12 @@ export async function getOptionalUser() {
 export async function destroySession() {
   const token = await readSessionToken();
   if (token) await db.session.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+}
+
+/** The hash of the session token this request authenticated with, if any. */
+export async function currentSessionTokenHash() {
+  const token = await readSessionToken();
+  return token ? hashSessionToken(token) : null;
 }
 
 export async function requireUser() {

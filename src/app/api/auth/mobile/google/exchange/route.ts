@@ -1,4 +1,4 @@
-import { mobileSessionResponse } from "@/platform/auth/mobile-session";
+import { mobileSessionJson } from "@/platform/auth/mobile-session";
 import { redeemMobileHandoff } from "@/platform/auth/mobile-handoff";
 import { errorResponse } from "@/platform/errors";
 
@@ -12,8 +12,9 @@ export const maxDuration = 30;
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => null);
-    const user = await redeemMobileHandoff(body?.code, body?.codeVerifier);
-    return await mobileSessionResponse(user);
+    // Consumes the code and creates the session in one locked transaction (see redeemMobileHandoff).
+    const { user, session, token } = await redeemMobileHandoff(body?.code, body?.codeVerifier);
+    return mobileSessionJson(user, session, token);
   } catch (error) {
     return errorResponse(error);
   }

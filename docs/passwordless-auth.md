@@ -37,11 +37,38 @@ account signs into that account (`existingAccount: true`) instead of creating a 
 | Phone-only user adds an email (link) | Email added; Google with that email reaches the same user |
 | Email-only user adds a phone (link) | Phone added to the same user |
 | Phone/email already belongs to another account | `409 IDENTIFIER_IN_USE`; nothing changes. Accounts are never merged implicitly |
-| Existing password account signs in with an email code | Same user; password hash untouched |
+| Existing password account with a **verified** email signs in with an email code or Google | Same user; password and other sessions untouched |
+| Existing account whose email was **never verified** is proved by an email code or Google | Same user, now verified; the password, every earlier session and any linked phone are removed, because whoever set them never proved the address (`claimEmailOnFirstProof`) |
 
-Legacy password routes (`/api/auth/login`, `/api/auth/register`, `/api/auth/mobile/session`,
-`/api/account/password`) remain for existing clients with their rate limiting. Accounts without a
-password get `INVALID_CREDENTIALS` / `PASSWORD_NOT_SET` there.
+Legacy password routes (`/api/auth/login`, `/api/auth/mobile/session`, `/api/account/password`)
+remain for existing clients with their rate limiting. Accounts without a password get
+`INVALID_CREDENTIALS` / `PASSWORD_NOT_SET` there. `POST /api/auth/register` is retired: it answers
+`410 REGISTRATION_RETIRED` to every request and creates nothing.
+
+Changing a password account's email is two steps: `PATCH /api/account/email` (current password)
+sends a code to the new address and answers `202` with the challenge; the email only changes when
+that code is verified at `POST /api/account/identifiers/verify`, which also signs out the account's
+other sessions.
+
+Concurrency (`src/platform/auth/account-lock.ts`): the `User` row is the single serialization
+authority. First email proof, password sign-in session issuance, password change and identifier
+link/email change each lock it (`SELECT … FOR UPDATE`, first statement, no other `User` row), and
+all but the first proof commit only if the account's sign-in state (password hash, email, email
+verified, phone, phone verified) is exactly what was authenticated — and, for work on a signed-in
+session, that session still exists. Sessions are only created and revoked inside those
+transactions, so no stale sign-in, password change or link can recreate access after an owner's
+first proof or an email change.
+
+Platform-admin bootstrap (`PLATFORM_ADMIN_BOOTSTRAP_EMAILS`) only matches verified emails, and every
+authorization read of a principal (`findUsablePlatformPrincipal`) accepts an `ENV_BOOTSTRAP`
+principal only while it is ACTIVE, its user's current email is verified, and that email is still on
+the list — including principals granted before this rule existed. A missing or stale list fails
+closed; no row is deleted. `MANUAL` principals are unaffected. Keep the production list set and
+current for every bootstrap admin.
+
+The mobile Google handoff is redeemed under the same account lock: code consumption, PKCE check and
+session creation happen in one transaction, and a handoff issued before any change to the account
+(its `User` row written after the handoff was created) is stale and creates no session.
 
 Features that need an email (team invitations, account emails) skip or explain when a phone-only
 account has none, rather than failing.

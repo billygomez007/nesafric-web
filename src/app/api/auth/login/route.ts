@@ -1,3 +1,4 @@
+import { accountState } from "@/platform/auth/account-lock";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -33,7 +34,8 @@ export async function POST(request: Request) {
       true,
     );
 
-    await createSession(user.id);
+    // Bound to the account state just authenticated (see PasswordSessionGuard).
+    await createSession(user.id, { account: accountState(user) });
 
     const store = await cookies();
 

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { verifyOtpLink } from "@/modules/identity/otp";
 import { publicUser } from "@/modules/identity/service";
-import { requireUser } from "@/platform/auth/session";
+import { accountState } from "@/platform/auth/account-lock";
+import { currentSessionTokenHash, requireUser } from "@/platform/auth/session";
 import { errorResponse } from "@/platform/errors";
 
 /**
@@ -12,7 +13,12 @@ import { errorResponse } from "@/platform/errors";
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
-    const updated = await verifyOtpLink(user.id, await request.json().catch(() => null));
+    // Bound to the state this request authenticated with; an email change signs out other
+    // sessions in the same transaction (see verifyOtpLink and account-lock.ts).
+    const updated = await verifyOtpLink(
+      { userId: user.id, account: accountState(user), sessionTokenHash: await currentSessionTokenHash() },
+      await request.json().catch(() => null),
+    );
     return NextResponse.json(publicUser(updated), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return errorResponse(error);
