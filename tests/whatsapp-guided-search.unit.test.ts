@@ -100,3 +100,20 @@ describe("step-by-step property search", () => {
     expect(describeFilters({ listingType: "SALE", category: "HOUSE", bedroomsMin: 4, location: "Kumasi", maxPriceMinor: "300000000", currencyCode: "GHS" })).toBe("Filters: To buy, House, 4+ bedrooms, in Kumasi, up to GHS 3,000,000.");
   });
 });
+
+describe("no matching properties", () => {
+  it("offers Change filters and New search buttons, and both work", async () => {
+    const { say, tools } = setup();
+    await say("2 bedroom apartment to rent in Osu under 5000 a month");
+    const none = await advanceConversation({ state: { workflow: "property_search", property: { listingType: "RENT", location: "Osu", country: "GH", currencyCode: "GHS" } }, body: "search", kind: "text", phone: "233241234567", conversationId: "c", messageId: "m", defaultCountry: "GH", defaultCurrency: "GHS" }, { tools: tools as never, interpret: (async (body: string, state: never) => interpretLocally(body, state)) as never });
+    expect(none.reply).toContain("No published, available properties match.");
+    expect(none.interactive).toMatchObject({ type: "button", buttons: [{ id: "change filters", title: "Change filters" }, { id: "new search", title: "New search" }] });
+    expect(whatsappInteractiveSchema.safeParse(none.interactive).success).toBe(true);
+
+    const change = await advanceConversation({ state: none.state, body: "change filters", kind: "text", phone: "233241234567", conversationId: "c", messageId: "m", defaultCountry: "GH", defaultCurrency: "GHS" }, { tools: tools as never, interpret: vi.fn() as never });
+    expect(change.reply).toContain("Tell me what to change");
+    expect(change.state).toMatchObject({ workflow: "property_search", property: { location: "Osu" } });
+    const fresh = await advanceConversation({ state: none.state, body: "new search", kind: "text", phone: "233241234567", conversationId: "c", messageId: "m", defaultCountry: "GH", defaultCurrency: "GHS" }, { tools: tools as never, interpret: vi.fn() as never });
+    expect(fresh.state).toMatchObject({ workflow: "idle" });
+  });
+});
