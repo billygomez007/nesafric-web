@@ -17,7 +17,7 @@ import { answerLandlord } from "./landlord";
 import { advanceBusiness } from "./business";
 import { invitationReply } from "@/modules/whatsapp-templates/invitation-reply";
 import { searchAgents } from "./tools";
-import { handleViewingCommand, handleViewingOutcome, openViewingNegotiation, viewingReference } from "./viewings";
+import { handleViewingCommand, handleViewingOutcome, openViewingNegotiation } from "./viewings";
 import { COMMERCIAL_PROMPT, commercialChoices, FIND_PROPERTY_PROMPT, findPropertyChoices, greetingLine, MORE_OPTIONS, OFFICIAL_ALIASES, OFFICIAL_MENU_COMMANDS, rentOrBuyButtons, VIEWING_PROMPT, viewingButtons, welcomeReply } from "./welcome";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** The sender's WhatsApp profile name, as Meta sent it (untrusted, display only). */ profileName?: string };
@@ -192,11 +192,8 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   // A viewing just requested in the chat: ask the listing team now, on WhatsApp where possible.
   const requested = result.state.lastRequest?.viewingId;
   if (requested && requested !== state.lastRequest?.viewingId) {
-    const negotiation = await (dependencies.openViewing ?? openViewingNegotiation)(requested);
-    const reference = viewingReference(requested);
-    return { ...result, reply: negotiation.teamReachable
-      ? `Viewing request ${reference} sent to the listing team. I'll message you here when they accept or suggest another time. It is not confirmed until then.`
-      : `Viewing request ${reference} saved. The listing team will confirm the time. Reply status to check it.` };
+    await (dependencies.openViewing ?? openViewingNegotiation)(requested);
+    return result;
   }
   // Anything not understood on the first turn, or between tasks, gets the welcome menu.
   if (state.workflow === "idle" && result.reply.startsWith("Would you like to find a property, find a service provider")) return { ...result, ...welcomeReply(await greeting(), "I did not catch that.\n\n") };

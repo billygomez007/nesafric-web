@@ -40,6 +40,8 @@ export const assistantStateSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   message: z.string().trim().max(5_000).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
+  /** The day chosen in the viewing day list, before a time is picked (YYYY-MM-DD, Ghana time). */
+  viewingDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   /** Step-by-step property search: on when started from the menu, the step asked, the steps answered. */
   guided: z.boolean().default(false),
   searchStep: z.enum(["type", "bedrooms", "area", "budget"]).optional(),
