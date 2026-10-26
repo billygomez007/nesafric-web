@@ -181,7 +181,7 @@ async function decide(organisationId: string, conversation: { id: string; status
   const rawMedia = metadata.media as { id?: unknown; mime_type?: unknown } | undefined;
   const media = typeof rawMedia?.id === "string" ? { id: rawMedia.id, mimeType: typeof rawMedia.mime_type === "string" ? rawMedia.mime_type : undefined } : undefined;
   const result = isOfficialWhatsAppOrganisation(organisationId)
-    ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined, profileName: typeof metadata.profileName === "string" ? metadata.profileName : undefined })
+    ? await advanceOfficialConversation({ ...input, organisationId, media, replyTo: message.externalReferenceId ?? undefined, profileName: typeof metadata.profileName === "string" ? metadata.profileName : undefined, flowResponse: typeof metadata.flowResponse === "string" ? metadata.flowResponse : undefined })
     : await advanceConversation(input);
   if (result.reply.length > 4096) throw new Error("Assistant reply exceeds WhatsApp text limit.");
   return { kind: "reply", state: result.state, reply: result.reply, status: result.handoff ? "HUMAN_REQUIRED" : "AI_ACTIVE", handoff: Boolean(result.handoff), redactInbound: "redactInbound" in result && Boolean(result.redactInbound), workflow: result.state.workflow, step: result.state.step, replyMetadata: "replyMetadata" in result ? result.replyMetadata as Record<string, unknown> | undefined : undefined, interactive: result.interactive, extras: result.extras };

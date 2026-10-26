@@ -16,8 +16,8 @@ import {
 } from "@/modules/listings/service";
 import { assertMarketplaceOperational, assertWritableMarketplaceProfessional } from "@/modules/marketplace-professionals/entitlements";
 import { MARKETPLACE_ENTITLEMENTS } from "@/modules/marketplace-professionals/catalog";
-import { claimFlowDraftForSubmission, finishFlowDraft, getFlowDraft, startFlowDraft, type FlowDraft } from "./drafts";
-import { advanceGuided, promptFor, type GuidedFlow, type Step } from "./guided";
+import { applyFlowDraftChange, claimFlowDraftForSubmission, finishFlowDraft, getFlowDraft, startFlowDraft, type FlowDraft } from "./drafts";
+import { advanceGuided, prefillGuided, promptFor, type GuidedFlow, type Step } from "./guided";
 import { amountMinor, buttons, command, formatMinor, isSkip, numbered, paragraph, pickNumbers, region, regionPrompt, text, type FlowInput, type FlowResult } from "./common";
 import { addListingPhoto, type MediaDownloader } from "./media";
 import { polishDescription } from "./polish";
@@ -454,4 +454,61 @@ async function submitListing(draft: FlowDraft, input: FlowInput, revision: numbe
     reply: `Submitted for review. Status: ${listing.status === "PENDING_REVIEW" ? "submitted for review (not yet published)" : listing.status.toLowerCase()}. NesAfric checks the listing before it is published; I'll let you know here if you have WhatsApp updates switched on.\nView it: ${editLink(data)}`,
     exit: true,
   };
+}
+
+type Choice = { id: string; title: string; description?: string };
+const choiceTitle = (value: string) => value.length > 30 ? `${value.slice(0, 29)}…` : value;
+
+/**
+ * Choices for the List Property WhatsApp Flow. Each option id is exactly the reply the matching
+ * chat step accepts (a menu number), so `startListingFromFlow` validates the answers with the
+ * same steps. `business` and `purpose`/`category` (when known) narrow properties and price units.
+ */
+export async function listingFlowChoices(userId: string, picked: { business?: string; purpose?: string; category?: string } = {}) {
+  const businesses = await listingBusinesses(userId);
+  const business = businesses[Number(picked.business ?? "1") - 1] ?? businesses[0];
+  const properties = business?.kind === "ORG" ? (await organisationProperties(business.organisationId)).flatMap((property) => property.units.length ? property.units.map((unit) => `${property.name}, ${unit.name}`) : [property.name]) : [];
+  const category = WHATSAPP_TYPES[Number(picked.category ?? "0") - 1]?.[0];
+  const purpose = picked.purpose === "SALE" ? "SALE" : "RENT";
+  const units: Choice[] = purpose === "SALE"
+    ? (category === "LAND" ? [{ id: "1", title: "Total price" }, { id: "2", title: "Per square metre" }] : [])
+    : priceUnitsFor("RENT", category).filter((unit) => unit !== "CUSTOM" && unit !== "PER_KM").map((unit, index) => ({ id: String(index + 1), title: PRICE_UNIT_LABELS[unit] }));
+  const number = (items: readonly string[]): Choice[] => items.map((title, index) => ({ id: String(index + 1), title: choiceTitle(title) }));
+  return {
+    businesses: number(businesses.map((item) => `${item.name}${item.kind === "ORG" ? " (your properties)" : ""}`)),
+    hasBusinesses: businesses.length > 0,
+    isLandlord: business?.kind === "ORG",
+    properties: number(properties),
+    categories: number(WHATSAPP_TYPES.map(([, label]) => label)),
+    units,
+    furnishing: number(FURNISHING.map(([, label]) => label)),
+    amenities: number([...LISTING_AMENITIES]),
+    authorities: number(AUTHORITIES.map((item) => item.label)),
+    evidenceTypes: number(LISTING_AUTHORITY_EVIDENCE_TYPES.map((type) => EVIDENCE_LABELS[type])),
+  };
+}
+
+/**
+ * Starts a property listing from List Property Flow answers (step id → chat reply). Every answer
+ * goes through its chat step; the draft listing is created (the photos step's `enter`) exactly as
+ * in the chat, and the chat continues with photos, review and submission for NesAfric review.
+ */
+export async function startListingFromFlow(input: FlowInput, answers: Record<string, string>): Promise<{ error: string; step: string } | { draftId: string; reply: string }> {
+  const businesses = await listingBusinesses(input.userId);
+  if (!businesses.length) return { error: "To list a property, register first: an agency, an agent profile, or your properties as a landlord.", step: "business" };
+  const { draft } = await startFlowDraft({ address: input.address, userId: input.userId, kind: "PROPERTY_LISTING", step: "purpose", data: { businesses, business: 0, amenities: [], properties: [] }, messageId: input.messageId });
+  if (draft.listingId || draft.step === "photos" || draft.step === "review") {
+    return { error: "You already have a property listing in progress. Reply resume in the chat to finish it first.", step: "business" };
+  }
+  const flow = listingFlow();
+  const prefilled = await prefillGuided(flow, flow.read({ businesses, business: 0, amenities: [], properties: [] }), answers, input);
+  const [field, message] = Object.entries(prefilled.errors)[0] ?? [];
+  if (field) return { error: message, step: field };
+  if (prefilled.step !== "photos") return { error: "Some details are missing. Please check the form.", step: prefilled.step };
+  const synced = await syncListing(prefilled.data, input);
+  if ("error" in synced) return { error: synced.error, step: "photos" };
+  const result = await applyFlowDraftChange(draft.id, input.userId, `${input.messageId}:answers`, () => ({ step: "photos", data: synced.data as Record<string, unknown> }));
+  if (!result.draft) return { error: "This listing draft is no longer open.", step: "business" };
+  const prompt = await promptFor(flow, result.draft);
+  return { draftId: draft.id, reply: prompt.reply };
 }

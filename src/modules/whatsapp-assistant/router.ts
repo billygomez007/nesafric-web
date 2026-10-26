@@ -1,3 +1,4 @@
+import { completeFlow, formsMenu, openForm } from "@/modules/whatsapp-flows/completion";
 import { AppError } from "@/platform/errors";
 import { maskPhone } from "@/platform/identity/phone";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
@@ -21,7 +22,7 @@ import { searchAgents } from "./tools";
 import { handleViewingCommand, handleViewingOutcome, openViewingNegotiation } from "./viewings";
 import { COMMERCIAL_PROMPT, commercialChoices, FIND_PROPERTY_PROMPT, findPropertyChoices, greetingLine, MORE_OPTIONS, OFFICIAL_ALIASES, OFFICIAL_MENU_COMMANDS, rentOrBuyButtons, VIEWING_PROMPT, viewingButtons, welcomeReply } from "./welcome";
 
-export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** The sender's WhatsApp profile name, as Meta sent it (untrusted, display only). */ profileName?: string };
+export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** The sender's WhatsApp profile name, as Meta sent it (untrusted, display only). */ profileName?: string; /** A finished WhatsApp Flow's response_json. */ flowResponse?: string };
 export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive; /** Messages sent after the reply, in order (property cards). */ extras?: Array<{ body: string; interactive?: WhatsAppInteractive }> };
 
 const START_ONBOARDING = /^(register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
@@ -119,6 +120,19 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
     if (pick === "property services") input = { ...input, body: "service provider" };
     if (state.workflow === "agent_search" && command === "resume") return { state: { ...state, paused: false }, reply: AGENT_AREA_PROMPT };
     if (state.workflow === "agent_search" && !state.paused && !target && !["menu", "cancel", "support", "resume"].includes(command)) return findAgents(input.body.trim(), state, reset, dependencies);
+  }
+
+  // WhatsApp Flows: a finished form, or the forms menu.
+  if (input.kind === "flow") {
+    const completed = await completeFlow({ phone: input.phone, organisationId: input.organisationId, flowResponse: input.flowResponse }, state, reset);
+    if (completed.command) return advanceOfficialConversation({ ...input, kind: "text", body: completed.command, flowResponse: undefined }, dependencies);
+    return { state: completed.state, reply: completed.reply, handoff: completed.handoff, interactive: completed.interactive };
+  }
+  if (input.kind === "text" && state.workflow === "idle") {
+    const formsInput = { address: whatsappAddress(input.phone), organisationId: input.organisationId };
+    const picked = command.match(/^form (\d{1,2})$/);
+    const forms = command === "forms" ? formsMenu(formsInput, state) : picked ? openForm(Number(picked[1]), formsInput, state) : null;
+    if (forms) return { state: forms.state, reply: forms.reply, interactive: forms.interactive };
   }
 
   // Onboarding keeps its progress in its own draft, so it survives conversation resets.
