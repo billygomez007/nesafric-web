@@ -11,7 +11,9 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
   const trade = input.match(/\b(plumb(?:er|ing)?s?|electric(?:ian|al)?s?|carpent(?:er|ry)s?|paint(?:er|ing)s?|clean(?:er|ing)s?|mason(?:ry)?s?|architects?|surveyors?|pest control|moving|security|air conditioning|property manag(?:er|ement))\b/);
   if (trade || input === "2" || /service provider/.test(input) || state.workflow === "service_search") {
     const location = input.match(/\b(?:in|near|around|at)\s+(.+?)(?:[.!?]|$)/)?.[1]?.trim();
-    return { intent: "service_search", service: { ...(trade ? { q: trade[0] } : {}), ...(location ? { city: location } : state.workflow === "service_search" && state.service.q && !state.service.city ? { city: input } : {}) } };
+    // Asked "What service do you need?": the answer is the service, whatever trade it names.
+    const asked = state.workflow === "service_search" && !state.service.q && !trade && !location && input.length >= 2 && input.length <= 200 && input !== "2";
+    return { intent: "service_search", service: { ...(trade ? { q: trade[0] } : asked ? { q: input } : {}), ...(location ? { city: location } : state.workflow === "service_search" && state.service.q && !state.service.city ? { city: input } : {}) } };
   }
   const property: NonNullable<Interpretation["property"]> = {};
   if (/\b(rent|renting|rental)\b/.test(input)) property.listingType = "RENT";
