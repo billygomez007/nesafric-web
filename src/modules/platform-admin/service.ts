@@ -102,19 +102,22 @@ export async function getOrganisationDetailForPlatform(principal: PlatformPrinci
   // who registered and completed Marketplace Professional onboarding but never set up PropertyOS
   // management. `getEntitlementSnapshot` requires an active subscription, so it's skipped (not
   // treated as an error) rather than crashing the entire admin view for such an organisation.
-  const [invoices, overrides, statusHistory, supportSessions, entitlements] = await Promise.all([
+  const [invoices, overrides, statusHistory, supportSessions, entitlements, checkouts, trialGrant, subscriptionEvents] = await Promise.all([
     db.subscriptionInvoice.findMany({ where: { organisationId }, orderBy: { periodStart: "desc" }, take: 24 }),
     db.organisationEntitlementOverride.findMany({ where: { organisationId }, orderBy: { createdAt: "desc" } }),
     db.subscriptionStatusHistory.findMany({ where: { organisationId }, orderBy: { createdAt: "desc" }, take: 50 }),
     db.platformSupportSession.findMany({ where: { organisationId }, orderBy: { startedAt: "desc" }, take: 20 }),
     organisation.subscription ? getEntitlementSnapshot(organisationId) : Promise.resolve(null),
+    db.subscriptionCheckout.findMany({ where: { organisationId }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, status: true, amountMinor: true, currencyCode: true, billingProviderKey: true, failureReason: true, createdAt: true, paidAt: true, plan: { select: { key: true, name: true } } } }),
+    db.managementTrialGrant.findUnique({ where: { organisationId }, select: { startedAt: true, endsAt: true, grantedToUserId: true } }),
+    db.auditEvent.findMany({ where: { organisationId, action: { startsWith: "subscription." } }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, action: true, actorUserId: true, metadata: true, createdAt: true } }),
   ]);
   await recordPlatformAudit(principal, "platform_admin.organisation_viewed", "organisation", organisationId, organisationId, { supportSessionId: supportSession.id });
   const serializableOrganisation = {
     ...organisation,
     subscription: organisation.subscription && { ...organisation.subscription, plan: serializablePlan(organisation.subscription.plan) },
   };
-  return { organisation: serializableOrganisation, invoices, overrides: overrides.map(withPlainLimitValue), statusHistory, supportSessions, entitlements, viewingUnderSupportSessionId: supportSession.id };
+  return { organisation: serializableOrganisation, invoices, overrides: overrides.map(withPlainLimitValue), statusHistory, supportSessions, entitlements, checkouts: checkouts.map((checkout) => ({ ...checkout, amountMinor: checkout.amountMinor.toString() })), trialGrant, subscriptionEvents, viewingUnderSupportSessionId: supportSession.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +303,7 @@ export async function suspendOrganisationSubscription(principal: PlatformPrincip
 export async function resumeOrganisationSubscription(principal: PlatformPrincipal, organisationId: string, input: unknown) {
   requirePermission(principal, PLATFORM_PERMISSIONS.orgsManage);
   const data = platformSuspendSchema.parse(input);
-  const updated = await platformSetSubscriptionStatus(principal.id, organisationId, "ACTIVE", data.reason);
+  const updated = await platformSetSubscriptionStatus(principal.id, organisationId, "RESUME", data.reason);
   await recordPlatformAudit(principal, "platform_admin.subscription_resumed", "organisation_subscription", updated.id, organisationId, { reason: data.reason });
   return updated;
 }
@@ -670,6 +673,8 @@ const PLATFORM_SUBSCRIPTION_STATUSES = [
   "GRACE_PERIOD",
   "SUSPENDED",
   "CANCELLED",
+  "EXPIRED",
+  "PAYMENT_PENDING",
 ] as const;
 
 const PLATFORM_PAYMENT_STATUSES = [
@@ -747,7 +752,10 @@ export async function listSubscriptionsForPlatform(
           billingCycle: true,
           currencyCode: true,
           billingProviderKey: true,
+          trialStartedAt: true,
           trialEndsAt: true,
+          expiredAt: true,
+          managementActivatedAt: true,
           currentPeriodStart: true,
           currentPeriodEnd: true,
           cancelAtPeriodEnd: true,
@@ -757,6 +765,7 @@ export async function listSubscriptionsForPlatform(
           pastDueSince: true,
           createdAt: true,
           updatedAt: true,
+          selectedPlan: { select: { key: true, name: true } },
           organisation: {
             select: {
               id: true,
@@ -778,6 +787,7 @@ export async function listSubscriptionsForPlatform(
             select: {
               invoices: true,
               statusHistory: true,
+              checkouts: { where: { status: "FAILED" } },
             },
           },
         },
@@ -805,6 +815,17 @@ export async function listSubscriptionsForPlatform(
     },
   );
 
+  // Managed units per organisation (non-archived units on non-archived properties), the same
+  // count the entitlement service enforces.
+  const organisationIds = subscriptions.map((subscription) => subscription.organisationId);
+  const unitRows = organisationIds.length
+    ? await db.$queryRaw<Array<{ organisationId: string; units: bigint }>>`
+        SELECT p."organisationId", COUNT(*)::bigint AS units FROM "Unit" u JOIN "Property" p ON p."id" = u."propertyId"
+        WHERE u."archivedAt" IS NULL AND p."archivedAt" IS NULL AND p."organisationId" = ANY(${organisationIds}::uuid[])
+        GROUP BY p."organisationId"`
+    : [];
+  const unitsByOrganisation = new Map(unitRows.map((row) => [row.organisationId, Number(row.units)]));
+
   return {
     summary: {
       total: totalSubscriptions,
@@ -813,7 +834,7 @@ export async function listSubscriptionsForPlatform(
       ),
       failedInvoices,
     },
-    subscriptions,
+    subscriptions: subscriptions.map((subscription) => ({ ...subscription, managedUnits: unitsByOrganisation.get(subscription.organisationId) ?? 0 })),
   };
 }
 

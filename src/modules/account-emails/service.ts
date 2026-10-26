@@ -36,7 +36,8 @@ export type AccountEmailTemplate =
   | "ACCOMMODATION_BOOKING_RECEIPT"
   | "ACCOMMODATION_BOOKING_CONFIRMED"
   | "ACCOMMODATION_BOOKING_DECLINED"
-  | "ACCOMMODATION_BOOKING_CANCELLED";
+  | "ACCOMMODATION_BOOKING_CANCELLED"
+  | "SUBSCRIPTION_NOTICE";
 
 /** Booking emails to the guest go to the address they gave; a guest needn't have an account. */
 const GUEST_BOOKING_TEMPLATES = new Set<AccountEmailTemplate>([
@@ -93,6 +94,10 @@ export type AccountEmailPayload = {
   tenantAccessCodeEncrypted?: EncryptedInvitationToken;
   tenantOrganisationId?: string;
   propertyName?: string;
+
+  /** Property-management subscription notices (trial, payment, renewal, expiry). */
+  noticeSubject?: string;
+  noticeParagraphs?: string[];
 
   /** The exact idempotency identity for this send — reused as both the job's BackgroundJob key
    * (set by the caller at enqueue time) and the message id handed to the email provider, so a
@@ -334,6 +339,8 @@ export function contentFor(
     | "guestEmail"
     | "guestPhone"
     | "specialRequest"
+    | "noticeSubject"
+    | "noticeParagraphs"
   > & {
     invitationToken?: string;
   },
@@ -552,6 +559,19 @@ export function contentFor(
       };
     }
 
+    case "SUBSCRIPTION_NOTICE":
+      return {
+        subject: lead?.noticeSubject ?? `Your ${BRAND.name} plan`,
+        sender: "notifications",
+        content: {
+          preheader: lead?.noticeSubject ?? `An update about your ${BRAND.name} property-management plan.`,
+          heading: lead?.noticeSubject ?? "Your property-management plan",
+          greeting: `Hi ${displayName},`,
+          paragraphs: lead?.noticeParagraphs ?? [],
+          cta: { label: "Open billing", path: "/settings/billing" },
+          supportNote: `Questions about your plan? Contact ${BRAND.contact.support}`,
+        },
+      };
     case "TEAM_INVITATION": {
       const expiry = lead?.invitationExpiresAt
         ? new Date(lead.invitationExpiresAt).toLocaleDateString("en-GB", {
@@ -769,4 +789,15 @@ export async function sendAccountEmail(payload: AccountEmailPayload) {
   // and its prefix ("resend:" vs "test-email:") is exactly the truthful mode signal this whole
   // integration is built around; visible via `vercel logs` without needing database access.
   console.log(JSON.stringify({ event: "account-email.sent", template: payload.template, dedupeKey, providerReference: result.providerReference }));
+}
+
+/** One email per owner/billing manager per subscription notice. Keyed by the notification id, so
+ * a retried delivery never sends twice. */
+export async function enqueueSubscriptionNoticeEmail(userId: string, notificationId: string, notice: { subject: string; paragraphs: string[] }) {
+  const dedupeKey = `account-email:subscription:${notificationId}:${userId}`;
+  return enqueueJob({
+    type: "account-email",
+    idempotencyKey: dedupeKey,
+    payload: { userId, template: "SUBSCRIPTION_NOTICE", noticeSubject: notice.subject, noticeParagraphs: notice.paragraphs, dedupeKey } satisfies AccountEmailPayload,
+  });
 }

@@ -240,7 +240,7 @@ describe("PostgreSQL Phase 18 Ghana payment integration", () => {
     const notification = await db.notification.findFirstOrThrow({ where: { organisationId: organisation.id, tenantOrganisationId: tenant.relationship.id, eventType: "PAYMENT_RECEIVED" } });
     expect(notification.channel).toBe("IN_APP");
     expect(notification.dedupeReference).toBe(payment.id);
-    expect(await db.backgroundJob.count({ where: { type: "notification-delivery" } })).toBe(1);
+    expect(await db.backgroundJob.count({ where: { type: "notification-delivery", idempotencyKey: `notification-delivery:${notification.id}` } })).toBe(1);
   });
 
   it("reconciles a failed MTN MoMo webhook without allocating rent, and notifies the tenant of the failure", async () => {
@@ -311,8 +311,9 @@ describe("PostgreSQL Phase 18 Ghana payment integration", () => {
     const replay = await reconcileProviderEvent(organisation.id, "mtn-momo-gh", event);
     expect(replay.id).toBe(first.id);
     expect(await db.payment.count({ where: { organisationId: organisation.id, providerTransactionRef: "mtn-txn-5" } })).toBe(1);
-    expect(await db.notification.count({ where: { organisationId: organisation.id, eventType: "PAYMENT_RECEIVED" } })).toBe(1);
-    expect(await db.backgroundJob.count({ where: { type: "notification-delivery" } })).toBe(1);
+    const received = await db.notification.findMany({ where: { organisationId: organisation.id, eventType: "PAYMENT_RECEIVED" } });
+    expect(received).toHaveLength(1);
+    expect(await db.backgroundJob.count({ where: { type: "notification-delivery", idempotencyKey: `notification-delivery:${received[0].id}` } })).toBe(1);
 
     // A different payload reusing the same event key is a tamper/replay attempt, not a legitimate retry.
     await expect(reconcileProviderEvent(organisation.id, "mtn-momo-gh", { ...event, amount: "1" })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });

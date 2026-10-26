@@ -53,6 +53,16 @@ export const ENTITLEMENTS = {
   voiceHumanTransferEnabled: { key: "propertyos.voice.human_transfer_enabled", kind: "BOOLEAN", label: "Live human transfer", description: "Whether an in-progress AI voice call may be bridged live to a human number." },
   /// Phase 22C item 11 — concurrency ceiling, capability-based (never a hard-coded plan name).
   voiceConcurrentCallsMax: { key: "propertyos.voice.concurrent_calls_max", kind: "LIMIT", label: "Concurrent AI voice calls", description: "AI-handled voice calls (inbound + outbound) that may be simultaneously in progress across the organisation.", unit: "calls" },
+  /// Property-management plans (Essential / Growth / Enterprise and the free trial). Values live in
+  /// `src/modules/subscriptions/plan-catalog.ts`.
+  pmCoreEnabled: { key: "pm.core", kind: "BOOLEAN", label: "Property management", description: "Managing units, tenants, leases, rent and maintenance. Requires an active trial or paid plan." },
+  pmWhatsappAiAssistantEnabled: { key: "pm.whatsapp_ai_assistant", kind: "BOOLEAN", label: "WhatsApp AI tenant assistant", description: "AI replies and AI maintenance triage for tenants on WhatsApp." },
+  pmRentRemindersEnabled: { key: "pm.rent_reminders", kind: "BOOLEAN", label: "Rent reminders", description: "Automatic rent and tenancy reminders to tenants." },
+  pmStaffRolesEnabled: { key: "pm.staff_roles", kind: "BOOLEAN", label: "Role-based staff permissions", description: "Inviting staff with roles other than owner." },
+  pmEscalationRulesEnabled: { key: "pm.escalation_rules", kind: "BOOLEAN", label: "Routing and escalation rules", description: "Configurable maintenance routing and escalation rules." },
+  pmSupervisorNotificationsEnabled: { key: "pm.supervisor_notifications", kind: "BOOLEAN", label: "Supervisor notifications", description: "Escalations and digests to staff other than the owner." },
+  pmBranchesMax: { key: "pm.branches.max", kind: "LIMIT", label: "Branches", description: "Active portfolios (branches) in the organisation.", unit: "branches" },
+  pmAiRepliesMonthlyMax: { key: "pm.ai_replies.monthly_max", kind: "LIMIT", label: "AI tenant replies / month", description: "Outbound messages written by the AI assistant in the current billing period.", unit: "replies" },
   /// Phase 23 — Property Service Professional commercial readiness. Ghana launch keeps every
   /// provider on a free tier with no enforcement; these two keys exist only so a future paid
   /// provider plan has a catalog entry to attach to rather than inventing one ad hoc. Not yet

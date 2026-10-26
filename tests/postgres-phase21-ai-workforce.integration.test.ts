@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { onPlan } from "./helpers/subscription";
 import { db } from "@/platform/database/client";
 import { verifyListingAsNesAfric } from "./helpers/nesafric-review";
 import { registerUser } from "@/modules/identity/service";
@@ -237,7 +238,7 @@ describe("PostgreSQL Phase 21 AI workforce", () => {
   it("resolves the maintenance provider dispatch hierarchy (private/preferred/standard/backup) and proposes dispatch in order", async () => {
     const owner = await registerUser({ displayName: "Dispatch Landlord", email: "workforce-dispatch-owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Dispatch Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    await db.organisationSubscription.update({ where: { organisationId: organisation.id }, data: { plan: { connect: { key: "growth" } } } });
+    await onPlan(organisation.id, "growth");
     const property = await createProperty(owner.id, organisation.id, { name: "Dispatch Property", referenceNumber: "DP-1", category: "Residential", countryCode: "GH", currencyCode: "GHS" });
 
     const plumbingCategory = await db.serviceCategory.findUniqueOrThrow({ where: { key: "plumbing" } });
@@ -286,7 +287,7 @@ describe("PostgreSQL Phase 21 AI workforce", () => {
   it("only uses NesAfric marketplace fallback when no internal provider exists and it is explicitly authorised, without exposing private work-order data", async () => {
     const owner = await registerUser({ displayName: "Fallback Landlord", email: "workforce-fallback-owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Fallback Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    await db.organisationSubscription.update({ where: { organisationId: organisation.id }, data: { plan: { connect: { key: "growth" } } } });
+    await onPlan(organisation.id, "growth");
     const property = await createProperty(owner.id, organisation.id, { name: "Fallback Property", referenceNumber: "FP-1", category: "Residential", countryCode: "GH", currencyCode: "GHS" });
     const electricalCategory = await db.serviceCategory.findUniqueOrThrow({ where: { key: "electrical" } });
 
@@ -306,7 +307,7 @@ describe("PostgreSQL Phase 21 AI workforce", () => {
     expect(fallbackAttempt.serviceProviderId).toBe(outsideProvider.id);
   });
 
-  it("gates AI maintenance dispatch behind the propertyos.maintenance.ai_dispatch entitlement (plan capability differences)", async () => {
+  it("gates AI maintenance dispatch behind an active property-management plan", async () => {
     const owner = await registerUser({ displayName: "Starter Landlord", email: "workforce-starter-owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Starter Dispatch Org", type: "INDIVIDUAL_LANDLORD", countryCode: "GH" });
     const property = await createProperty(owner.id, organisation.id, { name: "Starter Property", referenceNumber: "SP-1", category: "Residential", countryCode: "GH", currencyCode: "GHS" });
@@ -314,9 +315,10 @@ describe("PostgreSQL Phase 21 AI workforce", () => {
     await transitionMaintenanceRequest(owner.id, organisation.id, request.id, { status: "TRIAGED" });
     const workOrder = await createWorkOrder(owner.id, organisation.id, request.id, { title: "Fix tap", currencyCode: "GHS" });
 
-    // Starter plan (the default trial plan) has AI maintenance dispatch disabled (item 20).
+    // Every management plan includes provider dispatch; without a plan in force it is refused.
+    await db.organisationSubscription.update({ where: { organisationId: organisation.id }, data: { status: "EXPIRED" } });
     await expect(proposeDispatch(owner.id, organisation.id, { workOrderId: workOrder.id }))
-      .rejects.toMatchObject({ code: "ENTITLEMENT_FEATURE_DISABLED", details: { feature: "propertyos.maintenance.ai_dispatch" } });
+      .rejects.toMatchObject({ code: "PM_SUBSCRIPTION_REQUIRED", status: 402 });
   });
 
   it("enforces marketplace-professional RBAC and workspace isolation for AI employees, leads, and dispatch data", async () => {

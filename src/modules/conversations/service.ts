@@ -12,7 +12,7 @@ import { createAIEmployeeHandoff, receptionistMaintenanceIntake, selectReception
 import { canAccessPrivateData, resolveTenantIdentity } from "./identity";
 import { getChannelAdapter, type ChannelAdapters } from "./channels/registry";
 import { parseWhatsAppInteractive } from "./channels/whatsapp-interactive";
-import { assertOperational } from "@/modules/entitlements/service";
+import { assertOperational, hasAllowance, hasFeature } from "@/modules/entitlements/service";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import {
   assignConversationSchema,
@@ -334,6 +334,8 @@ async function escalateToHuman(organisationId: string, conversationId: string, a
   await record(organisationId, actorUserId ?? undefined, "conversation.handoff_requested", "conversation", conversationId, { reason, urgency });
 }
 
+const AI_PAUSED_ACKNOWLEDGEMENT = "Thanks for your message. It has been passed to the team, and a person will reply to you here.";
+
 async function sendAIReply(organisationId: string, conversationId: string, aiEmployeeId: string, body: string) {
   return recordOutboundMessage(organisationId, conversationId, { senderType: "AI_EMPLOYEE", aiEmployeeId, body });
 }
@@ -352,6 +354,19 @@ export async function routeInboundMessage(conversationId: string) {
   const employee = await selectReceptionistForProperty(conversation.organisationId, conversation.propertyId);
   if (!employee) {
     await escalateToHuman(conversation.organisationId, conversation.id, null, null, "No active AI receptionist is configured to handle this conversation.", "MEDIUM");
+    return;
+  }
+
+  // AI replies need the landlord's plan and its monthly AI allowance. Without them the message is
+  // never dropped: it goes to the team as a handoff, and the sender is told a person will reply.
+  // That one acknowledgement is an essential operational message and is sent even when the
+  // allowance is used up.
+  const aiAllowed = await hasFeature(conversation.organisationId, ENTITLEMENTS.pmWhatsappAiAssistantEnabled.key)
+    && await hasAllowance(conversation.organisationId, ENTITLEMENTS.pmAiRepliesMonthlyMax.key);
+  if (!aiAllowed) {
+    const acknowledged = await db.message.findFirst({ where: { conversationId: conversation.id, direction: "OUTBOUND", senderType: "AI_EMPLOYEE", body: AI_PAUSED_ACKNOWLEDGEMENT, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }, select: { id: true } });
+    if (!acknowledged) await sendAIReply(conversation.organisationId, conversation.id, employee.id, AI_PAUSED_ACKNOWLEDGEMENT);
+    await escalateToHuman(conversation.organisationId, conversation.id, employee.id, null, "AI replies are paused (no active plan or the monthly AI allowance is used up); a person needs to reply.", "MEDIUM");
     return;
   }
 

@@ -11,10 +11,23 @@ import { generateRentSchedule } from "@/modules/rent-schedules/service";
 import { ensureBillingSubscriptionRef } from "@/modules/billing/service";
 import { billingProviders } from "@/modules/billing/gateways";
 import { processBillingWebhookEvent } from "@/modules/subscriptions/lifecycle";
+import { activatePropertyManagement } from "@/modules/subscriptions/activation";
+import { PM_PLANS } from "@/modules/subscriptions/plan-catalog";
 
 async function cleanDatabase() {
   await db.$executeRawUnsafe('TRUNCATE TABLE "User", "Organisation", "PropertyOwner" CASCADE');
   await db.tenant.deleteMany();
+}
+
+const ESSENTIAL_PRICE = String(PM_PLANS.essential.monthlyPriceMinor);
+
+/** An organisation on a paid Essential plan whose provider holds a recurring mandate (a
+ * subscription reference issued by the provider), which is what INVOICE_* events refer to. */
+async function paidRecurringOrganisation(ownerId: string, organisationId: string) {
+  await activatePropertyManagement(organisationId, ownerId);
+  const essential = await db.subscriptionPlan.findUniqueOrThrow({ where: { key: "essential" } });
+  await db.organisationSubscription.update({ where: { organisationId }, data: { status: "ACTIVE", planId: essential.id, currentPeriodStart: new Date(), currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } });
+  return ensureBillingSubscriptionRef(organisationId);
 }
 
 function signedHeaders(secret: string, body: string) {
@@ -46,23 +59,24 @@ describe("PostgreSQL Phase 20 SaaS billing (provider-neutral, isolated from tena
   it("processes a verified billing webhook idempotently, and a replay returns the cached outcome instead of re-applying it", async () => {
     const owner = await registerUser({ displayName: "Billing Owner", email: "billing-owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Billing Organisation", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    const withRef = await ensureBillingSubscriptionRef(organisation.id);
+    const withRef = await paidRecurringOrganisation(owner.id, organisation.id);
     expect(withRef.billingCustomerRef).toMatch(/^cus_test_/);
     expect(withRef.billingSubscriptionRef).toMatch(/^sub_test_/);
 
-    const payload = { eventId: "evt_paid_1", eventType: "INVOICE_PAID", customerRef: withRef.billingCustomerRef, subscriptionRef: withRef.billingSubscriptionRef, providerInvoiceRef: "inv_paid_1", amountMinor: "25000", currencyCode: "GHS", occurredAt: new Date().toISOString() };
+    const payload = { eventId: "evt_paid_1", eventType: "INVOICE_PAID", customerRef: withRef.billingCustomerRef, subscriptionRef: withRef.billingSubscriptionRef, providerInvoiceRef: "inv_paid_1", amountMinor: ESSENTIAL_PRICE, currencyCode: "GHS", occurredAt: new Date().toISOString() };
     const result = await processBillingWebhookEvent("test", payload);
     expect(result.status).toBe("PROCESSED");
-    const activated = await db.organisationSubscription.findUniqueOrThrow({ where: { organisationId: organisation.id } });
-    expect(activated.status).toBe("ACTIVE");
-    expect(await db.subscriptionStatusHistory.count({ where: { organisationId: organisation.id, toStatus: "ACTIVE" } })).toBe(1);
+    const renewed = await db.organisationSubscription.findUniqueOrThrow({ where: { organisationId: organisation.id } });
+    expect(renewed.status).toBe("ACTIVE");
+    expect(await db.subscriptionInvoice.count({ where: { organisationId: organisation.id, status: "PAID" } })).toBe(1);
     expect(await db.billingWebhookEvent.count({ where: { providerKey: "test", eventKey: "evt_paid_1" } })).toBe(1);
 
-    // Replay: identical payload returns the cached record and never re-applies the transition.
+    // Replay: identical payload returns the cached record and never re-applies the renewal.
     const replay = await processBillingWebhookEvent("test", payload);
     expect(replay.id).toBe(result.id);
     expect(await db.billingWebhookEvent.count({ where: { providerKey: "test", eventKey: "evt_paid_1" } })).toBe(1);
-    expect(await db.subscriptionStatusHistory.count({ where: { organisationId: organisation.id, toStatus: "ACTIVE" } })).toBe(1);
+    expect(await db.subscriptionInvoice.count({ where: { organisationId: organisation.id, status: "PAID" } })).toBe(1);
+    expect((await db.organisationSubscription.findUniqueOrThrow({ where: { organisationId: organisation.id } })).currentPeriodEnd.getTime()).toBe(renewed.currentPeriodEnd.getTime());
 
     // The same event key with a different payload is a hard conflict, never silently applied.
     await expect(processBillingWebhookEvent("test", { ...payload, amountMinor: "99999" })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
@@ -71,6 +85,7 @@ describe("PostgreSQL Phase 20 SaaS billing (provider-neutral, isolated from tena
   it("records an unmatched webhook durably when no subscription references the event's subscription ref, without changing any subscription", async () => {
     const owner = await registerUser({ displayName: "Unmatched Owner", email: "unmatched-owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Unmatched Organisation", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
+    await activatePropertyManagement(organisation.id, owner.id);
     const before = await db.organisationSubscription.findUniqueOrThrow({ where: { organisationId: organisation.id } });
 
     const payload = { eventId: "evt_unmatched_1", eventType: "INVOICE_PAID", subscriptionRef: "sub_test_does_not_exist", amountMinor: "25000", currencyCode: "GHS" };
@@ -85,8 +100,7 @@ describe("PostgreSQL Phase 20 SaaS billing (provider-neutral, isolated from tena
   it("applies an INVOICE_FAILED event to move an active subscription to past due", async () => {
     const owner = await registerUser({ displayName: "Failed Invoice Owner", email: "failed-invoice-owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Failed Invoice Organisation", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    const withRef = await ensureBillingSubscriptionRef(organisation.id);
-    await processBillingWebhookEvent("test", { eventId: "evt_activate", eventType: "INVOICE_PAID", subscriptionRef: withRef.billingSubscriptionRef, amountMinor: "25000", currencyCode: "GHS" });
+    const withRef = await paidRecurringOrganisation(owner.id, organisation.id);
 
     const failurePayload = { eventId: "evt_fail_1", eventType: "INVOICE_FAILED", subscriptionRef: withRef.billingSubscriptionRef, failureReason: "Card expired" };
     const failed = await processBillingWebhookEvent("test", failurePayload);
@@ -114,8 +128,8 @@ describe("PostgreSQL Phase 20 SaaS billing (provider-neutral, isolated from tena
       method: "CASH", externalReference: "iso-cash-1", evidenceReference: "evidence/iso-cash-1.jpg", idempotencyKey: "iso-manual-1", allocations: [{ rentObligationId: obligation.id, amountMinor: "150000" }],
     });
     // ...and a real SaaS billing charge for the same organisation.
-    const withRef = await ensureBillingSubscriptionRef(organisation.id);
-    await processBillingWebhookEvent("test", { eventId: "evt_isolation", eventType: "INVOICE_PAID", subscriptionRef: withRef.billingSubscriptionRef, amountMinor: "25000", currencyCode: "GHS" });
+    const withRef = await paidRecurringOrganisation(owner.id, organisation.id);
+    await processBillingWebhookEvent("test", { eventId: "evt_isolation", eventType: "INVOICE_PAID", subscriptionRef: withRef.billingSubscriptionRef, amountMinor: ESSENTIAL_PRICE, currencyCode: "GHS" });
 
     // Tenant rent tables are completely untouched by the SaaS billing charge.
     expect(await db.payment.count({ where: { organisationId: organisation.id } })).toBe(1);

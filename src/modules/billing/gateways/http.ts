@@ -3,6 +3,8 @@ import { AppError } from "@/platform/errors";
 import type {
   BillingChargeRequest,
   BillingChargeResult,
+  BillingCheckoutRequest,
+  BillingCheckoutResult,
   BillingCustomerRequest,
   BillingCustomerResult,
   BillingProviderAdapter,
@@ -87,6 +89,17 @@ export class HttpBillingAdapter implements BillingProviderAdapter {
     await this.post(`/subscriptions/${encodeURIComponent(subscriptionRef)}/cancel`, {});
   }
 
+  async createCheckout(request: BillingCheckoutRequest): Promise<BillingCheckoutResult> {
+    const payload = await this.post<{ checkoutRef?: string; checkoutUrl?: string }>("/checkouts", {
+      externalId: request.internalReference, customerExternalId: request.organisationId, customerName: request.customerName, customerEmail: request.customerEmail,
+      planKey: request.planKey, billingCycle: request.billingCycle, currency: request.currencyCode, amount: request.amountMinor, returnUrl: request.returnUrl,
+    });
+    if (!payload.checkoutRef || !payload.checkoutUrl || !/^https:\/\//.test(payload.checkoutUrl)) {
+      throw new AppError("BILLING_PROVIDER_ERROR", 502, "The billing provider response was missing a checkout reference or a secure checkout URL.");
+    }
+    return { checkoutRef: payload.checkoutRef, checkoutUrl: payload.checkoutUrl };
+  }
+
   async chargeCurrentPeriod(request: BillingChargeRequest): Promise<BillingChargeResult> {
     const payload = await this.post<{ status?: string; providerInvoiceRef?: string; failureReason?: string }>("/charges", {
       customerRef: request.customerRef, subscriptionRef: request.subscriptionRef, externalId: request.internalReference,
@@ -98,19 +111,21 @@ export class HttpBillingAdapter implements BillingProviderAdapter {
 
   async parseWebhookEvent(payload: unknown): Promise<NormalizedBillingEvent> {
     const event = payload as {
-      eventId?: string; eventType?: string; customerRef?: string; subscriptionRef?: string;
+      eventId?: string; eventType?: string; customerRef?: string; subscriptionRef?: string; checkoutRef?: string;
       providerInvoiceRef?: string; amount?: string; currency?: string; occurredAt?: string; failureReason?: string;
     };
-    if (!event.eventType || !event.subscriptionRef) {
-      throw new AppError("BILLING_EVENT_INVALID", 422, "The billing webhook event is missing required fields (eventType, subscriptionRef).");
+    const isCheckout = event.eventType === "CHECKOUT_PAID" || event.eventType === "CHECKOUT_FAILED";
+    if (!event.eventType || (isCheckout ? !event.checkoutRef : !event.subscriptionRef)) {
+      throw new AppError("BILLING_EVENT_INVALID", 422, "The billing webhook event is missing required fields (eventType, and checkoutRef or subscriptionRef).");
     }
-    const knownTypes = new Set(["INVOICE_PAID", "INVOICE_FAILED", "SUBSCRIPTION_CANCELLED", "SUBSCRIPTION_UPDATED"]);
+    const knownTypes = new Set(["INVOICE_PAID", "INVOICE_FAILED", "SUBSCRIPTION_CANCELLED", "SUBSCRIPTION_UPDATED", "CHECKOUT_PAID", "CHECKOUT_FAILED"]);
     if (!knownTypes.has(event.eventType)) throw new AppError("BILLING_EVENT_INVALID", 422, `Unrecognised billing event type '${event.eventType}'.`);
     return {
-      eventKey: event.eventId ?? `${event.subscriptionRef}:${event.eventType}:${event.occurredAt ?? ""}`,
+      eventKey: event.eventId ?? `${event.checkoutRef ?? event.subscriptionRef}:${event.eventType}:${event.occurredAt ?? ""}`,
       eventType: event.eventType as NormalizedBillingEvent["eventType"],
       customerRef: event.customerRef,
       subscriptionRef: event.subscriptionRef,
+      checkoutRef: event.checkoutRef,
       providerInvoiceRef: event.providerInvoiceRef,
       amountMinor: event.amount,
       currencyCode: event.currency?.toUpperCase(),

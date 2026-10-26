@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { onPlan } from "./helpers/subscription";
 import { db } from "@/platform/database/client";
 import { verifyListingAsNesAfric } from "./helpers/nesafric-review";
 import { registerUser } from "@/modules/identity/service";
@@ -45,7 +46,7 @@ async function cleanDatabase() {
 }
 
 function scalePropertyOsOrg(organisationId: string) {
-  return db.organisationSubscription.update({ where: { organisationId }, data: { plan: { connect: { key: "scale" } } } });
+  return onPlan(organisationId, "scale");
 }
 
 async function createNativeListing(userId: string, marketplaceProfessionalId: string, overrides: Record<string, unknown> = {}) {
@@ -317,7 +318,7 @@ describe("PostgreSQL Phase 22 AI voice", () => {
   it("denies inbound voice handling when the receiving organisation lacks the voice entitlement, routing to human handoff instead", async () => {
     const owner = await registerUser({ displayName: "Growth Landlord", email: "voice-growth-landlord@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Growth Voice Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    await db.organisationSubscription.update({ where: { organisationId: organisation.id }, data: { plan: { connect: { key: "growth" } } } });
+    await onPlan(organisation.id, "growth");
     await configureVoiceProvider(owner.id, organisation.id, { phoneNumber: "+233200000018", inboundEnabled: true, ...wideHours });
 
     const { call, routing } = await startInboundCall({ toNumber: "+233200000018", fromNumber: "+233240000015" });
@@ -329,7 +330,7 @@ describe("PostgreSQL Phase 22 AI voice", () => {
   it("rejects an outbound artisan call when the maintenance voice-dispatch entitlement is not enabled on the plan, even though dispatch proposal itself is allowed", async () => {
     const owner = await registerUser({ displayName: "Growth Dispatch Landlord", email: "voice-growth-dispatch-landlord@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Growth Dispatch Voice Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    await db.organisationSubscription.update({ where: { organisationId: organisation.id }, data: { plan: { connect: { key: "growth" } } } });
+    await onPlan(organisation.id, "growth");
     const property = await createProperty(owner.id, organisation.id, { name: "Growth Dispatch House", referenceNumber: "GDH-1", category: "Residential", countryCode: "GH", currencyCode: "GHS" });
     const plumbingCategory = await db.serviceCategory.findUniqueOrThrow({ where: { key: "plumbing" } });
     const providerUser = await registerUser({ displayName: "Growth Plumber", email: "voice-growth-plumber@example.com", password: "secure-password-123" });

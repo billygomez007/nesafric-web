@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { onPlan } from "./helpers/subscription";
 import { db } from "@/platform/database/client";
 import { verifyListingAsNesAfric } from "./helpers/nesafric-review";
 import { registerUser } from "@/modules/identity/service";
@@ -50,7 +51,7 @@ async function cleanDatabase() {
 }
 
 function scalePropertyOsOrg(organisationId: string) {
-  return db.organisationSubscription.update({ where: { organisationId }, data: { plan: { connect: { key: "scale" } } } });
+  return onPlan(organisationId, "scale");
 }
 
 async function createNativeListing(userId: string, marketplaceProfessionalId: string, overrides: Record<string, unknown> = {}) {
@@ -432,7 +433,7 @@ describe("PostgreSQL Phase 22B real-time telephony + speech AI", () => {
     // Growth plan lacks `propertyos.voice.human_transfer_enabled`.
     const growthOwner = await registerUser({ displayName: "Growth Transfer Owner", email: "growth-transfer-owner@example.com", password: "secure-password-123" });
     const growthOrg = await createOrganisation(growthOwner.id, { name: "Growth Transfer Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    await db.organisationSubscription.update({ where: { organisationId: growthOrg.id }, data: { plan: { connect: { key: "growth" } } } });
+    await onPlan(growthOrg.id, "growth");
     await configureVoiceProvider(growthOwner.id, growthOrg.id, { phoneNumber: "+233209990011", inboundEnabled: true, ...wideHours });
     await createAIEmployee(growthOwner.id, growthOrg.id, { name: "Growth Receptionist", role: "RECEPTIONIST", scope: "ORGANISATION", toolPermissions: [], instructions: {}, escalationConfiguration: {} });
     const { call: growthCall } = await startInboundCall({ toNumber: "+233209990011", fromNumber: "+233240099015" });
@@ -544,7 +545,7 @@ describe("PostgreSQL Phase 22B real-time telephony + speech AI", () => {
   it("keeps proposeDispatch's own entitlement gate intact for a growth-plan organisation even when called via the escalation path", async () => {
     const owner = await registerUser({ displayName: "Growth Escalation Landlord", email: "growth-escalation-landlord@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "Growth Escalation Org", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
-    await db.organisationSubscription.update({ where: { organisationId: organisation.id }, data: { plan: { connect: { key: "growth" } } } });
+    await onPlan(organisation.id, "growth");
     const property = await createProperty(owner.id, organisation.id, { name: "Growth Escalation House", referenceNumber: "GEH-1", category: "Residential", countryCode: "GH", currencyCode: "GHS" });
     const plumbingCategory = await db.serviceCategory.findUniqueOrThrow({ where: { key: "plumbing" } });
     async function verifiedProvider(email: string, displayName: string, phone: string) {

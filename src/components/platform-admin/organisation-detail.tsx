@@ -8,6 +8,9 @@ type Detail = {
   overrides: Array<{ id: string; featureKey: string; kind: string; booleanValue: boolean | null; limitValue: string | null; isUnlimited: boolean; reason: string; expiresAt: string | null; revokedAt: string | null }>;
   statusHistory: Array<{ id: string; fromStatus: string | null; toStatus: string; reason: string; createdAt: string }>;
   supportSessions: Array<{ id: string; reason: string; startedAt: string; expiresAt: string; endedAt: string | null; revokedAt: string | null }>;
+  checkouts?: Array<{ id: string; status: string; amountMinor: string; currencyCode: string; billingProviderKey: string; failureReason: string | null; createdAt: string; paidAt: string | null; plan: { key: string; name: string } }>;
+  trialGrant?: { startedAt: string; endsAt: string; grantedToUserId: string | null } | null;
+  subscriptionEvents?: Array<{ id: string; action: string; actorUserId: string | null; createdAt: string }>;
   entitlements: { features: Array<{ featureKey: string; label: string; kind: string; booleanValue: boolean | null; limit: number | null; isUnlimited: boolean; current: number | null; reached: boolean; source: string }> } | null;
 };
 
@@ -77,7 +80,9 @@ export function PlatformAdminOrganisationDetail({ organisationId }: { organisati
         <div><dt className="inline font-semibold">Status:</dt> <dd className="inline"> {subscription.status}</dd></div>
         <div><dt className="inline font-semibold">Billing provider:</dt> <dd className="inline"> {subscription.billingProviderKey}</dd></div>
         <div><dt className="inline font-semibold">Current period ends:</dt> <dd className="inline"> {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</dd></div>
+        <div><dt className="inline font-semibold">Trial:</dt> <dd className="inline"> {detail.trialGrant ? `${new Date(detail.trialGrant.startedAt).toLocaleDateString()} → ${new Date(detail.trialGrant.endsAt).toLocaleDateString()}` : "Not used"}</dd></div>
       </dl>}
+      {!subscription && <p className="mt-3 text-sm text-muted">Property management has not been activated. Marketplace use is free and unaffected.</p>}
       {subscription && <div className="mt-4 flex flex-wrap gap-2">
         <button className="rounded-xl border border-hairline px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/suspend", { reason: "Suspended by platform operator" })}>Suspend</button>
         <button className="rounded-xl border border-hairline px-3 py-1.5 text-sm font-semibold" onClick={() => void action("/resume", { reason: "Resumed by platform operator" })}>Resume</button>
@@ -105,6 +110,16 @@ export function PlatformAdminOrganisationDetail({ organisationId }: { organisati
     <section className="rounded-xl border bg-white p-5 shadow-card">
       <h2 className="font-semibold">Invoices</h2>
       {detail.invoices.length ? <ul className="mt-3 divide-y text-sm">{detail.invoices.map((invoice) => <li className="flex justify-between py-2" key={invoice.id}><span>{new Date(invoice.periodStart).toLocaleDateString()} – {new Date(invoice.periodEnd).toLocaleDateString()}</span><span>{invoice.currencyCode} {(Number(invoice.amountMinor) / 100).toFixed(2)} — {invoice.status}</span></li>)}</ul> : <p className="mt-2 text-sm text-muted">No invoices yet.</p>}
+    </section>
+
+    <section className="rounded-xl border bg-white p-5 shadow-card">
+      <h2 className="font-semibold">Plan payments (checkouts)</h2>
+      {detail.checkouts?.length ? <ul className="mt-3 grid gap-1 text-sm">{detail.checkouts.map((checkout) => <li key={checkout.id}>{new Date(checkout.createdAt).toLocaleString()} — {checkout.plan.name} · {checkout.currencyCode} {(Number(checkout.amountMinor) / 100).toFixed(2)} · {checkout.billingProviderKey} · <strong>{checkout.status}</strong>{checkout.failureReason ? ` (${checkout.failureReason})` : ""}</li>)}</ul> : <p className="mt-3 text-sm text-muted">No checkouts.</p>}
+    </section>
+
+    <section className="rounded-xl border bg-white p-5 shadow-card">
+      <h2 className="font-semibold">Subscription events</h2>
+      {detail.subscriptionEvents?.length ? <ul className="mt-3 grid gap-1 text-sm">{detail.subscriptionEvents.map((event) => <li key={event.id}>{new Date(event.createdAt).toLocaleString()} — {event.action}{event.actorUserId ? " (user)" : " (system)"}</li>)}</ul> : <p className="mt-3 text-sm text-muted">No events.</p>}
     </section>
 
     <section className="rounded-xl border bg-white p-5 shadow-card">

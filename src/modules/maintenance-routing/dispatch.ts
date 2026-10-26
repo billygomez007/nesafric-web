@@ -1,3 +1,5 @@
+import { hasFeature } from "@/modules/entitlements/service";
+import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { db } from "@/platform/database/client";
 import { Prisma } from "@/platform/database/generated/client";
 import { AppError } from "@/platform/errors";
@@ -114,6 +116,13 @@ export async function routeMaintenanceRequest(organisationId: string, requestId:
   const classification = (request.classification ?? {}) as { safetyHazard?: boolean };
   if (request.priority === "EMERGENCY" || classification.safetyHazard) {
     await escalate(db, { organisationId, requestId, level: "CRITICAL", reason: "SAFETY", detail: `${request.referenceNumber}: ${request.title} at ${location} was reported as an emergency.`, dedupeKey: `${requestId}:critical` });
+  }
+
+  // Automatic provider dispatch is a plan feature. Without it the request stays recorded and open,
+  // the owner is told it needs manual handling, and nothing is sent to providers.
+  if (!(await hasFeature(organisationId, ENTITLEMENTS.maintenanceAiDispatchEnabled.key))) {
+    await decide(db, organisationId, requestId, "PLAN_INACTIVE", "Automatic dispatch is paused because the organisation has no active property-management plan.", null);
+    return escalate(db, { organisationId, requestId, level: "ATTENTION", reason: "PLAN_INACTIVE", detail: `${request.referenceNumber}: ${request.title} at ${location} needs manual handling — automatic dispatch is paused until a plan is active.`, dedupeKey: `${requestId}:PLAN_INACTIVE` });
   }
 
   const category = networkCategoryFor(request.category, `${request.title} ${request.description}`);

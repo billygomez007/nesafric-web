@@ -10,7 +10,11 @@ type SubscriptionRow = {
   billingCycle: string;
   currencyCode: string;
   billingProviderKey: string;
+  trialStartedAt: string | null;
   trialEndsAt: string | null;
+  expiredAt: string | null;
+  managedUnits: number;
+  selectedPlan: { key: string; name: string } | null;
   currentPeriodStart: string;
   currentPeriodEnd: string;
   cancelAtPeriodEnd: boolean;
@@ -36,6 +40,7 @@ type SubscriptionRow = {
   _count: {
     invoices: number;
     statusHistory: number;
+    checkouts: number;
   };
 };
 
@@ -56,6 +61,8 @@ const STATUSES = [
   "GRACE_PERIOD",
   "SUSPENDED",
   "CANCELLED",
+  "EXPIRED",
+  "PAYMENT_PENDING",
 ];
 
 function statusTone(status: string) {
@@ -69,6 +76,7 @@ function statusTone(status: string) {
       return "bg-gold/15 text-forest";
     case "SUSPENDED":
     case "CANCELLED":
+    case "EXPIRED":
       return "bg-red-50 text-red-800";
     default:
       return "bg-slate-100 text-slate-700";
@@ -240,7 +248,7 @@ function SubscriptionsContent() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-hairline bg-white shadow-card">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1150px] text-left text-sm">
+            <table className="w-full min-w-[1350px] text-left text-sm">
               <thead className="border-b border-hairline bg-warm-white text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th className="px-5 py-4">Organisation</th>
@@ -248,6 +256,8 @@ function SubscriptionsContent() {
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Cycle</th>
                   <th className="px-5 py-4">Provider</th>
+                  <th className="px-5 py-4">Trial</th>
+                  <th className="px-5 py-4">Units</th>
                   <th className="px-5 py-4">Current period</th>
                   <th className="px-5 py-4">Invoices</th>
                   <th className="px-5 py-4">Flags</th>
@@ -277,6 +287,11 @@ function SubscriptionsContent() {
                       <p className="mt-1 text-xs text-muted">
                         {subscription.plan.key}
                       </p>
+                      {subscription.selectedPlan && (
+                        <p className="mt-1 text-xs text-muted">
+                          Next: {subscription.selectedPlan.name}
+                        </p>
+                      )}
                     </td>
 
                     <td className="px-5 py-4">
@@ -300,6 +315,19 @@ function SubscriptionsContent() {
                     </td>
 
                     <td className="px-5 py-4 text-xs text-muted">
+                      {subscription.trialStartedAt && subscription.trialEndsAt
+                        ? `${new Date(subscription.trialStartedAt).toLocaleDateString()} → ${new Date(subscription.trialEndsAt).toLocaleDateString()}`
+                        : "—"}
+                      {subscription.expiredAt && (
+                        <p className="mt-1">Expired {new Date(subscription.expiredAt).toLocaleDateString()}</p>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4 font-semibold text-forest">
+                      {subscription.managedUnits}
+                    </td>
+
+                    <td className="px-5 py-4 text-xs text-muted">
                       {new Date(
                         subscription.currentPeriodStart,
                       ).toLocaleDateString()}
@@ -316,6 +344,11 @@ function SubscriptionsContent() {
                       <p className="mt-1 text-xs text-muted">
                         {subscription._count.statusHistory} lifecycle events
                       </p>
+                      {subscription._count.checkouts > 0 && (
+                        <p className="mt-1 text-xs text-red-700">
+                          {subscription._count.checkouts} failed payments
+                        </p>
+                      )}
                     </td>
 
                     <td className="px-5 py-4 text-xs text-muted">

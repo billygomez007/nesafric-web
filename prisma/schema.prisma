@@ -514,6 +514,15 @@ enum ReminderEventType {
   SUBSCRIPTION_SUSPENDED
   ENTITLEMENT_LIMIT_APPROACHING
   ENTITLEMENT_LIMIT_REACHED
+  // Property-management trial and plan lifecycle.
+  SUBSCRIPTION_TRIAL_STARTED
+  SUBSCRIPTION_TRIAL_REMINDER
+  SUBSCRIPTION_EXPIRED
+  SUBSCRIPTION_PLAN_SELECTED
+  SUBSCRIPTION_PAYMENT_FAILED
+  SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_CANCELLED
+  SUBSCRIPTION_UNIT_LIMIT_REACHED
 }
 
 enum NotificationChannel {
@@ -1090,6 +1099,8 @@ model Organisation {
   subscriptionStatusHistory   SubscriptionStatusHistory[]
   entitlementOverrides        OrganisationEntitlementOverride[]
   billingWebhookEvents        BillingWebhookEvent[]
+  subscriptionCheckouts       SubscriptionCheckout[]
+  managementTrialGrant        ManagementTrialGrant?
   platformSupportSessions     PlatformSupportSession[]
   platformAuditEvents         PlatformAuditEvent[]
   featureFlagOverrides        OrganisationFeatureFlagOverride[]
@@ -5077,6 +5088,21 @@ enum SubscriptionStatus {
   GRACE_PERIOD
   SUSPENDED
   CANCELLED
+  /// The free trial (or a paid period and its grace window) ended without a confirmed payment.
+  /// Paid management entitlements are removed; data, billing, support, settings and export stay.
+  EXPIRED
+  /// A checkout was started from `EXPIRED` and the provider has not confirmed it yet. Grants
+  /// nothing until a verified webhook confirms the payment.
+  PAYMENT_PENDING
+}
+
+/// One hosted-checkout attempt for a property-management plan. Entitlements are only ever granted
+/// by a verified provider webhook marking it `PAID` — never by the browser returning from checkout.
+enum SubscriptionCheckoutStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
 }
 
 enum BillingCycle {
@@ -5144,7 +5170,9 @@ model SubscriptionPlan {
   prices        PlanPrice[]
   entitlements  PlanEntitlement[]
   subscriptions OrganisationSubscription[]
+  selectedBy    OrganisationSubscription[] @relation("SelectedSubscriptionPlan")
   invoices      SubscriptionInvoice[]
+  checkouts     SubscriptionCheckout[]
 
   @@index([isActive, isPublic, sortOrder])
 }
@@ -5206,12 +5234,22 @@ model OrganisationSubscription {
   suspendedAt            DateTime?
   gracePeriodEndsAt      DateTime?
   pastDueSince           DateTime?
+  /// When property management was first activated for this organisation (the trial clock starts
+  /// here, never at account creation).
+  managementActivatedAt  DateTime?
+  trialStartedAt         DateTime?
+  expiredAt              DateTime?
+  /// The paid plan the organisation chose (during the trial, or as a downgrade scheduled for the
+  /// next renewal). `planId` stays the plan whose entitlements are in force right now.
+  selectedPlanId         String?                     @db.Uuid
   createdAt              DateTime                    @default(now())
   updatedAt              DateTime                    @updatedAt
   organisation           Organisation                @relation(fields: [organisationId], references: [id], onDelete: Restrict)
   plan                   SubscriptionPlan            @relation(fields: [planId], references: [id], onDelete: Restrict)
+  selectedPlan           SubscriptionPlan?           @relation("SelectedSubscriptionPlan", fields: [selectedPlanId], references: [id], onDelete: SetNull)
   invoices               SubscriptionInvoice[]
   statusHistory          SubscriptionStatusHistory[]
+  checkouts              SubscriptionCheckout[]
 
   @@index([status])
   @@index([planId])
@@ -5296,6 +5334,66 @@ model OrganisationEntitlementOverride {
   revokedByPlatformPrincipal   PlatformPrincipal? @relation("OverrideRevoker", fields: [revokedByPlatformPrincipalId], references: [id], onDelete: SetNull)
 
   @@index([organisationId, featureKey, revokedAt])
+}
+
+/// One hosted-checkout attempt for a property-management plan. The amount and currency are fixed
+/// server-side from `PlanPrice` when the checkout is created; a webhook reporting a different
+/// amount or currency is rejected and never grants anything. `idempotencyKey` makes a double-click
+/// or retried request return the same pending checkout instead of opening a second one.
+model SubscriptionCheckout {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  organisationId      String                     @db.Uuid
+  subscriptionId      String                     @db.Uuid
+  planId              String                     @db.Uuid
+  billingCycle        BillingCycle
+  amountMinor         Decimal                    @db.Decimal(19, 0)
+  currencyCode        String                     @db.Char(3)
+  billingProviderKey  String
+  providerCheckoutRef String?
+  checkoutUrl         String?
+  idempotencyKey      String
+  status              SubscriptionCheckoutStatus @default(PENDING)
+  failureReason       String?
+  createdByUserId     String?                    @db.Uuid
+  expiresAt           DateTime
+  paidAt              DateTime?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  organisation        Organisation               @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  subscription        OrganisationSubscription   @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  plan                SubscriptionPlan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, idempotencyKey])
+  @@unique([billingProviderKey, providerCheckoutRef])
+  @@index([organisationId, status])
+  @@index([status, expiresAt])
+}
+
+/// The single free property-management trial an organisation ever receives. Kept forever (even if
+/// the subscription is later cancelled) so re-activating never restarts the clock.
+model ManagementTrialGrant {
+  id              String                    @id @default(uuid()) @db.Uuid
+  organisationId  String                    @unique @db.Uuid
+  grantedToUserId String?                   @db.Uuid
+  startedAt       DateTime
+  endsAt          DateTime
+  createdAt       DateTime                  @default(now())
+  organisation    Organisation              @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  identities      ManagementTrialIdentity[]
+}
+
+/// Hashed identities (user id, verified email, verified phone) that have already received a trial.
+/// Unique on the hash, so registering a new account or organisation with the same person's
+/// details never yields a second trial. Raw emails/phones are never stored here.
+model ManagementTrialIdentity {
+  id           String               @id @default(uuid()) @db.Uuid
+  grantId      String               @db.Uuid
+  kind         String
+  identityHash String               @unique
+  createdAt    DateTime             @default(now())
+  grant        ManagementTrialGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  @@index([grantId])
 }
 
 /// Idempotency/replay-prevention ledger for inbound SaaS-billing provider webhooks (item 5),

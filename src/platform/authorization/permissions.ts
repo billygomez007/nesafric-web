@@ -91,6 +91,52 @@ export const PERMISSIONS = {
   billingManage: "billing.manage",
 } as const;
 
+/**
+ * Organisation permissions that perform property-management operations. Holding the role
+ * permission is not enough for these: the organisation also needs property management in force
+ * (an active trial or paid plan). The first such operation activates property management, which
+ * is when the one free trial starts. Reads, billing, settings, export, the marketplace (listings,
+ * leads, viewings, enquiries), team membership for marketplace teams, property records used as a
+ * listing source, conversations, and safety actions on existing maintenance requests (recording,
+ * updating, approving, pausing AI automation) are deliberately not in this list. Staff inherit
+ * the organisation's entitlements; their own role permissions still apply first.
+ */
+export const MANAGEMENT_PERMISSIONS: ReadonlySet<string> = new Set([
+  PERMISSIONS.portfolioCreate,
+  PERMISSIONS.tenantCreate,
+  PERMISSIONS.tenantUpdate,
+  PERMISSIONS.leaseCreate,
+  PERMISSIONS.leaseUpdate,
+  PERMISSIONS.leaseClose,
+  PERMISSIONS.rentScheduleManage,
+  PERMISSIONS.paymentRecord,
+  PERMISSIONS.paymentReverse,
+  PERMISSIONS.depositRecord,
+  PERMISSIONS.depositSettlementManage,
+  PERMISSIONS.depositSettlementApprove,
+  PERMISSIONS.depositRefundRecord,
+  PERMISSIONS.maintenanceAssign,
+  PERMISSIONS.providerManage,
+  PERMISSIONS.providerVerify,
+  PERMISSIONS.providerQuoteRecord,
+  PERMISSIONS.providerQuoteReview,
+  PERMISSIONS.providerAssign,
+  PERMISSIONS.marketplaceQuoteRequest,
+  PERMISSIONS.applicationConvert,
+  PERMISSIONS.leaseExecutionManage,
+  PERMISSIONS.moveInManage,
+  PERMISSIONS.moveOutManage,
+  PERMISSIONS.aiCommandCenter,
+  PERMISSIONS.aiPropose,
+  PERMISSIONS.aiApprove,
+  PERMISSIONS.aiAutonomyManage,
+  PERMISSIONS.aiEmployeeManage,
+  PERMISSIONS.aiEmployeeOperate,
+  PERMISSIONS.documentTemplateManage,
+  PERMISSIONS.integrationManage,
+  PERMISSIONS.communicationChannelManage,
+]);
+
 export async function requirePermission(userId: string, organisationId: string, permission: string) {
   if (!isUuid(organisationId)) throw forbidden();
   const membership = await db.organisationMember.findFirst({
@@ -99,6 +145,11 @@ export async function requirePermission(userId: string, organisationId: string, 
   });
   if (!membership || !membershipHasPermission(membership.roles, permission)) {
     throw forbidden();
+  }
+  if (MANAGEMENT_PERMISSIONS.has(permission)) {
+    // Imported lazily: the entitlement service depends on modules that depend on this one.
+    const { assertManagementAccess } = await import("@/modules/entitlements/service");
+    await assertManagementAccess(organisationId, userId);
   }
   return membership;
 }

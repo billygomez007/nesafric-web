@@ -8,6 +8,7 @@ import { requestOtp, verifyOtp } from "@/modules/identity/otp";
 import { createWhatsAppAccount, linkedWhatsAppUser, linkWhatsAppIdentity, whatsappAddress } from "../identity";
 import { abandonDraft, findOpenDraft, saveDraft, startDraft, type Draft } from "./draft";
 import { commitDraft, type CommitSummary } from "./commit";
+import { planOverviewText, trialNoticeText } from "@/modules/subscriptions/plans";
 import { formatErrors, formatMinor, parseAmountMinor, parseProviders, parseTenants, parseUnits, parseUnitType, PROVIDER_CATEGORIES, UNIT_TYPES, type LineError } from "./parse";
 
 export type OnboardingInput = { phone: string; messageId: string; body: string; kind: string; organisationId: string; defaultCountry: string; defaultCurrency: string };
@@ -110,6 +111,8 @@ function successReply(summary: CommitSummary, draft: Draft) {
       ? `• ${plural(data.providers.length, "maintenance professional")} saved as invitations, but they could not be sent yet: ${summary.providerInviteProblem} Nobody has been contacted.`
       : `• Invitations sent to ${plural(data.providers.length, "maintenance professional")}. Each joins your network only by replying ACCEPT; no work order is sent before that. Reply providers to check.`) : null,
     "• Automatic maintenance dispatch is not switched on yet. Your approval limit and alert contact are saved for when it is.",
+    summary.plan?.status === "TRIALING" && summary.plan.trialEndsAt ? `• ${trialNoticeText(summary.plan.trialEndsAt)} ${absoluteUrl("/settings/billing")}` : null,
+    summary.plan && summary.plan.status !== "TRIALING" && summary.plan.status !== "ACTIVE" ? `• Your free trial has already been used, so management features need a plan. Choose one at ${absoluteUrl("/settings/billing")}. Your saved details are kept.` : null,
     "\nReply account to see your portfolio, or menu for other options.",
   ].filter(Boolean).join("\n");
 }
@@ -406,6 +409,9 @@ export async function advanceOnboarding(input: OnboardingInput, dependencies: De
         const summary = await dependencies.commit(draft, userId);
         return { reply: successReply(summary, draft), exit: true };
       } catch (error) {
+        if (error instanceof AppError && (error.code === "ENTITLEMENT_LIMIT_REACHED" || error.code === "PM_SUBSCRIPTION_REQUIRED")) {
+          return { reply: `Not saved yet: ${error.message}\nYour draft and anything already saved are kept. Plans:\n${await planOverviewText()}\nChoose or upgrade at ${absoluteUrl("/settings/billing")}, then reply confirm again.` };
+        }
         if (error instanceof AppError && error.status < 500) return { reply: `Not saved yet: ${error.message}\nYour draft is kept. Fix this, then reply confirm again, or discard.` };
         throw error;
       }

@@ -101,6 +101,9 @@ async function createFixture(key: string) {
     rentFrequency: "MONTHLY",
     status: "ACTIVE",
   });
+  // Starting property management raises an organisation-level "trial started" notice; these tests
+  // count lease notifications only.
+  await db.notification.deleteMany({ where: { organisationId: organisation.id, leaseId: null } });
   return { owner, organisation, property, unit, tenant, lease };
 }
 

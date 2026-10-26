@@ -99,12 +99,24 @@ async function countConcurrentVoiceCalls(organisationId: string) {
   return db.voiceCall.count({ where: { organisationId, status: { in: ["QUEUED", "RINGING", "IN_PROGRESS"] } } });
 }
 
+/** Branches are the organisation's active portfolios. */
+async function countActiveBranches(organisationId: string) {
+  return db.portfolio.count({ where: { organisationId, archivedAt: null } });
+}
+
+/** AI tenant replies: outbound messages the AI assistant wrote in this period. */
+async function countAIReplies(organisationId: string, period: UsagePeriod) {
+  return db.message.count({ where: { organisationId, direction: "OUTBOUND", senderType: "AI_EMPLOYEE", createdAt: { gte: period.start, lt: period.end } } });
+}
+
 /** Resolves current usage for a single feature key. Returns `null` for boolean features and any
  * feature key this module does not know how to measure (there is nothing to compare a limit to). */
 export async function getCurrentUsage(organisationId: string, featureKey: string, period: UsagePeriod): Promise<number | null> {
   switch (featureKey) {
     case ENTITLEMENTS.propertiesMax.key: return countActiveProperties(organisationId);
     case ENTITLEMENTS.unitsMax.key: return countActiveUnits(organisationId);
+    case ENTITLEMENTS.pmBranchesMax.key: return countActiveBranches(organisationId);
+    case ENTITLEMENTS.pmAiRepliesMonthlyMax.key: return countAIReplies(organisationId, period);
     case ENTITLEMENTS.teamMembersMax.key: return countActiveTeamMembers(organisationId);
     case ENTITLEMENTS.aiEmployeesMax.key: return countActiveAIEmployees(organisationId);
     case ENTITLEMENTS.storageBytesMax.key: return sumStorageBytes(organisationId);

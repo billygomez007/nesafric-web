@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { DashboardContent } from "@/components/dashboard-content";
+import { PlanStatusBanner } from "@/components/plan-status-banner";
 
 export default function DashboardPage() {
   return (
@@ -25,6 +26,7 @@ export default function DashboardPage() {
       eyebrow="PROPERTY MANAGEMENT"
       title="Portfolio"
     >
+      <PlanStatusBanner />
       <DashboardContent />
     </AppShell>
   );

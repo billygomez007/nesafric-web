@@ -4,8 +4,8 @@ import { AppError, notFound } from "@/platform/errors";
 import { requirePermission, PERMISSIONS } from "@/platform/authorization/permissions";
 import { recordAudit } from "@/modules/audit/service";
 import { publishDomainEvent } from "@/modules/events/service";
-import { createTrialSubscription } from "@/modules/subscriptions/lifecycle";
-import { assertOperational } from "@/modules/entitlements/service";
+import { assertOperational, getManagementState, hasFeature } from "@/modules/entitlements/service";
+import { entitlementFeatureDisabled } from "@/modules/entitlements/errors";
 import { ENTITLEMENTS } from "@/modules/entitlements/catalog";
 import { createOrganisationSchema, inviteMemberSchema } from "./schemas";
 import {
@@ -30,15 +30,9 @@ export async function createOrganisation(userId: string, input: unknown, options
     await tx.membershipRole.create({ data: { memberId: member.id, roleId: ownerRole.id } });
     await tx.auditEvent.create({ data: { organisationId: organisation.id, actorUserId: userId, action: "organisation.created", entityType: "organisation", entityId: organisation.id } });
     await tx.domainEvent.create({ data: { organisationId: organisation.id, name: "organisation.created", aggregateType: "organisation", aggregateId: organisation.id, payload: { countryCode: organisation.countryCode } } });
-    // Every ordinary organisation gains a subscription the moment it exists (item 1 + item 6's
-    // onboarding checklist "org setup -> plan/trial"): no duplicate identity, never a second
-    // signup step. `skipSubscription` exists solely for `marketplace-professionals/service.ts`,
-    // which creates a hidden technical-backing organisation for a Marketplace professional
-    // profile (Phase 21A item 8) — that organisation must never carry a PropertyOS management
-    // subscription of its own; the professional's commercial track is a separate
-    // `MarketplaceSubscription` entirely. Every ordinary caller omits `options`, so this changes
-    // nothing about existing behaviour.
-    if (!options.skipSubscription) await createTrialSubscription(tx, organisation.id, currencyCode);
+    // No subscription and no trial here: creating an account or organisation never starts the
+    // property-management trial. It starts when property management is first used (see
+    // `subscriptions/activation.ts`), so agents, sellers and marketplace-only accounts stay free.
     return organisation;
   }).then(async (organisation) => {
     // Skipped for the hidden technical-backing organisation `marketplace-professionals/service.ts`
@@ -67,6 +61,11 @@ export async function inviteMember(actorUserId: string, organisationId: string, 
   // organisation must be in a writable subscription state to grow its team.
   await assertOperational(organisationId, ENTITLEMENTS.teamMembersMax.key);
   const data = inviteMemberSchema.parse(input);
+  // On a management plan, inviting staff with a non-owner role is role-based staff permissions
+  // (Growth and above). Marketplace-only teams are not on a management plan and are unaffected.
+  if (data.roleKey !== "organisation_owner" && (await getManagementState(organisationId)).entitled && !(await hasFeature(organisationId, ENTITLEMENTS.pmStaffRolesEnabled.key))) {
+    throw entitlementFeatureDisabled(ENTITLEMENTS.pmStaffRolesEnabled.key, ENTITLEMENTS.pmStaffRolesEnabled.label, true);
+  }
   const role = await db.role.findUnique({ where: { key: data.roleKey } });
   if (!role) throw notFound();
 

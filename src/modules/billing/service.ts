@@ -15,10 +15,27 @@ export function getBillingAdapter(providerKey: string): BillingProviderAdapter {
   return billingProviders.get(providerKey);
 }
 
-/** Which provider a brand-new subscription should bill through: the configured HTTP provider if
- * one is set up, otherwise the always-available deterministic test provider (item 15). */
+/** Which provider a subscription should bill through: the configured HTTP provider if one is set
+ * up, otherwise the deterministic test provider. The test provider refuses to work in production,
+ * so an unconfigured production deployment can never take or fake a payment. */
 export function resolveDefaultBillingProviderKey(): string {
   return billingProviders.get("http").isConfigured() ? "http" : "test";
+}
+
+/** The provider to open a checkout with right now, or null when no provider can take payments. */
+export function resolveCheckoutProvider(): BillingProviderAdapter | null {
+  const key = resolveDefaultBillingProviderKey();
+  const adapter = billingProviders.get(key);
+  return adapter.isConfigured() ? adapter : null;
+}
+
+/** Whether the provider holds a recurring authorisation it can charge without the customer —
+ * only a subscription reference the provider itself issued. A trial never has one, so a trial is
+ * never charged automatically. */
+export function hasRecurringAuthorisation(subscription: { billingProviderKey: string; billingSubscriptionRef: string | null; billingCustomerRef: string | null }) {
+  if (!subscription.billingSubscriptionRef || !subscription.billingCustomerRef) return false;
+  const adapter = billingProviders.list().find((candidate) => candidate.key === subscription.billingProviderKey);
+  return Boolean(adapter?.isConfigured());
 }
 
 export function listBillingProviders() {
@@ -56,7 +73,8 @@ export async function ensureBillingSubscriptionRef(organisationId: string) {
  * charge (that is a normal `FAILED` result the lifecycle state machine handles) — only for a
  * genuinely unavailable/misconfigured provider. */
 export async function chargeCurrentPeriod(organisationId: string, amountMinor: string, currencyCode: string) {
-  const subscription = await ensureBillingSubscriptionRef(organisationId);
+  const subscription = await db.organisationSubscription.findUniqueOrThrow({ where: { organisationId } });
+  if (!hasRecurringAuthorisation(subscription)) return { status: "FAILED" as const, providerInvoiceRef: undefined, failureReason: "No recurring payment authorisation is on file." };
   const adapter = getBillingAdapter(subscription.billingProviderKey);
   return adapter.chargeCurrentPeriod({
     customerRef: subscription.billingCustomerRef!,

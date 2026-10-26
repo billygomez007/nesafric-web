@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { onPlan } from "./helpers/subscription";
 import { createPortfolio, createProperty } from "@/modules/assets/service";
 import {
   createAIEmployee,
@@ -15,7 +16,6 @@ import { updateAutonomyConfiguration, upsertAutonomyPolicy } from "@/modules/ai-
 import { decideAIProposal } from "@/modules/ai/service";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
-import { changeOrganisationPlan } from "@/modules/subscriptions/service";
 import { db } from "@/platform/database/client";
 
 async function cleanDatabase() {
@@ -52,7 +52,7 @@ describe("PostgreSQL Phase 16 AI employees", () => {
     // These fixtures create more AI employees than the default STARTER plan's entitlement limit
     // (1) allows; upgrade to a plan with enough headroom so this file continues to exercise
     // multi-employee scenarios rather than the (separately tested) entitlement limit itself.
-    await changeOrganisationPlan(owner.id, organisation.id, { planKey: "growth" });
+    await onPlan(organisation.id, "growth");
     const managerMember = await addMember(organisation.id, manager.id, "property_manager");
     await addMember(organisation.id, administrator.id, "administrator");
     await addMember(organisation.id, viewer.id, "viewer");

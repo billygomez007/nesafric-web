@@ -2,6 +2,8 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import type {
   BillingChargeRequest,
   BillingChargeResult,
+  BillingCheckoutRequest,
+  BillingCheckoutResult,
   BillingCustomerRequest,
   BillingCustomerResult,
   BillingProviderAdapter,
@@ -43,8 +45,10 @@ export class TestBillingAdapter implements BillingProviderAdapter {
     return env("BILLING_TEST_WEBHOOK_SECRET") ?? "nesafric-test-billing-webhook-secret";
   }
 
+  /** Never available in production: its signing key is public and it "pays" every charge, so
+   * enabling it there would let anyone grant themselves a paid plan. */
   isConfigured() {
-    return true;
+    return process.env.NODE_ENV !== "production";
   }
 
   async createCustomer(request: BillingCustomerRequest): Promise<BillingCustomerResult> {
@@ -59,7 +63,14 @@ export class TestBillingAdapter implements BillingProviderAdapter {
     // Nothing external to cancel.
   }
 
+  async createCheckout(request: BillingCheckoutRequest): Promise<BillingCheckoutResult> {
+    if (!this.isConfigured()) throw new Error("The test billing provider is disabled in production.");
+    const checkoutRef = `chk_test_${createHash("sha256").update(request.internalReference).digest("hex").slice(0, 24)}`;
+    return { checkoutRef, checkoutUrl: `${request.returnUrl}${request.returnUrl.includes("?") ? "&" : "?"}testCheckout=${checkoutRef}` };
+  }
+
   async chargeCurrentPeriod(request: BillingChargeRequest): Promise<BillingChargeResult> {
+    if (!this.isConfigured()) return { status: "FAILED", providerInvoiceRef: "", failureReason: "The test billing provider is disabled in production." };
     return { status: "PAID", providerInvoiceRef: `inv_test_${createHash("sha256").update(request.internalReference).digest("hex").slice(0, 24)}` };
   }
 
@@ -69,20 +80,23 @@ export class TestBillingAdapter implements BillingProviderAdapter {
       eventType?: string;
       customerRef?: string;
       subscriptionRef?: string;
+      checkoutRef?: string;
       providerInvoiceRef?: string;
       amountMinor?: string;
       currencyCode?: string;
       occurredAt?: string;
       failureReason?: string;
     };
-    if (!event.eventType || !event.subscriptionRef) {
-      throw new Error("Test billing webhook event is missing required fields (eventType, subscriptionRef).");
+    const isCheckout = event.eventType === "CHECKOUT_PAID" || event.eventType === "CHECKOUT_FAILED";
+    if (!event.eventType || (isCheckout ? !event.checkoutRef : !event.subscriptionRef)) {
+      throw new Error("Test billing webhook event is missing required fields (eventType, and checkoutRef or subscriptionRef).");
     }
     return {
       eventKey: event.eventId ?? randomUUID(),
       eventType: event.eventType as NormalizedBillingEvent["eventType"],
       customerRef: event.customerRef,
       subscriptionRef: event.subscriptionRef,
+      checkoutRef: event.checkoutRef,
       providerInvoiceRef: event.providerInvoiceRef,
       amountMinor: event.amountMinor,
       currencyCode: event.currencyCode?.toUpperCase(),
@@ -92,6 +106,7 @@ export class TestBillingAdapter implements BillingProviderAdapter {
   }
 
   verifyWebhookSignature(rawBody: string, headers: Record<string, string | null>) {
+    if (!this.isConfigured()) return { verified: false, reason: "disabled-in-production" };
     const signature = headers["x-billing-signature"];
     if (!signature) return { verified: false, reason: "missing-signature" };
     const expected = createHmac("sha256", this.secret()).update(rawBody).digest("hex");
