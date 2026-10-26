@@ -5335,6 +5335,12 @@ model PlatformPrincipal {
   createdAt                 DateTime                          @default(now())
   updatedAt                 DateTime                          @updatedAt
   disabledAt                DateTime?
+  /// WhatsApp admin: hashed PIN (set by an operator), failed attempts, lockout, and how long an
+  /// entered PIN keeps admin commands unlocked. No PIN: WhatsApp admin is off for this principal.
+  whatsappPinHash           String?
+  whatsappPinFailures       Int                               @default(0)
+  whatsappPinLockedUntil    DateTime?
+  whatsappUnlockedUntil     DateTime?
   user                      User                              @relation(fields: [userId], references: [id], onDelete: Restrict)
   supportSessions           PlatformSupportSession[]
   auditEvents               PlatformAuditEvent[]

@@ -5,6 +5,7 @@ import { advanceConversation, MAIN_MENU, type EngineInput } from "./engine";
 import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { assistantStateSchema, initialState, type AssistantState } from "./schemas";
 import { createWhatsAppAccount, linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
+import { advanceAdmin } from "./admin";
 import { ACCOUNT_IN_USE, ACCOUNT_NAME_PROMPT, accountReady, validAccountName } from "./account-signup";
 import { formatAccountSummary, resolveAccountRoles } from "./account";
 import { advanceOnboarding } from "./onboarding/flow";
@@ -47,6 +48,7 @@ type Dependencies = {
   invitationReply: typeof invitationReply;
   agents: typeof searchAgents;
   createAccount?: typeof createWhatsAppAccount;
+  admin?: typeof advanceAdmin;
   viewingCommand?: typeof handleViewingCommand;
   viewingOutcome?: typeof handleViewingOutcome;
   openViewing?: typeof openViewingNegotiation;
@@ -71,6 +73,13 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   const greeting = async () => greetingLine(dependencies.now?.() ?? new Date(), (await dependencies.linkedUser(input.phone))?.user.displayName ?? input.profileName);
 
   if (state.workflow === "link") return continueLink(input, state, reset, dependencies);
+  // Platform admins linked by an operator (PIN-protected). For anyone else this returns null.
+  if (input.kind === "text" && (state.workflow === "admin" || /^admin(\s|$)/.test(command))) {
+    const linked = await dependencies.linkedUser(input.phone);
+    const admin = await (dependencies.admin ?? advanceAdmin)({ phone: input.phone, body: input.body, kind: input.kind, messageId: input.messageId, state, linkedUserId: linked?.user.id });
+    if (admin) return admin;
+    if (state.workflow === "admin") state = reset();
+  }
   if (state.workflow === "account") return continueAccount(input, state, reset, dependencies);
   if (input.kind === "text" && /^(create account|create my account|sign up|signup|open account)$/.test(command)) {
     if (await dependencies.linkedUser(input.phone)) return { state, reply: "This WhatsApp number is already connected to your NesAfric account. Reply menu to choose what to do." };
