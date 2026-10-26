@@ -78,6 +78,9 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
     state.paused = state.workflow !== "idle";
     return reply(MAIN_MENU + (state.paused ? "\n\nYour previous workflow is saved. Reply resume to continue or cancel before starting another." : ""));
   }
+  // The paging and no-results buttons (the official number answers these in its router first).
+  if (command === "new search") return { state: { ...initialState(), lastRequest: state.lastRequest }, reply: MAIN_MENU };
+  if (command === "change filters" && state.workflow === "property_search") { state.paused = false; return reply("Tell me what to change, for example: in East Legon, under 5000 a month, 2 bedrooms, or apartment. I'll search again with the new filters."); }
   if (command === "resume") { state.paused = false; return state.step === "confirm" ? { ...reply(promptFor(state)), interactive: confirmButtons(promptFor(state)) } : reply(promptFor(state)); }
   if (/^(support|human|8)$/.test(command)) return { ...reply("Your conversation has been added to the support queue. A team member will need to respond; no response time is guaranteed. Reply menu to go back to the assistant."), handoff: true };
   if (state.paused) { const text = "Your unfinished workflow is saved. Reply resume to continue, or cancel to start another."; return { ...reply(text), interactive: resumeButtons(text) }; }
@@ -173,7 +176,10 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
     const found = await dependencies.tools.searchProperties(state.property, state.page);
     state.results = found.ids; state.hasMore = found.hasMore;
     const filters = describeFilters(state.property);
-    if (!found.ids.length) return reply(`${filters}\nNo published, available properties match. You can change the area or budget. I have not relaxed your filters.`);
+    if (!found.ids.length) {
+      const text = `${filters}\nNo published, available properties match. You can change the area or budget. I have not relaxed your filters.`;
+      return { state, reply: text, interactive: replyButtons(text, [{ id: "change filters", title: "Change filters" }, { id: "new search", title: "New search" }]) };
+    }
     // Cards with the cover photo when the search returns full listings; the text list otherwise.
     if (found.listings?.length && found.total) {
       const from = (state.page - 1) * 3 + 1;

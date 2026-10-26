@@ -190,3 +190,14 @@ describe("Choose an option: each row runs an existing workflow", () => {
     expect(result.state).toMatchObject({ workflow: "viewing" });
   });
 });
+
+describe("official number: no matching properties", () => {
+  it("the no-results buttons lead to the filter prompt and to a new search", async () => {
+    const { deps } = dependencies();
+    const none = await advanceOfficialConversation(input("2 bedroom apartment to rent in Osu"), deps);
+    expect(none.reply).toContain("No published, available properties match.");
+    expect(none.interactive).toMatchObject({ buttons: [{ id: "change filters" }, { id: "new search" }] });
+    expect((await advanceOfficialConversation(input("change filters", none.state), deps)).reply).toContain("Tell me what to change");
+    expect((await advanceOfficialConversation(input("new search", none.state), deps)).reply).toBe(FIND_PROPERTY_PROMPT);
+  });
+});
