@@ -78,6 +78,23 @@ describe("PostgreSQL WhatsApp business registration", () => {
     expect(await db.marketplaceProfessional.count()).toBe(0);
   });
 
+  it("asks a new person to register as an agent or a business before listing, with buttons, and lists nothing", async () => {
+    const owner = await registerUser({ displayName: "Owner", email: "owner@example.com", password: "secure-password-123" });
+    const organisation = await createOrganisation(owner.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
+    const chat = whatsappConversation(PHONE, organisation.id);
+    await chat.send("list a property");
+    const choice = await chat.send("Kwesi Boateng");
+    expect(choice.reply).toContain("✅ Your NesAfric account is ready, Kwesi.");
+    expect(choice.reply).toContain("Before you list a property, register with NesAfric as one of these");
+    expect(choice.reply).toContain("upload the front and back of your Ghana Card");
+    expect(choice.reply).toContain("upload your business registration certificate");
+    expect(choice.interactive).toMatchObject({ type: "button", buttons: [{ id: "register agent", title: "Individual agent" }, { id: "register agency", title: "Real estate business" }] });
+    expect(await db.whatsAppFlowDraft.count({ where: { kind: "PROPERTY_LISTING" } })).toBe(0);
+    expect(await db.listing.count()).toBe(0);
+    // Tapping a button starts that registration.
+    expect((await chat.send("register agency")).reply).toContain("What kind of business is it?");
+  });
+
   it("never takes over an existing account: a number already in use must link with a code", async () => {
     const owner = await registerUser({ displayName: "Owner", email: "owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
@@ -107,7 +124,9 @@ describe("PostgreSQL WhatsApp business registration", () => {
     await chat.send(logoNumber);
     expect((await chat.send({ image: mediaId(2) })).reply).toContain("Please check your registration:");
     const submitted = await chat.send("confirm");
-    expect(submitted.reply).toContain("Accra Prime Realty is submitted for review. Status: submitted for review.");
+    expect(submitted.reply).toContain("✅ Accra Prime Realty is submitted for review.");
+    expect(submitted.reply).not.toMatch(/https?:\/\//);
+    expect(submitted.interactive).toMatchObject({ type: "button", buttons: [{ id: "list a property" }, { id: "my applications" }] });
     expect(submitted.reply).toContain("Your logo is saved.");
     expect(downloads.calls).toEqual([mediaId(2), CERTIFICATE]);
 
