@@ -28,8 +28,8 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business", "agent_search"]).default("idle"),
-  step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business", "agent_search", "account"]).default("idle"),
+  step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code", "account_name"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
   service: serviceFiltersSchema.default({}),
@@ -40,6 +40,8 @@ export const assistantStateSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   message: z.string().trim().max(5_000).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
+  /** What the person wanted when an account was needed ("list a property"); run once the account exists. */
+  afterAccount: z.string().regex(/^[a-z ]{2,60}$/).optional(),
   /** The day chosen in the viewing day list, before a time is picked (YYYY-MM-DD, Ghana time). */
   viewingDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   /** Step-by-step property search: on when started from the menu, the step asked, the steps answered. */

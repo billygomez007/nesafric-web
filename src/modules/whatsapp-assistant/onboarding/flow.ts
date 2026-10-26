@@ -5,7 +5,7 @@ import { PERMISSIONS } from "@/platform/authorization/permissions";
 import { membershipHasPermission } from "@/platform/authorization/policy";
 import { db } from "@/platform/database/client";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
-import { linkedWhatsAppUser, linkWhatsAppIdentity, whatsappAddress } from "../identity";
+import { createWhatsAppAccount, linkedWhatsAppUser, linkWhatsAppIdentity, whatsappAddress } from "../identity";
 import { abandonDraft, findOpenDraft, saveDraft, startDraft, type Draft } from "./draft";
 import { commitDraft, type CommitSummary } from "./commit";
 import { formatErrors, formatMinor, parseAmountMinor, parseProviders, parseTenants, parseUnits, parseUnitType, PROVIDER_CATEGORIES, UNIT_TYPES, type LineError } from "./parse";
@@ -155,6 +155,16 @@ async function startAccountCode(draft: Draft, input: OnboardingInput, dependenci
     if (!(error instanceof AppError)) throw error;
     draft.data.challengeId = undefined;
     draft.step = "account_code";
+    // Without text-message codes, a new number gets its account here: Meta attests the sender.
+    if (error.status === 503 && draft.data.displayName) {
+      const account = await createWhatsAppAccount(input.phone, draft.data.displayName, input.organisationId);
+      if (account.created) {
+        draft.userId = account.user.id;
+        await enterOrganisationStep(draft, account.user.id, dependencies);
+        return `✅ Your NesAfric account is ready, ${account.user.displayName}. This WhatsApp number is your sign-in.\n\n${promptFor(draft, input.phone)}`;
+      }
+      return "This WhatsApp number already belongs to a NesAfric account, and text-message codes are unavailable right now. Reply cancel, then link to connect it with a code sent to your email.";
+    }
     return error.status === 429 ? `${error.message} Reply resend when ready.` : "Text-message codes are unavailable right now. Your progress is saved; reply resend in a few minutes.";
   }
 }

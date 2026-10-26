@@ -122,8 +122,8 @@ describe("Choose an option: each row runs an existing workflow", () => {
     expect((await advanceOfficialConversation(input("book a viewing", found.state), deps)).reply).toBe(VIEWING_PROMPT);
   });
 
-  it("2 / Manage My Properties shows the linked account, and asks an unlinked number to link", async () => {
-    expect((await advanceOfficialConversation(input("2"), dependencies().deps)).reply).toContain("Reply link to connect it.");
+  it("2 / Manage My Properties shows the linked account, and offers an unlinked number setup or linking", async () => {
+    expect((await advanceOfficialConversation(input("2"), dependencies().deps)).reply).toContain("Reply register to set up your properties and tenants right here");
     const linkedUser = vi.fn(async () => ({ identityId: "i", user: { id: "u", displayName: "Kofi Mensah" } }));
     expect((await advanceOfficialConversation(input("account"), dependencies({ linkedUser }).deps)).reply).toContain("Kofi Mensah");
   });

@@ -1,11 +1,11 @@
-import { absoluteUrl } from "@/platform/brand";
 import { AppError } from "@/platform/errors";
 import { maskPhone } from "@/platform/identity/phone";
 import { requestOtp, verifyOtp } from "@/modules/identity/otp";
 import { advanceConversation, MAIN_MENU, type EngineInput } from "./engine";
 import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { assistantStateSchema, initialState, type AssistantState } from "./schemas";
-import { linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
+import { createWhatsAppAccount, linkedWhatsAppUser, linkWhatsAppIdentity, unlinkWhatsAppIdentity, whatsappAddress } from "./identity";
+import { ACCOUNT_IN_USE, ACCOUNT_NAME_PROMPT, accountReady, validAccountName } from "./account-signup";
 import { formatAccountSummary, resolveAccountRoles } from "./account";
 import { advanceOnboarding } from "./onboarding/flow";
 import { findOpenDraft } from "./onboarding/draft";
@@ -46,6 +46,7 @@ type Dependencies = {
   business: typeof advanceBusiness;
   invitationReply: typeof invitationReply;
   agents: typeof searchAgents;
+  createAccount?: typeof createWhatsAppAccount;
   viewingCommand?: typeof handleViewingCommand;
   viewingOutcome?: typeof handleViewingOutcome;
   openViewing?: typeof openViewingNegotiation;
@@ -70,6 +71,11 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
   const greeting = async () => greetingLine(dependencies.now?.() ?? new Date(), (await dependencies.linkedUser(input.phone))?.user.displayName ?? input.profileName);
 
   if (state.workflow === "link") return continueLink(input, state, reset, dependencies);
+  if (state.workflow === "account") return continueAccount(input, state, reset, dependencies);
+  if (input.kind === "text" && /^(create account|create my account|sign up|signup|open account)$/.test(command)) {
+    if (await dependencies.linkedUser(input.phone)) return { state, reply: "This WhatsApp number is already connected to your NesAfric account. Reply menu to choose what to do." };
+    return { state: { ...reset(), workflow: "account", step: "account_name" }, reply: ACCOUNT_NAME_PROMPT };
+  }
 
   // Viewing negotiation and the after-viewing check: explicit commands with a VW- reference, from
   // either side and from any step (they are what the viewing buttons send).
@@ -174,7 +180,7 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   }
   if (input.kind === "text" && /^(account|my account)$/.test(command)) {
     const linked = await dependencies.linkedUser(input.phone);
-    if (!linked) return { state, reply: "This WhatsApp number is not linked to a NesAfric account. Reply link to connect it." };
+    if (!linked) return { state, reply: "This WhatsApp number is not connected to a NesAfric account yet.\nReply register to set up your properties and tenants right here, or link if you already have an account." };
     return { state, reply: formatAccountSummary(linked.user.displayName, await dependencies.roles(linked.user.id)) };
   }
   if (input.kind === "text" && command === "unlink") {
@@ -195,6 +201,8 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
     await (dependencies.openViewing ?? openViewingNegotiation)(requested);
     return result;
   }
+  // No inquiry in this chat yet: point to the applications here, never to a website sign-in.
+  if (result.reply.startsWith("There is no submitted customer request in this conversation.")) return { ...result, reply: "There is no inquiry or viewing request in this chat yet. For your registrations and listings, reply my applications." };
   // Anything not understood on the first turn, or between tasks, gets the welcome menu.
   if (state.workflow === "idle" && result.reply.startsWith("Would you like to find a property, find a service provider")) return { ...result, ...welcomeReply(await greeting(), "I did not catch that.\n\n") };
   if (result.reply === "Are you looking to rent or buy?" && !result.interactive) return { ...result, interactive: rentOrBuyButtons(result.reply) };
@@ -224,6 +232,22 @@ async function findAgents(said: string, state: AssistantState, reset: () => Assi
   const next: AssistantState = { ...reset(), workflow: "agent_search", agentArea: area, page, hasMore: found.hasMore, results: [] };
   if (!found.ids.length) return { state: next, reply: page === 1 ? `No verified agents list ${area} as an area they cover yet. Send another area, or reply menu.` : "There are no more agents for that area. Send another area, or reply menu." };
   return { state: next, reply: `Verified agents for ${area}:\n\n${found.cards.join("\n\n")}\n\nOpen a profile to see their listings and contact them.${found.hasMore ? " Reply more for others." : ""} Send another area to search again, or reply menu.` };
+}
+
+/** Account sign-up: the name, then the account, then whatever the person had chosen. */
+async function continueAccount(input: OfficialInput, state: AssistantState, reset: () => AssistantState, dependencies: Dependencies): Promise<OfficialResult> {
+  const command = input.body.trim().toLowerCase();
+  if (command === "cancel" || command === "menu") return { state: reset(), reply: "Account sign-up cancelled. Nothing was created. Reply menu to see the options." };
+  const name = input.kind === "text" ? validAccountName(input.body) : null;
+  if (!name) return { state, reply: "Please send your full name (2 to 100 characters), or cancel." };
+  const result = await (dependencies.createAccount ?? createWhatsAppAccount)(input.phone, name, input.organisationId);
+  if (!result.created) return { state: reset(), reply: ACCOUNT_IN_USE };
+  const ready = accountReady(result.user.displayName);
+  if (!state.afterAccount) return { state: reset(), reply: `${ready}\n\nReply menu to choose what to do next.` };
+  // Carry straight on with the option that needed the account.
+  const next = await advanceOfficialConversation({ ...input, body: state.afterAccount, state: reset() }, dependencies);
+  const interactive = next.interactive && `${ready}\n\n${next.interactive.body}`.length <= 1024 ? { ...next.interactive, body: `${ready}\n\n${next.interactive.body}` } : next.interactive;
+  return { ...next, reply: `${ready}\n\n${next.reply}`, interactive };
 }
 
 async function continueLink(input: OfficialInput, state: AssistantState, reset: () => AssistantState, dependencies: Dependencies): Promise<OfficialResult> {
@@ -267,7 +291,7 @@ async function continueLink(input: OfficialInput, state: AssistantState, reset: 
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     if (error.code === "OTP_NO_ACCOUNT") {
-      return { state: reset(), reply: `No NesAfric account uses ${link.channel === "sms" ? "this number" : "that email address"} yet. Create one at ${absoluteUrl("/register")}, then reply link here.`, redactInbound: true };
+      return { state: { ...reset(), workflow: "account", step: "account_name" }, reply: `No NesAfric account uses ${link.channel === "sms" ? "this number" : "that email address"} yet.\n\n${ACCOUNT_NAME_PROMPT}`, redactInbound: true };
     }
     if (error.code === "OTP_EXPIRED") return { state: { ...state, step: "link_method", link: undefined }, reply: "That code has expired.\n" + methodPrompt(input.phone), redactInbound: true };
     if (error.code === "OTP_INVALID") {

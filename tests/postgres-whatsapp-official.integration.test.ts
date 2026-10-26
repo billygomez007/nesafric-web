@@ -168,7 +168,7 @@ describe("PostgreSQL official WhatsApp number", () => {
     expect((await officialPost(signed(tapped))).status).toBe(200);
     await work(adapters);
     expect((await db.message.findFirstOrThrow({ where: { externalMessageId: "wamid.tap" } })).body).toBe("account");
-    expect(sent.at(-1)?.body).toContain("not linked");
+    expect(sent.at(-1)?.body).toContain("not connected to a NesAfric account yet");
     expect(sent.at(-1)?.whatsappInteractive).toBeUndefined();
   });
 
@@ -177,7 +177,7 @@ describe("PostgreSQL official WhatsApp number", () => {
     const { adapters } = recordingAdapters();
     await receive("account");
     await work(adapters);
-    expect(await lastReply((await conversationFor(official.id)).id)).toContain("not linked");
+    expect(await lastReply((await conversationFor(official.id)).id)).toContain("not connected to a NesAfric account yet");
   });
 
   it("records STOP and START, and skips WhatsApp notifications while opted out", async () => {
