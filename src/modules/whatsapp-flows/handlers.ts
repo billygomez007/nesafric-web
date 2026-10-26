@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { db } from "@/platform/database/client";
+import { ZodError } from "zod";
 import { AppError } from "@/platform/errors";
 import { absoluteUrl } from "@/platform/brand";
 import { getPublicListing, searchPublicListings } from "@/modules/listings/service";
+import { createAccommodationBooking, findBookingForSubmission } from "@/modules/bookings/service";
+import type { PublicListing } from "@/modules/whatsapp-assistant/property-cards";
 import { discoverMarketplaceProviders } from "@/modules/marketplace/service";
 import { createMaintenanceRequest } from "@/modules/maintenance/service";
 import { maintenanceCategorySchema } from "@/modules/maintenance/schemas";
@@ -16,6 +19,8 @@ import { REGISTRATION_FLOW_KINDS, startRegistrationFromFlow } from "@/modules/wh
 import { GHANA_REGIONS } from "@/modules/whatsapp-assistant/business/common";
 import { findOpenDraft, saveDraft, startDraft } from "@/modules/whatsapp-assistant/onboarding/draft";
 import { parseUnits } from "@/modules/whatsapp-assistant/onboarding/parse";
+import { BLANK_PHOTO, FLOW_PHOTO_SLOTS } from "./definitions/components";
+import { listingPhotos } from "./photos";
 import { signOutcome, type FlowClaims } from "./token";
 import type { FlowKey } from "./registry";
 
@@ -43,12 +48,39 @@ function finish(ctx: Ctx, outcome: Record<string, string>): FlowResponse {
 const notice = (message: string): FlowResponse => ({ screen: "NOTICE", data: { message } });
 const invalid = (screen: string, data: Record<string, unknown>, message: string): FlowResponse => ({ screen, data: { ...data, error_message: message } });
 
-// --- Property search ---------------------------------------------------------------------------
+// --- Property search, then a viewing, a stay or a question in the same form ------------------
 
 const searchScreen = (): FlowResponse => ({ screen: "SEARCH", data: { categories: SEARCH_TYPES, regions: REGIONS } });
+const priceText = (listing: PublicListing) => `${money(listing.pricing.rentAmountMinor ?? listing.pricing.askingAmountMinor, listing.pricing.currencyCode)}${listing.pricing.frequency ? ` / ${listing.pricing.frequency.toLowerCase().replaceAll("_", " ")}` : ""}`;
+/** Any listing id a screen sends is checked against the published marketplace again. */
+const publicListing = (id: string) => getPublicListing(id).then((result) => result.listing).catch(() => null);
+const takesRequests = (listing: PublicListing) => listing.contact.enquiryEnabled && !listing.bookable;
+const takesStays = (listing: PublicListing) => listing.bookable && listing.contact.enquiryEnabled;
+const gone = (): FlowResponse => invalid("SEARCH", searchScreen().data, "That property is no longer available. Please search again.");
+
+async function propertyDetails(listing: PublicListing, withPhotos: boolean): Promise<FlowResponse> {
+  const photos = withPhotos ? await listingPhotos(listing) : [];
+  const photoSlots = Object.fromEntries(Array.from({ length: FLOW_PHOTO_SLOTS }, (_, index) => [[`has_photo_${index + 1}`, Boolean(photos[index])], [`photo_${index + 1}`, photos[index]?.src ?? BLANK_PHOTO]]).flat());
+  const next = takesStays(listing) ? [option("stay", "Book a stay")] : takesRequests(listing) ? [option("book", "Book a viewing"), option("inquire", "Ask a question")] : [];
+  return {
+    screen: "DETAILS",
+    data: {
+      listing_id: listing.id,
+      ...(withPhotos ? photoSlots : {}),
+      title: clip(listing.title, 80),
+      price: priceText(listing),
+      location: clip(listing.location.label ?? [listing.location.locality, listing.location.city, listing.location.region].filter(Boolean).join(", "), 120) || "Ghana",
+      features: [listing.attributes.bedrooms === null ? null : `${listing.attributes.bedrooms} bedrooms`, listing.attributes.bathrooms === null ? null : `${listing.attributes.bathrooms} bathrooms`, listing.stay?.maxGuests ? `Up to ${listing.stay.maxGuests} guests` : null, listing.stay?.minimumNights ? `${listing.stay.minimumNights}-night minimum` : null, `Verification: ${listing.verification.status.toLowerCase()}`].filter(Boolean).join(" · "),
+      description: `${clip(listing.description, 600)}\nAll photos: ${absoluteUrl(`/marketplace/properties/${listing.id}`)}`,
+      next_steps: next.length ? next : [option("close", withPhotos ? "Close" : "Viewings on the website only")],
+    },
+  };
+}
 
 const propertySearch: Handler = async (request, ctx) => {
   const data = request.data;
+  // The first published layout handed over to the viewing and question Flows; version 2 does it all here.
+  const inForm = field(data, "form_version", 2) === "2";
   if (request.action === "INIT") return searchScreen();
   if (data.action === "search") {
     const purpose = field(data, "purpose");
@@ -72,45 +104,38 @@ const propertySearch: Handler = async (request, ctx) => {
       screen: "RESULTS",
       data: {
         summary: `${result.pagination.total ?? result.items.length} ${purpose === "RENT" ? "rental" : "sale"} ${result.items.length === 1 ? "property matches" : "properties match"}. Showing ${result.items.length}.`,
-        results: result.items.map((item) => option(item.id, item.title, `${money(item.pricing.rentAmountMinor ?? item.pricing.askingAmountMinor, item.pricing.currencyCode)}${item.pricing.frequency ? ` / ${item.pricing.frequency.toLowerCase().replaceAll("_", " ")}` : ""} · ${item.location.label ?? [item.location.locality, item.location.city].filter(Boolean).join(", ")}`)),
+        results: result.items.map((item) => option(item.id, item.title, `${priceText(item)} · ${item.location.label ?? [item.location.locality, item.location.city].filter(Boolean).join(", ")}`)),
         filters: JSON.stringify(filters),
       },
     };
   }
-  if (data.action === "select" || data.action === "next") {
-    const listingId = field(data, "listing", 40);
-    // Any id the screen sends is checked against the published marketplace again.
-    const listing = await getPublicListing(listingId).then((result) => result.listing).catch(() => null);
-    if (!listing) return invalid("SEARCH", searchScreen().data, "That property is no longer available. Please search again.");
-    const enquiries = listing.contact.enquiryEnabled && !listing.bookable;
-    if (data.action === "next") {
-      const next = field(data, "next", 20);
-      if ((next === "book" || next === "inquire") && enquiries) return finish(ctx, { outcome: "open_flow", flow: next === "book" ? "nesafric_book_viewing" : "nesafric_property_inquiry", listing: listing.id });
-      return invalid("DETAILS", {}, "Please choose what you would like to do.");
+  const listing = await publicListing(field(data, "listing", 40));
+  if (data.action === "select") return listing ? propertyDetails(listing, true) : gone();
+  if (!listing) return gone();
+  if (data.action === "next") {
+    const next = field(data, "next", 20);
+    if (!inForm) {
+      if ((next === "book" || next === "inquire") && takesRequests(listing)) return finish(ctx, { outcome: "open_flow", flow: next === "book" ? "nesafric_book_viewing" : "nesafric_property_inquiry", listing: listing.id });
+      return invalid("DETAILS", (await propertyDetails(listing, false)).data, "Please choose what you would like to do.");
     }
-    return {
-      screen: "DETAILS",
-      data: {
-        listing_id: listing.id,
-        title: clip(listing.title, 80),
-        price: `${money(listing.pricing.rentAmountMinor ?? listing.pricing.askingAmountMinor, listing.pricing.currencyCode)}${listing.pricing.frequency ? ` / ${listing.pricing.frequency.toLowerCase().replaceAll("_", " ")}` : ""}`,
-        location: clip(listing.location.label ?? [listing.location.locality, listing.location.city, listing.location.region].filter(Boolean).join(", "), 120) || "Ghana",
-        features: [listing.attributes.bedrooms === null ? null : `${listing.attributes.bedrooms} bedrooms`, listing.attributes.bathrooms === null ? null : `${listing.attributes.bathrooms} bathrooms`, `Verification: ${listing.verification.status.toLowerCase()}`].filter(Boolean).join(" · "),
-        description: `${clip(listing.description, 600)}\nMore photos: ${absoluteUrl(`/marketplace/properties/${listing.id}`)}`,
-        // Without enquiries there is nothing to do here but go back (the header's back arrow).
-        next_steps: enquiries ? [option("book", "Book a viewing"), option("inquire", "Ask a question")] : [option("none", "Viewings on the website only")],
-      },
-    };
+    if (next === "book" && takesRequests(listing)) return viewingStep(ctx, listing, {}, "show", "VIEWING");
+    if (next === "inquire" && takesRequests(listing)) return questionStep(ctx, listing, {}, false, "QUESTION");
+    if (next === "stay" && takesStays(listing)) return stayStep(ctx, listing, {}, false);
+    if (next === "close") return { screen: "DONE", data: { message: "Reply menu in the chat for anything else, or forms to search again." } };
+    return invalid("DETAILS", (await propertyDetails(listing, true)).data, "Please choose what you would like to do.");
   }
+  if (data.action === "date" || data.action === "book") return takesRequests(listing) ? viewingStep(ctx, listing, data, data.action, "VIEWING") : gone();
+  if (data.action === "send") return takesRequests(listing) ? questionStep(ctx, listing, data, true, "QUESTION") : gone();
+  if (data.action === "stay") return takesStays(listing) ? stayStep(ctx, listing, data, true) : gone();
   return searchScreen();
 };
 
-// --- Book a viewing and ask about a property (the listing comes from the token only) ----------
+// --- Viewings, questions and stays (shared by the search Flow and the single-purpose Flows) ---
 
 async function boundListing(ctx: Ctx) {
   if (!ctx.claims.l) return null;
-  const listing = await getPublicListing(ctx.claims.l).then((result) => result.listing).catch(() => null);
-  return listing && listing.contact.enquiryEnabled && !listing.bookable ? listing : null;
+  const listing = await publicListing(ctx.claims.l);
+  return listing && takesRequests(listing) ? listing : null;
 }
 
 const SLOT_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
@@ -134,53 +159,96 @@ async function openSlots(listingId: string, date: string, now = new Date()) {
 
 const bookingWindow = (now = new Date()) => ({ min: isoDate(new Date(now.getTime() + DAY)), max: isoDate(new Date(now.getTime() + 60 * DAY)) });
 
-const bookViewing: Handler = async (request, ctx) => {
-  const listing = await boundListing(ctx);
-  if (!listing) return { screen: "DONE", data: { message: "This property is no longer taking viewing requests. Reply menu in the chat to search again." } };
+/** The viewing screen (`screen` is BOOK in the viewing Flow, VIEWING in the search Flow): show it, refresh its times for a date, or request the viewing. */
+async function viewingStep(ctx: Ctx, listing: PublicListing, data: Record<string, unknown>, step: "show" | "date" | "book", screenId: string): Promise<FlowResponse> {
   const window = bookingWindow();
-  const base = { property: clip(listing.title, 80), min_date: window.min, max_date: window.max, name: ctx.linked?.user.displayName ?? "" };
-  const data = request.data;
+  const base = { property: clip(listing.title, 80), listing_id: listing.id, min_date: window.min, max_date: window.max, name: ctx.linked?.user.displayName ?? "" };
   const date = field(data, "date", 10);
-  if (request.action === "INIT") return { screen: "BOOK", data: { ...base, slots: await openSlots(listing.id, window.min) } };
-  if (data.action === "date") {
+  if (step === "show") return { screen: screenId, data: { ...base, slots: await openSlots(listing.id, window.min) } };
+  if (step === "date") {
     const inWindow = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= window.min && date <= window.max;
     const slots = inWindow ? await openSlots(listing.id, date) : [];
-    return slots.length ? { screen: "BOOK", data: { ...base, slots } } : invalid("BOOK", { ...base, slots: [option("none", "No times left")] }, "No viewing times are left on that day. Please choose another date.");
+    return slots.length ? { screen: screenId, data: { ...base, slots } } : invalid(screenId, { ...base, slots: [option("none", "No times left")] }, "No viewing times are left on that day. Please choose another date.");
   }
-  if (data.action !== "book") return { screen: "BOOK", data: { ...base, slots: await openSlots(listing.id, window.min) } };
   const slot = field(data, "slot", 5);
   const name = field(data, "name", 100);
   const note = field(data, "note", 500);
-  if (!(/^\d{4}-\d{2}-\d{2}$/.test(date) && date >= window.min && date <= window.max)) return invalid("BOOK", { ...base, slots: await openSlots(listing.id, window.min) }, "Please choose a date between tomorrow and 60 days from now.");
+  if (!(/^\d{4}-\d{2}-\d{2}$/.test(date) && date >= window.min && date <= window.max)) return invalid(screenId, { ...base, slots: await openSlots(listing.id, window.min) }, "Please choose a date between tomorrow and 60 days from now.");
   const slots = await openSlots(listing.id, date);
   // Availability is checked again at submission: the screen's options may be stale.
-  if (!slots.some((item) => item.id === slot)) return invalid("BOOK", { ...base, slots: slots.length ? slots : [option("none", "No times left")] }, "That time is no longer available. Please choose another.");
-  if (name.length < 2) return invalid("BOOK", { ...base, slots }, "Please enter your name.");
+  if (!slots.some((item) => item.id === slot)) return invalid(screenId, { ...base, slots: slots.length ? slots : [option("none", "No times left")] }, "That time is no longer available. Please choose another.");
+  if (name.length < 2) return invalid(screenId, { ...base, slots }, "Please enter your name.");
   // One open viewing request per number per property: a second one returns the first.
   const existing = await db.viewingRequest.findFirst({ where: { listingId: listing.id, status: { in: ["REQUESTED", "CONFIRMED", "RESCHEDULED"] }, lead: { phone: ctx.claims.a } }, select: { id: true } });
   if (existing) return finish(ctx, { outcome: "viewing_exists", reference: existing.id, listing: listing.id });
   const startsAt = new Date(`${date}T${slot}:00.000Z`);
-  const request_ = await submitCustomerRequest({
+  const request = await submitCustomerRequest({
     state: { workflow: "viewing", step: "confirm", selectedListingId: listing.id, name, message: note || undefined, startsAt: startsAt.toISOString() } as never,
-    phone: ctx.claims.a, messageId: submissionId(ctx, "book"), conversationId: "whatsapp-flow",
+    phone: ctx.claims.a, messageId: submissionId(ctx, `book:${listing.id}`), conversationId: "whatsapp-flow",
   });
-  return finish(ctx, { outcome: "viewing_requested", reference: request_.viewingId ?? request_.leadId, lead: request_.leadId, listing: listing.id });
+  return finish(ctx, { outcome: "viewing_requested", reference: request.viewingId ?? request.leadId, lead: request.leadId, listing: listing.id });
+}
+
+async function questionStep(ctx: Ctx, listing: PublicListing, data: Record<string, unknown>, send: boolean, screenId: string): Promise<FlowResponse> {
+  const base = { property: clip(listing.title, 80), listing_id: listing.id, name: ctx.linked?.user.displayName ?? "" };
+  if (!send) return { screen: screenId, data: base };
+  const name = field(data, "name", 100);
+  const message = field(data, "message", 2000);
+  if (name.length < 2) return invalid(screenId, base, "Please enter your name.");
+  if (message.length < 3) return invalid(screenId, base, "Please write your question.");
+  const result = await submitCustomerRequest({
+    state: { workflow: "inquiry", step: "confirm", selectedListingId: listing.id, name, message } as never,
+    phone: ctx.claims.a, messageId: submissionId(ctx, `send:${listing.id}`), conversationId: "whatsapp-flow",
+  });
+  return finish(ctx, { outcome: "inquiry_sent", reference: result.leadId, lead: result.leadId, listing: listing.id });
+}
+
+const STAY_DAYS = 365;
+const MAX_FORM_GUESTS = 20;
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** A stay request for a hotel or short stay: the same booking request (and emails) as the website's. */
+async function stayStep(ctx: Ctx, listing: PublicListing, data: Record<string, unknown>, submit: boolean, now = new Date()): Promise<FlowResponse> {
+  const maxGuests = Math.min(listing.stay?.maxGuests ?? MAX_FORM_GUESTS, MAX_FORM_GUESTS);
+  const email = ctx.linked ? (await db.user.findUnique({ where: { id: ctx.linked.user.id }, select: { email: true } }))?.email ?? "" : "";
+  const base = {
+    property: clip(listing.title, 80), listing_id: listing.id, name: ctx.linked?.user.displayName ?? "", email,
+    min_date: isoDate(now), max_date: isoDate(new Date(now.getTime() + STAY_DAYS * DAY)),
+    adults: Array.from({ length: maxGuests }, (_, index) => option(String(index + 1), count(index + 1, "adult", "adults"))),
+    children: Array.from({ length: Math.min(maxGuests, 10) + 1 }, (_, index) => option(String(index), index ? count(index, "child", "children") : "No children")),
+  };
+  if (!submit) return { screen: "STAY", data: base };
+  const input = {
+    checkIn: field(data, "check_in", 10), checkOut: field(data, "check_out", 10),
+    adults: Number(field(data, "adults", 2)), children: Number(field(data, "children", 2) || "0"),
+    name: field(data, "name", 160), email: field(data, "email", 320), phone: ctx.claims.a,
+    ...(field(data, "note", 1000) ? { specialRequest: field(data, "note", 1000) } : {}),
+  };
+  if (!Number.isInteger(input.adults) || input.adults < 1) return invalid("STAY", base, "Please choose the number of adults.");
+  if (input.adults + input.children > maxGuests) return invalid("STAY", base, `This property hosts up to ${maxGuests} guests.`);
+  const submission = { keyHash: createHash("sha256").update(submissionId(ctx, `stay:${listing.id}`)).digest("hex"), fingerprint: createHash("sha256").update(JSON.stringify(input)).digest("hex") };
+  try {
+    const booking = await findBookingForSubmission(listing.id, submission) ?? await createAccommodationBooking(listing.id, ctx.linked?.user.id, input, { submission, now });
+    return finish(ctx, { outcome: "stay_requested", reference: booking.reference, listing: listing.id, check_in: booking.checkIn, check_out: booking.checkOut });
+  } catch (error) {
+    if (error instanceof ZodError) return invalid("STAY", base, error.issues[0]?.path[0] === "email" ? "Please enter a valid email for the booking receipt." : "Please check the dates, guests and your name.");
+    // The service's own rules (past dates, minimum nights, guests, a changed form) are worded for guests.
+    if (error instanceof AppError && error.status < 500) return invalid("STAY", base, error.message);
+    throw error;
+  }
+}
+
+const bookViewing: Handler = async (request, ctx) => {
+  const listing = await boundListing(ctx);
+  if (!listing) return { screen: "DONE", data: { message: "This property is no longer taking viewing requests. Reply menu in the chat to search again." } };
+  const step = request.action === "INIT" ? "show" : request.data.action === "date" ? "date" : request.data.action === "book" ? "book" : "show";
+  return viewingStep(ctx, listing, request.data, step, "BOOK");
 };
 
 const propertyInquiry: Handler = async (request, ctx) => {
   const listing = await boundListing(ctx);
   if (!listing) return { screen: "DONE", data: { message: "This property is no longer taking questions. Reply menu in the chat to search again." } };
-  const base = { property: clip(listing.title, 80), name: ctx.linked?.user.displayName ?? "" };
-  if (request.action === "INIT" || request.data.action !== "send") return { screen: "INQUIRY", data: base };
-  const name = field(request.data, "name", 100);
-  const message = field(request.data, "message", 2000);
-  if (name.length < 2) return invalid("INQUIRY", base, "Please enter your name.");
-  if (message.length < 3) return invalid("INQUIRY", base, "Please write your question.");
-  const result = await submitCustomerRequest({
-    state: { workflow: "inquiry", step: "confirm", selectedListingId: listing.id, name, message } as never,
-    phone: ctx.claims.a, messageId: submissionId(ctx, "send"), conversationId: "whatsapp-flow",
-  });
-  return finish(ctx, { outcome: "inquiry_sent", reference: result.leadId, lead: result.leadId, listing: listing.id });
+  return questionStep(ctx, listing, request.data, request.action !== "INIT" && request.data.action === "send", "INQUIRY");
 };
 
 // --- List a property (linked account; the chat's listing steps validate every answer) ---------

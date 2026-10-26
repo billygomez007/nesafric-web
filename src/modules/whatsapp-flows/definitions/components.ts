@@ -26,6 +26,20 @@ export const textInput = (name: string, label: string, extra: Json = {}): Json =
 export const textArea = (name: string, label: string, extra: Json = {}): Json => ({ type: "TextArea", name, label, required: true, ...extra });
 export const dropdown = (name: string, label: string, source: string | Option[], extra: Json = {}): Json => ({ type: "Dropdown", name, label, required: true, "data-source": source, ...extra });
 export const radios = (name: string, label: string, source: string | Option[], extra: Json = {}): Json => ({ type: "RadioButtonsGroup", name, label, required: true, "data-source": source, ...extra });
+/**
+ * Listing photos: up to three Image components (WhatsApp's limit per screen; Flow JSON 7.1 has no
+ * carousel), each base64 JPEG from the endpoint and shown only when that photo exists.
+ */
+export const FLOW_PHOTO_SLOTS = 3;
+export const photos = (): Json[] => Array.from({ length: FLOW_PHOTO_SLOTS }, (_, index) => ({
+  type: "If", condition: `\${data.has_photo_${index + 1}}`,
+  then: [{ type: "Image", src: `\${data.photo_${index + 1}}`, height: 220, "scale-type": "cover", "alt-text": "Property photo" }],
+}));
+/** A 1x1 PNG: the screen's example, and the value of a photo slot that is hidden. */
+export const BLANK_PHOTO = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+export const photoData = (): Record<string, Json> => Object.fromEntries(Array.from({ length: FLOW_PHOTO_SLOTS }, (_, index) => [
+  [`has_photo_${index + 1}`, bool(index === 0)], [`photo_${index + 1}`, str(BLANK_PHOTO)],
+]).flat());
 export const datePicker = (name: string, label: string, extra: Json = {}): Json => ({ type: "DatePicker", name, label, required: true, ...extra });
 
 /** The Footer: sends `payload` (form fields as `${form.x}`) to the endpoint with `action`. */

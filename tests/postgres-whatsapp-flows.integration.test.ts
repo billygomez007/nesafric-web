@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerUser } from "@/modules/identity/service";
 import { createOrganisation } from "@/modules/organisations/service";
@@ -102,6 +103,80 @@ describe("PostgreSQL WhatsApp Flows", () => {
     expect(results.data.results).toEqual([expect.objectContaining({ id: listing.id })]);
     expect((await exchange(search, "data_exchange", "RESULTS", { listing: listing.id, filters: "{}" })).screen).toBe("DETAILS");
     expect((await exchange(search, "data_exchange", "DETAILS", { listing: listing.id, next: "book" })).screen).toBe("SUCCESS");
+  });
+
+  it("shows the photos and books a viewing or sends a question without leaving the search form", async () => {
+    const { listing } = await publishedListing();
+    const photo = await sharp({ create: { width: 1200, height: 900, channels: 3, background: "#2a6" } }).jpeg().toBuffer();
+    const fetched: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { fetched.push(String(url)); return new Response(new Uint8Array(photo)); }));
+    const search = token("nesafric_property_search");
+    const details = await exchange(search, "data_exchange", "RESULTS", { listing: listing.id, filters: "{}" });
+    vi.unstubAllGlobals();
+    expect(fetched).toEqual(["https://cdn.example.com/listing/photo.jpg"]);
+    expect(details.data).toMatchObject({ listing_id: listing.id, has_photo_1: true, has_photo_2: false, has_photo_3: false, next_steps: [{ id: "book", title: "Book a viewing" }, { id: "inquire", title: "Ask a question" }] });
+    const size = await sharp(Buffer.from(details.data.photo_1 as string, "base64")).metadata();
+    expect([size.format, size.width, size.height]).toEqual(["jpeg", 640, 480]);
+
+    // Version 2 of the form continues on its own screens (WhatsApp leaves the step out, as live).
+    const viewing = await exchange(search, "data_exchange", "DETAILS", { listing: listing.id, next: "book", form_version: "2" });
+    expect(viewing).toMatchObject({ screen: "VIEWING", data: { listing_id: listing.id, property: "3-bedroom house in Spintex" } });
+    const date = viewing.data.min_date as string;
+    const slots = await exchange(search, "data_exchange", "VIEWING", { date, listing: listing.id, form_version: "2" });
+    expect(slots.screen).toBe("VIEWING");
+    const booked = await exchange(search, "data_exchange", "VIEWING", { date, slot: "14:00", name: "Ama Owusu", note: "", listing: listing.id, form_version: "2" });
+    expect(outcomeOf(booked)).toMatchObject({ outcome: "viewing_requested", listing: listing.id });
+    expect(await db.viewingRequest.count({ where: { listingId: listing.id, lead: { phone: PHONE } } })).toBe(1);
+    expect((await finish(booked)).reply).toContain("Viewing request saved");
+
+    const question = await exchange(search, "data_exchange", "DETAILS", { listing: listing.id, next: "inquire", form_version: "2" });
+    expect(question.screen).toBe("QUESTION");
+    expect((await exchange(search, "data_exchange", "QUESTION", { name: "Ama Owusu", message: "", listing: listing.id, form_version: "2" })).data.error_message).toContain("write your question");
+    const sent = await exchange(search, "data_exchange", "QUESTION", { name: "Ama Owusu", message: "Is parking included?", listing: listing.id, form_version: "2" });
+    expect(outcomeOf(sent)).toMatchObject({ outcome: "inquiry_sent", listing: listing.id });
+    // A forged listing id never reaches a request.
+    expect((await exchange(search, "data_exchange", "QUESTION", { name: "Ama", message: "Hello there", listing: "00000000-0000-4000-8000-000000000000", form_version: "2" })).data.error_message).toContain("no longer available");
+  });
+
+  it("requests a short stay inside the search form, with the website's rules", async () => {
+    const { user } = await linked();
+    const owner = await registerUser({ displayName: "Esi Host", email: "host@flows.test", password: "secure-password-123" });
+    const organisation = await createOrganisation(owner.id, { name: "Esi Stays", type: "PROPERTY_MANAGEMENT", countryCode: "GH" });
+    const property = await createProperty(owner.id, organisation.id, { name: "Osu Loft", referenceNumber: "OL-1", category: "Residential", countryCode: "GH", currencyCode: "GHS" });
+    const listing = await createListing(owner.id, organisation.id, {
+      propertyId: property.id, listingType: "RENT", category: "SHORT_STAY", title: "Osu loft for short stays", publicDescription: "A bright loft near Oxford Street.",
+      rentAmountMinor: "60000", currencyCode: "GHS", frequency: "PER_NIGHT", availableFrom: "2026-10-01", countryCode: "GH", region: "Greater Accra", city: "Accra", locality: "Osu", enquiryEnabled: true, bedrooms: 1, bathrooms: 1, maxGuests: 3, minimumNights: 2,
+      media: [{ type: "PHOTO", publicUrl: "https://cdn.example.com/listing/loft.jpg", mimeType: "image/jpeg", sortOrder: 1 }],
+    });
+    await updateListingVerification(owner.id, organisation.id, listing.id, { status: "PENDING", evidence: [{ type: "OWNERSHIP_OR_AUTHORITY", privateReference: "private/evidence/lease.pdf", metadata: {} }] });
+    await updateListingVerification(owner.id, organisation.id, listing.id, { status: "VERIFIED", note: "Checked." });
+    await transitionListing(owner.id, organisation.id, listing.id, { status: "PENDING_REVIEW" });
+    await transitionListing(owner.id, organisation.id, listing.id, { status: "PUBLISHED" });
+
+    const search = token("nesafric_property_search");
+    // A photo that cannot be fetched is left out; the property still shows.
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("timeout"); }));
+    const details = await exchange(search, "data_exchange", "RESULTS", { listing: listing.id, filters: "{}" });
+    vi.unstubAllGlobals();
+    expect(details.data).toMatchObject({ has_photo_1: false, next_steps: [{ id: "stay", title: "Book a stay" }] });
+    const stay = await exchange(search, "data_exchange", "DETAILS", { listing: listing.id, next: "stay", form_version: "2" });
+    expect(stay).toMatchObject({ screen: "STAY", data: { name: "Kofi Mensah", email: user.email } });
+    expect((stay.data.adults as unknown[]).length).toBe(3);
+    const day = (offset: number) => new Date(Date.now() + offset * 24 * 60 * 60_000).toISOString().slice(0, 10);
+    const form = { check_in: day(10), check_out: day(11), adults: "2", children: "", name: "Kofi Mensah", email: user.email, note: "Late arrival", listing: listing.id, form_version: "2" };
+    expect((await exchange(search, "data_exchange", "STAY", form)).data.error_message).toContain("2-night minimum");
+    expect((await exchange(search, "data_exchange", "STAY", { ...form, check_out: day(12), adults: "3", children: "1" })).data.error_message).toContain("up to 3 guests");
+    expect((await exchange(search, "data_exchange", "STAY", { ...form, check_out: day(12), email: "not-an-email" })).data.error_message).toContain("valid email");
+    const requested = await exchange(search, "data_exchange", "STAY", { ...form, check_out: day(12) });
+    const outcome = outcomeOf(requested);
+    expect(outcome).toMatchObject({ outcome: "stay_requested", listing: listing.id, check_in: day(10), check_out: day(12) });
+    // A retried submission returns the same booking.
+    await exchange(search, "data_exchange", "STAY", { ...form, check_out: day(12) });
+    const bookings = await db.accommodationBooking.findMany({ where: { listingId: listing.id } });
+    expect(bookings.map((booking) => [booking.reference, booking.nights, booking.adults, booking.guestPhone, booking.userId, booking.specialRequest])).toEqual([[outcome.reference, 2, 2, PHONE, user.id, "Late arrival"]]);
+    expect((await finish(requested)).reply).toContain(`Reference: ${outcome.reference}`);
+    // A stay is never booked through the viewing screens, nor a viewing on a stay.
+    expect((await exchange(search, "data_exchange", "DETAILS", { listing: listing.id, next: "book", form_version: "2" })).data.error_message).toBeTruthy();
   });
 
   it("books a viewing only in an open slot, once per number and property", async () => {

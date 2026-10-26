@@ -10,11 +10,12 @@ export type EndpointResult = { status: number; body: string; contentType: "text/
 /**
  * The step each screen's data_exchange stands for. The published Flows send it as `action` in the
  * payload, but WhatsApp does not pass that key on to the endpoint, so the step is taken from the
- * screen that sent the request. book_viewing's BOOK screen has two: picking a date, and the footer.
+ * screen that sent the request. A viewing screen has two: picking a date, and the footer.
  */
+const viewingStep = (data: Record<string, unknown>) => ("slot" in data || "name" in data ? "book" : "date");
 const SCREEN_STEPS: Partial<Record<FlowKey, Record<string, string | ((data: Record<string, unknown>) => string)>>> = {
-  nesafric_property_search: { SEARCH: "search", RESULTS: "select", DETAILS: "next" },
-  nesafric_book_viewing: { BOOK: (data) => ("slot" in data || "name" in data ? "book" : "date") },
+  nesafric_property_search: { SEARCH: "search", RESULTS: "select", DETAILS: "next", VIEWING: viewingStep, STAY: "stay", QUESTION: "send" },
+  nesafric_book_viewing: { BOOK: viewingStep },
   nesafric_property_inquiry: { INQUIRY: "send" },
   nesafric_list_property: { BASICS: "basics", PRICING: "pricing", AUTHORITY: "save" },
   nesafric_agent_registration: { PROFILE: "save" },

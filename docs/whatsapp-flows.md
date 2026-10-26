@@ -21,7 +21,7 @@ Logs: `whatsapp.flows.exchange`, `.completed`, `.token_rejected`, `.client_error
 
 | Flow | Meta id | Screens | Server actions | Writes (through the existing domain services) |
 |---|---|---|---|---|
-| `nesafric_property_search` | 1656146049308321 | SEARCH → RESULTS → DETAILS → (Book / Ask) | `searchPublicListings` (published only, GHS, region, type, budget, bedrooms); `getPublicListing` for every id the screen sends back | None. Hands the chosen listing to Book a viewing or Property inquiry |
+| `nesafric_property_search` | 1490433039600272 (`nesafric_property_search_v2`; the first version, 1656146049308321, is retired) | SEARCH → RESULTS → DETAILS (up to 3 photos) → VIEWING / STAY / QUESTION | `searchPublicListings` (published only, GHS, region, type, budget, bedrooms); `getPublicListing` for every id the screen sends back. Rent and sale listings: viewing (same slots and rules as Book a viewing) or question. Hotels and short stays: a stay request (`createAccommodationBooking`, the website's rules: minimum nights, guests, dates up to a year ahead; the guest's email for the receipt) | Viewing request, question, or stay request, all inside the form. The first version handed over to Book a viewing and Property inquiry; the endpoint still serves it |
 | `nesafric_book_viewing` | 947132434820601 | BOOK | Listing from the token only. Dates from tomorrow to 60 days ahead. Hourly slots 08:00–17:00 Ghana time, minus slots overlapping a CONFIRMED or RESCHEDULED viewing of that listing, and less than 2 hours ahead. Availability is re-checked at submission. One open request per number per listing (a second one returns the first) | Lead and viewing request (`submitCustomerRequest`, idempotency key from the token nonce). Status REQUESTED: the agent confirms |
 | `nesafric_property_inquiry` | 1421839692827883 | INQUIRY | Listing from the token only | Lead with the question |
 | `nesafric_list_property` | 4464855953767350 | NOTICE / BASICS → PRICING → AUTHORITY | Linked account, then its businesses (agency, agent or landlord organisation). Every answer goes through the chat listing step's own validator (`prefillGuided`) | DRAFT listing (`syncListing`, as in the chat). The chat continues with photos, review and submission to NesAfric review |
@@ -43,7 +43,7 @@ Untrusted input is never used as is: listing and provider ids are looked up as p
 | `WHATSAPP_FLOWS_PRIVATE_KEY` | RSA private key (PEM) whose public key is registered on the phone number. Secret Manager |
 | `WHATSAPP_FLOWS_PRIVATE_KEY_PASSPHRASE` | Optional |
 | `WHATSAPP_APP_SECRET` | Meta app secret (already used by the webhook) |
-| `WHATSAPP_FLOW_IDS` | JSON `{ "nesafric_property_search": "1656146049308321", … }` (the registry) |
+| `WHATSAPP_FLOW_IDS` | JSON `{ "nesafric_property_search": "1490433039600272", … }` (the registry) |
 | `WHATSAPP_FLOWS_MODE` | `draft` (default: Flows can be sent before they are published) or `published` |
 | `WHATSAPP_OFFICIAL_ORGANISATION_ID`, `SESSION_SECRET` | Already required |
 

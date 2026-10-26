@@ -45,6 +45,8 @@ export async function completeFlow(input: { phone: string; organisationId: strin
       return { state: { ...reset(), lastRequest: { listingId: outcome.listing, leadId: outcome.lead, ...(outcome.reference !== outcome.lead ? { viewingId: outcome.reference } : {}) } }, reply: `Viewing request saved. Reference: ${outcome.reference}. The appointment is not confirmed yet: the agent confirms the time with you. Reply status to check it.` };
     case "viewing_exists":
       return { state: reset(), reply: `You already have a viewing request for this property (reference ${outcome.reference}), so no second one was made. Reply status to check it.` };
+    case "stay_requested":
+      return { state: { ...reset(), selectedListingId: outcome.listing }, reply: `Booking request sent. Reference: ${outcome.reference}.\nCheck-in ${outcome.check_in}, check-out ${outcome.check_out}.\nThe host confirms it with you, and a receipt is on its way to your email. Nothing is paid yet.` };
     case "inquiry_sent":
       return { state: { ...reset(), lastRequest: { listingId: outcome.listing, leadId: outcome.lead } }, reply: `Question sent to the listing team. Reference: ${outcome.reference}. Reply status to check it.` };
     case "draft": {
