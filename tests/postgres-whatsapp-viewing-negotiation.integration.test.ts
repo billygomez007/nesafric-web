@@ -104,7 +104,9 @@ describe("PostgreSQL WhatsApp viewing negotiation", () => {
   it("asks the listing team, lets them propose another time, and confirms only when the customer accepts", async () => {
     const { listing } = await setup();
     const { viewing, reference, confirmed } = await requestViewing(listing.id);
-    expect(confirmed.at(-1)?.body).toContain(`Viewing request ${reference} sent to the listing team`);
+    expect(confirmed.at(-1)?.body).toContain("✅ *Viewing request received*");
+    expect(confirmed.at(-1)?.body).toContain(`🔖 Reference: ${reference}`);
+    expect(confirmed.at(-1)?.body).toContain("We will notify you here on WhatsApp as soon as they reply.");
     expect(viewing.status).toBe("REQUESTED");
     expect(viewing.proposals).toEqual([expect.objectContaining({ proposedBy: "CUSTOMER", status: "OPEN" })]);
     // The lister has no open conversation: the approved alert template goes out.

@@ -6,6 +6,9 @@ import { interpretMessage } from "./interpret";
 import { marketplaceTools, type MarketplaceTools } from "./tools";
 import { formatViewingTime, parseViewingTime } from "./viewing-time";
 import { propertyCard, propertyDetailsMessage, resultsNavigation, type PropertyMessage } from "./property-cards";
+import { dayPicker, readPickerAnswer, timePicker } from "./viewing-picker";
+import { locationLabel } from "./property-cards";
+import { viewingReference } from "./viewings";
 import { answerSearchStep, describeFilters, GUIDED_START, nextSearchStep, searchStepPrompt, type SearchStep } from "./search-steps";
 
 export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
@@ -81,6 +84,7 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
   // The paging and no-results buttons (the official number answers these in its router first).
   if (command === "new search") return { state: { ...initialState(), lastRequest: state.lastRequest }, reply: MAIN_MENU };
   if (command === "change filters" && state.workflow === "property_search") { state.paused = false; return reply("Tell me what to change, for example: in East Legon, under 5000 a month, 2 bedrooms, or apartment. I'll search again with the new filters."); }
+  if (command === "resume" && state.step === "time" && state.workflow === "viewing") { state.paused = false; return { state, ...dayPicker() }; }
   if (command === "resume") { state.paused = false; return state.step === "confirm" ? { ...reply(promptFor(state)), interactive: confirmButtons(promptFor(state)) } : reply(promptFor(state)); }
   if (/^(support|human|8)$/.test(command)) return { ...reply("Your conversation has been added to the support queue. A team member will need to respond; no response time is guaranteed. Reply menu to go back to the assistant."), handoff: true };
   if (state.paused) { const text = "Your unfinished workflow is saved. Reply resume to continue, or cancel to start another."; return { ...reply(text), interactive: resumeButtons(text) }; }
@@ -91,20 +95,43 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
     if (state.step === "name") {
       if (body.length < 2 || body.length > 160) return reply("Please send a name between 2 and 160 characters.");
       state.name = body; state.step = state.workflow === "viewing" ? "time" : "message";
-      return reply(promptFor(state));
+      // The day, then the time, are chosen from WhatsApp lists (typing still works).
+      return state.workflow === "viewing" ? { state, ...dayPicker() } : reply(promptFor(state));
     }
     if (state.step === "message") {
       if (body.length > 5000) return reply("Please shorten your inquiry to 5,000 characters.");
       state.message = body; state.step = "confirm";
     } else if (state.step === "time") {
-      const startsAt = parseViewingTime(body);
-      if (!startsAt) return reply("I could not read that as a future date and time within the next year.\n" + promptFor(state));
-      state.startsAt = startsAt.toISOString(); state.step = "confirm";
+      const picked = readPickerAnswer(body, state.viewingDay);
+      const again = (lead: string) => { state.viewingDay = undefined; const days = dayPicker(); return { state, reply: `${lead}\n${days.reply}`, interactive: { ...days.interactive, body: `${lead} ${days.interactive.body}`.slice(0, 1024) } }; };
+      if (picked === "unavailable") return again("That day or time is no longer available.");
+      if (picked && "other" in picked) return reply(promptFor(state));
+      if (picked && "day" in picked) {
+        state.viewingDay = picked.day;
+        return { state, ...(timePicker(picked.day) ?? again("That day has no times left.")) };
+      }
+      const startsAt = picked && "startsAt" in picked ? picked.startsAt : parseViewingTime(body);
+      if (!startsAt) return again("I could not read that as a future date and time within the next year.");
+      state.startsAt = startsAt.toISOString(); state.viewingDay = undefined; state.step = "confirm";
     } else if (state.step === "confirm") {
       if (command !== "confirm") { const text = "Nothing has been submitted. Reply confirm to submit, or cancel to start again."; return { ...reply(text), interactive: confirmButtons(text) }; }
       try {
         const request = await dependencies.tools.submitCustomerRequest({ state, phone: input.phone, messageId: input.messageId, conversationId: input.conversationId });
-        return { state: { ...initialState(), lastRequest: request }, reply: request.viewingId ? `Viewing request saved. Reference: ${request.viewingId}. The appointment is not confirmed. Reply status to check it.` : `Inquiry saved. Reference: ${request.leadId}. Reply status to check it.` };
+        if (!request.viewingId) return { state: { ...initialState(), lastRequest: request }, reply: `Inquiry saved. Reference: ${request.leadId}. Reply status to check it.` };
+        const listing = await dependencies.tools.propertyDetails(state.selectedListingId!).catch(() => null);
+        const [day, time] = formatViewingTime(state.startsAt!).replace(/ GMT$/, "").split(", ");
+        const lines = [
+          "✅ *Viewing request received*", "",
+          listing ? `🏠 ${listing.title}` : null,
+          listing?.listing ? `📍 ${locationLabel(listing.listing.location)}` : null,
+          `📅 ${day}`, `🕒 ${time} (Ghana time)`, `👤 ${state.name}`, `🔖 Reference: ${viewingReference(request.viewingId)}`, "",
+          "*What happens next*",
+          "1. We have sent your request to the agent.",
+          "2. The agent will confirm this time or suggest another.",
+          "3. We will notify you here on WhatsApp as soon as they reply.", "",
+          "This viewing is not confirmed yet. Reply status at any time to check it.",
+        ].filter((line) => line !== null);
+        return { state: { ...initialState(), lastRequest: request }, reply: lines.join("\n") };
       } catch (error) {
         if (error instanceof AppError && error.status < 500) return reply("This request cannot currently be submitted. The property may no longer be available or the viewing time may have passed. Your details are saved; reply cancel to search again or support for help.");
         // The worker rolls back state/reply and retries the same idempotent domain action.
@@ -112,7 +139,10 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
       }
     }
     const details = await dependencies.tools.propertyDetails(state.selectedListingId!);
-    const review = `Review your ${state.workflow === "viewing" ? "viewing request" : "inquiry"}:\nProperty: ${details.title}\nName: ${state.name}\nPhone shared with the listing team: +${input.phone.replace(/^\+/, "")}\n${state.startsAt ? `Preferred one-hour slot starts: ${formatViewingTime(state.startsAt)}` : `Question: ${state.message}`}\n\nReply confirm to submit and share these details, or cancel.`;
+    const when = state.startsAt ? formatViewingTime(state.startsAt).replace(/ GMT$/, "").split(", ") : null;
+    const review = state.startsAt
+      ? `*Please check your viewing request*\n\n🏠 ${details.title}\n📅 ${when![0]}\n🕒 ${when![1]} (Ghana time)\n👤 ${state.name}\n📱 +${input.phone.replace(/^\+/, "")} (shared with the agent)\n\nTap Confirm to send it to the agent, or Cancel.`
+      : `Review your inquiry:\nProperty: ${details.title}\nName: ${state.name}\nPhone shared with the listing team: +${input.phone.replace(/^\+/, "")}\nQuestion: ${state.message}\n\nReply confirm to submit and share these details, or cancel.`;
     // A long question cannot fit a button message; it then goes out as plain text.
     return { ...reply(review), interactive: confirmButtons(review) };
   }
