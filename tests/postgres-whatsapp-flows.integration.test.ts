@@ -94,6 +94,16 @@ describe("PostgreSQL WhatsApp Flows", () => {
     expect(chat.interactive).toMatchObject({ type: "flow", flowId: "947132434820601" });
   });
 
+  it("searches when WhatsApp leaves the step out of the payload, as it does live", async () => {
+    const { listing } = await publishedListing();
+    const search = token("nesafric_property_search");
+    const results = await exchange(search, "data_exchange", "SEARCH", { purpose: "RENT", region: "Greater Accra", category: "", area: "", max_budget: "", bedrooms: "" });
+    expect(results.screen).toBe("RESULTS");
+    expect(results.data.results).toEqual([expect.objectContaining({ id: listing.id })]);
+    expect((await exchange(search, "data_exchange", "RESULTS", { listing: listing.id, filters: "{}" })).screen).toBe("DETAILS");
+    expect((await exchange(search, "data_exchange", "DETAILS", { listing: listing.id, next: "book" })).screen).toBe("SUCCESS");
+  });
+
   it("books a viewing only in an open slot, once per number and property", async () => {
     const { owner, organisation, listing } = await publishedListing();
     const booking = token("nesafric_book_viewing", { listingId: listing.id });

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FLOW_DEFINITIONS } from "@/modules/whatsapp-flows/definitions";
 import { FLOW_KEYS, flowIds } from "@/modules/whatsapp-flows/registry";
 import { issueFlowToken, signOutcome, verifyFlowToken, verifyOutcome } from "@/modules/whatsapp-flows/token";
-import { handleFlowsRequest } from "@/modules/whatsapp-flows/endpoint";
+import { handleFlowsRequest, stepFromScreen } from "@/modules/whatsapp-flows/endpoint";
 import { flowMessage } from "@/modules/whatsapp-flows/messages";
 import { graphInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
 import { parseWhatsAppEvents } from "@/modules/conversations/channels/whatsapp-payload";
@@ -52,6 +52,21 @@ describe("WhatsApp Flow JSON definitions", () => {
         }
       });
       if (screen.terminal) expect((children.find((child) => child.type === "Footer")!["on-click-action"] as Json).name).toBe("complete");
+    }
+  });
+
+  it.each(FLOW_KEYS.map((key) => [key] as const))("%s: every data_exchange step can be told from its screen alone", (key) => {
+    // WhatsApp drops the payload's `action` before it reaches the endpoint (seen live, 26 Oct 2026).
+    const flow = FLOW_DEFINITIONS[key]() as { screens: Array<{ id: string; layout: { children: Json[] } }> };
+    for (const screen of flow.screens) {
+      walk(screen.layout.children, (node) => {
+        for (const event of ["on-click-action", "on-select-action"]) {
+          const action = node[event] as { name?: string; payload?: Record<string, unknown> } | undefined;
+          if (action?.name !== "data_exchange") continue;
+          const { action: step, ...payload } = action.payload ?? {};
+          expect(stepFromScreen(key, screen.id, payload), `${screen.id} ${event}`).toBe(step);
+        }
+      });
     }
   });
 

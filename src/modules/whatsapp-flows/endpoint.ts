@@ -2,9 +2,35 @@ import { linkedWhatsAppUser } from "@/modules/whatsapp-assistant/identity";
 import { officialWhatsAppOrganisationId } from "@/modules/whatsapp-assistant/identity";
 import { decryptFlowRequest, encryptFlowResponse, FlowDecryptionError, flowsPrivateKey, validFlowSignature } from "./crypto";
 import { FLOW_HANDLERS, flowLog, submissionHash, type FlowResponse } from "./handlers";
+import type { FlowKey } from "./registry";
 import { verifyFlowToken } from "./token";
 
 export type EndpointResult = { status: number; body: string; contentType: "text/plain" | "application/json" };
+
+/**
+ * The step each screen's data_exchange stands for. The published Flows send it as `action` in the
+ * payload, but WhatsApp does not pass that key on to the endpoint, so the step is taken from the
+ * screen that sent the request. book_viewing's BOOK screen has two: picking a date, and the footer.
+ */
+const SCREEN_STEPS: Partial<Record<FlowKey, Record<string, string | ((data: Record<string, unknown>) => string)>>> = {
+  nesafric_property_search: { SEARCH: "search", RESULTS: "select", DETAILS: "next" },
+  nesafric_book_viewing: { BOOK: (data) => ("slot" in data || "name" in data ? "book" : "date") },
+  nesafric_property_inquiry: { INQUIRY: "send" },
+  nesafric_list_property: { BASICS: "basics", PRICING: "pricing", AUTHORITY: "save" },
+  nesafric_agent_registration: { PROFILE: "save" },
+  nesafric_landlord_registration: { SETUP: "save" },
+  nesafric_tenant_registration: { CONNECT: "redeem" },
+  nesafric_maintenance_request: { REPORT: "report" },
+  nesafric_find_professional: { SEARCH: "search", RESULTS: "select" },
+  nesafric_book_service: { REQUEST: "request" },
+  nesafric_property_management: { MENU: "choose" },
+  nesafric_help_support: { HELP: "send" },
+};
+
+export function stepFromScreen(flow: FlowKey, screen: unknown, data: Record<string, unknown>): string | undefined {
+  const step = typeof screen === "string" ? SCREEN_STEPS[flow]?.[screen] : undefined;
+  return typeof step === "function" ? step(data) : step;
+}
 
 const json = (status: number, value: unknown): EndpointResult => ({ status, body: JSON.stringify(value), contentType: "application/json" });
 
@@ -42,12 +68,17 @@ export async function handleFlowsRequest(rawBody: string, signature: string | nu
     flowLog("whatsapp.flows.token_rejected", { action });
     return json(427, { error: "The flow token is invalid or has expired." });
   }
+  const sentStep = typeof data.action === "string";
+  if (action === "data_exchange" && !sentStep) {
+    const step = stepFromScreen(claims.f, body.screen, data);
+    if (step) data.action = step;
+  }
   const started = Date.now();
   try {
     const linked = await linkedWhatsAppUser(claims.a);
     const handler = FLOW_HANDLERS[claims.f];
     const response: FlowResponse = await handler({ action, screen: typeof body.screen === "string" ? body.screen : undefined, data, flowToken: token }, { claims, token, linked });
-    flowLog("whatsapp.flows.exchange", { flow: claims.f, action, requestAction: typeof data.action === "string" ? data.action : undefined, screen: response.screen, ms: Date.now() - started, session: submissionHash(claims.n), invalid: "error_message" in response.data });
+    flowLog("whatsapp.flows.exchange", { flow: claims.f, action, requestAction: typeof data.action === "string" ? data.action : undefined, stepFrom: sentStep ? "payload" : "screen", fromScreen: typeof body.screen === "string" ? body.screen : undefined, fields: Object.keys(data).filter((key) => key !== "action").sort().join(","), screen: response.screen, ms: Date.now() - started, session: submissionHash(claims.n), invalid: "error_message" in response.data });
     return reply({ version: "3.0", ...response });
   } catch (error) {
     flowLog("whatsapp.flows.error", { flow: claims.f, action, session: submissionHash(claims.n), error: error instanceof Error ? error.name : "unknown" });
