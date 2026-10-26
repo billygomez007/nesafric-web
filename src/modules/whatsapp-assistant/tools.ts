@@ -5,6 +5,7 @@ import { PUBLIC_LISTING_WHERE, searchPublicListings, getPublicListing, createMar
 import { discoverMarketplaceProviders } from "@/modules/marketplace/service";
 import type { AssistantState } from "./schemas";
 import { formatViewingTime } from "./viewing-time";
+import { viewingReference } from "./viewings";
 
 function money(amount: string | null, currency: string) {
   if (amount === null) return "Price not supplied";
@@ -19,6 +20,8 @@ export async function searchProperties(filters: AssistantState["property"], page
   const result = await searchPublicListings({ ...filters, page, pageSize: 3 });
   return {
     ids: result.items.map((item) => item.id), hasMore: page < result.pagination.totalPages,
+    /** Full public listings, for property cards with the cover photo. */
+    listings: result.items, total: result.pagination.total,
     cards: result.items.map((item, index) => [
       `${index + 1}. ${clip(item.title)}`,
       `${money(item.pricing.rentAmountMinor ?? item.pricing.askingAmountMinor, item.pricing.currencyCode)}${item.pricing.frequency ? ` / ${item.pricing.frequency.toLowerCase().replaceAll("_", " ")}` : ""}`,
@@ -50,7 +53,7 @@ export async function searchServices(filters: AssistantState["service"], page: n
 
 export async function propertyDetails(id: string) {
   const { listing } = await getPublicListing(id);
-  return { title: listing.title, description: clip(listing.description, 1500), enquiryEnabled: listing.contact.enquiryEnabled && !listing.bookable, url: absoluteUrl(`/marketplace/properties/${listing.id}`) };
+  return { title: listing.title, description: clip(listing.description, 1500), enquiryEnabled: listing.contact.enquiryEnabled && !listing.bookable, url: absoluteUrl(`/marketplace/properties/${listing.id}`), listing };
 }
 
 /** Reuse domain submission keys so a crash after domain commit cannot duplicate the action. */
@@ -76,7 +79,7 @@ export async function customerRequestStatus(request: NonNullable<AssistantState[
   const lead = await db.marketplaceLead.findFirst({ where: { id: request.leadId, listingId: request.listingId, phone: `+${phone.replace(/^\+/, "")}` }, select: { id: true, status: true } });
   if (!lead) return "This request is no longer available. Reply support for assistance.";
   const viewing = request.viewingId ? await db.viewingRequest.findFirst({ where: { id: request.viewingId, leadId: lead.id }, select: { id: true, status: true, confirmedStartsAt: true } }) : null;
-  return viewing ? `Viewing ${viewing.id}: ${viewing.status}.${viewing.confirmedStartsAt ? ` Appointment time: ${formatViewingTime(viewing.confirmedStartsAt)}.` : " No appointment time has been confirmed."}` : `Inquiry ${lead.id}: ${lead.status}.`;
+  return viewing ? `Viewing ${viewingReference(viewing.id)}: ${viewing.status.toLowerCase()}.${viewing.confirmedStartsAt ? ` Appointment time: ${formatViewingTime(viewing.confirmedStartsAt)}.` : " No appointment time has been confirmed."}` : `Inquiry ${lead.id}: ${lead.status}.`;
 }
 
 const AGENT_TYPES = ["INDIVIDUAL_AGENT", "BROKER", "BROKERAGE", "REAL_ESTATE_COMPANY"] as const;
@@ -115,5 +118,11 @@ export async function searchAgents(area: string, page: number) {
   };
 }
 
-export const marketplaceTools = { searchProperties, searchServices, propertyDetails, submitCustomerRequest, customerRequestStatus };
+/** Property types with published, verified listings for rent or for sale, and how many each. */
+export async function propertyTypes(listingType: "RENT" | "SALE") {
+  const rows = await db.listing.groupBy({ by: ["category"], where: { ...PUBLIC_LISTING_WHERE, archivedAt: null, listingType }, _count: { _all: true } });
+  return rows.map((row) => ({ category: row.category, count: row._count._all }));
+}
+
+export const marketplaceTools = { propertyTypes, searchProperties, searchServices, propertyDetails, submitCustomerRequest, customerRequestStatus };
 export type MarketplaceTools = typeof marketplaceTools;

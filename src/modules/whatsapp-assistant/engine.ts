@@ -5,6 +5,8 @@ import { assistantStateSchema, initialState, type AssistantState, type Interpret
 import { interpretMessage } from "./interpret";
 import { marketplaceTools, type MarketplaceTools } from "./tools";
 import { formatViewingTime, parseViewingTime } from "./viewing-time";
+import { propertyCard, propertyDetailsMessage, resultsNavigation, type PropertyMessage } from "./property-cards";
+import { answerSearchStep, describeFilters, GUIDED_START, nextSearchStep, searchStepPrompt, type SearchStep } from "./search-steps";
 
 export const MAIN_MENU = `Welcome to NesAfric! 🏡\n1. Find a property\n2. Find a service provider\n3. Register a real estate business\n4. Register as an agent or landlord\n5. List a property\n6. Register a service business\n7. Check my request\n8. Talk to support\n\nTell me what you need, or choose a number. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.`;
 
@@ -46,7 +48,7 @@ export function mainMenuList(reply: string, official = false): WhatsAppInteracti
 const confirmButtons = (text: string) => replyButtons(text, [{ id: "confirm", title: "Confirm" }, { id: "cancel", title: "Cancel" }]);
 const resumeButtons = (text: string) => replyButtons(text, [{ id: "resume", title: "Resume" }, { id: "cancel", title: "Cancel" }]);
 
-type Result = { state: AssistantState; reply: string; handoff?: boolean; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
+type Result = { state: AssistantState; reply: string; handoff?: boolean; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive; /** Messages sent after the reply, in order (property cards). */ extras?: PropertyMessage[] };
 export type EngineInput = { state: unknown; body: string; kind: string; phone: string; conversationId: string; messageId: string; defaultCountry: string; defaultCurrency: string };
 type Dependencies = { tools: MarketplaceTools; interpret: typeof interpretMessage };
 
@@ -112,14 +114,19 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
     return { ...reply(review), interactive: confirmButtons(review) };
   }
 
-  const selection = command.match(/^(details|inquire|view)\s+([1-3])$/);
-  if (selection && state.workflow === "property_search") {
-    const id = state.results[Number(selection[2]) - 1];
+  // A number picks from the latest results; a card's button carries the listing id itself.
+  const selection = command.match(/^(details|inquire|view)\s+([1-3]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
+  if (selection && (state.workflow === "property_search" || (selection[2].length > 1 && ["idle", "inquiry", "viewing"].includes(state.workflow)))) {
+    const id = selection[2].length > 1 ? selection[2] : state.results[Number(selection[2]) - 1];
     if (!id) return reply("Choose a property number from the most recent results.");
     try {
       const details = await dependencies.tools.propertyDetails(id);
-      if (selection[1] === "details" || selection[1] === "") return reply(`${details.title}\n${details.description}\n${details.url}\n\nOnly the published details above are known. Reply inquire ${selection[2]} to ask the listing team, or view ${selection[2]} to request a viewing.`);
+      if (selection[1] === "details" || selection[1] === "") {
+        if (details.listing) { const message = propertyDetailsMessage(details.listing); return { state, reply: message.body, interactive: message.interactive }; }
+        return reply(`${details.title}\n${details.description}\n${details.url}\n\nOnly the published details above are known. Reply inquire ${selection[2]} to ask the listing team, or view ${selection[2]} to request a viewing.`);
+      }
       if (!details.enquiryEnabled) return reply(`This property does not accept this request here. See its available actions: ${details.url}`);
+      if (state.workflow !== "property_search" && state.workflow !== "idle") { state.message = undefined; state.startsAt = undefined; }
       state.selectedListingId = id; state.workflow = selection[1] === "view" ? "viewing" : "inquiry"; state.step = "name";
       return reply(promptFor(state));
     } catch (error) {
@@ -128,30 +135,63 @@ async function advance(input: EngineInput, dependencies: Dependencies): Promise<
     }
   }
   if (selection && state.workflow === "service_search") return reply(!state.results[Number(selection[2]) - 1] ? "Choose a provider number from the most recent results." : `Open provider ${selection[2]}'s profile link above to contact them or request a quote securely. Reply more for other providers, or cancel to start another search.`);
+  // A guided search step answered by a tap or a short reply; anything else is read as free text.
+  const asked: SearchStep | undefined = state.workflow === "property_search" && state.guided && !state.paused ? state.searchStep : undefined;
+  const answered = asked !== undefined && command !== "more" && answerSearchStep(state, asked, body);
+  if (answered) state.page = 1;
   if (command === "more" && (state.workflow === "property_search" || state.workflow === "service_search")) {
     if (!state.hasMore) return reply("There are no more results for these filters. Change the area or budget, or cancel to start another search.");
     state.page += 1;
-  } else {
+  } else if (!answered) {
     const interpretation: Interpretation = await dependencies.interpret(body, state);
+    // A bare number is never an area; anything else that is not a search answer is asked again.
+    if (asked && ((interpretation.intent !== "property_search" && interpretation.intent !== "support") || (asked === "area" && /^\d+$/.test(body)))) return guidedPrompt(state, asked, dependencies, "I didn't catch that. ");
     if (interpretation.intent === "support") return { ...reply("Your conversation has been added to the support queue. Reply menu to go back to the assistant."), handoff: true };
     if (interpretation.intent === "registration" || interpretation.intent === "listing") return reply(`Continue securely in your NesAfric account: ${absoluteUrl(interpretation.intent === "registration" ? "/onboarding" : "/pro")}\nWhatsApp business onboarding and listing editing are not enabled yet. Your WhatsApp number alone cannot grant access to a business or its listings. Reply support if you need help.`);
     if (interpretation.intent === "status") return reply(state.lastRequest ? await dependencies.tools.customerRequestStatus(state.lastRequest, input.phone) : `There is no submitted customer request in this conversation. For your business applications and listings, sign in: ${absoluteUrl("/pro")}`);
     if (interpretation.intent === "unknown") return reply("Would you like to find a property, find a service provider, or talk to support? Please choose one task first.");
     if (state.workflow !== "idle" && state.workflow !== interpretation.intent) { state.paused = true; const text = "You have a saved search. Reply resume to continue it, or cancel and send your new request again."; return { ...reply(text), interactive: resumeButtons(text) }; }
+    // Starting from a menu answer (rent, buy, land, office...) asks for the other filters step by step.
+    if (state.workflow === "idle" && interpretation.intent === "property_search" && GUIDED_START.test(command)) { state.guided = true; state.searchAnswered = []; state.searchStep = undefined; }
     state.workflow = interpretation.intent; state.page = 1;
     if (interpretation.intent === "property_search") state.property = { country: input.defaultCountry, currencyCode: input.defaultCurrency, ...state.property, ...interpretation.property };
+    if (asked && interpretation.intent === "property_search") {
+      const set = { type: state.property.category, bedrooms: state.property.bedroomsMin, area: state.property.location, budget: state.property.maxPriceMinor ?? state.property.minPriceMinor }[asked];
+      if (set !== undefined) state.searchAnswered = [...new Set([...state.searchAnswered, asked])];
+    }
     else state.service = { country: input.defaultCountry, ...state.service, ...interpretation.service };
   }
   if (state.workflow === "property_search") {
-    if (!state.property.listingType || !state.property.location) return reply(promptFor(state));
+    if (!state.property.listingType) return reply(promptFor(state));
+    if (state.guided) {
+      const step = nextSearchStep(state);
+      if (step) return guidedPrompt(state, step, dependencies, asked === step && !answered ? "I didn't catch that. " : "");
+      state.searchStep = undefined;
+    }
+    if (!state.property.location) return reply(promptFor(state));
     if (state.property.listingType === "RENT" && state.property.maxPriceMinor && !state.property.frequency) return reply("Is that rental budget per month, per year, per quarter or per night?");
     const found = await dependencies.tools.searchProperties(state.property, state.page);
     state.results = found.ids; state.hasMore = found.hasMore;
-    const filters = `Filters: ${state.property.listingType}, ${state.property.location}${state.property.category ? `, ${state.property.category}` : ""}${state.property.maxPriceMinor ? `, maximum ${state.property.currencyCode} ${Number(state.property.maxPriceMinor) / 100}${state.property.frequency ? ` ${state.property.frequency}` : ""}` : ""}${state.property.bedroomsMin !== undefined ? `, ${state.property.bedroomsMin} bedrooms` : ""}.`;
-    return reply(found.ids.length ? `${filters}\n\n${found.cards.join("\n\n")}\n\nReply details 1, inquire 1 or view 1 for a result.${found.hasMore ? " Reply more for the next page." : ""}` : `${filters}\nNo published, available properties match. You can change the area or budget. I have not relaxed your filters.`);
+    const filters = describeFilters(state.property);
+    if (!found.ids.length) return reply(`${filters}\nNo published, available properties match. You can change the area or budget. I have not relaxed your filters.`);
+    // Cards with the cover photo when the search returns full listings; the text list otherwise.
+    if (found.listings?.length && found.total) {
+      const from = (state.page - 1) * 3 + 1;
+      const extras = [...found.listings.map((listing, index) => propertyCard(listing, from + index, found.total!)), resultsNavigation({ from, to: from + found.listings.length - 1, total: found.total }, found.hasMore)];
+      return { state, reply: `${filters}\nHere ${found.total === 1 ? "is the matching property" : "are matching properties"}:`, extras };
+    }
+    return reply(`${filters}\n\n${found.cards.join("\n\n")}\n\nReply details 1, inquire 1 or view 1 for a result.${found.hasMore ? " Reply more for the next page." : ""}`);
   }
   if (!state.service.q || !state.service.city) return reply(promptFor(state));
   const found = await dependencies.tools.searchServices(state.service, state.page);
   state.results = found.ids; state.hasMore = found.hasMore;
   return reply(found.ids.length ? `${found.cards.join("\n\n")}\n\nOpen a provider profile to contact them or request a quote securely.${found.hasMore ? " Reply more for the next page." : ""}` : "No verified providers match this service and area. Try another area or service; I have not broadened your search.");
+}
+
+async function guidedPrompt(state: AssistantState, step: SearchStep, dependencies: Dependencies, prefix: string): Promise<Result> {
+  state.searchStep = step;
+  const inventory = step === "type" && state.property.listingType ? await dependencies.tools.propertyTypes?.(state.property.listingType).catch(() => []) ?? [] : [];
+  const prompt = searchStepPrompt(state, step, inventory);
+  const interactive = prompt.interactive && prefix ? { ...prompt.interactive, body: `${prefix}${prompt.interactive.body}` } : prompt.interactive;
+  return { state, reply: `${prefix}${prompt.reply}`, interactive };
 }

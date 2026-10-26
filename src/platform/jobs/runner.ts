@@ -7,7 +7,7 @@ import { JobDeadlineExceededError, runWithJobDeadline } from "./deadline";
 
 /** Exponential backoff for messaging jobs, a flat minute for everything else. */
 function retryDelayMs(job: BackgroundJob) {
-  return job.type.startsWith("whatsapp-") || job.type === "conversation-message-delivery" ? Math.min(60_000 * 2 ** job.attempts, 3_600_000) : 60_000;
+  return job.type.startsWith("whatsapp-") || job.type.startsWith("conversation-message-") ? Math.min(60_000 * 2 ** job.attempts, 3_600_000) : 60_000;
 }
 
 /** `job` is the row as read before the claim, so this attempt is number `job.attempts + 1`. */
@@ -44,7 +44,7 @@ export async function runDueJobs(
   // These handlers persist idempotency keys at their domain boundaries. Recover only
   // their expired claims; other job types need their own replay-safety assessment.
   await db.backgroundJob.updateMany({
-    where: { status: "RUNNING", type: { in: ["whatsapp-assistant-message", "whatsapp-delivery-status", "whatsapp-legacy-inbound", "conversation-message-delivery"] }, lockedAt: { lt: new Date(now.getTime() - 5 * 60_000) } },
+    where: { status: "RUNNING", type: { in: ["whatsapp-assistant-message", "whatsapp-delivery-status", "whatsapp-legacy-inbound", "conversation-message-delivery", "conversation-message-sequence"] }, lockedAt: { lt: new Date(now.getTime() - 5 * 60_000) } },
     data: { status: "FAILED", lockedAt: null, runAt: now, lastError: "Worker lease expired; retry with persisted idempotency keys. Unconfirmed sends require review." },
   });
   await db.backgroundJob.updateMany({

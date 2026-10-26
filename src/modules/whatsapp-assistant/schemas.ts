@@ -6,6 +6,7 @@ export const propertyFiltersSchema = z.object({
   location: z.string().trim().min(2).max(150).optional(),
   country: z.string().regex(/^[A-Z]{2}$/).optional(),
   currencyCode: z.string().regex(/^[A-Z]{3}$/).optional(),
+  minPriceMinor: z.string().regex(/^\d{1,16}$/).optional(),
   maxPriceMinor: z.string().regex(/^\d{1,16}$/).optional(),
   bedroomsMin: z.number().int().min(0).max(100).optional(),
   bedroomsMax: z.number().int().min(0).max(100).optional(),
@@ -39,6 +40,10 @@ export const assistantStateSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   message: z.string().trim().max(5_000).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
+  /** Step-by-step property search: on when started from the menu, the step asked, the steps answered. */
+  guided: z.boolean().default(false),
+  searchStep: z.enum(["type", "bedrooms", "area", "budget"]).optional(),
+  searchAnswered: z.array(z.enum(["type", "bedrooms", "area", "budget"])).max(4).default([]),
   /** Agent directory search (official number): the area asked for. */
   agentArea: z.string().trim().min(2).max(120).optional(),
   lastRequest: z.object({ listingId: z.string().uuid(), leadId: z.string().uuid(), viewingId: z.string().uuid().optional() }).optional(),

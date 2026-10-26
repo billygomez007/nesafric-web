@@ -9,6 +9,10 @@
  * reason is in `reviewFlag`) and `submit` refuses it until someone approves a change. Never edit a
  * body here without the catalogue changing first.
  *
+ * Meta's approved names: U01-U06, U03, U10, U23-U26 and U31 use the `nesafric_*` templates already
+ * approved on the NesAfric WABA, with their exact text, so they send without a new submission.
+ * The rest keep their catalogue text and still need submitting.
+ *
  * Changing an approved template: never edit its body in place. Bump `version` (the Meta name gains
  * a `_v<n>` suffix) and submit the new one; the old version keeps sending until the new one is
  * approved, because sending checks the content hash of the version in the registry.
@@ -81,47 +85,47 @@ const catalogue = (template: Entry): UtilityTemplate => ({ version: 1, language:
 export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
   // Category A: customer property enquiries
   catalogue({
-    key: "U01", name: "nes_property_enquiry_received", group: "CUSTOMER_ENQUIRIES", title: "Property Enquiry Received",
-    body: "Hello {{1}}, your enquiry about property {{2}} has been received by NesAfric. Reference: {{3}}. We will update you when the agent responds.",
+    key: "U01", name: "nesafric_inquiry_received", group: "CUSTOMER_ENQUIRIES", title: "Property Enquiry Received",
+    body: "Hello {{1}}, we received your inquiry about {{2}}. Your reference is {{3}}. We will notify you when the agent responds.",
     params: [NAME("Ama"), PROPERTY("2-bedroom apartment in East Legon"), REFERENCE("EQ-7K4P2Q")],
     trigger: { event: "marketplace.lead_created", condition: "Enquiry made on the website with WhatsApp updates ticked. Enquiries made on WhatsApp are answered in the chat." },
     recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U02", name: "nes_property_viewing_confirmed", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Confirmed",
-    body: "Hello {{1}}, your property viewing for {{2}} is confirmed for {{3}} at {{4}}. Your agent is {{5}}. Reply here if you need assistance.",
-    params: [NAME("Kwame"), PROPERTY("3-bedroom house in Spintex"), DATE("Sat, 26 Oct 2026"), TIME("10:00 GMT"), p("agent_name", "Abena Agyei", 60, "customer")],
+    key: "U02", name: "nesafric_viewing_confirmed", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Confirmed",
+    body: "Hello {{1}}, your viewing of {{2}} is confirmed for {{3}} at {{4}}. Please arrive on time.",
+    params: [NAME("Kwame"), PROPERTY("3-bedroom house in Spintex"), DATE("Sat, 26 Oct 2026"), TIME("10:00 GMT")],
     trigger: { event: "viewing.confirmed", condition: "The agent or landlord confirms a time." },
-    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"], wiring: { status: "WIRED" },
+    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN", "LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U03", name: "nes_property_viewing_reminder", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Reminder",
-    body: "Reminder from NesAfric: your viewing for {{1}} is scheduled for {{2}} at {{3}}. Your booking reference is {{4}}. Reply here if you need to change it.",
-    params: [PROPERTY("3-bedroom house in Spintex"), DATE("Sat, 26 Oct 2026"), TIME("10:00 GMT"), REFERENCE("VW-3M8D1R")],
+    key: "U03", name: "nesafric_viewing_reminder", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Reminder",
+    body: "Hello {{1}}, this is a reminder of your scheduled viewing for {{2}} on {{3}} at {{4}}. Please arrive on time.",
+    params: [NAME("Kwame"), PROPERTY("3-bedroom house in Spintex"), DATE("Sat, 26 Oct 2026"), TIME("10:00 GMT")],
     trigger: { event: "viewing.reminder_due", condition: "A confirmed viewing is approaching." },
-    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"],
-    wiring: { status: "NOT_WIRED", reason: "No business event marks an approaching viewing; this needs a scheduled reminder job over confirmed viewings, not a new event." },
+    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN", "LINKED_ACCOUNT"],
+    wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U04", name: "nes_property_viewing_rescheduled", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Rescheduled",
-    body: "Hello {{1}}, your viewing for {{2}} has been rescheduled to {{3}} at {{4}}. Please reply if you need help.",
+    key: "U04", name: "nesafric_viewing_rescheduled", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Rescheduled",
+    body: "Hello {{1}}, your viewing for {{2}} has been rescheduled to {{3}} at {{4}}. Please review the updated appointment.",
     params: [NAME("Kwame"), PROPERTY("3-bedroom house in Spintex"), DATE("Wed, 28 Oct 2026"), TIME("16:30 GMT")],
     trigger: { event: "viewing.rescheduled", condition: "The agent or landlord moves a viewing to a new confirmed time." },
-    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"], wiring: { status: "WIRED" },
+    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN", "LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U05", name: "nes_property_enquiry_response", group: "CUSTOMER_ENQUIRIES", title: "Property Enquiry Response",
-    body: "Hello {{1}}, there is an update to your enquiry about {{2}}. Status: {{3}}. Reference: {{4}}. Reply to this message to continue your enquiry.",
-    params: [NAME("Ama"), PROPERTY("2-bedroom apartment in East Legon"), STATUS("the agent has responded"), REFERENCE("EQ-7K4P2Q")],
+    key: "U05", name: "nesafric_inquiry_response", group: "CUSTOMER_ENQUIRIES", title: "Property Enquiry Response",
+    body: "Hello {{1}}, the agent has responded to your inquiry about {{2}}. Reference: {{3}}. Open NesAfric to read the response.",
+    params: [NAME("Ama"), PROPERTY("2-bedroom apartment in East Legon"), REFERENCE("EQ-7K4P2Q")],
     trigger: { event: "listing.lead_status_changed", condition: "The enquiry moves to CONTACTED, CLOSED or LOST. Viewing and application stages have their own messages." },
     recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U06", name: "nes_property_viewing_cancelled", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Cancelled",
-    body: "Hello {{1}}, your viewing for {{2}} scheduled for {{3}} has been cancelled. Reference: {{4}}. Reply here if you need assistance.",
-    params: [NAME("Kwame"), PROPERTY("3-bedroom house in Spintex"), p("scheduled_for", "Sat, 26 Oct 2026, 10:00 GMT", 40), REFERENCE("VW-3M8D1R")],
+    key: "U06", name: "nesafric_viewing_cancelled", group: "CUSTOMER_ENQUIRIES", title: "Property Viewing Cancelled",
+    body: "Hello {{1}}, your scheduled viewing for {{2}} on {{3}} has been cancelled. Please check NesAfric for details.",
+    params: [NAME("Kwame"), PROPERTY("3-bedroom house in Spintex"), p("scheduled_for", "Sat, 26 Oct 2026, 10:00 GMT", 40)],
     trigger: { event: "listing.viewing_status_changed", condition: "Status changes to CANCELLED." },
-    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN"], wiring: { status: "WIRED" },
+    recipient: "PROPERTY_SEEKER", optIn: ["ENQUIRY_OPT_IN", "LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
 
   // Category B: agent and broker onboarding
@@ -147,9 +151,9 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
     recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U10", name: "nes_property_listing_received", group: "AGENT_ONBOARDING", title: "Property Listing Received",
-    body: "Hello {{1}}, thank you for listing with NesAfric. We have received your property listing {{2}} and our team will review it. Listing reference: {{3}}. Current status: {{4}}. We will message you when the review is complete.",
-    params: [NAME("Abena"), p("property_title", "4-bedroom townhouse in Cantonments", 80, "customer"), REFERENCE("LS-9F2C7A"), STATUS("pending review")],
+    key: "U10", name: "nesafric_listing_submitted", group: "AGENT_ONBOARDING", title: "Property Listing Received",
+    body: "Hello {{1}}, your property listing {{2}} has been submitted successfully. Reference: {{3}}. It is awaiting review.",
+    params: [NAME("Abena"), p("property_title", "4-bedroom townhouse in Cantonments", 80, "customer"), REFERENCE("LS-9F2C7A")],
     trigger: { event: "listing.pending_review", condition: "A listing moves to PENDING_REVIEW. Not sent while the lister is chatting with NesAfric." },
     recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
@@ -247,30 +251,30 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
 
   // Category E: property operations
   catalogue({
-    key: "U23", name: "nes_maintenance_request_received", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Received",
-    body: "Hello {{1}}, your maintenance request for property {{2}} has been received by NesAfric. Ticket number: {{3}}. Current status: {{4}}. We will keep you updated on this request.",
-    params: [NAME("Kojo"), PROPERTY("Adenta Court, Unit 4B"), p("ticket", "NM-1042", 20), STATUS("received")],
+    key: "U23", name: "nesafric_maintenance_request_received", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Received",
+    body: "Hello {{1}}, your maintenance request for {{2}} has been received. Request reference: {{3}}. You can track your request in NesAfric.",
+    params: [NAME("Kojo"), PROPERTY("Adenta Court, Unit 4B"), p("ticket", "NM-1042", 20)],
     trigger: { event: "maintenance.requested", condition: "A repair request for a tenancy is created on the web or mobile app. Reports made on WhatsApp are answered in the chat." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U24", name: "nes_maintenance_request_assigned", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Assigned",
-    body: "Hello {{1}}, your maintenance request {{2}} has been assigned to {{3}}, who will handle the work. Current status: {{4}}. We will keep you updated on progress.",
-    params: [NAME("Kojo"), p("ticket", "NM-1042", 20), p("provider_name", "Kwesi Plumbing Services", 80, "customer"), STATUS("waiting for the provider to accept")],
+    key: "U24", name: "nesafric_maintenance_assigned", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Assigned",
+    body: "Hello {{1}}, your maintenance request {{2}} has been assigned to {{3}}. You can track its progress in NesAfric.",
+    params: [NAME("Kojo"), p("ticket", "NM-1042", 20), p("provider_name", "Kwesi Plumbing Services", 80, "customer")],
     trigger: { event: "workorder.assigned", condition: "The landlord assigns a provider to the request's work order. Requests handled by the automatic provider network are skipped: providers' updates already reach the tenant." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U25", name: "nes_maintenance_status_updated", group: "PROPERTY_OPERATIONS", title: "Maintenance Status Updated",
-    body: "Hello {{1}}, there is an update on maintenance ticket {{2}} for property {{3}}. The new status is {{4}}. Reply here if you have any questions.",
-    params: [NAME("Kojo"), p("ticket", "NM-1042", 20), PROPERTY("Adenta Court, Unit 4B"), STATUS("work has started")],
+    key: "U25", name: "nesafric_maintenance_status_update", group: "PROPERTY_OPERATIONS", title: "Maintenance Status Updated",
+    body: "Hello {{1}}, the status of your maintenance request {{2}} has changed to {{3}}. Please check NesAfric for details.",
+    params: [NAME("Kojo"), p("ticket", "NM-1042", 20), STATUS("work has started")],
     trigger: { event: "maintenance.started | maintenance.rejected | maintenance.cancelled", condition: "Sent to the tenant. Requests handled by the automatic provider network are skipped: providers' updates already reach the tenant. Landlords keep their existing escalations and digest." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
   catalogue({
-    key: "U26", name: "nes_maintenance_request_completed", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Completed",
-    body: "Hello {{1}}, maintenance request {{2}} for property {{3}} has been marked completed. Reply here if the issue is unresolved.",
-    params: [NAME("Kojo"), p("ticket", "NM-1042", 20), PROPERTY("Adenta Court, Unit 4B")],
+    key: "U26", name: "nesafric_maintenance_completed", group: "PROPERTY_OPERATIONS", title: "Maintenance Request Completed",
+    body: "Hello {{1}}, your maintenance request {{2}} has been marked completed. Please review the job details in NesAfric.",
+    params: [NAME("Kojo"), p("ticket", "NM-1042", 20)],
     trigger: { event: "maintenance.completed", condition: "Requests handled by the automatic provider network are skipped: the provider's completion message already reaches the tenant." },
     recipient: "TENANT", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
@@ -303,6 +307,14 @@ export const UTILITY_TEMPLATES: readonly UtilityTemplate[] = [
     body: "Hello {{1}}, your NesAfric account or business profile {{2}} has a status update: {{3}}. Reference: {{4}}. Reply if you need assistance.",
     params: [NAME("Kofi"), p("profile_name", "Golden Key Realty", 80, "customer"), STATUS("suspended pending review"), REFERENCE("AS-0C4D8B")],
     trigger: { event: "marketplace_professional.verification_reviewed", condition: "A NesAfric reviewer sets the business profile to SUSPENDED." },
+    recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
+  }),
+  // Category F: the listing team (added with the WhatsApp viewing workflow)
+  catalogue({
+    key: "U31", name: "nesafric_inquiry_agent_alert", group: "CUSTOMER_ENQUIRIES", title: "New Property Inquiry",
+    body: "Hello {{1}}, a customer has inquired about {{2}}. Inquiry reference: {{3}}. Please review the request in NesAfric.",
+    params: [NAME("Abena"), PROPERTY("3-bedroom house in Spintex"), REFERENCE("VW-3M8D1R")],
+    trigger: { event: "listing.viewing_requested", condition: "A customer requests a viewing on WhatsApp; the listing team is asked to accept, propose a time or decline. Sent only when no conversation with them is open." },
     recipient: "AGENT_OR_BROKER", optIn: ["LINKED_ACCOUNT"], wiring: { status: "WIRED" },
   }),
 ];

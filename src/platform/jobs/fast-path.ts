@@ -8,7 +8,7 @@ import { runDueJobs } from "@/platform/jobs/runner";
  * scheduled `/api/jobs/run` would otherwise make people wait for the next cron tick. Every job
  * still has its idempotency key and lock, so the cron or worker picking up the same job is safe.
  */
-export const FAST_TYPES = ["whatsapp-assistant-message", "whatsapp-legacy-inbound", "conversation-message-delivery", "whatsapp-delivery-status", "maintenance-route", "escalation-alert"];
+export const FAST_TYPES = ["whatsapp-assistant-message", "whatsapp-legacy-inbound", "conversation-message-delivery", "conversation-message-sequence", "whatsapp-delivery-status", "maintenance-route", "escalation-alert"];
 
 /** Must match `maxDuration` in the WhatsApp webhook routes. */
 export const WEBHOOK_MAX_DURATION_MS = 120_000;

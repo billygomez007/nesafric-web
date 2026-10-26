@@ -1,3 +1,4 @@
+import { sendViewingReminder } from "@/modules/whatsapp-assistant/viewings";
 import { processLeaseExpiry } from "@/modules/lifecycle/service";
 import { deliverNotification } from "@/modules/notifications/service";
 import { defaultNotificationProviders, NotificationProviders } from "@/modules/notifications/providers";
@@ -32,6 +33,20 @@ export function createJobHandlers(notificationProviders: NotificationProviders =
   },
   "ai-proactive-evaluation": async (payload: Record<string, unknown>) => {
     await runProactiveEvaluationJob(String(payload.organisationId));
+  },
+  // Several replies to one message (property cards): sent strictly in order. A message already
+  // sent is skipped on retry; one that cannot be sent at all is passed over so the rest still go.
+  // A viewing reminder (2 h / 1 h before) or the after-viewing check; re-checks the booking first.
+  "whatsapp-viewing-reminder": async (payload: Record<string, unknown>) => {
+    await sendViewingReminder(payload);
+  },
+  "conversation-message-sequence": async (payload: Record<string, unknown>) => {
+    const organisationId = String(payload.organisationId);
+    const deliveryIds = Array.isArray(payload.deliveryIds) ? payload.deliveryIds.map(String) : [];
+    for (const deliveryId of deliveryIds) {
+      const delivery = await deliverConversationMessage(organisationId, deliveryId, channelAdapters);
+      if (delivery.status === "FAILED" && ("retryable" in delivery ? delivery.retryable : true)) throw new Error("Conversation message delivery failed; see the delivery record.");
+    }
   },
   "conversation-message-delivery": async (payload: Record<string, unknown>) => {
     const delivery = await deliverConversationMessage(String(payload.organisationId), String(payload.deliveryId), channelAdapters);

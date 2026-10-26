@@ -114,8 +114,10 @@ describe("Choose an option: each row runs an existing workflow", () => {
     const land = await advanceOfficialConversation(input("land", found.state), deps);
     expect(land.interactive).toMatchObject({ type: "button", buttons: [{ id: "rent" }, { id: "buy" }] });
     const buy = await advanceOfficialConversation(input("buy", land.state), deps);
-    await advanceOfficialConversation(input("Kasoa", buy.state), deps);
-    expect(tools.searchProperties).toHaveBeenCalledWith(expect.objectContaining({ listingType: "SALE", category: "LAND", location: "kasoa" }), 1);
+    const area = await advanceOfficialConversation(input("Kasoa", buy.state), deps);
+    expect(area.reply).toContain("What is your budget");
+    await advanceOfficialConversation(input("any budget", area.state), deps);
+    expect(tools.searchProperties).toHaveBeenCalledWith(expect.objectContaining({ listingType: "SALE", category: "LAND", location: "Kasoa" }), 1);
     expect((await advanceOfficialConversation(input("commercial", found.state), deps)).reply).toBe(COMMERCIAL_PROMPT);
     expect((await advanceOfficialConversation(input("book a viewing", found.state), deps)).reply).toBe(VIEWING_PROMPT);
   });

@@ -17,10 +17,11 @@ import { answerLandlord } from "./landlord";
 import { advanceBusiness } from "./business";
 import { invitationReply } from "@/modules/whatsapp-templates/invitation-reply";
 import { searchAgents } from "./tools";
+import { handleViewingCommand, handleViewingOutcome, openViewingNegotiation, viewingReference } from "./viewings";
 import { COMMERCIAL_PROMPT, commercialChoices, FIND_PROPERTY_PROMPT, findPropertyChoices, greetingLine, MORE_OPTIONS, OFFICIAL_ALIASES, OFFICIAL_MENU_COMMANDS, rentOrBuyButtons, VIEWING_PROMPT, viewingButtons, welcomeReply } from "./welcome";
 
 export type OfficialInput = EngineInput & { organisationId: string; media?: { id: string; mimeType?: string }; /** Provider message id this message replied to (quick-reply buttons). */ replyTo?: string; /** The sender's WhatsApp profile name, as Meta sent it (untrusted, display only). */ profileName?: string };
-export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive };
+export type OfficialResult = { state: AssistantState; reply: string; handoff?: boolean; /** The inbound text was a one-time code and must not stay in the transcript. */ redactInbound?: boolean; replyMetadata?: Record<string, unknown>; /** List or reply buttons sent with `reply` as their fallback text. */ interactive?: WhatsAppInteractive; /** Messages sent after the reply, in order (property cards). */ extras?: Array<{ body: string; interactive?: WhatsAppInteractive }> };
 
 const START_ONBOARDING = /^(register|register landlord|landlord|property manager|add my property|add my properties|onboard|set up my properties)$/;
 const MAX_CODE_FAILURES = 5;
@@ -45,6 +46,9 @@ type Dependencies = {
   business: typeof advanceBusiness;
   invitationReply: typeof invitationReply;
   agents: typeof searchAgents;
+  viewingCommand?: typeof handleViewingCommand;
+  viewingOutcome?: typeof handleViewingOutcome;
+  openViewing?: typeof openViewingNegotiation;
   /** The clock for the greeting (tests pass a fixed time). */
   now?: () => Date;
 };
@@ -67,11 +71,22 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
 
   if (state.workflow === "link") return continueLink(input, state, reset, dependencies);
 
+  // Viewing negotiation and the after-viewing check: explicit commands with a VW- reference, from
+  // either side and from any step (they are what the viewing buttons send).
+  if (input.kind === "text" && /^(accept|propose|decline|cancel|viewed)\s+vw-[0-9a-f]{6}\b/.test(command)) {
+    const linked = await dependencies.linkedUser(input.phone);
+    const answer = await (dependencies.viewingCommand ?? handleViewingCommand)({ phone: input.phone, body: input.body, messageId: input.messageId, linkedUserId: linked?.user.id })
+      ?? await (dependencies.viewingOutcome ?? handleViewingOutcome)({ phone: input.phone, body: input.body });
+    if (answer) return { state, ...answer };
+  }
+
   // The welcome menu. A bare number is a menu choice wherever a search is open (results are picked
   // with "details 2"); an option's words or list tap count when nothing else is under way.
   const searching = ["idle", "property_search", "service_search", "agent_search"].includes(state.workflow);
   if (input.kind === "text" && (searching || ["inquiry", "viewing"].includes(state.workflow))) {
-    const pick = searching ? OFFICIAL_MENU_COMMANDS[command] ?? (state.workflow === "idle" || state.paused ? OFFICIAL_ALIASES[command] : undefined) : undefined;
+    // During a guided search step a number is its answer (2 bedrooms), not a menu choice.
+    const answering = state.workflow === "property_search" && state.guided && Boolean(state.searchStep) && !state.paused;
+    const pick = searching ? (answering ? undefined : OFFICIAL_MENU_COMMANDS[command]) ?? (state.workflow === "idle" || state.paused ? OFFICIAL_ALIASES[command] : undefined) : undefined;
     const navigation = !pick && ["menu", "cancel"].includes(OFFICIAL_ALIASES[command] ?? "") ? OFFICIAL_ALIASES[command] : undefined;
     if (pick && !["menu", "cancel"].includes(pick)) state = reset();
     const target = pick ?? navigation;
@@ -81,6 +96,8 @@ export async function advanceOfficialConversation(input: OfficialInput, dependen
     }
     if (pick === "more options") return { state, reply: MORE_OPTIONS };
     if (pick === "find a property") return { state, reply: FIND_PROPERTY_PROMPT, interactive: findPropertyChoices() };
+    if (command === "new search" && (state.workflow === "property_search" || state.workflow === "idle")) return { state: reset(), reply: FIND_PROPERTY_PROMPT, interactive: findPropertyChoices() };
+    if (command === "change filters" && state.workflow === "property_search") return { state: { ...state, paused: false }, reply: CHANGE_FILTERS_PROMPT };
     if (pick === "commercial") return { state, reply: COMMERCIAL_PROMPT, interactive: commercialChoices() };
     if (pick === "book a viewing") return { state, reply: VIEWING_PROMPT, interactive: viewingButtons() };
     if (pick === "find an agent") return { state: { ...state, workflow: "agent_search", agentArea: undefined, page: 1 }, reply: AGENT_AREA_PROMPT };
@@ -172,6 +189,15 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   }
 
   const result = await dependencies.engine(input);
+  // A viewing just requested in the chat: ask the listing team now, on WhatsApp where possible.
+  const requested = result.state.lastRequest?.viewingId;
+  if (requested && requested !== state.lastRequest?.viewingId) {
+    const negotiation = await (dependencies.openViewing ?? openViewingNegotiation)(requested);
+    const reference = viewingReference(requested);
+    return { ...result, reply: negotiation.teamReachable
+      ? `Viewing request ${reference} sent to the listing team. I'll message you here when they accept or suggest another time. It is not confirmed until then.`
+      : `Viewing request ${reference} saved. The listing team will confirm the time. Reply status to check it.` };
+  }
   // Anything not understood on the first turn, or between tasks, gets the welcome menu.
   if (state.workflow === "idle" && result.reply.startsWith("Would you like to find a property, find a service provider")) return { ...result, ...welcomeReply(await greeting(), "I did not catch that.\n\n") };
   if (result.reply === "Are you looking to rent or buy?" && !result.interactive) return { ...result, interactive: rentOrBuyButtons(result.reply) };
@@ -185,6 +211,8 @@ To set a limit, reply set limit rule <number> <amount>, for example set limit ru
   const [before, after] = result.reply.split(MAIN_MENU);
   return { ...result, ...welcomeReply(await greeting(), before, after) };
 }
+
+const CHANGE_FILTERS_PROMPT = "Tell me what to change, for example:\n• in East Legon (area)\n• under 5000 a month (budget)\n• 2 bedrooms\n• apartment, house, land or office (type)\nI'll search again with the new filters. Reply new search to start over.";
 
 const AGENT_AREA_PROMPT = "Which area should I search for agents? For example East Legon, Kumasi or Takoradi.\nOnly agents and agencies verified by NesAfric are shown.";
 
