@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { replyButtons } from "@/modules/conversations/channels/whatsapp-interactive";
 import { z } from "zod";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
@@ -393,9 +394,12 @@ async function organisationProperties(organisationId: string) {
   return properties.map((property) => ({ id: property.id, name: property.name, units: property.units }));
 }
 
+/** Listing needs a registered profile: an agent (Ghana Card) or a business (certificate). */
+export const REGISTER_BEFORE_LISTING = "Before you list a property, register with NesAfric as one of these:\n• Individual agent: you'll upload the front and back of your Ghana Card.\n• Real estate business: you'll upload your business registration certificate.\n\nTap one below. It takes a few minutes, all here on WhatsApp. Landlords listing their own properties: reply register.";
+
 export async function startListing(input: FlowInput): Promise<FlowResult> {
   const businesses = await listingBusinesses(input.userId);
-  if (!businesses.length) return { reply: "To list a property, register first: reply register agency, register agent, or register (landlords). Service providers: reply list my services.", exit: true };
+  if (!businesses.length) return { reply: REGISTER_BEFORE_LISTING, interactive: replyButtons(REGISTER_BEFORE_LISTING, [{ id: "register agent", title: "Individual agent" }, { id: "register agency", title: "Real estate business" }]), exit: true };
   const { draft, created } = await startFlowDraft({ address: input.address, userId: input.userId, kind: "PROPERTY_LISTING", step: businesses.length > 1 ? "business" : businesses[0].kind === "ORG" ? "property" : "purpose", data: { businesses, business: 0, amenities: [], properties: [] }, messageId: input.messageId });
   const prompt = await promptFor(listingFlow(), draft);
   const intro = created ? `Let's create your property listing${businesses.length === 1 ? ` for ${businesses[0].name}` : ""}. I'll ask one question at a time; reply help at any time.` : "Continuing your property listing.";
