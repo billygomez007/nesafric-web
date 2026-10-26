@@ -1,6 +1,6 @@
 import type { FlowKey } from "../registry";
 import {
-  body, caption, complete, datePicker, dropdown, flowJson, formPayload, heading, options, PURPOSE_OPTIONS, radios, REGION_OPTIONS,
+  body, caption, complete, datePicker, dropdown, flowJson, formPayload, heading, options, photoData, photos, PURPOSE_OPTIONS, radios, REGION_OPTIONS,
   screen, str, submit, subheading, textArea, textInput, type Option,
 } from "./components";
 
@@ -13,6 +13,12 @@ const OPT: Option[] = [{ id: "1", title: "Example" }];
 const DONE = screen({ id: "DONE", title: "NesAfric", terminal: true, data: { message: str("Thank you. We will continue in the chat.") }, children: [body("${data.message}"), complete("Close")] });
 const BEDROOMS: Option[] = [{ id: "1", title: "1 bedroom" }, { id: "2", title: "2 bedrooms" }, { id: "3", title: "3 bedrooms" }, { id: "4", title: "4 bedrooms" }, { id: "5", title: "5 or more" }];
 
+/**
+ * Search to request without leaving the form: results, the property with its photos, then a
+ * viewing (rent and sale), a stay (hotels and short stays) or a question, all on the endpoint.
+ * `form_version` tells this layout from the first published one, which handed over to the
+ * separate viewing and question Flows.
+ */
 function propertySearch() {
   const search = [
     radios("purpose", "Rent or buy?", PURPOSE_OPTIONS),
@@ -22,6 +28,27 @@ function propertySearch() {
     textInput("max_budget", "Maximum budget in GHS (optional)", { required: false, "input-type": "number", "helper-text": "Per month for rentals" }),
     dropdown("bedrooms", "Bedrooms (optional)", BEDROOMS, { required: false }),
   ];
+  const listing = { listing: "${data.listing_id}", form_version: "2" };
+  const viewing = [
+    datePicker("date", "Preferred date", { "min-date": "${data.min_date}", "max-date": "${data.max_date}", "on-select-action": { name: "data_exchange", payload: { action: "date", date: "${form.date}", ...listing } } }),
+    dropdown("slot", "Preferred time (Ghana time)", "${data.slots}"),
+    textInput("name", "Your name", { "init-value": "${data.name}", "min-chars": 2, "max-chars": 100 }),
+    textArea("note", "Anything the agent should know? (optional)", { required: false, "max-length": 500 }),
+  ];
+  const stay = [
+    datePicker("check_in", "Check-in", { "min-date": "${data.min_date}", "max-date": "${data.max_date}" }),
+    datePicker("check_out", "Check-out", { "min-date": "${data.min_date}", "max-date": "${data.max_date}" }),
+    dropdown("adults", "Adults", "${data.adults}"),
+    dropdown("children", "Children (optional)", "${data.children}", { required: false }),
+    textInput("name", "Your name", { "init-value": "${data.name}", "min-chars": 2, "max-chars": 160 }),
+    textInput("email", "Email for the booking receipt", { "input-type": "email", "init-value": "${data.email}", "max-chars": 320 }),
+    textArea("note", "Special requests (optional)", { required: false, "max-length": 1000 }),
+  ];
+  const question = [
+    textInput("name", "Your name", { "init-value": "${data.name}", "min-chars": 2, "max-chars": 100 }),
+    textArea("message", "Your question", { "max-length": 2000, "helper-text": "For example: Is it still available? Is the rent negotiable?" }),
+  ];
+  const about = { property: str("2-bedroom apartment, East Legon"), listing_id: str("listing-id"), name: str("Ama") };
   return flowJson([
     screen({ id: "SEARCH", title: "Find a property", data: { categories: options(OPT), regions: options(REGION_OPTIONS.slice(0, 2)) }, children: [heading("Find a property in Ghana"), ...search, submit("Search", "search", formPayload(search))] }),
     screen({ id: "RESULTS", title: "Matching properties", data: { summary: str("3 properties match your search."), results: options([{ id: "listing-id", title: "2-bedroom apartment, East Legon", description: "GHS 4,500 / month" }]), filters: str("{}") }, children: [
@@ -29,15 +56,28 @@ function propertySearch() {
       submit("View property", "select", { listing: "${form.listing}", filters: "${data.filters}" }),
     ] }),
     screen({ id: "DETAILS", title: "Property details", data: {
-      listing_id: str("listing-id"), title: str("2-bedroom apartment, East Legon"), price: str("GHS 4,500 / month"), location: str("East Legon, Greater Accra"),
+      listing_id: str("listing-id"), ...photoData(), title: str("2-bedroom apartment, East Legon"), price: str("GHS 4,500 / month"), location: str("East Legon, Greater Accra"),
       features: str("2 bedrooms · 2 bathrooms"), description: str("Bright apartment close to the main road."), next_steps: options([{ id: "book", title: "Book a viewing" }]),
     }, children: [
+      ...photos(),
       heading("${data.title}"), subheading("${data.price}"), body("${data.location}"), body("${data.features}"), body("${data.description}"),
       radios("next", "What would you like to do?", "${data.next_steps}"),
-      submit("Continue", "next", { listing: "${data.listing_id}", next: "${form.next}" }),
+      submit("Continue", "next", { next: "${form.next}", ...listing }),
+    ] }),
+    screen({ id: "VIEWING", title: "Book a viewing", data: { ...about, min_date: str("2026-10-27"), max_date: str("2026-12-25"), slots: options([{ id: "10:00", title: "10:00 am" }]) }, children: [
+      heading("${data.property}"), ...viewing, caption("This requests a one-hour viewing. The agent confirms the time with you."),
+      submit("Request viewing", "book", { ...formPayload(viewing), ...listing }),
+    ] }),
+    screen({ id: "STAY", title: "Book a stay", data: { ...about, email: str("ama@example.com"), min_date: str("2026-10-26"), max_date: str("2027-10-26"), adults: options([{ id: "2", title: "2 adults" }]), children: options([{ id: "0", title: "No children" }]) }, children: [
+      heading("${data.property}"), ...stay, caption("This sends a booking request. The host confirms it with you; nothing is paid now."),
+      submit("Request booking", "stay", { ...formPayload(stay), ...listing }),
+    ] }),
+    screen({ id: "QUESTION", title: "Ask about this property", data: about, children: [
+      heading("${data.property}"), ...question, caption("Your name and WhatsApp number are shared with the listing team only."),
+      submit("Send question", "send", { ...formPayload(question), ...listing }),
     ] }),
     DONE,
-  ], { SEARCH: ["RESULTS"], RESULTS: ["DETAILS"], DETAILS: ["DONE"], DONE: [] });
+  ], { SEARCH: ["RESULTS"], RESULTS: ["DETAILS"], DETAILS: ["VIEWING", "STAY", "QUESTION", "DONE"], VIEWING: ["DONE"], STAY: ["DONE"], QUESTION: ["DONE"], DONE: [] });
 }
 
 function bookViewing() {
