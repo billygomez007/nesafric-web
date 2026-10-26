@@ -166,4 +166,43 @@ describe("PostgreSQL WhatsApp super admin", () => {
     expect((await db.conversation.findUniqueOrThrow({ where: { id: conversation.id } })).status).toBe("AI_ACTIVE");
     expect(sent.filter((request) => request.recipientAddress === CUSTOMER).at(-1)?.body).toContain("You're back with the NesAfric assistant");
   });
+
+  it("finds accounts, shows a person, and suspends then reactivates a business after confirm", async () => {
+    const { professional } = await setup();
+    await db.marketplaceProfessional.update({ where: { id: professional.id }, data: { verificationStatus: "VERIFIED" } });
+    await say(ADMIN, "admin");
+    await say(ADMIN, PIN);
+    const ref = adminRef("professional", professional.id);
+
+    const found = await last(ADMIN, "admin find Kofi");
+    expect(found.body).toContain(`${ref} Business: Kofi Mensah Realty`);
+    expect(found.body).toMatch(/U-[0-9A-F]{6} Person: Kofi Agent/);
+    const userRef = /(U-[0-9A-F]{6}) Person: Kofi Agent/.exec(found.body)![1];
+    const person = await last(ADMIN, `admin view ${userRef}`);
+    expect(person.body).toContain("👤 *Kofi Agent*");
+    expect(person.body).toContain(`Kofi Mensah Realty ${ref}`);
+
+    // A verified business offers Suspend; the reason comes as the next message.
+    expect((await last(ADMIN, `admin view ${ref}`)).whatsappInteractive).toMatchObject({ buttons: [{ id: `admin suspend ${ref}` }] });
+    expect((await last(ADMIN, `admin suspend ${ref}`)).body).toContain(`What is the reason for suspending ${ref}?`);
+    expect((await last(ADMIN, "Fake listings reported")).body).toContain(`Please confirm: SUSPEND Kofi Mensah Realty (${ref})\nNote: Fake listings reported`);
+    expect((await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: professional.id } })).status).toBe("ACTIVE");
+    await say(ADMIN, "confirm");
+    expect((await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: professional.id } })).status).toBe("SUSPENDED");
+
+    expect((await last(ADMIN, `admin view ${ref}`)).whatsappInteractive).toMatchObject({ buttons: [{ id: `admin reactivate ${ref}` }] });
+    await say(ADMIN, `admin reactivate ${ref}`);
+    await say(ADMIN, "confirm");
+    expect((await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: professional.id } })).status).toBe("ACTIVE");
+    expect(await db.platformAuditEvent.count({ where: { action: { in: ["platform_admin.whatsapp_suspend", "platform_admin.whatsapp_reactivate"] }, entityId: professional.id } })).toBe(2);
+  });
+
+  it("only suspends businesses and providers, and asks for something to search", async () => {
+    await setup();
+    await say(ADMIN, "admin");
+    await say(ADMIN, PIN);
+    expect((await last(ADMIN, "admin find")).body).toContain("Type what to look for");
+    expect((await last(ADMIN, "admin suspend L-ABCDEF spam")).body).toContain("Only businesses (P-…) and service providers (S-…)");
+    expect((await last(ADMIN, "admin find zzzz-nobody")).body).toContain("Nothing matches");
+  });
 });

@@ -3,9 +3,9 @@ import type { PlatformPrincipal, User } from "@/platform/database/generated/clie
 import { verifyPassword } from "@/platform/auth/passwords";
 import { AppError } from "@/platform/errors";
 import { replyButtons, type WhatsAppInteractive } from "@/modules/conversations/channels/whatsapp-interactive";
-import { getVerificationQueueForPlatform, recordPlatformAudit, rejectListingForPlatform, requestListingChangesForPlatform, verifyAndPublishListingForPlatform } from "@/modules/platform-admin/service";
-import { reviewMarketplaceVerification } from "@/modules/marketplace-professionals/service";
-import { listPendingProviderIdentityReviews, reviewProviderIdentity } from "@/modules/providers/service";
+import { getVerificationQueueForPlatform, listOrganisationsForPlatform, listUsersForPlatform, recordPlatformAudit, rejectListingForPlatform, requestListingChangesForPlatform, verifyAndPublishListingForPlatform } from "@/modules/platform-admin/service";
+import { reviewMarketplaceVerification, setMarketplaceProfessionalAccountStatus } from "@/modules/marketplace-professionals/service";
+import { listPendingProviderIdentityReviews, reinstateProviderForPlatform, reviewProviderIdentity, suspendProviderForPlatform } from "@/modules/providers/service";
 import { getSignedStorageAccess } from "@/modules/documents/service";
 import { officialWhatsAppOrganisationId } from "./identity";
 import { queueOfficialText } from "./outbound";
@@ -21,15 +21,15 @@ import { initialState, type AssistantState } from "./schemas";
 
 type Reply = { state: AssistantState; reply: string; interactive?: WhatsAppInteractive; redactInbound?: boolean; replyMetadata?: Record<string, unknown> };
 type Admin = { user: User; principal: PlatformPrincipal };
-type Entity = "listing" | "professional" | "provider" | "conversation";
+type Entity = "listing" | "professional" | "provider" | "conversation" | "user" | "organisation";
 type Pending = NonNullable<NonNullable<AssistantState["admin"]>["pending"]>;
 
 const UNLOCK_MS = 12 * 60 * 60_000;
 const LOCK_MS = 30 * 60_000;
 const MAX_PIN_FAILURES = 5;
-const PREFIX: Record<Entity, string> = { listing: "L", professional: "P", provider: "S", conversation: "C" };
-const TABLE: Record<Entity, string> = { listing: "Listing", professional: "MarketplaceProfessional", provider: "ServiceProvider", conversation: "Conversation" };
-const ENTITY_OF: Record<string, Entity> = { L: "listing", P: "professional", S: "provider", C: "conversation" };
+const PREFIX: Record<Entity, string> = { listing: "L", professional: "P", provider: "S", conversation: "C", user: "U", organisation: "O" };
+const TABLE: Record<Entity, string> = { listing: "Listing", professional: "MarketplaceProfessional", provider: "ServiceProvider", conversation: "Conversation", user: "User", organisation: "Organisation" };
+const ENTITY_OF: Record<string, Entity> = { L: "listing", P: "professional", S: "provider", C: "conversation", U: "user", O: "organisation" };
 
 export const adminRef = (entity: Entity, id: string) => `${PREFIX[entity]}-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 const ago = (at: Date, now: Date) => { const hours = Math.round((now.getTime() - at.getTime()) / 3_600_000); return hours < 1 ? "just now" : hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} days ago`; };
@@ -45,7 +45,7 @@ export async function whatsappAdmin(userId: string | undefined): Promise<Admin |
 }
 
 async function resolveRef(ref: string): Promise<{ entity: Entity; id: string } | null> {
-  const match = /^([lpsc])-([0-9a-f]{6})$/i.exec(ref);
+  const match = /^([lpscuo])-([0-9a-f]{6})$/i.exec(ref);
   if (!match) return null;
   const entity = ENTITY_OF[match[1].toUpperCase()];
   const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(`SELECT "id" FROM "${TABLE[entity]}" WHERE replace("id"::text, '-', '') LIKE $1 LIMIT 2`, `${match[2].toLowerCase()}%`);
@@ -53,8 +53,8 @@ async function resolveRef(ref: string): Promise<{ entity: Entity; id: string } |
 }
 
 const menu = (state: AssistantState, lead = ""): Reply => {
-  const body = `${lead}🛡️ *NesAfric admin*\nTap "Admin menu", or type a command:\n• admin queue — registrations and listings to review\n• admin support — customers waiting for a person\n• admin lock — lock admin now`;
-  return { state, reply: body, interactive: { type: "list", body: body.slice(0, 1024), button: "Admin menu", sections: [{ title: "Admin", rows: [{ id: "admin queue", title: "Review queue", description: "Agents, companies, providers, listings" }, { id: "admin support", title: "Support inbox", description: "Customers waiting for a person" }, { id: "admin lock", title: "Lock admin" }] }] } };
+  const body = `${lead}🛡️ *NesAfric admin*\nTap "Admin menu", or type a command:\n• admin queue — registrations and listings to review\n• admin support — customers waiting for a person\n• admin find <name, email or phone> — accounts, with suspend and reactivate\n• admin lock — lock admin now`;
+  return { state, reply: body, interactive: { type: "list", body: body.slice(0, 1024), button: "Admin menu", sections: [{ title: "Admin", rows: [{ id: "admin queue", title: "Review queue", description: "Agents, companies, providers, listings" }, { id: "admin support", title: "Support inbox", description: "Customers waiting for a person" }, { id: "admin find", title: "Find an account", description: "People, businesses, providers, organisations" }, { id: "admin lock", title: "Lock admin" }] }] } };
 };
 
 const adminState = (state: AssistantState, admin: NonNullable<AssistantState["admin"]>): AssistantState => ({ ...state, workflow: "admin", admin });
@@ -116,7 +116,7 @@ async function run(command: string, state: AssistantState, admin: Admin, input: 
   if (asked && !/^admin(\s|$)/.test(lower)) {
     const cleared = { ...state, admin: { awaitingPin: false } };
     if (lower === "cancel") return menu(cleared, "Cancelled. Nothing was changed.\n\n");
-    return decide(asked.action, asked.ref, command, cleared);
+    return asked.action === "suspend" ? account("suspend", asked.ref, command, cleared) : decide(asked.action, asked.ref, command, cleared);
   }
   if (lower === "cancel" || lower === "exit" || lower === "menu" && !lower.startsWith("admin")) return { state: leave(state), reply: "Left admin. Reply admin to come back." };
   const [, verb = "", ref = "", ...words] = command.split(" ");
@@ -130,6 +130,8 @@ async function run(command: string, state: AssistantState, admin: Admin, input: 
     case "support": return support(state, now);
     case "open": return open(ref, state);
     case "reply": case "done": return converse(verb.toLowerCase() as "reply" | "done", ref, text, state);
+    case "find": return find([ref, text].filter(Boolean).join(" "), state, admin);
+    case "suspend": case "reactivate": return account(verb.toLowerCase() as "suspend" | "reactivate", ref, text, state);
     default: return menu(state, `I don't know "admin ${verb}".\n\n`);
   }
 }
@@ -161,6 +163,7 @@ async function view(ref: string, state: AssistantState, admin: Admin): Promise<R
   const target = await resolveRef(ref);
   if (!target || target.entity === "conversation") return { state, reply: `I could not find ${ref.toUpperCase() || "that item"}. Reply admin queue for the list.` };
   const label = ref.toUpperCase();
+  if (target.entity === "user" || target.entity === "organisation") return viewAccount(target.entity, target.id, label, state, admin);
   let lines: string[] = [];
   let links: string[] = [];
   if (target.entity === "professional") {
@@ -169,14 +172,19 @@ async function view(ref: string, state: AssistantState, admin: Admin): Promise<R
     links = await signedLinks(admin, item.verificationDocuments.map((document) => ({ label: document.type.replaceAll("_", " ").toLowerCase(), id: document.storageObject.id })));
   } else if (target.entity === "provider") {
     const item = await db.serviceProvider.findUniqueOrThrow({ where: { id: target.id } });
-    lines = [`🛠️ *${item.displayName}* (${label})`, item.legalName ? `Legal name: ${item.legalName}` : "", `Verification: ${String(item.verificationStatus).toLowerCase()}`];
+    lines = [`🛠️ *${item.displayName}* (${label})`, item.legalName ? `Legal name: ${item.legalName}` : "", `Verification: ${String(item.verificationStatus).toLowerCase()}`, item.suspendedAt ? "Status: suspended" : ""];
   } else {
     const item = await db.listing.findUniqueOrThrow({ where: { id: target.id }, include: { media: { where: { type: "PHOTO" }, orderBy: { sortOrder: "asc" }, take: 3 } } });
     lines = [`🏠 *${item.title}* (${label})`, `${item.listingType === "RENT" ? "For rent" : "For sale"} · ${item.category.toLowerCase()}`, `Status: ${item.status.toLowerCase()} · Verification: ${item.verificationStatus.toLowerCase()}`, [item.locality, item.city, item.region].filter(Boolean).join(", "), `Price: ${item.currencyCode} ${(Number(item.rentAmountMinor ?? item.askingAmountMinor ?? 0) / 100).toLocaleString("en-GB")}${item.frequency ? ` ${item.frequency.toLowerCase()}` : ""}`, clip(item.publicDescription, 200)];
     links = item.media.map((media, index) => `Photo ${index + 1}: ${media.publicUrl}`);
   }
   const body = [...lines.filter(Boolean), ...(links.length ? ["", "Documents and photos (links expire in 5 minutes):", ...links] : [])].join("\n");
-  const buttons = [{ id: `admin approve ${label}`, title: "Approve" }, ...(target.entity !== "professional" ? [{ id: `admin changes ${label}`, title: target.entity === "listing" ? "Request changes" : "Ask for more info" }] : []), { id: `admin reject ${label}`, title: "Reject" }];
+  // Waiting for review: the review actions. Already decided: suspend or reactivate the account.
+  const reviewing = target.entity === "listing" || /Verification: (pending|requires_more_information|unverified)/.test(body);
+  const suspended = /Status: suspended|Verification: suspended/.test(body);
+  const buttons = reviewing
+    ? [{ id: `admin approve ${label}`, title: "Approve" }, ...(target.entity !== "professional" ? [{ id: `admin changes ${label}`, title: target.entity === "listing" ? "Request changes" : "Ask for more info" }] : []), { id: `admin reject ${label}`, title: "Reject" }]
+    : [suspended ? { id: `admin reactivate ${label}`, title: "Reactivate" } : { id: `admin suspend ${label}`, title: "Suspend" }];
   const summary = lines.filter(Boolean).slice(0, 3).join("\n");
   return {
     state, reply: body,
@@ -205,6 +213,72 @@ async function decide(action: "approve" | "changes" | "reject", ref: string, not
   const summary = `${what} ${name} (${label})${note ? `\nNote to them: ${clip(note, 300)}` : ""}`;
   const pending: Pending = { action, entity: target.entity, id: target.id, ref: label, summary, note: note || undefined, expectedUpdatedAt, expectedStatus };
   const body = `Please confirm: ${summary}\n\nThey will be told. Reply confirm, or cancel.`;
+  return { state: { ...state, admin: { awaitingPin: false, pending } }, reply: body, interactive: replyButtons(body.slice(0, 1024), [{ id: "confirm", title: "Confirm" }, { id: "cancel", title: "Cancel" }]) };
+}
+
+/** People, businesses, service providers and organisations matching a name, email or phone. */
+async function find(query: string, state: AssistantState, admin: Admin): Promise<Reply> {
+  const text = query.trim();
+  if (text.length < 2) return { state, reply: "Type what to look for after admin find: a name, an email address or a phone number. Example: admin find Mensah" };
+  const [users, organisations, professionals, providers] = await Promise.all([
+    listUsersForPlatform(admin.principal, { search: text, take: 4 }),
+    listOrganisationsForPlatform(admin.principal, { search: text }).then((items) => items.slice(0, 3)),
+    db.marketplaceProfessional.findMany({ where: { archivedAt: null, displayName: { contains: text, mode: "insensitive" } }, take: 3, orderBy: { createdAt: "desc" }, select: { id: true, displayName: true, type: true, status: true, verificationStatus: true } }),
+    db.serviceProvider.findMany({ where: { displayName: { contains: text, mode: "insensitive" } }, take: 3, orderBy: { createdAt: "desc" }, select: { id: true, displayName: true, verificationStatus: true, suspendedAt: true } }),
+  ]);
+  const rows = [
+    ...users.map((user) => ({ ref: adminRef("user", user.id), title: user.displayName, detail: [user.email, user.phoneE164].filter(Boolean).join(" · ") || "No contact", kind: "Person" })),
+    ...professionals.map((item) => ({ ref: adminRef("professional", item.id), title: item.displayName, detail: `${item.type === "INDIVIDUAL_AGENT" ? "Agent" : "Company"} · ${item.verificationStatus.toLowerCase()} · ${item.status.toLowerCase()}`, kind: "Business" })),
+    ...providers.map((item) => ({ ref: adminRef("provider", item.id), title: item.displayName, detail: `Service provider · ${String(item.verificationStatus).toLowerCase()}${item.suspendedAt ? " · suspended" : ""}`, kind: "Provider" })),
+    ...organisations.map((item) => ({ ref: adminRef("organisation", item.id), title: item.name, detail: `Organisation · ${item.subscription?.plan.name ?? "no plan"} · ${item.subscription?.status.toLowerCase() ?? "no subscription"}`, kind: "Organisation" })),
+  ].slice(0, 10);
+  if (!rows.length) return menu(state, `Nothing matches "${clip(text, 40)}".\n\n`);
+  const body = `🔎 *Results for "${clip(text, 40)}"*\n${rows.map((row) => `• ${row.ref} ${row.kind}: ${clip(row.title, 40)} (${clip(row.detail, 60)})`).join("\n")}\n\nTap one to open it, or type admin view <ref>.`;
+  return { state, reply: body, interactive: { type: "list", body: body.slice(0, 1024), button: "Open a result", sections: [{ title: "Results", rows: rows.map((row) => ({ id: `admin view ${row.ref}`, title: `${row.ref} ${row.kind}`.slice(0, 24), description: clip(`${row.title} · ${row.detail}`, 72) })) }] } };
+}
+
+async function viewAccount(entity: "user" | "organisation", id: string, label: string, state: AssistantState, admin: Admin): Promise<Reply> {
+  if (entity === "user") {
+    const user = await db.user.findUniqueOrThrow({ where: { id }, select: { displayName: true, email: true, phoneE164: true, createdAt: true, platformPrincipal: { select: { role: true, status: true } }, memberships: { where: { archivedAt: null }, take: 5, select: { status: true, organisation: { select: { id: true, name: true } } } }, marketplaceProfessionalMemberships: { take: 5, select: { status: true, marketplaceProfessional: { select: { id: true, displayName: true } } } } } });
+    const whatsapp = await db.channelIdentity.findFirst({ where: { userId: id, channel: "WHATSAPP", verifiedAt: { not: null } }, select: { address: true } });
+    await recordPlatformAudit(admin.principal, "platform_admin.whatsapp_user_viewed", "user", id);
+    const body = [
+      `👤 *${user.displayName}* (${label})`,
+      user.email ? `Email: ${user.email}` : "", user.phoneE164 ? `Phone: ${user.phoneE164}` : "", whatsapp ? `WhatsApp: ${whatsapp.address}` : "",
+      `Joined: ${user.createdAt.toISOString().slice(0, 10)}`,
+      user.platformPrincipal ? `Platform role: ${user.platformPrincipal.role.toLowerCase()} (${user.platformPrincipal.status.toLowerCase()})` : "",
+      user.memberships.length ? `Organisations: ${user.memberships.map((item) => `${item.organisation.name} ${adminRef("organisation", item.organisation.id)}`).join(", ")}` : "",
+      user.marketplaceProfessionalMemberships.length ? `Businesses: ${user.marketplaceProfessionalMemberships.map((item) => `${item.marketplaceProfessional.displayName} ${adminRef("professional", item.marketplaceProfessional.id)}`).join(", ")}` : "",
+      "", "People's accounts are suspended through their business (admin suspend P-…) or provider (S-…).",
+    ].filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n");
+    return { state, reply: body.slice(0, 4000) };
+  }
+  const organisation = (await listOrganisationsForPlatform(admin.principal, {})).find((item) => item.id === id) ?? null;
+  if (!organisation) return { state, reply: `I could not open ${label}.` };
+  const body = [
+    `🏢 *${organisation.name}* (${label})`,
+    `Type: ${organisation.type.replaceAll("_", " ").toLowerCase()} · ${organisation.countryCode}`,
+    `Plan: ${organisation.subscription?.plan.name ?? "none"} · Subscription: ${organisation.subscription?.status.toLowerCase() ?? "none"}`,
+    `Members: ${organisation._count.members} · Properties: ${organisation._count.properties}`,
+    `Created: ${organisation.createdAt.toISOString().slice(0, 10)}`,
+    "", "Subscription changes (suspend, resume, plan) come with the platform and billing commands.",
+  ].join("\n");
+  return { state, reply: body };
+}
+
+/** Suspend or reactivate a business (P-) or service provider (S-), read back for confirm first. */
+async function account(action: "suspend" | "reactivate", ref: string, note: string, state: AssistantState): Promise<Reply> {
+  const target = await resolveRef(ref);
+  const label = ref.toUpperCase();
+  if (!target || (target.entity !== "professional" && target.entity !== "provider")) return { state, reply: `Only businesses (P-…) and service providers (S-…) are suspended or reactivated here. Find one with admin find <name>.` };
+  if (action === "suspend" && note.length < 3) return { state: { ...state, admin: { awaitingPin: false, awaitingReason: { action: "suspend", ref: label } } }, reply: `What is the reason for suspending ${label}? It is recorded and sent to them.\nType it now, or reply cancel.` };
+  let name = "";
+  let expectedStatus: string | undefined;
+  if (target.entity === "professional") { const item = await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: target.id }, select: { displayName: true, status: true } }); name = item.displayName; expectedStatus = item.status; }
+  else name = (await db.serviceProvider.findUniqueOrThrow({ where: { id: target.id }, select: { displayName: true } })).displayName;
+  const summary = `${action === "suspend" ? "SUSPEND" : "REACTIVATE"} ${name} (${label})${note ? `\nNote: ${clip(note, 300)}` : ""}`;
+  const body = `Please confirm: ${summary}\n\n${action === "suspend" ? "Their listings and services are hidden while suspended. " : ""}Reply confirm, or cancel.`;
+  const pending: Pending = { action, entity: target.entity, id: target.id, ref: label, summary, note: note || undefined, expectedStatus };
   return { state: { ...state, admin: { awaitingPin: false, pending } }, reply: body, interactive: replyButtons(body.slice(0, 1024), [{ id: "confirm", title: "Confirm" }, { id: "cancel", title: "Cancel" }]) };
 }
 
@@ -242,7 +316,11 @@ async function converse(action: "reply" | "done", ref: string, text: string, sta
 async function execute(pending: Pending, state: AssistantState, admin: Admin, input: { messageId: string }): Promise<Reply> {
   const done = (text: string) => menu(state, `✅ ${text}\n\n`);
   try {
-    if (pending.entity === "listing") {
+    if (pending.action === "suspend" || pending.action === "reactivate") {
+      if (pending.entity === "professional") await setMarketplaceProfessionalAccountStatus(admin.user, pending.id, { status: pending.action === "suspend" ? "SUSPENDED" : "ACTIVE", ...(pending.note ? { reason: pending.note } : {}), ...(pending.expectedStatus ? { expectedStatus: pending.expectedStatus } : {}) });
+      else if (pending.action === "suspend") await suspendProviderForPlatform(admin.user, pending.id, { reason: pending.note });
+      else await reinstateProviderForPlatform(admin.user, pending.id, pending.note ? { note: pending.note } : {});
+    } else if (pending.entity === "listing") {
       const expectedUpdatedAt = pending.expectedUpdatedAt;
       if (pending.action === "approve") await verifyAndPublishListingForPlatform(admin.principal, pending.id, { expectedUpdatedAt, ...(pending.note ? { note: pending.note } : {}) });
       else if (pending.action === "changes") await requestListingChangesForPlatform(admin.principal, pending.id, { expectedUpdatedAt, note: pending.note });

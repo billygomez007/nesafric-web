@@ -1,8 +1,8 @@
 # WhatsApp admin
 
 Platform administration from the official NesAfric WhatsApp number, for a platform principal an
-operator has linked. Stage 1: reviews and approvals, and the support inbox. Accounts and
-suspensions, and platform and billing, follow.
+operator has linked. Stage 1: reviews and approvals, and the support inbox. Stage 2: accounts and
+suspensions. Platform and billing follow.
 
 ## Access
 
@@ -31,6 +31,10 @@ suspensions, and platform and billing, follow.
 | `admin open <ref>` | The last messages of that chat |
 | `admin reply <ref> <message>` | Sends the message as "NesAfric team"; the assistant stays quiet in that chat |
 | `admin done <ref>` | Hands the chat back to the assistant and tells the customer |
+| `admin find <name, email or phone>` | People (U-), businesses (P-), service providers (S-) and organisations (O-) that match |
+| `admin view U-…` / `O-…` | A person (contact, organisations, businesses, platform role) or an organisation (plan, subscription, members, properties) |
+| `admin suspend <ref> <reason>` | Suspends a business (P-) or service provider (S-); the reason can also be sent as the next message |
+| `admin reactivate <ref> [note]` | Reactivates a suspended business or service provider |
 | `admin lock` | Locks admin now |
 
 Admins also get a WhatsApp alert when a customer asks for a person or writes into a chat a person
