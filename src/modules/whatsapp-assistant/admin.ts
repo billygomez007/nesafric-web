@@ -111,6 +111,13 @@ async function run(command: string, state: AssistantState, admin: Admin, input: 
   const pending = state.admin?.pending;
   if (pending && lower === "confirm") return execute(pending, { ...state, admin: { awaitingPin: false } }, admin, input);
   if (pending && lower === "cancel") return menu({ ...state, admin: { awaitingPin: false } }, "Cancelled. Nothing was changed.\n\n");
+  // The reason asked for after Reject or Request changes (a button tap carries none).
+  const asked = state.admin?.awaitingReason;
+  if (asked && !/^admin(\s|$)/.test(lower)) {
+    const cleared = { ...state, admin: { awaitingPin: false } };
+    if (lower === "cancel") return menu(cleared, "Cancelled. Nothing was changed.\n\n");
+    return decide(asked.action, asked.ref, command, cleared);
+  }
   if (lower === "cancel" || lower === "exit" || lower === "menu" && !lower.startsWith("admin")) return { state: leave(state), reply: "Left admin. Reply admin to come back." };
   const [, verb = "", ref = "", ...words] = command.split(" ");
   const text = words.join(" ").trim();
@@ -184,7 +191,10 @@ async function decide(action: "approve" | "changes" | "reject", ref: string, not
   const label = ref.toUpperCase();
   if (!target || target.entity === "conversation") return { state, reply: `I could not find ${label || "that item"}. Reply admin queue for the list.` };
   if (action === "changes" && target.entity === "professional") return { state, reply: `Agent and company registrations are approved or rejected. To ask for something, reply admin reject ${label} <what is missing>.` };
-  if (action !== "approve" && note.length < 3) return { state, reply: `Add the reason after the reference, for example: admin ${action} ${label} The Ghana Card photo is unreadable.` };
+  if (action !== "approve" && note.length < 3) {
+    const what = action === "reject" ? "rejecting" : target.entity === "listing" ? "sending it back for changes" : "asking for more information";
+    return { state: { ...state, admin: { awaitingPin: false, awaitingReason: { action, ref: label } } }, reply: `What is the reason for ${what} (${label})? It will be sent to them.\nType it now, for example: The Ghana Card photo is unreadable. Or reply cancel.` };
+  }
   let name = "";
   let expectedUpdatedAt: string | undefined;
   let expectedStatus: string | undefined;

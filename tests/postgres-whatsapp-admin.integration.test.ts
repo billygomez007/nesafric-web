@@ -88,10 +88,30 @@ describe("PostgreSQL WhatsApp super admin", () => {
     expect(await db.platformAuditEvent.count({ where: { platformPrincipalId: principal.id, action: "platform_admin.whatsapp_approve", entityId: professional.id } })).toBe(1);
 
     // A rejection needs a reason; cancel changes nothing.
-    expect((await last(ADMIN, `admin reject ${ref}`)).body).toContain("Add the reason");
+    expect((await last(ADMIN, `admin reject ${ref}`)).body).toContain(`What is the reason for rejecting (${ref})?`);
+    expect((await last(ADMIN, "cancel")).body).toContain("Nothing was changed");
     await last(ADMIN, `admin reject ${ref} Wrong card`);
     expect((await last(ADMIN, "cancel")).body).toContain("Nothing was changed");
     expect((await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: professional.id } })).verificationStatus).toBe("VERIFIED");
+  });
+
+  it("takes the next message as the reason after Reject (the button carries none), then asks to confirm", async () => {
+    const { professional } = await setup();
+    const ref = adminRef("professional", professional.id);
+    await say(ADMIN, "admin");
+    await say(ADMIN, PIN);
+    // Exactly what happened on the phone: the Reject button, then the reason on its own.
+    expect((await last(ADMIN, `admin reject ${ref}`)).body).toContain("What is the reason for rejecting");
+    const confirm = await last(ADMIN, "No proper pictures");
+    expect(confirm.body).toContain(`Please confirm: REJECT Kofi Mensah Realty (${ref})\nNote to them: No proper pictures`);
+    expect(confirm.whatsappInteractive).toMatchObject({ buttons: [{ id: "confirm" }, { id: "cancel" }] });
+    expect((await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: professional.id } })).verificationStatus).toBe("PENDING");
+    expect((await last(ADMIN, "confirm")).body).toContain(`✅ Done: REJECT Kofi Mensah Realty (${ref})`);
+    expect((await db.marketplaceProfessional.findUniqueOrThrow({ where: { id: professional.id } })).verificationStatus).toBe("REJECTED");
+
+    // A full admin command typed while a reason is awaited is a command, not the reason.
+    await say(ADMIN, `admin reject ${ref}`);
+    expect((await last(ADMIN, "admin queue")).body).toMatch(/Review queue|Nothing is waiting/);
   });
 
   it("locks admin for 30 minutes after 5 wrong PINs, and admin lock locks it at once", async () => {

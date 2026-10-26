@@ -44,6 +44,8 @@ export const assistantStateSchema = z.object({
   admin: z.object({
     awaitingPin: z.boolean().default(false),
     then: z.string().max(1000).optional(),
+    /** Reject or Request changes was chosen without a reason: the next message is the reason. */
+    awaitingReason: z.object({ action: z.enum(["changes", "reject"]), ref: z.string().max(12) }).optional(),
     pending: z.object({
       action: z.enum(["approve", "changes", "reject", "reply", "done"]),
       entity: z.enum(["listing", "professional", "provider", "conversation"]),
