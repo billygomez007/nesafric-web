@@ -2,6 +2,7 @@ import { MAX_LISTING_MEDIA_ITEMS, MAX_LISTING_PHOTOS } from "@/lib/listing-media
 import type { z } from "zod";
 import { ensureListingCover, lockListingMedia } from "./cover";
 import { isBookableCategory } from "@/lib/listing-categories";
+import { regionSpellings } from "@/lib/ghana-regions";
 import { listingReadinessProblems } from "./readiness";
 import {
   ListingStatus,
@@ -1330,7 +1331,7 @@ function publicSearchSql(filters: ReturnType<typeof publicListingSearchSchema.pa
   if (filters.sizeMaxSqm !== undefined) conditions.push(Prisma.sql`l."sizeSqm" <= ${filters.sizeMaxSqm}`);
   if (filters.country) conditions.push(Prisma.sql`l."countryCode" = ${filters.country}`);
   if (filters.location) conditions.push(Prisma.sql`position(lower(${filters.location}) in lower(concat_ws(' ', l."region", l."city", l."district", l."locality", l."publicLocationLabel"))) > 0`);
-  if (region) conditions.push(Prisma.sql`lower(l."region") = lower(${region})`);
+  if (region) conditions.push(Prisma.sql`lower(trim(l."region")) IN (${Prisma.join(regionSpellings(region))})`);
   if (filters.city) conditions.push(Prisma.sql`lower(l."city") = lower(${filters.city})`);
   if (filters.district) conditions.push(Prisma.sql`lower(l."district") = lower(${filters.district})`);
   for (const amenity of [...new Set(filters.amenities ?? [])]) {
