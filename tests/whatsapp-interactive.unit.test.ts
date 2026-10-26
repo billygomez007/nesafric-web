@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WhatsAppChannelAdapter } from "@/modules/conversations/channels/whatsapp";
 import { parseWhatsAppInteractive, replyButtons } from "@/modules/conversations/channels/whatsapp-interactive";
-import { advanceConversation, MAIN_MENU, mainMenuList, OFFICIAL_MAIN_MENU } from "@/modules/whatsapp-assistant/engine";
-import { advanceOfficialConversation, OFFICIAL_MENU_SUFFIX } from "@/modules/whatsapp-assistant/router";
+import { advanceConversation, MAIN_MENU, mainMenuList } from "@/modules/whatsapp-assistant/engine";
+import { advanceOfficialConversation } from "@/modules/whatsapp-assistant/router";
+import { officialWelcomeList, welcomeReply } from "@/modules/whatsapp-assistant/welcome";
 
 const MENU_INTRO = "Welcome to NesAfric! 🏡\nTap \"Choose an option\" below, or tell me what you need. Business registration and listing currently continue securely on the website. Use menu, resume or cancel at any time.";
 const MENU_ROWS = [
@@ -105,11 +106,11 @@ describe("WhatsApp interactive limits", () => {
   });
 
   it("keeps every main-menu row title within 24 characters and every row id a command the assistant handles", () => {
-    const official = mainMenuList(MAIN_MENU + OFFICIAL_MENU_SUFFIX, true)!;
+    const official = officialWelcomeList("Good morning! 🏡")!;
     expect(official.type).toBe("list");
     const rows = official.type === "list" ? official.sections.flatMap((section) => section.rows) : [];
-    expect(rows.map((row) => row.id)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "link", "account"]);
-    expect(rows.every((row) => row.title.length <= 24)).toBe(true);
+    expect(rows.map((row) => row.id)).toEqual(["find a property", "account", "list a property", "register agent", "register services", "register", "property services", "my applications", "support", "more options"]);
+    expect(rows.every((row) => row.title.length <= 24 && (row.description ?? "").length <= 72)).toBe(true);
   });
 });
 
@@ -137,11 +138,9 @@ describe("assistant replies carry the menu list and plain-text fallback", () => 
 
   it("adds the official rows on the official number", async () => {
     const result = await advanceOfficialConversation({ ...input("menu"), organisationId: "11111111-1111-4111-8111-111111111111" }, {
-      engine: advanceConversation, providerMessage: vi.fn(async () => null), network: vi.fn(async () => null), report: vi.fn(async () => null), rules: vi.fn(async () => null), jobs: vi.fn(async () => null), landlord: vi.fn(async () => null), linkedUser: vi.fn(async () => null), business: vi.fn(async () => null), invitationReply: vi.fn(async () => null),
+      engine: advanceConversation, providerMessage: vi.fn(async () => null), network: vi.fn(async () => null), report: vi.fn(async () => null), rules: vi.fn(async () => null), jobs: vi.fn(async () => null), landlord: vi.fn(async () => null), linkedUser: vi.fn(async () => null), business: vi.fn(async () => null), invitationReply: vi.fn(async () => null), agents: vi.fn(), now: () => new Date("2026-10-25T09:00:00Z"),
     } as never);
-    // On the official number registration and listing happen in the conversation.
-    expect(result.reply).toBe(OFFICIAL_MAIN_MENU + OFFICIAL_MENU_SUFFIX);
-    expect(result.interactive?.body).toBe(MENU_INTRO.replace(" Business registration and listing currently continue securely on the website.", "") + OFFICIAL_MENU_SUFFIX);
-    expect(result.interactive?.type === "list" && result.interactive.sections[0].rows.map((row) => row.id)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "link", "account"]);
+    // The official number has its own nine-option welcome; the list carries it within Meta's limits.
+    expect(result).toMatchObject(welcomeReply("Good morning! 🏡"));
   });
 });

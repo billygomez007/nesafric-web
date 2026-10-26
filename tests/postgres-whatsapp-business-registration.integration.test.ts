@@ -57,19 +57,59 @@ describe("PostgreSQL WhatsApp business registration", () => {
   afterEach(() => { vi.unstubAllEnvs(); });
   afterAll(async () => { await cleanDatabase(); await db.$disconnect(); });
 
-  it("requires a linked account: a phone number alone registers nothing", async () => {
+  it("creates the account in the chat when none exists, then starts the chosen registration; nothing is registered before that", async () => {
     const owner = await registerUser({ displayName: "Owner", email: "owner@example.com", password: "secure-password-123" });
     const organisation = await createOrganisation(owner.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
     const chat = whatsappConversation(PHONE, organisation.id);
-    const reply = await chat.send("register agency");
-    expect(reply.reply).toContain("first connect this WhatsApp number to your NesAfric account: reply link");
+    const asked = await chat.send("register agency");
+    expect(asked.reply).toContain("I'll create your free NesAfric account right here");
+    expect(asked.reply).not.toMatch(/https?:\/\//);
     expect(await db.whatsAppFlowDraft.count()).toBe(0);
+    expect(await db.user.count({ where: { phoneE164: `+${PHONE}` } })).toBe(0);
+
+    const started = await chat.send("Ama Owusu");
+    expect(started.reply).toContain("✅ Your NesAfric account is ready, Ama.");
+    expect(started.reply).toContain("What kind of business is it?");
+    const user = await db.user.findFirstOrThrow({ where: { phoneE164: `+${PHONE}` } });
+    expect(user).toMatchObject({ displayName: "Ama Owusu", phoneVerifiedAt: expect.any(Date), passwordHash: null });
+    expect(await db.channelIdentity.findFirstOrThrow({ where: { address: `+${PHONE}` } })).toMatchObject({ userId: user.id, verificationMethod: "WHATSAPP_REPLY" });
+    expect(await db.auditEvent.count({ where: { action: "account.created_on_whatsapp", entityId: user.id } })).toBe(1);
+    expect(chat.state.workflow).toBe("business");
     expect(await db.marketplaceProfessional.count()).toBe(0);
+  });
+
+  it("asks a new person to register as an agent or a business before listing, with buttons, and lists nothing", async () => {
+    const owner = await registerUser({ displayName: "Owner", email: "owner@example.com", password: "secure-password-123" });
+    const organisation = await createOrganisation(owner.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
+    const chat = whatsappConversation(PHONE, organisation.id);
+    await chat.send("list a property");
+    const choice = await chat.send("Kwesi Boateng");
+    expect(choice.reply).toContain("✅ Your NesAfric account is ready, Kwesi.");
+    expect(choice.reply).toContain("Before you list a property, register with NesAfric as one of these");
+    expect(choice.reply).toContain("upload the front and back of your Ghana Card");
+    expect(choice.reply).toContain("upload your business registration certificate");
+    expect(choice.interactive).toMatchObject({ type: "button", buttons: [{ id: "register agent", title: "Individual agent" }, { id: "register agency", title: "Real estate business" }] });
+    expect(await db.whatsAppFlowDraft.count({ where: { kind: "PROPERTY_LISTING" } })).toBe(0);
+    expect(await db.listing.count()).toBe(0);
+    // Tapping a button starts that registration.
+    expect((await chat.send("register agency")).reply).toContain("What kind of business is it?");
+  });
+
+  it("never takes over an existing account: a number already in use must link with a code", async () => {
+    const owner = await registerUser({ displayName: "Owner", email: "owner@example.com", password: "secure-password-123" });
+    const organisation = await createOrganisation(owner.id, { name: "NesAfric", type: "OTHER", countryCode: "GH" });
+    await db.user.update({ where: { id: owner.id }, data: { phoneE164: `+${PHONE}`, phoneVerifiedAt: new Date() } });
+    const chat = whatsappConversation(PHONE, organisation.id);
+    await chat.send("list a property");
+    const refused = await chat.send("Somebody Else");
+    expect(refused.reply).toContain("already belongs to a NesAfric account. Reply link");
+    expect(await db.channelIdentity.count({ where: { userId: owner.id } })).toBe(0);
+    expect(await db.user.count()).toBe(1);
   });
 
   it("registers an agency one question at a time, with a replaceable logo, and submits it for Super Admin review", async () => {
     const { user, chat } = await linkedUser();
-    expect((await chat.send("3")).reply).toContain("What kind of business is it?");
+    expect((await chat.send("register agency")).reply).toContain("What kind of business is it?");
     chat.reset();
     await db.whatsAppFlowDraft.deleteMany();
     const atLogo = await agencyAnswers(chat);
@@ -84,7 +124,9 @@ describe("PostgreSQL WhatsApp business registration", () => {
     await chat.send(logoNumber);
     expect((await chat.send({ image: mediaId(2) })).reply).toContain("Please check your registration:");
     const submitted = await chat.send("confirm");
-    expect(submitted.reply).toContain("Accra Prime Realty is submitted for review. Status: submitted for review.");
+    expect(submitted.reply).toContain("✅ Accra Prime Realty is submitted for review.");
+    expect(submitted.reply).not.toMatch(/https?:\/\//);
+    expect(submitted.interactive).toMatchObject({ type: "button", buttons: [{ id: "list a property" }, { id: "my applications" }] });
     expect(submitted.reply).toContain("Your logo is saved.");
     expect(downloads.calls).toEqual([mediaId(2), CERTIFICATE]);
 
@@ -101,9 +143,9 @@ describe("PostgreSQL WhatsApp business registration", () => {
 
   it("starts registration from the menu even in the middle of a search (found in the live test)", async () => {
     const { chat } = await linkedUser();
-    await chat.say("2", "Cleaning");
+    await chat.say("7", "Cleaning");
     expect((await chat.send("Dzorwulu")).reply).toContain("No verified providers");
-    expect((await chat.send("3")).reply).toContain("What kind of business is it?");
+    expect((await chat.send("register agency")).reply).toContain("What kind of business is it?");
     expect(chat.state.workflow).toBe("business");
   });
 

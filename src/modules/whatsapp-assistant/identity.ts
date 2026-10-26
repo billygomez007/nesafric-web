@@ -57,6 +57,35 @@ export async function linkWhatsAppIdentity(waId: string, userId: string, method:
   });
 }
 
+/**
+ * Creates a NesAfric account for the person writing from this WhatsApp number and links the number
+ * to it. Meta attests the sender, so the number is proven as an SMS code to it would prove it. Only
+ * for a number no account uses yet: an existing account is never taken over this way (it is linked
+ * with a code instead, `link`).
+ */
+export async function createWhatsAppAccount(waId: string, displayName: string, organisationId: string): Promise<{ created: true; user: { id: string; displayName: string } } | { created: false; reason: "NUMBER_IN_USE" }> {
+  const address = whatsappAddress(waId);
+  try {
+    return await db.$transaction(async (tx) => {
+      if (await tx.user.findFirst({ where: { phoneE164: address }, select: { id: true } })) return { created: false as const, reason: "NUMBER_IN_USE" as const };
+      const now = new Date();
+      const user = await tx.user.create({ data: { phoneE164: address, phoneVerifiedAt: now, displayName }, select: { id: true, displayName: true } });
+      const identity = await tx.channelIdentity.upsert({
+        where: { channel_address: { channel: "WHATSAPP", address } },
+        update: { userId: user.id, verifiedAt: now, verificationMethod: "WHATSAPP_REPLY" },
+        create: { channel: "WHATSAPP", address, userId: user.id, verifiedAt: now, verificationMethod: "WHATSAPP_REPLY" },
+      });
+      await tx.auditEvent.create({ data: { organisationId, actorUserId: user.id, action: "account.created_on_whatsapp", entityType: "user", entityId: user.id, metadata: { channel: "WHATSAPP" } } });
+      await tx.auditEvent.create({ data: { organisationId, actorUserId: user.id, action: "channel_identity.linked", entityType: "channel_identity", entityId: identity.id, metadata: { channel: "WHATSAPP", method: "WHATSAPP_REPLY", previousUserId: null } } });
+      return { created: true as const, user };
+    });
+  } catch (error) {
+    // Another request created an account for this number at the same moment.
+    if ((error as { code?: string })?.code === "P2002") return { created: false, reason: "NUMBER_IN_USE" };
+    throw error;
+  }
+}
+
 export async function unlinkWhatsAppIdentity(waId: string, organisationId: string) {
   const address = whatsappAddress(waId);
   return db.$transaction(async (tx) => {

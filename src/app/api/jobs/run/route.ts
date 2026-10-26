@@ -6,6 +6,7 @@ import { jobHandlers } from "@/platform/jobs/handlers";
 import { sweepExpiredPublicWriteRecords } from "@/platform/security/public-write-limit";
 import { scheduleDueDigests } from "@/modules/staff-notifications/service";
 import { dispatchUtilityEvents } from "@/modules/whatsapp-templates/dispatch";
+import { scheduleViewingReminders } from "@/modules/whatsapp-assistant/viewings";
 import { scheduleUploadAndDraftCleanup } from "@/modules/documents/cleanup";
 
 /**
@@ -15,6 +16,7 @@ import { scheduleUploadAndDraftCleanup } from "@/modules/documents/cleanup";
 async function runScheduledWork() {
   await scheduleDueDigests().catch(() => console.error("Digest scheduling failed."));
   await dispatchUtilityEvents().catch(() => console.error("WhatsApp utility dispatch failed."));
+  await scheduleViewingReminders().catch(() => console.error("WhatsApp viewing reminder scheduling failed."));
   await scheduleUploadAndDraftCleanup().catch(() => console.error("Cleanup scheduling failed."));
   try {
     await runDueJobs(jobHandlers);

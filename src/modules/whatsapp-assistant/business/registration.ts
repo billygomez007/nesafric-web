@@ -1,7 +1,7 @@
 import { z } from "zod";
+import { replyButtons } from "@/modules/conversations/channels/whatsapp-interactive";
 import { db } from "@/platform/database/client";
 import { AppError } from "@/platform/errors";
-import { absoluteUrl } from "@/platform/brand";
 import { createOrganisation } from "@/modules/organisations/service";
 import { createMarketplaceProfessional, submitMarketplaceVerification } from "@/modules/marketplace-professionals/service";
 import { createServiceProvider, submitProviderVerification } from "@/modules/providers/service";
@@ -341,15 +341,12 @@ async function submitProfessional(draft: FlowDraft, data: Data, input: FlowInput
     await submitMarketplaceVerification(input.userId, target.id, { evidenceReferences: [`Submitted on WhatsApp${data.reference ? `: ${data.reference}` : ""}`, `Documents uploaded: ${documents.join(", ")}`] });
   }
   await finishFlowDraft(draft.id, { status: "SUBMITTED", step: "submitted", targets: { marketplaceProfessionalId: target.id } });
-  return {
-    reply: [
-      `${target.name} is submitted for review. Status: submitted for review.`,
-      logo === "failed" ? "Your logo could not be saved; you can add it on the website." : logo === "uploaded" ? "Your logo is saved." : null,
-      "Your documents are stored privately for NesAfric's review. You can prepare property listings now (reply list a property); they can be submitted for review once your business is approved.",
-      `Manage your profile: ${absoluteUrl(`/pro/${target.id}`)}`,
-    ].filter(Boolean).join("\n"),
-    exit: true,
-  };
+  const reply = [
+    `✅ ${target.name} is submitted for review.`,
+    logo === "failed" ? "Your logo could not be saved; you can send it again later." : logo === "uploaded" ? "Your logo is saved." : null,
+    "Your documents are stored privately for NesAfric's review. You can prepare your property listings now; they are submitted for review once your registration is approved. Reply my applications to check the status.",
+  ].filter(Boolean).join("\n");
+  return { reply, interactive: replyButtons(reply, [{ id: "list a property", title: "List a property" }, { id: "my applications", title: "My applications" }]), exit: true };
 }
 
 async function submitProvider(draft: FlowDraft, data: Data, input: FlowInput, download?: MediaDownloader): Promise<FlowResult> {
@@ -389,7 +386,7 @@ async function submitProvider(draft: FlowDraft, data: Data, input: FlowInput, do
   return {
     reply: [
       `${target.name} is submitted for review. Status: submitted for review.`,
-      logo === "failed" ? "Your logo could not be saved; you can add it on the website." : logo === "uploaded" ? "Your logo is saved." : null,
+      logo === "failed" ? "Your logo could not be saved; you can send it again later." : logo === "uploaded" ? "Your logo is saved." : null,
       "Once NesAfric approves you, reply list my services to publish your service listing with prices and photos. You can prepare it now; it goes live after approval.",
     ].filter(Boolean).join("\n"),
     exit: true,

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { viewingReference } from "@/modules/whatsapp-assistant/viewings";
 import { advanceConversation } from "@/modules/whatsapp-assistant/engine";
 import { interpretLocally } from "@/modules/whatsapp-assistant/interpret";
 import { assistantStateSchema, initialState, type AssistantState } from "@/modules/whatsapp-assistant/schemas";
@@ -179,11 +180,12 @@ describe("WhatsApp shopping: the conversation", () => {
       expect(replies[3]).toContain("Bright flat");
       expect(deps.tools.propertyDetails).toHaveBeenCalledWith(listingIds[1]);
       expect(replies[5]).toContain("tomorrow 2pm");
-      expect(replies[6]).toContain("Preferred one-hour slot starts: Sun 25 Oct 2026, 2:00 pm GMT");
-      expect(replies[6]).toContain("Phone shared with the listing team: +233241234567");
+      expect(replies[6]).toContain("📅 Sun 25 Oct 2026\n🕒 2:00 pm (Ghana time)");
+      expect(replies[6]).toContain("📱 +233241234567 (shared with the agent)");
       expect(deps.tools.submitCustomerRequest).toHaveBeenCalledTimes(1);
       expect(deps.tools.submitCustomerRequest.mock.calls[0]).toEqual([expect.objectContaining({ state: expect.objectContaining({ selectedListingId: listingIds[0], name: "Ama Owusu", startsAt: "2026-10-25T14:00:00.000Z" }) })]);
-      expect(replies[7]).toContain(`Reference: ${viewingId}`);
+      expect(replies[7]).toContain(`🔖 Reference: ${viewingReference(viewingId)}`);
+      expect(replies[7]).toContain("The agent will confirm this time or suggest another.");
       expect(state).toMatchObject({ workflow: "idle", lastRequest: { leadId, viewingId } });
     } finally {
       vi.useRealTimers();

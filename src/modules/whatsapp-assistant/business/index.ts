@@ -1,4 +1,4 @@
-import { absoluteUrl } from "@/platform/brand";
+import { ACCOUNT_NAME_PROMPT } from "../account-signup";
 import type { AssistantState } from "../schemas";
 import { buttons, command, numbered, type FlowInput, type FlowResult } from "./common";
 import { getFlowDraft, listOpenFlowDrafts, type FlowDraft } from "./drafts";
@@ -60,7 +60,12 @@ export async function advanceBusiness(context: BusinessContext): Promise<Busines
     reply: result.reply,
     interactive: result.interactive,
   });
-  const needLink = (): BusinessResult => ({ state: reset(), reply: `To register a business or list on NesAfric here, first connect this WhatsApp number to your NesAfric account: reply link.\nNo account yet? Create one at ${absoluteUrl("/register")}, then reply link.` });
+  // No account yet: create one right here (this WhatsApp number is the sign-in), then carry on with
+  // what they chose. A number that already has an account is linked with a code instead.
+  const needLink = (): BusinessResult => ({
+    state: { ...reset(), workflow: "account", step: "account_name", afterAccount: /^[a-z ]{2,60}$/.test(said) ? said : undefined },
+    reply: ACCOUNT_NAME_PROMPT,
+  });
 
   if (state.workflow === "business" && state.business?.draftId) {
     if (!context.linked) return needLink();

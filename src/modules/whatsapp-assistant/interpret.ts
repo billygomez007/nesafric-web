@@ -11,13 +11,15 @@ export function interpretLocally(body: string, state: AssistantState): Interpret
   const trade = input.match(/\b(plumb(?:er|ing)?s?|electric(?:ian|al)?s?|carpent(?:er|ry)s?|paint(?:er|ing)s?|clean(?:er|ing)s?|mason(?:ry)?s?|architects?|surveyors?|pest control|moving|security|air conditioning|property manag(?:er|ement))\b/);
   if (trade || input === "2" || /service provider/.test(input) || state.workflow === "service_search") {
     const location = input.match(/\b(?:in|near|around|at)\s+(.+?)(?:[.!?]|$)/)?.[1]?.trim();
-    return { intent: "service_search", service: { ...(trade ? { q: trade[0] } : {}), ...(location ? { city: location } : state.workflow === "service_search" && state.service.q && !state.service.city ? { city: input } : {}) } };
+    // Asked "What service do you need?": the answer is the service, whatever trade it names.
+    const asked = state.workflow === "service_search" && !state.service.q && !trade && !location && input.length >= 2 && input.length <= 200 && input !== "2";
+    return { intent: "service_search", service: { ...(trade ? { q: trade[0] } : asked ? { q: input } : {}), ...(location ? { city: location } : state.workflow === "service_search" && state.service.q && !state.service.city ? { city: input } : {}) } };
   }
   const property: NonNullable<Interpretation["property"]> = {};
   if (/\b(rent|renting|rental)\b/.test(input)) property.listingType = "RENT";
   if (/\b(buy|buying|sale|purchase)\b/.test(input)) property.listingType = "SALE";
   const categories: Array<[RegExp, NonNullable<typeof property.category>]> = [
-    [/\b(apartments?|flats?)\b/, "APARTMENT"], [/\b(townhouses?)\b/, "TOWNHOUSE"], [/\b(houses?|homes?)\b/, "HOUSE"], [/\bland\b/, "LAND"], [/\boffices?\b/, "OFFICE"], [/\bshops?\b/, "SHOP"], [/\bwarehouses?\b/, "WAREHOUSE"], [/\bhotels?\b/, "HOTEL"], [/\bshort stays?\b/, "SHORT_STAY"], [/\bvillas?\b/, "VILLA"],
+    [/\b(apartments?|flats?)\b/, "APARTMENT"], [/\b(townhouses?)\b/, "TOWNHOUSE"], [/\b(houses?|homes?)\b/, "HOUSE"], [/\bland\b/, "LAND"], [/\boffices?\b/, "OFFICE"], [/\bshops?\b/, "SHOP"], [/\bwarehouses?\b/, "WAREHOUSE"], [/\bcommercial\b/, "COMMERCIAL"], [/\bhotels?\b/, "HOTEL"], [/\bshort stays?\b/, "SHORT_STAY"], [/\bvillas?\b/, "VILLA"],
   ];
   property.category = categories.find(([pattern]) => pattern.test(input))?.[1];
   // "around 4000" or "in 2 bedrooms" is not an area; "near 37 Military Hospital" is.

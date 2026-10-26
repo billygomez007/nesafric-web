@@ -5,6 +5,11 @@ import { metaTemplateClient, MetaTemplateApiError } from "@/modules/whatsapp-tem
 import { metaTemplateName, UTILITY_TEMPLATES, utilityTemplate, type UtilityTemplate } from "@/modules/whatsapp-templates/registry";
 import CATALOGUE from "./fixtures/whatsapp-utility-catalogue.json";
 
+/** Mapped to templates Meta already approved on the NesAfric WABA (exact `nesafric_*` text). */
+const ON_META: Record<string, string> = {
+  U01: "nesafric_inquiry_received", U02: "nesafric_viewing_confirmed", U03: "nesafric_viewing_reminder", U04: "nesafric_viewing_rescheduled", U05: "nesafric_inquiry_response", U06: "nesafric_viewing_cancelled",
+  U10: "nesafric_listing_submitted", U23: "nesafric_maintenance_request_received", U24: "nesafric_maintenance_assigned", U25: "nesafric_maintenance_status_update", U26: "nesafric_maintenance_completed", U31: "nesafric_inquiry_agent_alert",
+};
 const GROUPS: Array<[string, number, number]> = [
   ["CUSTOMER_ENQUIRIES", 1, 6], ["AGENT_ONBOARDING", 7, 11], ["LANDLORD_ONBOARDING", 12, 16],
   ["TENANT_MANAGEMENT", 17, 22], ["PROPERTY_OPERATIONS", 23, 27], ["ACCOUNT_ACTIVITY", 28, 30],
@@ -14,15 +19,17 @@ const withBody = (body: string, params = utilityTemplate("U19").params): Utility
 const NEEDS_REVIEW: string[] = [];
 
 describe("Utility template registry", () => {
-  it("defines U01-U30 once each, in their six categories, as English Utility templates", () => {
-    expect(UTILITY_TEMPLATES.map(({ key }) => key)).toEqual(Array.from({ length: 30 }, (_, index) => `U${String(index + 1).padStart(2, "0")}`));
-    expect(new Set(UTILITY_TEMPLATES.map(metaTemplateName)).size).toBe(30);
+  it("defines U01-U31 once each, in their six categories, as English Utility templates", () => {
+    expect(UTILITY_TEMPLATES.map(({ key }) => key)).toEqual(Array.from({ length: 31 }, (_, index) => `U${String(index + 1).padStart(2, "0")}`));
+    expect(new Set(UTILITY_TEMPLATES.map(metaTemplateName)).size).toBe(31);
     for (const [group, from, to] of GROUPS) {
-      expect(UTILITY_TEMPLATES.filter((template) => template.group === group).map(({ key }) => Number(key.slice(1)))).toEqual(Array.from({ length: to - from + 1 }, (_, index) => from + index));
+      const expected = Array.from({ length: to - from + 1 }, (_, index) => from + index);
+      expect(UTILITY_TEMPLATES.filter((template) => template.group === group).map(({ key }) => Number(key.slice(1)))).toEqual(group === "CUSTOMER_ENQUIRIES" ? [...expected, 31] : expected);
     }
     for (const template of UTILITY_TEMPLATES) {
       expect(template).toMatchObject({ category: "UTILITY", language: "en", version: 1 });
-      expect(metaTemplateName(template)).toMatch(/^nes_[a-z0-9_]+$/);
+      expect(metaTemplateName(template)).toBe(ON_META[template.key] ?? metaTemplateName(template));
+      expect(metaTemplateName(template)).toMatch(ON_META[template.key] ? /^nesafric_[a-z0-9_]+$/ : /^nes_[a-z0-9_]+$/);
       expect(template.buttons ?? []).toEqual([]);
       expect(template.trigger.event).toBeTruthy();
       expect(template.optIn.length).toBeGreaterThan(0);
@@ -30,8 +37,8 @@ describe("Utility template registry", () => {
     }
   });
 
-  it("holds the approved catalogue's names and bodies exactly", () => {
-    expect(UTILITY_TEMPLATES.map(({ key, name, body }) => ({ key, name, body }))).toEqual(CATALOGUE);
+  it("holds the approved catalogue's names and bodies exactly, except those mapped to Meta's approved text", () => {
+    expect(UTILITY_TEMPLATES.filter(({ key }) => !ON_META[key]).map(({ key, name, body }) => ({ key, name, body }))).toEqual(CATALOGUE.filter(({ key }: { key: string }) => !ON_META[key]));
   });
 
   it.each(UTILITY_TEMPLATES.map((template) => [template.key, template] as const))("%s is FINAL only if it passes Meta's format rules with realistic samples", (_, template) => {
@@ -45,7 +52,8 @@ describe("Utility template registry", () => {
       expect(template.reviewFlag).toMatch(/ends with a variable/);
     } else {
       expect(template.content).toBe("FINAL");
-      expect(errors).toEqual([]);
+      // Meta already approved the mapped ones; the local rules guard new submissions only.
+      if (!ON_META[template.key]) expect(errors).toEqual([]);
     }
   });
 
@@ -95,9 +103,9 @@ describe("Parameters and payloads", () => {
     expect(reason).toHaveLength(160);
   });
 
-  it("refuses missing or unknown parameters", () => {
+  it("refuses missing parameters and ignores values a template does not use", () => {
     expect(() => templateParameters(template, { recipient_name: "Kofi", business_name: "Golden Key Realty" })).toThrow(/missing required_information/);
-    expect(() => templateParameters(template, { recipient_name: "Kofi", business_name: "Golden Key Realty", required_information: "a licence", extra: "x" })).toThrow(/no parameter extra/);
+    expect(templateParameters(template, { recipient_name: "Kofi", business_name: "Golden Key Realty", required_information: "a licence", extra: "x" })).toEqual(["Kofi", "Golden Key Realty", "a licence"]);
   });
 
   it("builds the Meta creation payload: body only, samples, no buttons and no silent recategorisation", () => {

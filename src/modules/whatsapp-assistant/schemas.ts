@@ -6,6 +6,7 @@ export const propertyFiltersSchema = z.object({
   location: z.string().trim().min(2).max(150).optional(),
   country: z.string().regex(/^[A-Z]{2}$/).optional(),
   currencyCode: z.string().regex(/^[A-Z]{3}$/).optional(),
+  minPriceMinor: z.string().regex(/^\d{1,16}$/).optional(),
   maxPriceMinor: z.string().regex(/^\d{1,16}$/).optional(),
   bedroomsMin: z.number().int().min(0).max(100).optional(),
   bedroomsMax: z.number().int().min(0).max(100).optional(),
@@ -27,8 +28,8 @@ export type Interpretation = z.infer<typeof interpretationSchema>;
 
 export const assistantStateSchema = z.object({
   version: z.literal(1).default(1),
-  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business"]).default("idle"),
-  step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code"]).default("search"),
+  workflow: z.enum(["idle", "property_search", "service_search", "inquiry", "viewing", "link", "onboarding", "network", "report", "rules", "job", "business", "agent_search", "account", "admin"]).default("idle"),
+  step: z.enum(["search", "name", "message", "time", "confirm", "link_method", "link_code", "account_name"]).default("search"),
   paused: z.boolean().default(false),
   property: propertyFiltersSchema.default({}),
   service: serviceFiltersSchema.default({}),
@@ -39,6 +40,33 @@ export const assistantStateSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   message: z.string().trim().max(5_000).optional(),
   startsAt: z.string().datetime({ offset: true }).optional(),
+  /** WhatsApp admin (platform principals with a PIN): waiting for the PIN, and a change awaiting confirm. */
+  admin: z.object({
+    awaitingPin: z.boolean().default(false),
+    then: z.string().max(1000).optional(),
+    /** Reject or Request changes was chosen without a reason: the next message is the reason. */
+    awaitingReason: z.object({ action: z.enum(["changes", "reject"]), ref: z.string().max(12) }).optional(),
+    pending: z.object({
+      action: z.enum(["approve", "changes", "reject", "reply", "done"]),
+      entity: z.enum(["listing", "professional", "provider", "conversation"]),
+      id: z.string().uuid(),
+      ref: z.string().max(12),
+      summary: z.string().max(1000),
+      note: z.string().max(2000).optional(),
+      expectedUpdatedAt: z.string().optional(),
+      expectedStatus: z.string().max(40).optional(),
+    }).optional(),
+  }).optional(),
+  /** What the person wanted when an account was needed ("list a property"); run once the account exists. */
+  afterAccount: z.string().regex(/^[a-z ]{2,60}$/).optional(),
+  /** The day chosen in the viewing day list, before a time is picked (YYYY-MM-DD, Ghana time). */
+  viewingDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** Step-by-step property search: on when started from the menu, the step asked, the steps answered. */
+  guided: z.boolean().default(false),
+  searchStep: z.enum(["type", "bedrooms", "area", "budget"]).optional(),
+  searchAnswered: z.array(z.enum(["type", "bedrooms", "area", "budget"])).max(4).default([]),
+  /** Agent directory search (official number): the area asked for. */
+  agentArea: z.string().trim().min(2).max(120).optional(),
   lastRequest: z.object({ listingId: z.string().uuid(), leadId: z.string().uuid(), viewingId: z.string().uuid().optional() }).optional(),
   /** Provider-network management: what was last listed, and an action awaiting confirmation. */
   network: z.object({
